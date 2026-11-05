@@ -746,7 +746,7 @@
     {
       "id": "cls-raumpostfach",
       "name": "Raumpostfach",
-      "documentation": "Ein Besprechungsraum.",
+      "documentation": "Ein Besprechungsraum. «Auffindbar» heisst: Mitglied der Raumliste seines Orts und mit Ortsangaben (Set-Place), so dass Outlook ihn in der Raumsuche zeigt.",
       "stereotype": "businessObject",
       "attributes": [],
       "x": 940,
@@ -763,6 +763,11 @@
             "name": "Buchbar",
             "x": 200,
             "y": 40
+          },
+          {
+            "name": "Auffindbar",
+            "x": 200,
+            "y": 140
           },
           {
             "name": "Entfernt",
@@ -785,6 +790,16 @@
           {
             "id": "t-raumpostfach-3",
             "from": "Angelegt",
+            "to": "Entfernt"
+          },
+          {
+            "id": "t-raumpostfach-4",
+            "from": "Buchbar",
+            "to": "Auffindbar"
+          },
+          {
+            "id": "t-raumpostfach-5",
+            "from": "Auffindbar",
             "to": "Entfernt"
           }
         ]
@@ -899,6 +914,59 @@
           }
         ],
         "transitions": []
+      }
+    },
+    {
+      "id": "cls-raumliste",
+      "name": "Raumliste",
+      "documentation": "Eine Raumliste in Exchange: eine Verteilergruppe, die mit -RoomList angelegt ist und Raumpostfaecher als Mitglieder hat. Outlook zeigt Raeume in der Raumsuche nur ueber Raumlisten. Eine pro Ort, benannt nach der Namensregel (RL-<Ort>).",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "ort",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Der Ort, fuer den die Liste steht (der Teil des Standorts vor dem ersten Komma)."
+        }
+      ],
+      "x": 1540,
+      "y": 920,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Ergaenzt",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Verkleinert",
+            "x": 360,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-raumliste-1",
+            "from": "Angelegt",
+            "to": "Ergaenzt"
+          },
+          {
+            "id": "t-raumliste-2",
+            "from": "Ergaenzt",
+            "to": "Verkleinert"
+          },
+          {
+            "id": "t-raumliste-3",
+            "from": "Verkleinert",
+            "to": "Ergaenzt"
+          }
+        ]
       }
     },
     {
@@ -1750,6 +1818,16 @@
       }
     },
     {
+      "id": "gen-9",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-raumliste"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
       "id": "assoc-1",
       "name": "traegt",
       "kind": "composition",
@@ -2077,6 +2155,21 @@
         "classId": "cls-konto",
         "role": "ansprechperson",
         "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-23",
+      "name": "enthaelt",
+      "kind": "association",
+      "from": {
+        "classId": "cls-raumliste",
+        "role": "raumliste",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-raumpostfach",
+        "role": "raeume",
+        "multiplicity": "0..*"
       }
     }
   ],

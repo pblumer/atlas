@@ -44,10 +44,11 @@ Die OnPrem-Variante (`beispiel-m365-dienste-onprem`) baut `install-m365-dienste.
 | `Postfach` | businessObject |  | Bereit → Abwesend → Weitergeleitet | Das persoenliche Postfach einer Person, mit Abwesenheit, Kontingent, Weiterleitung und weiteren Adressen. Personenbezogen. |
 | `Funktionspostfach` | businessObject |  | Angelegt → Entfernt | Ein gemeinsames Postfach (Shared Mailbox) fuer eine Funktion oder ein Team, ohne eigene Lizenz. |
 | `Ressourcenpostfach` | businessObject |  |  | Ein buchbares Postfach mit Buchungsregeln (Kalenderverarbeitung). Den Lebenszyklus tragen Raum- und Geraetepostfach selbst, weil ein Datenzustand gegen die Klasse aufgeloest wird, die das Datenobjekt nennt. |
-| `Raumpostfach` | businessObject |  | Angelegt → Buchbar → Entfernt | Ein Besprechungsraum. |
+| `Raumpostfach` | businessObject |  | Angelegt → Buchbar → Auffindbar → Entfernt | Ein Besprechungsraum. «Auffindbar» heisst: Mitglied der Raumliste seines Orts und mit Ortsangaben (Set-Place), so dass Outlook ihn in der Raumsuche zeigt. |
 | `Geraetepostfach` | businessObject |  | Angelegt → Buchbar → Entfernt | Ein buchbares Geraet, etwa ein Beamer oder ein Fahrzeug. |
 | `Verteiler` | businessObject |  | Angelegt → Entfernt | Eine Verteilerliste in Exchange. |
 | `Mailkontakt` | businessObject |  | Angelegt | Eine externe Adresse als Kontakt in Exchange, damit sie Mitglied eines Verteilers sein kann. Personenbezogen. |
+| `Raumliste` | businessObject |  | Angelegt → Ergaenzt → Verkleinert | Eine Raumliste in Exchange: eine Verteilergruppe, die mit -RoomList angelegt ist und Raumpostfaecher als Mitglieder hat. Outlook zeigt Raeume in der Raumsuche nur ueber Raumlisten. Eine pro Ort, benannt nach der Namensregel (RL-<Ort>). |
 | `Verteilermitgliedschaft` | businessObject |  | Beantragt → Aufgenommen → Entfernt | Die Mitgliedschaft eines Empfaengers in einem Verteiler (Selbstanmeldung oder Bestellung). |
 | `Postfachberechtigung` | businessObject |  | Beantragt → Erteilt → Entzogen | Ein Recht einer Person an einem Postfach: Vollzugriff, Senden als, Senden im Auftrag oder Kalenderstellvertretung. |
 | `Aufbewahrung` | businessObject |  | Beantragt → Aktiv → Aufgehoben | Litigation Hold auf einem Postfach: nichts darin wird endgueltig geloescht, solange er gilt. |
@@ -73,11 +74,13 @@ Beziehungen:
 - `Geraetepostfach` ist ein `Ressourcenpostfach`
 - `Verteiler` ist ein `Empfaenger`
 - `Mailkontakt` ist ein `Empfaenger`
+- `Raumliste` ist ein `Empfaenger`
 - `Konto` traegt `Lizenzzuweisung` (composition, 1 : 0..*)
 - `AdKonto` wird synchronisiert als `Konto` (association, 0..1 : 0..1)
 - `Konto` besitzt `Postfach` (association, 1 : 0..1)
 - `Empfaenger` gewaehrt `Postfachberechtigung` (composition, 1 : 0..*)
 - `Postfachberechtigung` fuer `Konto` (association, 0..* : 1)
+- `Raumliste` enthaelt `Raumpostfach` (association, 0..* : 0..*)
 - `Verteiler` hat `Verteilermitgliedschaft` (composition, 1 : 0..*)
 - `Verteilermitgliedschaft` von `Empfaenger` (association, 0..* : 1)
 - `Postfach` steht unter `Aufbewahrung` (composition, 1 : 0..1)
@@ -132,7 +135,9 @@ Personenbezogen sind `Konto`, `Partnerkonto`, `AdKonto`, `Postfach` und `Mailkon
 | Exchange: Postfachzugriff entziehen (`postfachzugriff-entziehen.bpmn`) | Katalogposition [Zurueckgegeben]; Postfachberechtigung [Entzogen] | Exchange Online: Empfaenger |
 | Exchange: Postfachzugriff erteilen (`postfachzugriff-erteilen.bpmn`) | Katalogposition [Erledigt, Abgelehnt]; Postfachberechtigung [Erteilt] | Exchange Online: Empfaenger |
 | Exchange: Sitzungszimmer einrichten (`raum-einrichten.bpmn`) | Katalogposition [Erledigt, Abgelehnt]; Raumpostfach [Angelegt, Buchbar] | Exchange Online: Empfaenger |
-| Exchange: Sitzungszimmer entfernen (`raum-entfernen.bpmn`) | Katalogposition [Zurueckgegeben]; Raumpostfach [Entfernt] | Exchange Online: Empfaenger |
+| Exchange: Sitzungszimmer entfernen (`raum-entfernen.bpmn`) | Katalogposition [Zurueckgegeben]; Raumliste [Verkleinert]; Raumpostfach [Entfernt] | Exchange Online: Empfaenger |
+| Exchange: Sitzungszimmer nachführen (`raum-nachfuehren.bpmn`) | Raumpostfach [Auffindbar] | Exchange Online: Empfaenger |
+| Exchange: Sitzungszimmer auffindbar machen (`raumliste.bpmn`) | Raumliste [Angelegt, Ergaenzt]; Raumpostfach [Auffindbar] | Exchange Online: Empfaenger |
 | SharePoint: Team Site (`sharepoint-site.bpmn`) | Katalogposition [Erledigt, Zurueckgegeben, Abgelehnt]; M365-Gruppe [Aktiv, Geloescht]; SharePoint-Site [Bereit]; Site-Inventar-Eintrag [Active, Returned, Removed] | Entra ID: Konten, Entra ID: Gruppen, Exchange Online: Empfaenger, SharePoint Online: Sites, SharePoint Online: Site-Inventar |
 | Microsoft Teams: Team (`team.bpmn`) | Katalogposition [Erledigt, Zurueckgegeben, Abgelehnt]; M365-Gruppe [Aktiv]; Team [Aktiv, Archiviert] | Entra ID: Konten, Entra ID: Gruppen |
 | Teams-Telefonie: persönliche Rufnummer (`telefonie.bpmn`) | Katalogposition [Erledigt, Zurueckgegeben]; Lizenzzuweisung [Zugewiesen, Entzogen]; Rufnummer [Zugewiesen, Frei] | Entra ID: Konten, Teams Phone: Rufnummern |
@@ -153,7 +158,7 @@ Eigentuemerin aller Capabilities ist die Gruppe M365-Administration. Die Schlues
 | `m365-partner` | **Externe Partner anbinden**: Externen Personen ueber ein oeffentliches Formular einen befristeten Zugang geben und ihn nach Ablauf sperren. | Partnerzugang (öffentliches Formular) | `m365-konten` |
 | `m365-zusammenarbeit` | **Zusammenarbeitsraeume bereitstellen**: Teams, SharePoint-Teamwebsites und Viva-Engage-Communities nach Namensregel anlegen, mit Besitzern, Gaesten, Kontingent und Inventar, und sie archivieren oder loeschen. | Microsoft Teams: Team; SharePoint: Team Site; Viva Engage: Community | `m365-konten` |
 | `m365-messaging` | **Gemeinsame Postfaecher und Verteiler bereitstellen**: Funktionspostfaecher und Verteiler anlegen, ihre Berechtigten und Mitglieder pflegen und Anmeldungen zu Verteilern annehmen. | Exchange: Funktionspostfach; Exchange: Verteilerliste; Verteiler-Anmeldung (öffentliches Formular); `proc_m365_funktionspostfach_onprem` (OnPrem); `proc_m365_verteiler_onprem` (OnPrem) | `m365-konten` |
-| `m365-ressourcen` | **Raeume und Geraete buchbar machen**: Raum- und Geraetepostfaecher mit Buchungsregeln einrichten und wieder entfernen. | Exchange: Sitzungszimmer einrichten; Exchange: Sitzungszimmer entfernen; Exchange: Gerätepostfach einrichten; Exchange: Gerätepostfach entfernen; `proc_m365_raum_einrichten_onprem` (OnPrem); `proc_m365_raum_entfernen_onprem` (OnPrem); `proc_m365_geraet_einrichten_onprem` (OnPrem); `proc_m365_geraet_entfernen_onprem` (OnPrem) |  |
+| `m365-ressourcen` | **Raeume und Geraete buchbar machen**: Raum- und Geraetepostfaecher mit Buchungsregeln einrichten und wieder entfernen. | Exchange: Sitzungszimmer einrichten; Exchange: Sitzungszimmer entfernen; Exchange: Sitzungszimmer nachführen; Exchange: Sitzungszimmer auffindbar machen; Exchange: Gerätepostfach einrichten; Exchange: Gerätepostfach entfernen; `proc_m365_raum_einrichten_onprem` (OnPrem); `proc_m365_raum_entfernen_onprem` (OnPrem); `proc_m365_raumliste_onprem` (OnPrem); `proc_m365_geraet_einrichten_onprem` (OnPrem); `proc_m365_geraet_entfernen_onprem` (OnPrem) |  |
 | `m365-telefonie` | **Telefonie bereitstellen**: Personen eine Rufnummer mit Telefonielizenz geben und Telefonzentralen und Anrufwarteschlangen mit Ressourcenkonto einrichten. | Teams-Telefonie: persönliche Rufnummer; Teams Phone: Telefonzentrale; Teams Phone: Anrufwarteschlange | `m365-lizenzen` |
 | `m365-aufbewahrung` | **Daten rechtssicher aufbewahren**: Postfaecher unter Aufbewahrung (Litigation Hold) stellen und sie wieder aufheben. | Exchange: Aufbewahrung (Litigation Hold) |  |
 | `m365-genehmigung` | **Bestellungen genehmigen**: Bestellungen der vorgesetzten Person aus Entra ID vorlegen, erinnern und eskalieren, mit Ersatzgruppe, wenn niemand zu finden ist. | Microsoft 365: Genehmigung durch Vorgesetzte |  |

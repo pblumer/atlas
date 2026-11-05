@@ -431,3 +431,44 @@ func TestStripAnnotationsLeavesScalars(t *testing.T) {
 		t.Error("a scalar item was changed")
 	}
 }
+
+// TestRunRoomFinderOperations: a room list is created with -RoomList on either target,
+// and Set-Place reaches Exchange Online only — a task on an Exchange Server Worker is
+// refused before the server is asked (ADR-draft-exchange-room-lists-and-places).
+func TestRunRoomFinderOperations(t *testing.T) {
+	online := &fakeBackend{target: catalog.Online}
+	if _, err := Run(context.Background(), Job{
+		Connector: "m365", Operation: "set-place",
+		Parameters: map[string]any{"Identity": "rm-fin-sitzung@contoso.ch", "City": "Bern", "Floor": 5, "Capacity": 8},
+	}, regWith("m365", online)); err != nil {
+		t.Fatal(err)
+	}
+	if online.inv.Cmdlet != "Set-Place" || online.inv.Parameters["City"] != "Bern" {
+		t.Errorf("online call = %#v", online.inv)
+	}
+
+	onprem := &fakeBackend{target: catalog.OnPrem, out: []any{map[string]any{"Alias": "rl-bern"}}}
+	out, err := Run(context.Background(), Job{
+		Connector: "intern", Operation: "create-room-list", ResultVariable: "liste",
+		Parameters: map[string]any{"Name": "RL-Bern", "Alias": "rl-bern"},
+	}, regWith("intern", onprem))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if onprem.inv.Cmdlet != "New-DistributionGroup" || onprem.inv.Parameters["RoomList"] != true {
+		t.Errorf("on-premises call = %#v", onprem.inv)
+	}
+	if !reflect.DeepEqual(out, map[string]any{"liste": map[string]any{"Alias": "rl-bern"}}) {
+		t.Errorf("out = %#v", out)
+	}
+	onprem.calls = 0
+	if _, err := Run(context.Background(), Job{
+		Connector: "intern", Operation: "set-place",
+		Parameters: map[string]any{"Identity": "raum", "City": "Bern"},
+	}, regWith("intern", onprem)); err == nil || !strings.Contains(err.Error(), "Exchange Online only") {
+		t.Errorf("set-place on Exchange Server: err = %v", err)
+	}
+	if onprem.calls != 0 {
+		t.Error("a refused set-place reached the Exchange Server")
+	}
+}

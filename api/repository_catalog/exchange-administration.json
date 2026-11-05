@@ -1,10 +1,10 @@
 {
   "id": "atlas.exchange-administration",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "connector",
   "title": "Microsoft Exchange administration",
   "author": "Atlas core",
-  "description": "Administer Exchange Online or an Exchange Server from a process: create shared, room and equipment mailboxes, convert and update them, add and remove addresses; grant and revoke full access, send as, send on behalf and folder permissions; create distribution groups and mail contacts and manage their members; set automatic replies, forwarding, litigation hold, calendar processing and quotas — plus a read-only escape hatch that runs any Get- cmdlet. Each operation runs one Exchange cmdlet with the parameters it needs added by the Worker (full access is AccessRights FullAccess with InheritanceType All), and where Exchange Online and Exchange Server need different cmdlets for one intent, the Worker's organization picks. Parameters keep the cmdlets' own names, so Microsoft's cmdlet reference documents them. The organization's credential lives on the Worker, resolved from the vault; the engine never holds it.",
+  "description": "Administer Exchange Online or an Exchange Server from a process: create shared, room and equipment mailboxes, convert and update them, add and remove addresses; grant and revoke full access, send as, send on behalf and folder permissions; create distribution groups, room lists and mail contacts and manage their members; set automatic replies, forwarding, litigation hold, calendar processing, quotas and a room's place metadata for Outlook's Room Finder (Exchange Online) — plus a read-only escape hatch that runs any Get- cmdlet. Each operation runs one Exchange cmdlet with the parameters it needs added by the Worker (full access is AccessRights FullAccess with InheritanceType All), and where Exchange Online and Exchange Server need different cmdlets for one intent, the Worker's organization picks. Parameters keep the cmdlets' own names, so Microsoft's cmdlet reference documents them. The organization's credential lives on the Worker, resolved from the vault; the engine never holds it.",
   "engineCompat": ">=0.10",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
@@ -131,6 +131,10 @@
             "value": "create-distribution-group"
           },
           {
+            "name": "Create room list",
+            "value": "create-room-list"
+          },
+          {
             "name": "Read distribution group",
             "value": "get-distribution-group"
           },
@@ -205,6 +209,14 @@
           {
             "name": "Set calendar processing",
             "value": "set-calendar-processing"
+          },
+          {
+            "name": "Read a room's place metadata (Online)",
+            "value": "get-place"
+          },
+          {
+            "name": "Set a room's place metadata (Online)",
+            "value": "set-place"
           },
           {
             "name": "Set mailbox quotas",

@@ -82,6 +82,16 @@
       "processId": "proc_m365_raum_entfernen"
     },
     {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raum_nachfuehren"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raumliste"
+    },
+    {
       "capability": "m365-telefonie",
       "kind": "process",
       "processId": "proc_m365_telefonie"

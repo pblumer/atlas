@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Exchange Worker creates room lists and sets a room's Places metadata.** Three operations
+  for Outlook's Room Finder, which lists rooms only through room lists and filters them by city,
+  floor and capacity: `create-room-list` (`New-DistributionGroup -RoomList`, the switch set by the
+  operation, on Exchange Online and Exchange Server), `set-place` (`Set-Place` with `Capacity`,
+  `City`, `Building`, `Floor`, `FloorLabel`, `Label`, `Tags`, the address and the room's equipment;
+  at least one of them) and `get-place`. The two Places operations exist in Exchange Online only:
+  against an Exchange Server the Worker refuses them before anything is sent and says that city and
+  address are properties of the account there (ADR-draft-exchange-room-lists-and-places).
 - **The handbook shows every app's symbol.** In "The apps at a glance", each app's card leads with
   its symbol, the same one the drawer and the top bar show, and the overview says so. The
   handbook keeps no copy: a module script draws the cards from `api/web/module-icons.js`.
@@ -71,6 +79,20 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Fixed
+- **A meeting room of `m365-dienste` appears in Outlook's Room Finder.** «Sitzungszimmer
+  (Raumpostfach)» created the room mailbox and wrote its location into `CustomAttribute4` only,
+  so the room was bookable by its address and missing from "Browse all rooms" and the location
+  suggestions. The provisioning now calls a new process, `raumliste.bpmn`, which splits the
+  location («Bern, 5. Stock» into city Bern, floor 5), names the city's room list with the naming
+  rule (`<NAME_PREFIX>RL-<Ort>`, new object type `raumliste`), creates it when it is missing, adds
+  the room unless it is already a member and sets `City`, `Building`, `Floor`, `FloorLabel` and
+  `Capacity` with `Set-Place` while the application constant `ORTSANGABEN` is true (the Exchange
+  Server variant of the test environment sets it to false and copies the called process with its
+  callers). The return takes the room out of every room list before it removes the mailbox, and
+  «Sitzungszimmer nachführen» (`raum-nachfuehren.bpmn`, started by hand) runs the same process for
+  every room the catalogue created, which repairs the rooms provisioned before. A correction with
+  «Angaben ändern» starts no process for this product (ADR-0359); the README says how a location
+  is changed.
 - **The top bar stays in view while a page scrolls.** In every app the bar with the app
   switcher, the view names and the account menu disappeared after a little less than one
   window of scrolling: it is sticky, a sticky bar only sticks inside its parent, and the

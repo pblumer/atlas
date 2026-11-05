@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Sitzungszimmer in der Raumsuche auffindbar machen (Raumliste und Ortsangaben).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_raumliste" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <itemDefinition id="item_Raumliste" structureRef="Raumliste"/>
+  <itemDefinition id="item_Raumpostfach" structureRef="Raumpostfach"/>
+  <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
+  <process id="proc_m365_raumliste" name="Exchange: Sitzungszimmer auffindbar machen" isExecutable="true">
+    <documentation>Macht ein Raumpostfach in der Raumsuche von Outlook auffindbar («Alle Räume durchsuchen», Ortsvorschläge). Outlook zeigt Räume nur über Raumlisten (Verteilergruppen, die mit -RoomList angelegt sind) und filtert sie nach den Places-Angaben des Raums (Set-Place: Ort, Stockwerk, Plätze). Ein Raumpostfach ohne beides ist über seine Adresse buchbar, in der Raumsuche fehlt es.
+
+Aufgerufen (Call Activity) von «Sitzungszimmer einrichten» und von «Sitzungszimmer nachführen», darum idempotent: Eine vorhandene Raumliste wird nicht neu angelegt, ein Raum, der schon Mitglied ist, nicht noch einmal aufgenommen, und Set-Place setzt dieselben Werte beliebig oft.
+
+Eingaben: adresse (primäre Adresse des Raumpostfachs), standort (Formularantwort, z.B. «Bern, 5. Stock»), kapazitaet (Zahl oder null).
+
+Der Standort wird einfach zerlegt: Ort ist der Teil vor dem ersten Komma, Stockwerkbezeichnung der Rest, Stockwerk die erste Zahl im Rest («5. Stock» = 5; EG, Erdgeschoss, Parterre = 0). Die Raumliste ist eine pro Ort: Anzeigename «&lt;NAME_PREFIX&gt;RL-&lt;Ort&gt;», Alias «&lt;NAME_PREFIX&gt;rl-&lt;ort&gt;» nach der Namensregel M365Namensregel (Objekttyp raumliste). Das Gebäude ist der Ort; wer pro Ort mehrere Gebäude unterscheidet, braucht eine feinere Regel.
+
+Set-Place gibt es nur in Exchange Online. Die Konstante ORTSANGABEN (Applikation, Vorgabe true) schaltet den Schritt aus; die Exchange-Server-Variante des Beispiels setzt sie auf false, denn dort weist der Worker set-place ab. Änderungen erscheinen in der Raumsuche nach 24 bis 48 Stunden.
+
+Worker: ucc_exchange. Konstanten NAME_PREFIX, MAIL_DOMAIN, ORTSANGABEN.</documentation>
+    <extensionElements>
+      <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
+        <atlas:constant name="MAIL_DOMAIN" type="string" source="application" value="contoso.ch"/>
+        <atlas:constant name="ORTSANGABEN" type="json" source="application" value="true"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Raum übergeben"><documentation>Der aufrufende Prozess übergibt adresse, standort und kapazitaet.</documentation><outgoing>f_s__sc_lage</outgoing></startEvent>
+    <scriptTask id="sc_lage" name="Standort zerlegen"><documentation>Zerlegt den Standort in lage.ort (vor dem ersten Komma), lage.etagenLabel (der Rest) und lage.etage (die erste Zahl im Rest; EG, Erdgeschoss oder Parterre ergeben 0). Was fehlt, ist null und wird von Set-Place weggelassen statt gelöscht. Ein Skript und kein Input-Mapping, weil die Namensregel und Set-Place beide den Ort brauchen.</documentation><extensionElements><zeebe:script expression='={ort: if standort = null or replace(if contains(standort, ",") then substring before(standort, ",") else standort, "^\s+|\s+$", "") = "" then null else replace(if contains(standort, ",") then substring before(standort, ",") else standort, "^\s+|\s+$", ""), etagenLabel: if standort = null or not(contains(standort, ",")) or replace(substring after(standort, ","), "^\s+|\s+$", "") = "" then null else replace(substring after(standort, ","), "^\s+|\s+$", ""), etage: if standort = null or not(contains(standort, ",")) then null else if matches(substring after(standort, ","), "[0-9]") then number(replace(substring after(standort, ","), "^[^0-9]*([0-9]+).*$", "$1")) else if matches(lower case(substring after(standort, ",")), "^\s*(eg|erdgeschoss|parterre)([^a-z]|$)") then 0 else null}' resultVariable="lage"/></extensionElements><incoming>f_s__sc_lage</incoming><outgoing>f_sc_lage__br_rl</outgoing></scriptTask>
+    <businessRuleTask id="br_rl" name="Raumliste benennen"><documentation>Wendet die Namensregel M365Namensregel mit dem Objekttyp raumliste an: Bezeichnung ist der Ort, bereich ist leer. Der slug normalisiert den Ort wie bei jedem anderen Objekt. Das Ergebnis steht in regelRl (erlaubt, grund, anzeigename, alias).</documentation><extensionElements><zeebe:calledDecision decisionId="M365Namensregel" resultVariable="regelRl"/><zeebe:ioMapping><zeebe:input source="=application.NAME_PREFIX" target="praefix"/><zeebe:input source='="raumliste"' target="objekttyp"/><zeebe:input source='=""' target="bereich"/><zeebe:input source='=if lage.ort = null then "" else lage.ort' target="bezeichnung"/><zeebe:input source='=if lage.ort = null then "" else replace(replace(replace(replace(replace(replace(replace(lower case(lage.ort), "ä", "ae"), "ö", "oe"), "ü", "ue"), "[éèê]", "e"), "[àâ]", "a"), "[^a-z0-9]+", "-"), "^-+|-+$", "")' target="slug"/></zeebe:ioMapping></extensionElements><incoming>f_sc_lage__br_rl</incoming><outgoing>f_br_rl__gw_rl</outgoing></businessRuleTask>
+    <exclusiveGateway id="gw_rl" name="Raumliste benennbar?" default="f_gw_rl__gw_mg_join"><documentation>Ohne Ort oder mit einem Namen, den die Regel ablehnt, entsteht keine Raumliste; der Raum erhält trotzdem seine Ortsangaben. Fail-closed: Der Default ist der Weg ohne Raumliste.</documentation><incoming>f_br_rl__gw_rl</incoming><outgoing>f_gw_rl__st_rl_finden</outgoing><outgoing>f_gw_rl__gw_mg_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_rl_finden" name="Raumliste suchen"><documentation>list-distribution-groups mit RecipientTypeDetails RoomList und dem Alias der Regel. Ein Alias ist in Exchange eindeutig; maxResults 5, weil eine Exchange-Liste über der Grenze scheitert, statt abgeschnitten zu werden.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-distribution-groups" parameters="{&quot;Filter&quot;: &quot;=\&quot;Alias -eq '\&quot; + regelRl.alias + \&quot;'\&quot;&quot;, &quot;RecipientTypeDetails&quot;: &quot;RoomList&quot;}" maxResults="5" resultVariable="listen"/></extensionElements><incoming>f_gw_rl__st_rl_finden</incoming><outgoing>f_st_rl_finden__gw_rl_da</outgoing></serviceTask>
+    <exclusiveGateway id="gw_rl_da" name="Raumliste vorhanden?" default="f_gw_rl_da__st_rl_anlegen"><incoming>f_st_rl_finden__gw_rl_da</incoming><outgoing>f_gw_rl_da__st_rl_anlegen</outgoing><outgoing>f_gw_rl_da__gw_rl_da_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_rl_anlegen" name="Raumliste anlegen"><documentation>create-room-list: New-DistributionGroup -RoomList mit Name, Anzeigename, Alias und Adresse aus der Namensregel. Der erste Raum eines Orts legt sie an.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="create-room-list" parameters='{"Name": "=regelRl.anzeigename", "DisplayName": "=regelRl.anzeigename", "Alias": "=regelRl.alias", "PrimarySmtpAddress": "=regelRl.alias + \"@\" + application.MAIL_DOMAIN"}'/></extensionElements><incoming>f_gw_rl_da__st_rl_anlegen</incoming><outgoing>f_st_rl_anlegen__gw_rl_da_join</outgoing><dataOutputAssociation id="doa_st_rl_anlegen"><targetRef>dor_st_rl_anlegen</targetRef></dataOutputAssociation></serviceTask>
+    <exclusiveGateway id="gw_rl_da_join"><incoming>f_gw_rl_da__gw_rl_da_join</incoming><incoming>f_st_rl_anlegen__gw_rl_da_join</incoming><outgoing>f_gw_rl_da_join__st_raum</outgoing></exclusiveGateway>
+    <serviceTask id="st_raum" name="Raumpostfach lesen"><documentation>get-mailbox: der Distinguished Name des Raums, nach dem die nächste Suche filtert.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mailbox" parameters='{"Identity": "=adresse"}' resultVariable="raum"/></extensionElements><incoming>f_gw_rl_da_join__st_raum</incoming><outgoing>f_st_raum__st_rl_ist</outgoing></serviceTask>
+    <serviceTask id="st_rl_ist" name="Raumlisten des Raums suchen"><documentation>list-distribution-groups mit RecipientTypeDetails RoomList und dem Filter Members -eq '&lt;Distinguished Name&gt;': die Raumlisten, in denen der Raum schon ist. Ein Apostroph im Namen wird für den Filter verdoppelt. maxResults 50.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-distribution-groups" parameters="{&quot;Filter&quot;: &quot;=\&quot;Members -eq '\&quot; + replace(raum.DistinguishedName, \&quot;'\&quot;, \&quot;''\&quot;) + \&quot;'\&quot;&quot;, &quot;RecipientTypeDetails&quot;: &quot;RoomList&quot;}" maxResults="50" resultVariable="raumListen"/></extensionElements><incoming>f_st_raum__st_rl_ist</incoming><outgoing>f_st_rl_ist__gw_mg</outgoing></serviceTask>
+    <exclusiveGateway id="gw_mg" name="Schon Mitglied?" default="f_gw_mg__st_rl_mitglied"><documentation>Ein Raum, der schon in der Raumliste ist, wird nicht noch einmal aufgenommen: Ein zweites Add-DistributionGroupMember meldet «ist bereits Mitglied» als Fehler.</documentation><incoming>f_st_rl_ist__gw_mg</incoming><outgoing>f_gw_mg__st_rl_mitglied</outgoing><outgoing>f_gw_mg__gw_mg_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_rl_mitglied" name="Raum aufnehmen"><documentation>add-distribution-group-member: der Raum in die Raumliste seines Orts. BypassSecurityGroupManagerCheck, weil die Raumliste keinen Besitzer hat.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="add-distribution-group-member" parameters='{"Identity": "=regelRl.alias", "Member": "=adresse", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_mg__st_rl_mitglied</incoming><outgoing>f_st_rl_mitglied__gw_mg_join</outgoing><dataOutputAssociation id="doa_st_rl_mitglied"><targetRef>dor_st_rl_mitglied</targetRef></dataOutputAssociation></serviceTask>
+    <exclusiveGateway id="gw_mg_join"><incoming>f_gw_rl__gw_mg_join</incoming><incoming>f_gw_mg__gw_mg_join</incoming><incoming>f_st_rl_mitglied__gw_mg_join</incoming><outgoing>f_gw_mg_join__gw_ort</outgoing></exclusiveGateway>
+    <exclusiveGateway id="gw_ort" name="Ortsangaben setzen?" default="f_gw_ort__gw_ort_join"><documentation>Nur wenn ORTSANGABEN true ist: Set-Place gibt es nur in Exchange Online.</documentation><incoming>f_gw_mg_join__gw_ort</incoming><outgoing>f_gw_ort__st_place</outgoing><outgoing>f_gw_ort__gw_ort_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_place" name="Ortsangaben setzen"><documentation>set-place: City und Building = Ort, Floor = Stockwerk, FloorLabel = Stockwerkbezeichnung, Capacity = Plätze. Danach filtert die Raumsuche. Ein Wert, der null ist, wird weggelassen.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="set-place" parameters='{"Identity": "=adresse", "City": "=lage.ort", "Building": "=lage.ort", "Floor": "=lage.etage", "FloorLabel": "=lage.etagenLabel", "Capacity": "=kapazitaet"}'/></extensionElements><incoming>f_gw_ort__st_place</incoming><outgoing>f_st_place__gw_ort_join</outgoing><dataOutputAssociation id="doa_st_place"><targetRef>dor_st_place</targetRef></dataOutputAssociation></serviceTask>
+    <exclusiveGateway id="gw_ort_join"><incoming>f_gw_ort__gw_ort_join</incoming><incoming>f_st_place__gw_ort_join</incoming><outgoing>f_gw_ort_join__e</outgoing></exclusiveGateway>
+    <endEvent id="e" name="Raum auffindbar"><incoming>f_gw_ort_join__e</incoming></endEvent>
+    <sequenceFlow id="f_s__sc_lage" sourceRef="s" targetRef="sc_lage"/>
+    <sequenceFlow id="f_sc_lage__br_rl" sourceRef="sc_lage" targetRef="br_rl"/>
+    <sequenceFlow id="f_br_rl__gw_rl" sourceRef="br_rl" targetRef="gw_rl"/>
+    <sequenceFlow id="f_gw_rl__st_rl_finden" sourceRef="gw_rl" targetRef="st_rl_finden" name="ja"><conditionExpression>=regelRl.erlaubt = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_rl__gw_mg_join" sourceRef="gw_rl" targetRef="gw_mg_join" name="nein"/>
+    <sequenceFlow id="f_st_rl_finden__gw_rl_da" sourceRef="st_rl_finden" targetRef="gw_rl_da"/>
+    <sequenceFlow id="f_gw_rl_da__st_rl_anlegen" sourceRef="gw_rl_da" targetRef="st_rl_anlegen" name="nein"/>
+    <sequenceFlow id="f_gw_rl_da__gw_rl_da_join" sourceRef="gw_rl_da" targetRef="gw_rl_da_join" name="ja"><conditionExpression>=count(listen) &gt; 0</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_st_rl_anlegen__gw_rl_da_join" sourceRef="st_rl_anlegen" targetRef="gw_rl_da_join"/>
+    <sequenceFlow id="f_gw_rl_da_join__st_raum" sourceRef="gw_rl_da_join" targetRef="st_raum"/>
+    <sequenceFlow id="f_st_raum__st_rl_ist" sourceRef="st_raum" targetRef="st_rl_ist"/>
+    <sequenceFlow id="f_st_rl_ist__gw_mg" sourceRef="st_rl_ist" targetRef="gw_mg"/>
+    <sequenceFlow id="f_gw_mg__st_rl_mitglied" sourceRef="gw_mg" targetRef="st_rl_mitglied" name="nein"/>
+    <sequenceFlow id="f_gw_mg__gw_mg_join" sourceRef="gw_mg" targetRef="gw_mg_join" name="ja"><conditionExpression>=some l in raumListen satisfies lower case(l.Alias) = lower case(regelRl.alias)</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_st_rl_mitglied__gw_mg_join" sourceRef="st_rl_mitglied" targetRef="gw_mg_join"/>
+    <sequenceFlow id="f_gw_mg_join__gw_ort" sourceRef="gw_mg_join" targetRef="gw_ort"/>
+    <sequenceFlow id="f_gw_ort__st_place" sourceRef="gw_ort" targetRef="st_place" name="ja"><conditionExpression>=application.ORTSANGABEN = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_ort__gw_ort_join" sourceRef="gw_ort" targetRef="gw_ort_join" name="nein"/>
+    <sequenceFlow id="f_st_place__gw_ort_join" sourceRef="st_place" targetRef="gw_ort_join"/>
+    <sequenceFlow id="f_gw_ort_join__e" sourceRef="gw_ort_join" targetRef="e"/>
+    <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
+    <dataObject id="do_raumliste" name="Raumliste" itemSubjectRef="item_Raumliste"/>
+    <dataObject id="do_raumpostfach" name="Raumpostfach" itemSubjectRef="item_Raumpostfach"/>
+    <dataObjectReference id="dor_st_rl_anlegen" name="Raumliste" dataObjectRef="do_raumliste"><dataState name="Angelegt"/></dataObjectReference>
+    <dataObjectReference id="dor_st_rl_mitglied" name="Raumliste" dataObjectRef="do_raumliste"><dataState name="Ergaenzt"/></dataObjectReference>
+    <dataObjectReference id="dor_st_place" name="Raumpostfach" dataObjectRef="do_raumpostfach"><dataState name="Auffindbar"/></dataObjectReference>
+    <dataStoreReference id="dsr_exchange_online_empfaenger" name="Exchange Online: Empfaenger" dataStoreRef="ds_exchange_online_empfaenger"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_raumliste_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_raumliste_plane" bpmnElement="proc_m365_raumliste">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_lage_di" bpmnElement="sc_lage"><omgdc:Bounds x="250" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_rl_di" bpmnElement="br_rl"><omgdc:Bounds x="400" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_rl_di" bpmnElement="gw_rl" isMarkerVisible="true"><omgdc:Bounds x="555" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="545" y="160" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_rl_finden_di" bpmnElement="st_rl_finden"><omgdc:Bounds x="660" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_rl_da_di" bpmnElement="gw_rl_da" isMarkerVisible="true"><omgdc:Bounds x="815" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="805" y="62" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_rl_anlegen_di" bpmnElement="st_rl_anlegen"><omgdc:Bounds x="890" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_rl_da_join_di" bpmnElement="gw_rl_da_join" isMarkerVisible="true"><omgdc:Bounds x="1015" y="105" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_raum_di" bpmnElement="st_raum"><omgdc:Bounds x="1115" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_rl_ist_di" bpmnElement="st_rl_ist"><omgdc:Bounds x="1265" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_mg_di" bpmnElement="gw_mg" isMarkerVisible="true"><omgdc:Bounds x="1420" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1410" y="62" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_rl_mitglied_di" bpmnElement="st_rl_mitglied"><omgdc:Bounds x="1495" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_mg_join_di" bpmnElement="gw_mg_join" isMarkerVisible="true"><omgdc:Bounds x="1620" y="105" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_ort_di" bpmnElement="gw_ort" isMarkerVisible="true"><omgdc:Bounds x="1720" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1710" y="62" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_place_di" bpmnElement="st_place"><omgdc:Bounds x="1820" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_ort_join_di" bpmnElement="gw_ort_join" isMarkerVisible="true"><omgdc:Bounds x="1975" y="105" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="2082" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="2050" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__sc_lage_di" bpmnElement="f_s__sc_lage"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="250" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_lage__br_rl_di" bpmnElement="f_sc_lage__br_rl"><omgdi:waypoint x="350" y="130"/><omgdi:waypoint x="400" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_rl__gw_rl_di" bpmnElement="f_br_rl__gw_rl"><omgdi:waypoint x="500" y="130"/><omgdi:waypoint x="555" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rl__st_rl_finden_di" bpmnElement="f_gw_rl__st_rl_finden"><omgdi:waypoint x="605" y="130"/><omgdi:waypoint x="660" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="611" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rl__gw_mg_join_di" bpmnElement="f_gw_rl__gw_mg_join"><omgdi:waypoint x="580" y="105"/><omgdi:waypoint x="580" y="40"/><omgdi:waypoint x="1645" y="40"/><omgdi:waypoint x="1645" y="105"/><bpmndi:BPMNLabel><omgdc:Bounds x="586" y="20" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_rl_finden__gw_rl_da_di" bpmnElement="f_st_rl_finden__gw_rl_da"><omgdi:waypoint x="760" y="130"/><omgdi:waypoint x="815" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rl_da__st_rl_anlegen_di" bpmnElement="f_gw_rl_da__st_rl_anlegen"><omgdi:waypoint x="840" y="155"/><omgdi:waypoint x="840" y="270"/><omgdi:waypoint x="890" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="846" y="200" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rl_da__gw_rl_da_join_di" bpmnElement="f_gw_rl_da__gw_rl_da_join"><omgdi:waypoint x="865" y="130"/><omgdi:waypoint x="1015" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="871" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_rl_anlegen__gw_rl_da_join_di" bpmnElement="f_st_rl_anlegen__gw_rl_da_join"><omgdi:waypoint x="990" y="270"/><omgdi:waypoint x="1040" y="270"/><omgdi:waypoint x="1040" y="155"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rl_da_join__st_raum_di" bpmnElement="f_gw_rl_da_join__st_raum"><omgdi:waypoint x="1065" y="130"/><omgdi:waypoint x="1115" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_raum__st_rl_ist_di" bpmnElement="f_st_raum__st_rl_ist"><omgdi:waypoint x="1215" y="130"/><omgdi:waypoint x="1265" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_rl_ist__gw_mg_di" bpmnElement="f_st_rl_ist__gw_mg"><omgdi:waypoint x="1365" y="130"/><omgdi:waypoint x="1420" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_mg__st_rl_mitglied_di" bpmnElement="f_gw_mg__st_rl_mitglied"><omgdi:waypoint x="1445" y="155"/><omgdi:waypoint x="1445" y="270"/><omgdi:waypoint x="1495" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="1451" y="200" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_mg__gw_mg_join_di" bpmnElement="f_gw_mg__gw_mg_join"><omgdi:waypoint x="1470" y="130"/><omgdi:waypoint x="1620" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="1476" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_rl_mitglied__gw_mg_join_di" bpmnElement="f_st_rl_mitglied__gw_mg_join"><omgdi:waypoint x="1595" y="270"/><omgdi:waypoint x="1645" y="270"/><omgdi:waypoint x="1645" y="155"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_mg_join__gw_ort_di" bpmnElement="f_gw_mg_join__gw_ort"><omgdi:waypoint x="1670" y="130"/><omgdi:waypoint x="1720" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ort__st_place_di" bpmnElement="f_gw_ort__st_place"><omgdi:waypoint x="1770" y="130"/><omgdi:waypoint x="1820" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="1776" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ort__gw_ort_join_di" bpmnElement="f_gw_ort__gw_ort_join"><omgdi:waypoint x="1745" y="155"/><omgdi:waypoint x="1745" y="270"/><omgdi:waypoint x="2000" y="270"/><omgdi:waypoint x="2000" y="155"/><bpmndi:BPMNLabel><omgdc:Bounds x="1751" y="200" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_place__gw_ort_join_di" bpmnElement="f_st_place__gw_ort_join"><omgdi:waypoint x="1920" y="130"/><omgdi:waypoint x="1975" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ort_join__e_di" bpmnElement="f_gw_ort_join__e"><omgdi:waypoint x="2025" y="130"/><omgdi:waypoint x="2082" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_rl_anlegen_di" bpmnElement="dor_st_rl_anlegen"><omgdc:Bounds x="922" y="350" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="890" y="404" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_rl_anlegen_di" bpmnElement="doa_st_rl_anlegen"><omgdi:waypoint x="940" y="310"/><omgdi:waypoint x="940" y="350"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_rl_mitglied_di" bpmnElement="dor_st_rl_mitglied"><omgdc:Bounds x="1527" y="350" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1495" y="404" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_rl_mitglied_di" bpmnElement="doa_st_rl_mitglied"><omgdi:waypoint x="1545" y="310"/><omgdi:waypoint x="1545" y="350"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_place_di" bpmnElement="dor_st_place"><omgdc:Bounds x="1852" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1820" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_place_di" bpmnElement="doa_st_place"><omgdi:waypoint x="1870" y="90"/><omgdi:waypoint x="1870" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="480" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="535" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

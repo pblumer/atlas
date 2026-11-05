@@ -606,9 +606,11 @@ The control-flow basics most real models use.
   **Exchange is another Worker Type in the catalog**
   ([ADR-0462](docs/adr/0462-exchange-worker.md)): a service task marked
   `<atlas:exchangeConnector connector operation parameters …>` runs one Exchange
-  administration cmdlet as a named operation — forty-five of them across mailboxes,
-  permissions (full access, send as, send on behalf, folders), distribution groups and mail
-  contacts, and mailbox settings, plus `run-get-cmdlet` for any read-only `Get-` cmdlet. One
+  administration cmdlet as a named operation — fifty-one of them across mailboxes,
+  permissions (full access, send as, send on behalf, folders), distribution groups, room lists
+  and mail contacts, and mailbox settings including a room's Places metadata for Outlook's Room
+  Finder ([ADR-draft-exchange-room-lists-and-places](docs/adr/draft-exchange-room-lists-and-places.md)),
+  plus `run-get-cmdlet` for any read-only `Get-` cmdlet. One
   operation table (`connector/exchange/catalog`) is read by the compiler and the worker
   alike. Worker-only and supervised by default like Entra: Exchange Online over the REST
   endpoint the Exchange Online PowerShell module uses (app-only, certificate or secret),
