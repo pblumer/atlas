@@ -1,0 +1,132 @@
+{
+  "id": "iot",
+  "name": "Device Automation",
+  "summary": "Atlas for IoT automation: a device Worker Type that drives outputs (GPIO, PWM, buses, e-paper displays) and turns physical inputs into messages, from a Raspberry Pi hosting the server down to a microcontroller speaking the job protocol, with safe states enforced on the device.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-05",
+  "plan": "../../planning/device-automation-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-iot--device-automation-",
+  "next_action": "Review and merge the programme registration with ADR-draft-device-workers-for-the-physical-world (Accepted by the owner on 2026-11-05); then IOT1: the device Worker Type with digital.write, digital.read and pulse on the Linux tier, safe state and on-duration watchdog, tested against a fake gpiochip.",
+  "slices": [
+    {
+      "id": "IOT0",
+      "title": "Decision and threat model",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [],
+      "prs": [],
+      "note": "The owner accepted option 4 of the Device Workers record on 2026-11-05: a device Worker Type defined as a contract over the existing job protocol, MQTT later. Open: the threat model for physically exposed device credentials, which gates IOT2."
+    },
+    {
+      "id": "IOT1",
+      "title": "Linux outputs: digital.write, digital.read, pulse",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [],
+      "prs": [],
+      "note": "First, because every later slice configures a device Worker and this slice creates it. Pure Go against the GPIO character device (no sysfs, no cgo); safe state at start and shutdown, on-duration watchdog on the device, pulse deduplicated by job key; tested against a fake chip. Runs with today's worker token scope: outputs need no message route."
+    },
+    {
+      "id": "IOT2",
+      "title": "Inputs to messages and the device token scope",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT0",
+        "IOT1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Edges and debounce on the device, POST /api/v1/messages with timeToLiveMs and a messageId of device id, boot id and counter; a device scope reaching the job protocol and only the message names the Worker's inputs declare."
+    },
+    {
+      "id": "IOT3",
+      "title": "E-paper display.show",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "One reference panel on a Pi Zero: declarative layout resolved on lease, rasterised on the device with an Umlaut-capable font, content hash, refresh interval, stale marker as the display's safe state; SPI implemented with the driver, not exposed to models."
+    },
+    {
+      "id": "IOT4",
+      "title": "PWM, I2C and 1-Wire",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "pwm.set, i2c.read/i2c.write against configured bus devices, onewire.read (e.g. DS18B20)."
+    },
+    {
+      "id": "IOT5",
+      "title": "Microcontroller client and protocol conformance suite",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT1",
+        "IOT2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "MicroPython reference client for a Pico 2 W; a conformance suite any client can be run against. Settles the open question on TLS long-poll within the microcontroller's RAM and how that tier renders text."
+    },
+    {
+      "id": "IOT6",
+      "title": "Edge server on a Raspberry Pi",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Measured sizing of atlas serve and atlas worker on Pi Zero W, Zero 2 W and Pi 5; an example application; the handbook card in both languages."
+    },
+    {
+      "id": "IOT7",
+      "title": "Coupling an edge Atlas with a central Atlas",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT6"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Needs its own ADR: two engines with their own logs have no cross-engine process today. Decide what crosses (messages, jobs, both), in which direction, and what each side may do while the other is unreachable."
+    },
+    {
+      "id": "IOT8",
+      "title": "People acting through a device",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT2",
+        "IOT3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "A display with a button is an approval terminal nobody logged into. Decide with the Identity-aware Execution programme who a button press is attributed to before a device may complete human work."
+    },
+    {
+      "id": "IOT9",
+      "title": "MQTT bridge for off-the-shelf devices",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Own ADR. Broker QoS acknowledges delivery to the broker, not the effect; a request/response pattern is needed before a job may complete on it."
+    }
+  ]
+}

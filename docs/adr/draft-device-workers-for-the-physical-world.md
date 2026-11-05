@@ -1,6 +1,6 @@
 # ADR-DRAFT: Device Workers — GPIO, buses, displays and inputs of the physical world
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-11-05
 - **Deciders:** Atlas maintainers
@@ -80,8 +80,9 @@ The physical world changes three assumptions every existing Worker Type relies o
 
 ## Decision outcome
 
-Proposed: **option 4 — a `device` Worker Type defined as a contract, implemented per
-tier, over the existing job protocol.**
+Chosen option: **4 — a `device` Worker Type defined as a contract, implemented per
+tier, over the existing job protocol**, accepted by the programme owner on 2026-11-05.
+Delivery is tracked in the [Device Automation programme](../planning/device-automation-program.md).
 
 ### The contract
 
@@ -228,18 +229,26 @@ milliseconds to seconds and not bounded.
   smaller edge binary would need its own record against ADR-0011; persisted pulse
   deduplication; rate limiting of messages per device token.
 
-### Proposed slices
+### Slices
 
-1. Accept this record and a threat model for physically exposed credentials.
-2. Token scope `device` with the message-name allowlist (server only).
-3. Linux tier: `digital.write`, `digital.read`, `pulse`, safe state and on-duration
+The order below is the delivery order. The `device` token scope was first in this
+record's draft; it moved behind the Linux outputs because its message allowlist refers
+to the inputs a device Worker declares, and that Worker is what the first slice
+creates. Outputs need nothing beyond today's `worker` scope.
+
+1. Linux tier: `digital.write`, `digital.read`, `pulse`, safe state and on-duration
    watchdog, tested against a fake gpiochip.
-4. Inputs to messages: edges, debounce, `messageId`.
-5. `display.show` on the Linux tier for one reference e-paper panel on a Pi Zero:
+2. Inputs to messages (edges, debounce, `messageId`) together with the token scope
+   `device` and its message-name allowlist, after a threat model for physically
+   exposed credentials.
+3. `display.show` on the Linux tier for one reference e-paper panel on a Pi Zero:
    layout, rasteriser, content hash, refresh interval, stale marker.
-6. `pwm.set`, `i2c.*`, `onewire.read`.
-7. Microcontroller reference client and the protocol conformance suite.
-8. Edge server on a Pi: sizing measured, an example application, the handbook card.
+4. `pwm.set`, `i2c.*`, `onewire.read`.
+5. Microcontroller reference client and the protocol conformance suite.
+6. Edge server on a Pi: sizing measured, an example application, the handbook card.
+7. Coupling an edge Atlas with a central one, in its own record.
+8. People acting through a device (a button that approves), decided with the
+   Identity-aware Execution programme.
 9. MQTT bridge for off-the-shelf devices, in its own record.
 
 ## Pros and cons of the options

@@ -6,13 +6,14 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**7 programmes** · active: 6 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
+**8 programmes** · active: 7 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Owner key ceremony for the atlas hub sample registry (atlas hub keygen, two offline backups checked with atlas hub fingerprint, publicKey in examples/hub/releases.json, secret ATLAS_HUB_SIGNING_KEY), first Pages publication and a Console import from a real installation; then rebase draft PR #1424 and finish verified installation finalization and restart recovery (#1422). |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+| [Device Automation](../planning/device-automation-program.md) | active | 0/10 | pblumer | Review and merge the programme registration with ADR-draft-device-workers-for-the-physical-world (Accepted by the owner on 2026-11-05); then IOT1: the device Worker Type with digital.write, digital.read and pulse on the Linux tier, safe state and on-duration watchdog, tested against a fake gpiochip. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/8 | pblumer | MFE1 server and UI slices (#1492, #1495, #1497, #1498) are merged and the "published" question is decided (newest deployed version). Review and merge the handbook follow-up PR #1500, then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1459's DMN fork and npm-lockfile licence evidence; inspect actual generated DMN JS/CSS/font bundle, run reproducible rebuild and SBOM/notice checks, verify copied fixtures, and explicitly accept or revise ADR-0513 before authoring changes. |
 | [Operations History at Scale](../planning/operations-history-at-scale-program.md) | active | 1/3 | pblumer | Merge #1514 (variables at a step, OHS3 increment 3); then job/user-task history per iteration (OHS3) and a 50,000-iteration MI-subprocess acceptance through the HTTP server. |
@@ -66,6 +67,25 @@ Govern external Worker actions through explicit identities, managed Connections,
 | **IAE6** — Console, Operations and audit | planned | unassigned | IAE1, IAE3, IAE4, IAE5 | — | Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history. |
 | **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
 | **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
+
+## Device Automation (IOT)
+
+Atlas for IoT automation: a device Worker Type that drives outputs (GPIO, PWM, buses, e-paper displays) and turns physical inputs into messages, from a Raspberry Pi hosting the server down to a microcontroller speaking the job protocol, with safe states enforced on the device.
+
+**[Programme plan](../planning/device-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-iot--device-automation-) · [Manifest](iot/program.json) · Reviewed: 2026-11-05**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **IOT0** — Decision and threat model | active | pblumer | — | — | The owner accepted option 4 of the Device Workers record on 2026-11-05: a device Worker Type defined as a contract over the existing job protocol, MQTT later. Open: the threat model for physically exposed device credentials, which gates IOT2. |
+| **IOT1** — Linux outputs: digital.write, digital.read, pulse | active | pblumer | — | — | First, because every later slice configures a device Worker and this slice creates it. Pure Go against the GPIO character device (no sysfs, no cgo); safe state at start and shutdown, on-duration watchdog on the device, pulse deduplicated by job key; tested against a fake chip. Runs with today's worker token scope: outputs need no message route. |
+| **IOT2** — Inputs to messages and the device token scope | planned | unassigned | IOT0, IOT1 | — | Edges and debounce on the device, POST /api/v1/messages with timeToLiveMs and a messageId of device id, boot id and counter; a device scope reaching the job protocol and only the message names the Worker's inputs declare. |
+| **IOT3** — E-paper display.show | planned | unassigned | IOT1 | — | One reference panel on a Pi Zero: declarative layout resolved on lease, rasterised on the device with an Umlaut-capable font, content hash, refresh interval, stale marker as the display's safe state; SPI implemented with the driver, not exposed to models. |
+| **IOT4** — PWM, I2C and 1-Wire | planned | unassigned | IOT1 | — | pwm.set, i2c.read/i2c.write against configured bus devices, onewire.read (e.g. DS18B20). |
+| **IOT5** — Microcontroller client and protocol conformance suite | planned | unassigned | IOT1, IOT2 | — | MicroPython reference client for a Pico 2 W; a conformance suite any client can be run against. Settles the open question on TLS long-poll within the microcontroller's RAM and how that tier renders text. |
+| **IOT6** — Edge server on a Raspberry Pi | planned | unassigned | IOT1 | — | Measured sizing of atlas serve and atlas worker on Pi Zero W, Zero 2 W and Pi 5; an example application; the handbook card in both languages. |
+| **IOT7** — Coupling an edge Atlas with a central Atlas | planned | unassigned | IOT6 | — | Needs its own ADR: two engines with their own logs have no cross-engine process today. Decide what crosses (messages, jobs, both), in which direction, and what each side may do while the other is unreachable. |
+| **IOT8** — People acting through a device | planned | unassigned | IOT2, IOT3 | — | A display with a button is an approval terminal nobody logged into. Decide with the Identity-aware Execution programme who a button press is attributed to before a device may complete human work. |
+| **IOT9** — MQTT bridge for off-the-shelf devices | planned | unassigned | IOT2 | — | Own ADR. Broker QoS acknowledges delivery to the broker, not the effect; a request/response pattern is needed before a job may complete on it. |
 
 ## Mobile & Field Experience (MFE)
 

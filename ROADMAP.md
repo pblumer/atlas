@@ -2525,6 +2525,25 @@ tests](docs/planning/capability-driven-automation-program.md) are the
 review checklist. Treat `Proposed`, `Partial`, `Merged`, and `Landed`
 as distinct states.
 
+## Milestone IOT — Device Automation 🔲
+
+A [delivery programme](docs/planning/device-automation-program.md) for IoT automation:
+a `device` Worker Type that drives outputs and turns physical inputs into messages, from
+a Raspberry Pi hosting the server down to a microcontroller speaking the job protocol.
+[ADR-draft-device-workers-for-the-physical-world](docs/adr/draft-device-workers-for-the-physical-world.md)
+is **Accepted / Not started**.
+
+- 🔲 **IOT0 — Decision and threat model.** The direction is decided; the threat model for a physically exposed device credential is open.
+- 🔲 **IOT1 — Linux outputs.** `digital.write`, `digital.read` and `pulse` in pure Go against the GPIO character device, outputs addressed by name, safe states and an on-duration watchdog enforced on the device.
+- 🔲 **IOT2 — Inputs and the device token scope.** Debounced edges published as idempotent messages; a credential that reaches only the job protocol and the device's declared message names.
+- 🔲 **IOT3 — E-paper displays.** `display.show` with a declarative layout, rendered on the device, unchanged pictures skipped, a stale marker as the display's safe state.
+- 🔲 **IOT4 — PWM, I2C and 1-Wire.**
+- 🔲 **IOT5 — Microcontroller client** and a protocol conformance suite.
+- 🔲 **IOT6 — Edge server on a Pi**, with measured sizing.
+- 🔲 **IOT7 — Coupling an edge Atlas with a central one** (own ADR).
+- 🔲 **IOT8 — People acting through a device**, decided with IAE.
+- 🔲 **IOT9 — MQTT bridge** for off-the-shelf devices (own ADR).
+
 ## Milestone K — Service catalogue, orders & the portal 🚧
 
 A parallel track: what a person may order, and a record of what they already hold. Three
