@@ -13,6 +13,20 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The handbook shows every app's symbol.** In "The apps at a glance", each app's card leads with
+  its symbol, the same one the drawer and the top bar show, and the overview says so. The
+  handbook keeps no copy: a module script draws the cards from `api/web/module-icons.js`.
+- **Every app has a symbol, and the Console greets with a rocket built of them.** Each module — Console,
+  Modeler, Data, Operations, Tasks, Panorama, Catalogue and Shop — has a symbol: a white
+  glyph on its own colour, which leads its entry in the app drawer and stands beside
+  the open app's name in the top bar (left out where a 1024px bar has no room for it,
+  back on a phone). The Console's
+  welcome card shows a rocket beside its text whose sections are the modules, each
+  marked with its symbol: Operations at the engines, the Console in the command capsule,
+  the Marketplace as the two boosters. The symbols are drawn once
+  (`api/web/module-icons.js`); `scripts/brand/modules.py` writes their copies under
+  `docs/brand/icons/modules/` and `scripts/brand/welcome.py` draws the rocket, and a test
+  holds both to the drawing. On a phone the card leaves the picture out.
 
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has

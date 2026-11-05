@@ -71,6 +71,8 @@ pasted, so the copy stays in English even where the surrounding docs are not.
 | `atlas-social.svg` / `atlas-social.png` | 1200×630 social / link-preview card |
 | `atlas-social-flat.svg` | The same card with its text as outlines — renders identically where the fonts are missing |
 | `icons/*.svg` | The feature icons the README's Highlights list carries |
+| `icons/modules/module-*.svg` | The module symbols, one per app — copies of the Console's drawing in `api/web/module-icons.js`, written by `scripts/brand/modules.py` |
+| `atlas-welcome.svg` | The Console's welcome illustration: a rocket whose sections are the modules — written by `scripts/brand/welcome.py`, together with the copy the Console embeds (`api/web/welcome.svg`) |
 
 The PNGs are rendered from the SVGs — the SVGs are the source of truth. To
 regenerate them, screenshot each SVG at the target size with headless Chromium
@@ -97,6 +99,53 @@ buildless and cannot fetch a file before it paints: the `<link rel="icon">` data
 URI at the top of each page in `api/web/` (the `favicon.svg` cut), the `.mark`
 spans in those same pages, and `BUILTIN_MARK` in `api/web/logo.js` (both the
 `atlas-glyph.svg` cut). Change the drawing here and change those with it.
+
+## Module symbols (`icons/modules/`)
+
+Each module of atlas — each app the drawer offers — has a symbol: a white glyph in a
+24-unit box on a rounded tile in the module's colour. They tell the apps apart at a
+glance in the drawer, stand beside the open app's name in the top bar — next to the
+mark or an organisation's logo, never in its place — and mark the sections of the
+welcome illustration's rocket.
+
+| Module | Colour | Symbol |
+|--------|--------|--------|
+| Console | `#0b5cff` | A gauge with its needle: watching over the engine |
+| Modeler | `#7c5cff` | Start, task, gateway: a process being drawn |
+| Data | `#0ea5e9` | Two classes and their association: the information model |
+| Operations | `#14b8a6` | A pulse: instances running live |
+| Tasks | `#f59e0b` | A checked box over a line: the inbox of work |
+| Panorama | `#ec4899` | A hub and its applications: the whole estate on one map |
+| Catalogue | `#4f46e5` | An open book: the catalogue of products |
+| Shop | `#f43f5e` | A bag: ordering |
+
+**One drawing.** The symbols are drawn once, in `api/web/module-icons.js`, as a JSON
+table between `/* JSON */` and `/* /JSON */` — plain JSON so the brand scripts read
+exactly what the Console paints. `scripts/brand/modules.py` writes the copies here,
+`scripts/brand/welcome.py` puts them on the rocket, and
+`api/modulesymbols_internal_test.go` fails while a copy differs, while an app has no
+symbol, or while a symbol has no app. A new app therefore needs a symbol before the
+build is green; draw it in the same idiom — white on the colour, filled shapes or
+round-capped strokes of about two units, nothing finer than the 24px drawer can show —
+and give it a colour no other module uses.
+
+The colours are fixed, not themed: a tile reads the same on the light, dark and
+cockpit appearances, and the white glyph needs the saturated ground under it.
+
+## Welcome illustration (`atlas-welcome.svg`)
+
+The Console's welcome card shows a rocket climbing through orbit, built of the
+modules: Operations is the engine section, Data, Tasks, Modeler and Panorama are the
+stages above it, the Console is the command capsule, and the Marketplace — Catalogue
+and Shop — are the two boosters. Each section carries its module's symbol. A
+muted red planet sits behind it; a glow, a dashed orbit and a few sparkles surround it,
+and the ground is transparent, so it sits on any card. It has no logo of its own:
+the card already leads with the mark (or an organisation's logo) beside its heading.
+
+It is drawn by `scripts/brand/welcome.py` as a small 3D model — frustums and domes
+projected by a perspective camera and painted back to front — which is what gives the
+sections their shading. Run the script after a change to it or to a module symbol; it
+writes this file and `api/web/welcome.svg` at once.
 
 ## Feature icons (`icons/`)
 
