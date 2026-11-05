@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Every app has a symbol, and the Console greets with a rocket built of them.** Each module — Console,
+  Modeler, Data, Operations, Tasks, Panorama, Catalogue and Shop — has a symbol: a white
+  glyph on its own colour, which leads its entry in the app drawer. The Console's
+  welcome card shows a rocket beside its text whose sections are the modules, each
+  marked with its symbol: Operations at the engines, the Console in the command capsule,
+  the Marketplace as the two boosters. The symbols are drawn once
+  (`api/web/module-icons.js`); `scripts/brand/modules.py` writes their copies under
+  `docs/brand/icons/modules/` and `scripts/brand/welcome.py` draws the rocket, and a test
+  holds both to the drawing. On a phone the card leaves the picture out.
 
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
