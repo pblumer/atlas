@@ -3,7 +3,7 @@
   M365Namensregel: die Namenskonvention für alles, was der Microsoft-365-Katalog anlegt (Governance).
 
   Eingaben: objekttyp  ("team" | "funktionspostfach" | "verteiler" | "raum" | "warteschlange" | "telefonzentrale"
-                        | "site" | "geraet" | "community")
+                        | "site" | "geraet" | "community" | "raumliste")
             slug       (die normalisierte Bezeichnung; der Prozess bildet sie im Input-Mapping)
             laenge     (berechnet: Länge von slug und bereich zusammen)
             bereich, bezeichnung (Formularantworten; die Ausgaben lesen sie)
@@ -30,6 +30,13 @@
 
   Objekttypen geraet (Präfix GE) und community (Präfix EC) sind später dazugekommen; ihre Regeln
   r11 und r12 stehen vor der Auffangregel r10 und ändern an den bisherigen nichts.
+
+  Objekttyp raumliste (Präfix RL, Regel r13) benennt die Raumliste, über die Outlook die
+  Sitzungszimmer eines Orts in der Raumsuche zeigt. Sie hat keinen Bereich: Der Prozess
+  übergibt bereich als "" und den Ort (den Teil des Standorts vor dem ersten Komma) als
+  bezeichnung, normalisiert als slug. Anzeigename «RL-Bern», Alias «rl-bern», beide mit dem
+  Präfix davor. Leer, reserviert oder über 30 Zeichen wird wie jede Bezeichnung abgelehnt; der
+  Prozess legt dann keine Raumliste an.
 
   Wer die Konvention ändert, ändert diese Tabelle und nicht die Prozesse. Achtung: Präfixe sind Teil
   der Identität bestehender Teams und Ressourcenkonten (deren Rückgabe bildet den Alias neu); ein
@@ -195,6 +202,16 @@
         <outputEntry id="r12_o1"><text>"Namensregel erfüllt"</text></outputEntry>
         <outputEntry id="r12_o2"><text>(if praefix = null then "" else praefix) + "EC-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
         <outputEntry id="r12_o3"><text>(if praefix = null then "" else praefix) + "ec-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r13">
+        <description>Objekttyp raumliste: Präfix RL, eine Raumliste pro Ort (ohne Bereich; bezeichnung ist der Ort, slug der normalisierte Ort)</description>
+        <inputEntry id="r13_i0"><text>"raumliste"</text></inputEntry>
+        <inputEntry id="r13_i1"><text>-</text></inputEntry>
+        <inputEntry id="r13_i2"><text>-</text></inputEntry>
+        <outputEntry id="r13_o0"><text>true</text></outputEntry>
+        <outputEntry id="r13_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r13_o2"><text>(if praefix = null then "" else praefix) + "RL-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r13_o3"><text>(if praefix = null then "" else praefix) + "rl-" + slug</text></outputEntry>
       </rule>
       <rule id="r10">
         <description>Auffangregel: ein Objekttyp ohne Regel wird abgelehnt (fail-closed)</description>
