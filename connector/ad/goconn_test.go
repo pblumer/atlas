@@ -385,7 +385,7 @@ func TestSearchScope(t *testing.T) {
 // them as standard base64 of those bytes — named in any case — rather than as the
 // bytes forced into a string, which no process can compare or pass on. Base64 of
 // objectGUID as AD stores it is Entra's onPremisesImmutableId
-// (ADR-draft-informationstransfer-operations). A text attribute is unchanged.
+// (ADR-0534). A text attribute is unchanged.
 func TestGoConnSearchEncodesBinaryAttributes(t *testing.T) {
 	guid := []byte{0x5c, 0x2a, 0x0b, 0x6f, 0x91, 0x3e, 0x4a, 0x47, 0x8b, 0x00, 0xff, 0x10, 0x22, 0x33, 0x44, 0x55}
 	sid := []byte{0x01, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x15, 0x00}

@@ -225,6 +225,12 @@
       "version": "1.0.0",
       "digest": "sha256:5f53d8196cf79975c8108eb7849475b42926a1da44e48ca031a0c19c301b1f03",
       "minAtlas": "0.23.0-0"
+    },
+    {
+      "bundle": "informationstransfer",
+      "version": "1.0.1",
+      "digest": "sha256:c4f757f718b4b65a13c790131e162f011855d26e26787fbedd9f9a80710de3b9",
+      "minAtlas": "0.24.0-0"
     }
   ]
 }

@@ -68,7 +68,7 @@ place.
   mailbox and `restore-mailbox-content` copies a disconnected mailbox's content into another mailbox
   (`New-MailboxRestoreRequest`, `AllowLegacyDNMismatch` set by the Worker). The AD Worker returns
   `objectGUID`, `objectSid` and `mS-DS-ConsistencyGuid` as base64 of their bytes; for `objectGUID`
-  that is Entra's `onPremisesImmutableId` (ADR-draft-informationstransfer-operations).
+  that is Entra's `onPremisesImmutableId` (ADR-0534).
 - **The Modeler steps between a process's versions and restores one as the draft.** Arrows on
   either side of the editor bar's version chip open the version before or after the one shown, the
   draft after the newest, and the chip's panel lists every version with who deployed it and when.

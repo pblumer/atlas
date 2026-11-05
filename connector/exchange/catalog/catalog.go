@@ -259,7 +259,7 @@ var Ops = map[string]Op{
 		Unavailable: remoteOnly},
 
 	// Moving a mailbox's content from one account to another on Exchange Server
-	// (ADR-draft-informationstransfer-operations). disable-mailbox removes the Exchange
+	// (ADR-0534). disable-mailbox removes the Exchange
 	// attributes from the source account and disconnects its mailbox; the content stays
 	// in the database for the deleted-mailbox retention period, and
 	// restore-mailbox-content copies it from there into the target's mailbox.

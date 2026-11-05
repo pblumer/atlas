@@ -621,6 +621,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0531](0531-entra-subscribed-skus.md) | The Entra Worker reads the tenant's licence subscriptions and the last sign-in | Accepted | Landed |
 | [0532](0532-exchange-room-lists-and-places.md) | Rooms Outlook can find — room lists and Places metadata in the Exchange Worker | Accepted | Landed |
 | [0533](0533-modeler-walks-and-restores-versions.md) | The Modeler walks a process's versions and restores one as the draft | Accepted | Landed |
+| [0534](0534-informationstransfer-operations.md) | Worker operations for transferring resources between two accounts | Accepted | Landed |
 
 ## The two states of a record
 

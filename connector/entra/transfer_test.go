@@ -12,7 +12,7 @@ import (
 )
 
 // The operations a transfer of resources from one account to another needs
-// (ADR-draft-informationstransfer-operations): the groups the source account is a
+// (ADR-0534): the groups the source account is a
 // direct member of, and the recycle bin for users — restore and final deletion.
 
 // list-user-groups reads the user's direct memberships, cast to groups, with the

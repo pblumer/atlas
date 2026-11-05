@@ -187,7 +187,7 @@ var Ops = map[string]Op{
 	"get-sync-behavior": {Method: "GET", NeedsUser: true, Label: "read a user's source of authority"},
 	"set-sync-behavior": {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "transfer a user's source of authority"},
 	// What a transfer from one account to another needs
-	// (ADR-draft-informationstransfer-operations). list-user-groups is the groups the
+	// (ADR-0534). list-user-groups is the groups the
 	// user is a *direct* member of — memberOf cast to groups, not transitiveMemberOf:
 	// a transfer copies the memberships somebody granted, and what a nested group
 	// grants follows from that group, so copying it as well would make the target a

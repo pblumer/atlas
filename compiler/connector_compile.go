@@ -255,7 +255,7 @@ type entraOp struct {
 	selectOnly bool
 	// alwaysAdvanced marks a listing Graph answers only as an advanced query —
 	// list-user-groups, an OData cast on memberOf
-	// (ADR-draft-informationstransfer-operations). It compiles as one whatever the
+	// (ADR-0534). It compiles as one whatever the
 	// model says, and advancedQuery="false" on it is refused rather than overridden.
 	alwaysAdvanced bool
 }
@@ -305,7 +305,7 @@ var entraOps = map[string]entraOp{
 	"get-sync-behavior": {needsUser: true},
 	"set-sync-behavior": {needsUser: true, needsAttributes: true},
 	// A transfer from one account to another: the groups a user is a direct member of,
-	// and the users' recycle bin (ADR-draft-informationstransfer-operations).
+	// and the users' recycle bin (ADR-0534).
 	"list-user-groups":        {needsUser: true, isList: true, alwaysAdvanced: true},
 	"restore-user":            {needsUser: true},
 	"permanently-delete-user": {needsUser: true},

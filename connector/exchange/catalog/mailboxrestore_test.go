@@ -11,7 +11,7 @@ import (
 // attributes from the account and disconnects the mailbox, whose content stays in the
 // database for the retention period — what restore-mailbox-content reads afterwards.
 // Exchange Online has no such step for a user mailbox, so the operation is refused
-// there with what to do instead (ADR-draft-informationstransfer-operations).
+// there with what to do instead (ADR-0534).
 func TestDisableMailboxIsExchangeServerOnly(t *testing.T) {
 	inv := build(t, "disable-mailbox", catalog.OnPrem, map[string]any{"Identity": "anna.muster"})
 	if inv.Cmdlet != "Disable-Mailbox" || inv.Parameters["Identity"] != "anna.muster" || len(inv.Parameters) != 1 {

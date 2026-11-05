@@ -1,4 +1,4 @@
-# ADR-DRAFT: Worker operations for transferring resources between two accounts
+# ADR-0534: Worker operations for transferring resources between two accounts
 
 - **Status:** Accepted
 - **Implementation:** Landed

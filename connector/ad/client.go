@@ -383,7 +383,7 @@ func entriesFrom(res *goldap.SearchResult) []Entry {
 // lower-cased name (LDAP names are case-insensitive). Read as a string, a GUID or a SID
 // is sixteen or so arbitrary bytes that no JSON variable carries intact and no process
 // can compare, so a search and a sync answer them as standard base64 of the raw bytes
-// instead (ADR-draft-informationstransfer-operations). For objectGUID that is exactly
+// instead (ADR-0534). For objectGUID that is exactly
 // Entra ID's onPremisesImmutableId — the source anchor Entra Connect writes and a hard
 // match compares — and mS-DS-ConsistencyGuid, the anchor newer Connect installations
 // use, carries the same bytes. The list is deliberately the identity anchors and no
