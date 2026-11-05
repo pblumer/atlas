@@ -1040,7 +1040,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
 const WORKER_TYPES = [
   {
     id: "temis", name: "temis", kind: "Decision engine",
-    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's DMN references at deploy time.",
+    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's rules (DMN references) at deploy time.",
     refs: "ADR-0014 · ADR-0034", status: "active", statusLabel: "embedded",
   },
   {
@@ -6730,7 +6730,7 @@ async function validateProject(projectId) {
 // show under "Deployed". Uses a raw fetch so the refusal body (which is not an
 // {error} shape) is read instead of thrown away.
 async function deployProject(id, reload) {
-  if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
+  if (!window.confirm("Publish this application? Its rules are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
     const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/deploy`, { method: "POST" });
