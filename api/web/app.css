@@ -603,6 +603,9 @@ b { font-weight: 600; }
 #drawer-apps a:hover { background: var(--bg); text-decoration: none; }
 #drawer-apps a.active { background: var(--accent-soft); color: var(--accent-text); }
 #drawer-apps a .soon { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 500; }
+/* Each app leads with its module's symbol (module-icons.js): a fixed-colour tile, so
+   it reads the same on every appearance and does not shrink when a name is long. */
+#drawer-apps a .module-symbol { flex: none; display: block; }
 /* The two shop surfaces are pages of their own and open in their own window, so
    the drawer says so before the click rather than after it: an entry that silently
    opens a second window is the same surprise whichever way it is resolved. It is a
@@ -968,6 +971,19 @@ ol.steps li { margin: 6px 0; }
 .welcome-head h1 { margin: 0; }
 .welcome-version { font-size: 13px; font-family: ui-monospace, monospace; }
 .welcome-mark { width: 48px; height: 48px; border-radius: 10px; flex: none; }
+/* Beside the text, the welcome illustration (welcome.svg, scripts/brand/welcome.py): a
+   rocket whose sections are the modules, each marked with its symbol. It is a picture
+   only — alt="" — and on a phone it gives way, so the first actions stay in reach
+   without scrolling past it. */
+.welcome-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 24px; align-items: center; }
+.welcome-art { width: 100%; height: auto; display: block; }
+@media (max-width: 860px) {
+  .welcome-card { grid-template-columns: minmax(0, 1fr); }
+  .welcome-art { max-width: 400px; justify-self: center; }
+}
+@media (max-width: 640px) {
+  .welcome-art { display: none; }
+}
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
