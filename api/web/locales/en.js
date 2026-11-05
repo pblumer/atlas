@@ -4349,6 +4349,7 @@ export default {
   "pnl.ops.entra.result.syncBehavior": "For this operation, the onPremisesSyncBehavior object: { isCloudManaged: true | false } — true means the cloud manages the account.",
   "pnl.ops.entra.result.restoreGroup": "For this operation, the restored group object (id, displayName, mailNickname, …) — with the same id it had before deletion.",
   "pnl.ops.entra.result.listDeletedGroups": "For this operation, a JSON array of the deleted groups in the recycle bin, each with its deletedDateTime (required).",
+  "pnl.ops.entra.result.listSubscribedSkus": "For this operation, a JSON array of the tenant's licence subscriptions, one per SKU: skuId, skuPartNumber, capabilityStatus, appliesTo, consumedUnits (assigned) and prepaidUnits {enabled, warning, suspended, lockedOut} (bought).",
   "pnl.ops.entra.result.none": "This operation returns nothing — Graph answers without content (204), and the variable stays empty.",
   "pnl.ops.entra.result.default": "The operation's response object.",
   "pnl.ops.ps.op.eq": "Equal to.",

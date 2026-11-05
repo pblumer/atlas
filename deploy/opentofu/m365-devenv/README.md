@@ -18,7 +18,7 @@ Das Projekt ist für **Entwicklung und temporäre Tests** gedacht, nicht für de
 
 | Worker Type | Worker in der Console | Ziel | Berechtigungen der App |
 |---|---|---|---|
-| `entra` ([ADR-0172](../../../docs/adr/0172-entra-id-connector.md)) | `ucc_entra` | Microsoft Graph: Benutzer, Gruppen, Teams | `User.ReadWrite.All`, `Group.ReadWrite.All`, `TeamMember.ReadWrite.All`, `Channel.Create`, `TeamSettings.ReadWrite.All`; Zertifikat |
+| `entra` ([ADR-0172](../../../docs/adr/0172-entra-id-connector.md)) | `ucc_entra` | Microsoft Graph: Benutzer, Gruppen, Teams | `User.ReadWrite.All`, `Group.ReadWrite.All`, `TeamMember.ReadWrite.All`, `Channel.Create`, `TeamSettings.ReadWrite.All`, `User.Invite.All`, `LicenseAssignment.Read.All` (Lizenzbestand, `list-subscribed-skus`), `AuditLog.Read.All` (letzte Anmeldung, `signInActivity`; nur mit Entra ID P1/P2 im Tenant); Zertifikat |
 | `exchange` ([ADR-0462](../../../docs/adr/0462-exchange-worker.md)) | `ucc_exchange` | Exchange Online | `Exchange.ManageAsApp` + Rolle *Exchange Administrator*; Zertifikat |
 | `sharepoint` ([ADR-0141](../../../docs/adr/0141-sharepoint-connector.md)) | `ucc_sharepoint` | SharePoint Online | `Sites.ReadWrite.All`; Zertifikat |
 | `teamsphone` ([ADR-0463](../../../docs/adr/0463-teams-phone-worker.md)) | `ucc_teams` | Teams Phone (PowerShell) | `User.ReadWrite.All` + Rolle *Teams Administrator*; Zertifikat |

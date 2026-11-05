@@ -114,6 +114,8 @@ export function entraResultShape(operation) {
       return t("pnl.ops.entra.result.listGroups");
     case "list-deleted-groups":
       return t("pnl.ops.entra.result.listDeletedGroups");
+    case "list-subscribed-skus":
+      return t("pnl.ops.entra.result.listSubscribedSkus");
     case "restore-group":
       return t("pnl.ops.entra.result.restoreGroup");
     case "invite-guest":
@@ -160,6 +162,7 @@ export function entraResultType(operation) {
     case "list-users":
     case "list-groups":
     case "list-deleted-groups":
+    case "list-subscribed-skus":
       return "array";
     case "assign-license":
     case "assign-role":

@@ -4409,6 +4409,7 @@ export default {
   "pnl.ops.entra.result.syncBehavior": "Bei dieser Operation das Objekt onPremisesSyncBehavior: { isCloudManaged: true | false } — true heisst, die Cloud verwaltet das Konto.",
   "pnl.ops.entra.result.restoreGroup": "Bei dieser Operation das wiederhergestellte Gruppen-Objekt (id, displayName, mailNickname, …) — mit derselben id wie vor dem Löschen.",
   "pnl.ops.entra.result.listDeletedGroups": "Bei dieser Operation ein JSON-Array der gelöschten Gruppen im Papierkorb, jede mit deletedDateTime (erforderlich).",
+  "pnl.ops.entra.result.listSubscribedSkus": "Bei dieser Operation ein JSON-Array der Lizenzabonnemente des Tenants, eines pro SKU: skuId, skuPartNumber, capabilityStatus, appliesTo, consumedUnits (zugewiesen) und prepaidUnits {enabled, warning, suspended, lockedOut} (gekauft).",
   "pnl.ops.entra.result.none": "Diese Operation gibt nichts zurück — Graph antwortet ohne Inhalt (204), die Variable bleibt leer.",
   "pnl.ops.entra.result.default": "Das Antwort-Objekt der Operation.",
   "pnl.ops.ps.op.eq": "Gleich.",

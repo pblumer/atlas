@@ -7619,7 +7619,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>) und
             Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
             <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
-            sein).</li>
+            sein). Den Lizenzbestand des Tenants lesen (<code>list-subscribed-skus</code>: gekaufte und zugewiesene
+            Einheiten pro SKU) braucht zusätzlich <code>LicenseAssignment.Read.All</code>. Die letzte Anmeldung
+            eines Kontos (<code>signInActivity</code> im <code>select</code> von <code>list-users</code> oder
+            <code>get-user</code>) braucht zusätzlich <code>AuditLog.Read.All</code> und im Tenant eine Lizenz
+            Entra ID P1 oder P2.</li>
           <li data-l="en"><b>API permissions → Microsoft Graph → Application permissions.</b> For the usual
             joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and
             <code>Group.ReadWrite.All</code>. If a process only manages membership and creates no groups, the tighter
@@ -7629,7 +7633,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             worker never needs. Teams operations and role assignment are opt-in, and so is inviting guests
             (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>), and so is creating Viva Engage
             communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
-            documents that the Engage network must be in native mode for it).</li>
+            documents that the Engage network must be in native mode for it). Reading the tenant's licence stock
+            (<code>list-subscribed-skus</code>: bought and assigned units per SKU) also needs
+            <code>LicenseAssignment.Read.All</code>. An account's last sign-in (<code>signInActivity</code> in the
+            <code>select</code> of <code>list-users</code> or <code>get-user</code>) also needs
+            <code>AuditLog.Read.All</code> and an Entra ID P1 or P2 licence in the tenant.</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the

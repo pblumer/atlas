@@ -199,6 +199,9 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "list-users", job: Job{ResultVariable: "leute"},
 			method: "GET", path: "/users",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "list-subscribed-skus", job: Job{ResultVariable: "lizenzen"},
+			method: "GET", path: "/subscribedSkus",
+			wantBodyIs: func(b any) bool { return b == nil }},
 		{op: "delta-users", job: Job{ResultVariable: "aenderungen"},
 			method: "GET", path: "/users/delta",
 			wantBodyIs: func(b any) bool { return b == nil }},
@@ -382,7 +385,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 34 {
+	if len(Ops) != 35 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -829,16 +832,18 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 			// both halves must place the same way: filter/search/advancedQuery on a
 			// listing; select/pageSize/maxUsers on a listing or a delta query (both return
 			// a collection); deltaLink on a delta query alone. The compiler must refuse
-			// each where it has no meaning rather than drop it silently.
+			// each where it has no meaning rather than drop it silently. A select-only
+			// listing (list-subscribed-skus) takes select and maxUsers alone.
+			shaped := spec.IsList && !spec.SelectOnly
 			for _, c := range []struct {
 				q       string
 				allowed bool
 			}{
-				{`filter="accountEnabled eq true"`, spec.IsList},
-				{`search="&#34;displayName:Arno&#34;"`, spec.IsList},
-				{`advancedQuery="true"`, spec.IsList},
+				{`filter="accountEnabled eq true"`, shaped},
+				{`search="&#34;displayName:Arno&#34;"`, shaped},
+				{`advancedQuery="true"`, shaped},
 				{`select="id"`, spec.IsList || spec.IsDelta || spec.Selects},
-				{`pageSize="10"`, spec.IsList || spec.IsDelta},
+				{`pageSize="10"`, shaped || spec.IsDelta},
 				{`maxUsers="10"`, spec.IsList || spec.IsDelta},
 				{`deltaLink="https://graph.microsoft.com/v1.0/users/delta?$deltatoken=t"`, spec.IsDelta},
 			} {

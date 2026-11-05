@@ -4209,7 +4209,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, and licences and directory-role assignments", icon: "E",
+    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, licences and directory-role assignments, and the tenant's licence subscriptions (bought and assigned units per SKU)", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD Worker Type, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -4253,6 +4253,7 @@ const SERVICE_TASK_KINDS = [
           { v: "archive-team", l: "Archive team" },
           { v: "create-community", l: "Create Engage community" },
           { v: "assign-license", l: "Assign licence" },
+          { v: "list-subscribed-skus", l: "List licence subscriptions (Lizenzbestand)" },
           { v: "assign-role", l: "Assign directory role" },
           { v: "invite-guest", l: "Invite guest user" },
           { v: "get-sync-behavior", l: "Read source of authority (AD or cloud)" },
@@ -4319,12 +4320,14 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
         hint: (v) => v.operation === "get-user-manager"
           ? "An OData $select over the manager: which of the manager's properties come back, e.g. id,displayName,mail,userPrincipalName. Empty returns Graph's default set for the manager."
+          : v.operation === "list-subscribed-skus"
+          ? "An OData $select over each licence subscription, e.g. skuId,skuPartNumber,consumedUnits,prepaidUnits. The only query Graph's /subscribedSkus takes: no filter, search or page size. Empty returns every property, servicePlans included."
           : ["get-user", "get-group"].includes(v.operation)
-          ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses and employeeId \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId."
-          : "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
+          ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses, employeeId and signInActivity \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId. signInActivity (the last sign-in) additionally needs AuditLog.Read.All and Entra ID P1."
+          : "An OData $select: which properties each object comes back with. Empty returns Graph's default set; signInActivity (the last sign-in) is outside it and additionally needs AuditLog.Read.All and Entra ID P1. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
@@ -4333,7 +4336,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "maxUsers", label: "Maximum objects", placeholder: "1000",
-        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
         hint: "Caps what may land in the result variable. A read returning more fails the job rather than truncating, because a short result is a wrong answer, not a partial one — and a truncated change set would persist a deltaLink having skipped changes. Empty uses 1000; 0 is unbounded.",
       },
       {

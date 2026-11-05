@@ -12,6 +12,20 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The Entra Worker reads the tenant's licence stock.** A new operation,
+  `list-subscribed-skus`, reads Microsoft Graph's `GET /subscribedSkus`. Like the other
+  Entra listings, the result variable receives a JSON array with one item per SKU:
+  `skuId`, `skuPartNumber`, `capabilityStatus`, `appliesTo`, `consumedUnits` (assigned)
+  and `prepaidUnits {enabled, warning, suspended, lockedOut}` (bought). It takes only a
+  `select`, because Graph refuses anything else there, so the compiler refuses filter,
+  search, advancedQuery and pageSize on it. The permission is `LicenseAssignment.Read.All`.
+  A user's last sign-in is read by naming `signInActivity` in the `select` of `list-users`
+  or `get-user`, which needs `AuditLog.Read.All` and Entra ID P1 or P2. The M365 devenv
+  grants both permissions to the Entra worker app. See ADR-draft-entra-subscribed-skus
+  and `docs/entra-permissions.md`.
+
 ## [0.23.0] — 2026-11-04
 
 **A password is set by its owner, never typed by an administrator or mailed.** Registration
