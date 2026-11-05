@@ -621,6 +621,10 @@ func (s *Server) apiRoutes() []apiRoute {
 				// What the worker serves with its own configuration (ADR-0168), and where
 				// each of those connects, as scheme://host:port (ADR-0471).
 				"connectors": tArray(), "endpoints": tObject(),
+				// The handshake (ADR-0535 §3): the Worker protocol major version, absent
+				// meaning 1, and the Worker Type the instance runs. Every answer carries
+				// the accepted versions in X-Atlas-Worker-Protocol.
+				"protocol": tInteger(), "workerType": tObject(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		// The Worker protocol's second message kind: a query a Worker Instance answers
@@ -630,6 +634,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Lease the form lookups waiting for a Worker this Worker Instance holds, optionally long-polling — the query twin of the job pull; nothing about a query is durable", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Job type, worker id, the Workers this instance holds, batch size, and how long to wait", schemaObj(map[string]any{
 				"type": tString(), "worker": tString(), "connectors": tArray(), "maxQueries": tInteger(), "waitMs": tInteger(),
+				"protocol": tInteger(), "workerType": tObject(),
 			}, "type", "worker")),
 			resp: jsonBody("The leased queries", tObject())}},
 		{"POST", "/api/v1/worker-queries/{id}/answer", s.workerQueries.HandleAnswer, apiOp{

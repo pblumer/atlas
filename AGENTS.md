@@ -122,6 +122,8 @@ api/        HTTP API, web UI, command submission and queries
               completion (ADR-0473)
   workerquery/ The Worker protocol's non-durable query beside the job: an in-memory
               broker Worker Instances lease from, never the log
+  workerproto/ The Worker protocol handshake: the versions this server speaks and the
+              Worker Type an instance reports (ADR-0535)
   storage/    The disk under the data directory: the monitor that reads it off the run
               loop, the reserve below which writes are refused, and the forecast
               (ADR-0481)

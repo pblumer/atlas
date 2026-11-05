@@ -56,6 +56,8 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/infomodel"
+	"github.com/pblumer/atlas/api/workerproto"
+	"github.com/pblumer/atlas/workertype"
 )
 
 // deployedProcess is one process registered by a deployment. A collaboration
@@ -6665,10 +6667,29 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// architecture sketch draws them for workers the server holds no
 		// configuration for.
 		Endpoints map[string]string `json:"endpoints,omitempty"`
+		// Protocol and WorkerType are the handshake (ADR-0535 §3): the Worker
+		// protocol major version this instance speaks — absent is version 1, every
+		// client from before the handshake — and the Worker Type it runs, when it
+		// reports one.
+		Protocol   int                   `json:"protocol,omitempty"`
+		WorkerType *workerproto.Identity `json:"workerType,omitempty"`
 	}
+	// Every answer names the versions this server speaks, refusals included: that is
+	// how a newer client tells an older server from a broken one.
+	w.Header().Set(workerproto.Header, workerproto.HeaderValue)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
+	}
+	if err := workerproto.Check(body.Protocol); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if wt := body.WorkerType; wt != nil {
+		if err := workertype.CheckIdentity(wt.ID, wt.Version, wt.Digest); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	reported := reportedEndpoints(body.Connectors, body.Endpoints)
 	body.Type = strings.TrimSpace(body.Type)
@@ -6795,6 +6816,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// holds its workers, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
 			s.workers.holdsConnectors(body.Worker, body.Connectors, reported)
+			s.workers.identifies(body.Worker, body.Protocol, body.WorkerType)
 		})
 	}
 

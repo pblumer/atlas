@@ -55,6 +55,7 @@ import (
 	"github.com/pblumer/atlas/tracing"
 	"github.com/pblumer/atlas/wal"
 	"github.com/pblumer/atlas/worker"
+	"github.com/pblumer/atlas/workersdk"
 )
 
 func main() {
@@ -1511,7 +1512,12 @@ func runWorker(args []string) error {
 		// Only a server that supervises this worker sets it, and only for the process
 		// serving a Worker whose credential it brokers per job.
 		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
-		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
+		// The Worker Type this process runs, for the handshake (ADR-0535 §3). A
+		// supervisor launching an installed artifact sets these from its manifest and
+		// the digest it verified; a worker run by hand reports none unless its operator
+		// sets them.
+		Identity: workerIdentityFromEnv(os.Getenv),
+		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
 		Endpoints:  builtin.Endpoints,
 		// The form lookups the configured kinds answer, for the same Workers
@@ -1554,6 +1560,28 @@ func runWorker(args []string) error {
 		return nil // interrupted, which is an ordinary exit
 	}
 	return runErr
+}
+
+// The environment a Worker Instance reads its Worker Type identity from.
+const (
+	workerTypeIDEnv      = "ATLAS_WORKER_TYPE_ID"
+	workerTypeVersionEnv = "ATLAS_WORKER_TYPE_VERSION"
+	workerTypeDigestEnv  = "ATLAS_WORKER_TYPE_DIGEST"
+)
+
+// workerIdentityFromEnv is the Worker Type identity the environment names, or nil when
+// it names no id. Its shape is the server's to judge: a malformed one is refused on the
+// first poll, with the reason, which is where an operator looks.
+func workerIdentityFromEnv(getenv func(string) string) *workersdk.Identity {
+	id := strings.TrimSpace(getenv(workerTypeIDEnv))
+	if id == "" {
+		return nil
+	}
+	return &workersdk.Identity{
+		ID:      id,
+		Version: strings.TrimSpace(getenv(workerTypeVersionEnv)),
+		Digest:  strings.TrimSpace(getenv(workerTypeDigestEnv)),
+	}
 }
 
 // sortedKeys is the handled job types in a stable order, for the startup line.
