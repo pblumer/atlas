@@ -73,7 +73,9 @@ test.afterEach(async ({ page }) => {
 
 test("a reader with no reports sees no report tab", async ({ page }) => {
   await open(page, { team: 0, organisations: [] });
-  await expect(page.locator(".nav .navlink")).toHaveCount(3);
+  // The catalogue and "My services" — what somebody holds and what they ordered
+  // are one screen.
+  await expect(page.locator(".nav .navlink")).toHaveCount(2);
 });
 
 test("a line manager's team tab names the people and their positions", async ({ page }) => {

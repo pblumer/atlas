@@ -70,6 +70,21 @@ _Changed_ / _Removed_ for each version.
   grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
+### Changed
+- **The shop's "My services" and "My orders" are one screen.** "My services" now lists, per
+  Marktleistung and per person it is for, what somebody holds and what they ordered: its catalogue
+  icon as a pie of how far it is provisioned, how many are held, since when and the order behind
+  it. Opened, an entry shows its possible events (the actions its lifecycle process takes, such
+  as a password reset), the orders and positions behind it with their tasks, and what a held
+  bundle lacks. A filter chooses for whom (me, others, everyone), a status (ready, being set up,
+  task open, ended) and searches by service, person or order; tasks waiting on the reader
+  outside the filter are pointed out. The cascade keeps its columns, now with the pies and a
+  details column; the tile layout is a list whose rows open in place. The "My orders" tab is gone.
+- **The cascade catalogue shows the products' icons.** Each Marktleistung and each part in the
+  cascade, and each search hit, carries the same icon as its tile.
+- **A product page's way back is a button.** "‹ Back to the catalogue" replaces the small link in
+  the corner of a product page in the tile layout.
+
 ### Fixed
 - **The top bar stays in view while a page scrolls.** In every app the bar with the app
   switcher, the view names and the account menu disappeared after a little less than one

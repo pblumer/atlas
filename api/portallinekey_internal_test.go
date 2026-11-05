@@ -65,7 +65,7 @@ func TestTheKeyIsTheSameRuleTheServerUses(t *testing.T) {
 // it, and the catalogue holds a name somebody wrote for exactly this purpose. The
 // shape belongs there too, now that two positions can differ by nothing else.
 func TestThePositionListNamesTheProduct(t *testing.T) {
-	body := webRegion(t, readWeb(t, "shop.js"), "function orderRowBodies(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function lineItem(", "\n}")
 	if strings.Contains(body, "' ', l.itemId, ' \\u2014 '") {
 		t.Error("the position list prints the product id where the catalogue has a name")
 	}

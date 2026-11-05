@@ -106,7 +106,9 @@ test.afterEach(async ({ page }) => {
 
 const open = async (page) => {
   await page.goto("/shop.html");
-  await page.getByRole("button", { name: "My orders" }).click();
+  // The orders are under "My services": an entry opened shows its order.
+  await page.getByRole("button", { name: "My services" }).click();
+  await page.locator(".svc-body .cell:has(.pie-icon) button.label").first().click();
   await expect(page.getByText("ord_follow")).toBeVisible({ timeout: 10000 });
 };
 

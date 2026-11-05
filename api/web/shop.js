@@ -29,7 +29,7 @@ const STRINGS = {
     'tile.parts': "Paket enthält {n} Elemente",
     'tile.none': "Keine Marktleistung passt zu dieser Auswahl.",
     'tile.scroll': "Weitere anzeigen",
-    'page.back': "Katalog",
+    'page.back': "Zurück zum Katalog",
     'page.title': "Bestellen",
     'page.summary': "Bestellung für",
     'page.scope': "Leistungsumfang",
@@ -51,7 +51,6 @@ const STRINGS = {
     'portal.options': 'Zusätzlich wählbar',
     'portal.order': 'Bestellen',
     'portal.ordering': 'Wird bestellt …',
-    'portal.noOrders': 'Sie haben noch nichts bestellt.',
     'portal.placed': 'Bestellt am',
     'portal.approval': 'Genehmigung nötig',
     'portal.back': 'Zurück zu atlas',
@@ -105,7 +104,6 @@ const STRINGS = {
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
     'nav.catalog': 'Katalog',
-    'nav.orders': 'Meine Aufträge',
     'nav.services': 'Meine Leistungen',
     'nav.team': 'Mein Team',
     'nav.org': 'Organisation',
@@ -199,18 +197,7 @@ const STRINGS = {
     'noid.title': 'Bestellen ist ohne Anmeldung nicht möglich.',
     'noid.hint': 'Eine Bestellung gehört jemandem. Ohne Anmeldung gibt es niemanden, dem sie gehört, und niemanden, der benachrichtigt wird. Der Katalog steht hier zum Ansehen; für eine Bestellung startet man den Server mit --auth.',
     'cat.all': 'Alle',
-    'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
-    'tbl.placed': 'bestellt',
-    'tbl.order': 'Auftrag',
-    'tbl.status': 'Status',
-    'tbl.searchCompany': 'Unternehmen suchen',
-    'tbl.searchPerson': 'Person suchen',
-    'tbl.searchDate': 'Datum',
-    'tbl.searchOrder': 'Auftrag suchen',
-    'tbl.searchStatus': 'Status suchen',
-    'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
-    'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
     'note.missingPart': 'Nicht mehr bezogen — einzeln nachbestellen.',
     'window.later': 'Bestellbar ab',
@@ -248,6 +235,25 @@ const STRINGS = {
     'services.col.order': 'Bestellung',
     'services.count': '{n} vorhanden',
     'services.building': '{n} im Aufbau',
+    'services.who': 'Für wen',
+    'services.who.me': 'Für mich',
+    'services.who.others': 'Für andere',
+    'services.who.all': 'Für alle',
+    'services.phase': 'Status',
+    'services.phase.all': 'Alle Status',
+    'services.phase.ready': 'Bereit',
+    'services.phase.building': 'Im Aufbau',
+    'services.phase.task': 'Aufgabe offen',
+    'services.phase.ended': 'Beendet',
+    'services.find': 'Leistung, Person oder Bestellung suchen',
+    'services.noMatch': 'Keine Leistung entspricht dem Filter.',
+    'services.for': 'Für',
+    'services.taskOpen': 'Aufgabe offen',
+    'services.actions': 'Mögliche Ereignisse',
+    'services.noOrder': 'Die Bestellung zu dieser Leistung ist nicht mehr gespeichert.',
+    'services.col.detail': 'Details',
+    'services.tasksHidden': '{n} Leistung(en) ausserhalb des Filters warten auf eine Aufgabe von Ihnen.',
+    'services.showTasks': 'Anzeigen',
     'fav.mark': 'Als Favorit merken',
     'act.add': 'In den Warenkorb legen',
     'act.remove': 'Aus dem Warenkorb nehmen',
@@ -292,7 +298,7 @@ const STRINGS = {
     'tile.parts': "Bundle contains {n} items",
     'tile.none': "No offering matches this choice.",
     'tile.scroll': "Show more",
-    'page.back': "Catalogue",
+    'page.back': "Back to the catalogue",
     'page.title': "Order",
     'page.summary': "Order for",
     'page.scope': "Scope of service",
@@ -314,7 +320,6 @@ const STRINGS = {
     'portal.options': 'Also available',
     'portal.order': 'Order',
     'portal.ordering': 'Ordering …',
-    'portal.noOrders': 'You have not ordered anything yet.',
     'portal.placed': 'Ordered on',
     'portal.approval': 'Needs approval',
     'portal.back': 'Back to atlas',
@@ -368,7 +373,6 @@ const STRINGS = {
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
     'nav.catalog': 'Catalogue',
-    'nav.orders': 'My orders',
     'nav.services': 'My services',
     'nav.team': 'My team',
     'nav.org': 'Organisation',
@@ -460,18 +464,7 @@ const STRINGS = {
     'noid.title': 'Ordering needs somebody to be.',
     'noid.hint': 'An order belongs to somebody. Without a sign-in there is nobody it belongs to and nobody to notify. The catalogue is here to be looked at; start the server with --auth to order from it.',
     'cat.all': 'All',
-    'tbl.company': 'Organisation',
     'tbl.person': 'Person',
-    'tbl.placed': 'ordered',
-    'tbl.order': 'Order',
-    'tbl.status': 'Status',
-    'tbl.searchCompany': 'Search organisation',
-    'tbl.searchPerson': 'Search person',
-    'tbl.searchDate': 'Date',
-    'tbl.searchOrder': 'Search order',
-    'tbl.searchStatus': 'Search status',
-    'tbl.noMatch': 'No order matches the search.',
-    'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
     'note.missingPart': 'No longer held — order it again on its own.',
     'window.later': 'Orderable from',
@@ -509,6 +502,25 @@ const STRINGS = {
     'services.col.order': 'Order',
     'services.count': '{n} held',
     'services.building': '{n} being set up',
+    'services.who': 'For whom',
+    'services.who.me': 'For me',
+    'services.who.others': 'For others',
+    'services.who.all': 'For everyone',
+    'services.phase': 'Status',
+    'services.phase.all': 'Any status',
+    'services.phase.ready': 'Ready',
+    'services.phase.building': 'Being set up',
+    'services.phase.task': 'Task open',
+    'services.phase.ended': 'Ended',
+    'services.find': 'Search service, person or order',
+    'services.noMatch': 'No service matches the filter.',
+    'services.for': 'For',
+    'services.taskOpen': 'Task open',
+    'services.actions': 'Possible events',
+    'services.noOrder': 'The order behind this service is no longer kept.',
+    'services.col.detail': 'Details',
+    'services.tasksHidden': '{n} service(s) outside the filter wait on a task of yours.',
+    'services.showTasks': 'Show',
     'fav.mark': 'Mark as favourite',
     'act.add': 'Put in the basket',
     'act.remove': 'Take out of the basket',
@@ -553,7 +565,7 @@ const STRINGS = {
     'tile.parts': "Le paquet contient {n} éléments",
     'tile.none': "Aucune prestation ne correspond à ce choix.",
     'tile.scroll': "Afficher plus",
-    'page.back': "Catalogue",
+    'page.back': "Retour au catalogue",
     'page.title': "Commander",
     'page.summary': "Commande pour",
     'page.scope': "Étendue des prestations",
@@ -575,7 +587,6 @@ const STRINGS = {
     'portal.options': 'Également disponible',
     'portal.order': 'Commander',
     'portal.ordering': 'Commande en cours …',
-    'portal.noOrders': 'Vous n’avez encore rien commandé.',
     'portal.placed': 'Commandé le',
     'portal.approval': 'Approbation nécessaire',
     'portal.back': 'Retour à atlas',
@@ -629,7 +640,6 @@ const STRINGS = {
     'order.partial': 'Partiellement exécutée',
     'order.unfulfilled': 'Non exécutée',
     'nav.catalog': 'Catalogue',
-    'nav.orders': 'Mes commandes',
     'nav.services': 'Mes prestations',
     'nav.team': 'Mon équipe',
     'nav.org': 'Organisation',
@@ -721,18 +731,7 @@ const STRINGS = {
     'noid.title': 'Commander exige une identité.',
     'noid.hint': 'Une commande appartient à quelqu’un. Sans connexion, il n’y a personne à qui elle appartienne ni personne à informer. Le catalogue est ici pour être consulté ; pour commander, démarrez le serveur avec --auth.',
     'cat.all': 'Toutes',
-    'tbl.company': 'Organisation',
     'tbl.person': 'Personne',
-    'tbl.placed': 'commandé',
-    'tbl.order': 'Commande',
-    'tbl.status': 'Statut',
-    'tbl.searchCompany': 'Rechercher une organisation',
-    'tbl.searchPerson': 'Rechercher une personne',
-    'tbl.searchDate': 'Date',
-    'tbl.searchOrder': 'Rechercher une commande',
-    'tbl.searchStatus': 'Rechercher un statut',
-    'tbl.noMatch': 'Aucune commande ne correspond à la recherche.',
-    'note.noCompany': 'La colonne Organisation reste vide : une commande ne porte aujourd’hui aucune organisation. Elle indique seulement qui commande et qui reçoit.',
     'note.included': 'Toujours inclus — ne peut pas être désélectionné.',
     'note.missingPart': 'Plus détenu — le recommander séparément.',
     'window.later': 'Commandable à partir du',
@@ -770,6 +769,25 @@ const STRINGS = {
     'services.col.order': 'Commande',
     'services.count': '{n} disponible(s)',
     'services.building': '{n} en cours de mise en place',
+    'services.who': 'Pour qui',
+    'services.who.me': 'Pour moi',
+    'services.who.others': 'Pour d’autres',
+    'services.who.all': 'Pour tous',
+    'services.phase': 'Statut',
+    'services.phase.all': 'Tous les statuts',
+    'services.phase.ready': 'Prête',
+    'services.phase.building': 'En cours de mise en place',
+    'services.phase.task': 'Tâche ouverte',
+    'services.phase.ended': 'Terminée',
+    'services.find': 'Rechercher une prestation, une personne ou une commande',
+    'services.noMatch': 'Aucune prestation ne correspond au filtre.',
+    'services.for': 'Pour',
+    'services.taskOpen': 'Tâche ouverte',
+    'services.actions': 'Événements possibles',
+    'services.noOrder': 'La commande de cette prestation n’est plus conservée.',
+    'services.col.detail': 'Détails',
+    'services.tasksHidden': '{n} prestation(s) hors du filtre attendent une tâche de votre part.',
+    'services.showTasks': 'Afficher',
     'fav.mark': 'Ajouter aux favoris',
     'act.add': 'Mettre dans le panier',
     'act.remove': 'Retirer du panier',
@@ -813,7 +831,7 @@ const STRINGS = {
     'tile.parts': "Il pacchetto contiene {n} elementi",
     'tile.none': "Nessuna prestazione corrisponde a questa scelta.",
     'tile.scroll': "Mostra altri",
-    'page.back': "Catalogo",
+    'page.back': "Torna al catalogo",
     'page.title': "Ordinare",
     'page.summary': "Ordine per",
     'page.scope': "Ambito del servizio",
@@ -835,7 +853,6 @@ const STRINGS = {
     'portal.options': 'Disponibile anche',
     'portal.order': 'Ordinare',
     'portal.ordering': 'Ordine in corso …',
-    'portal.noOrders': 'Non ha ancora ordinato nulla.',
     'portal.placed': 'Ordinato il',
     'portal.approval': 'Richiede approvazione',
     'portal.back': 'Ritorno ad atlas',
@@ -889,7 +906,6 @@ const STRINGS = {
     'order.partial': 'Parzialmente evaso',
     'order.unfulfilled': 'Non evaso',
     'nav.catalog': 'Catalogo',
-    'nav.orders': 'I miei ordini',
     'nav.services': 'Le mie prestazioni',
     'nav.team': 'Il mio team',
     'nav.org': 'Organizzazione',
@@ -981,18 +997,7 @@ const STRINGS = {
     'noid.title': 'Per ordinare occorre essere qualcuno.',
     'noid.hint': 'Un ordine appartiene a qualcuno. Senza accesso non c’è nessuno a cui appartenga né nessuno da informare. Il catalogo è qui per essere consultato; per ordinare, avviare il server con --auth.',
     'cat.all': 'Tutte',
-    'tbl.company': 'Organizzazione',
     'tbl.person': 'Persona',
-    'tbl.placed': 'ordinato',
-    'tbl.order': 'Ordine',
-    'tbl.status': 'Stato',
-    'tbl.searchCompany': 'Cercare un’organizzazione',
-    'tbl.searchPerson': 'Cercare una persona',
-    'tbl.searchDate': 'Data',
-    'tbl.searchOrder': 'Cercare un ordine',
-    'tbl.searchStatus': 'Cercare uno stato',
-    'tbl.noMatch': 'Nessun ordine corrisponde alla ricerca.',
-    'note.noCompany': 'La colonna Organizzazione resta vuota: oggi un ordine non porta alcuna organizzazione. Indica soltanto chi ordina e chi riceve.',
     'note.included': 'Sempre incluso — non deselezionabile.',
     'note.missingPart': 'Non più detenuto — riordinarlo singolarmente.',
     'window.later': 'Ordinabile dal',
@@ -1030,6 +1035,25 @@ const STRINGS = {
     'services.col.order': 'Ordine',
     'services.count': '{n} disponibili',
     'services.building': '{n} in allestimento',
+    'services.who': 'Per chi',
+    'services.who.me': 'Per me',
+    'services.who.others': 'Per altri',
+    'services.who.all': 'Per tutti',
+    'services.phase': 'Stato',
+    'services.phase.all': 'Tutti gli stati',
+    'services.phase.ready': 'Pronta',
+    'services.phase.building': 'In allestimento',
+    'services.phase.task': 'Compito aperto',
+    'services.phase.ended': 'Terminata',
+    'services.find': 'Cerca prestazione, persona o ordine',
+    'services.noMatch': 'Nessuna prestazione corrisponde al filtro.',
+    'services.for': 'Per',
+    'services.taskOpen': 'Compito aperto',
+    'services.actions': 'Eventi possibili',
+    'services.noOrder': 'L’ordine di questa prestazione non è più conservato.',
+    'services.col.detail': 'Dettagli',
+    'services.tasksHidden': '{n} prestazione/i fuori dal filtro attendono un suo compito.',
+    'services.showTasks': 'Mostra',
     'fav.mark': 'Aggiungere ai preferiti',
     'act.add': 'Mettere nel carrello',
     'act.remove': 'Togliere dal carrello',
@@ -1561,8 +1585,11 @@ const state = {
   // server resolves a principal id, a username, a directory id or a mail address
   // (ADR-0356).
   forWhom: '',
-  // filters is the orders table's per-column search, keyed by column.
-  filters: { company: '', person: '', date: '', order: '', status: '' },
+  // svc is "my services" narrowed: whose (mine, other people's, or both), a word
+  // typed into its search, and a phase (ready, being set up, waiting on a task,
+  // ended). svcOpen is the entry whose positions, tasks and actions are open.
+  svc: { who: 'me', q: '', phase: '' },
+  svcOpen: '',
   // info is the service whose details are open, empty for none.
   info: '',
   // favourites is what this person marked, as ids — a bookmark and never an
@@ -2475,7 +2502,7 @@ async function order() {
     state.variants = {};
     state.configError = '';
     state.inBasket = false;
-    state.view = 'orders';
+    state.view = 'services';
     await load();
   } catch (e) {
     state.error = `${t('portal.failed')} ${e.message}`;
@@ -3092,7 +3119,7 @@ function renderSearch(rel, by) {
             state.step = 3;
             render();
           },
-          lead: starButton(it.id),
+          lead: [starButton(it.id), cellIcon(it)],
           meta: where
             ? el('span', {}, `${t('find.where')} ${where}`)
             : null,
@@ -3192,6 +3219,7 @@ function renderCatalogue() {
   const offeringCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.offering')),
     keepFavourites(rel, offerings).map((o) => cell({
+      lead: cellIcon(by[o.id] || o),
       text: name(o.id),
       open: state.offering === o.id,
       onOpen: () => {
@@ -3209,7 +3237,7 @@ function renderCatalogue() {
     el('div', { class: 'colhead' }, t('col.service')),
     keepFavourites(rel, services).map((sv) => cell({
       text: name(sv.id),
-      lead: toggle(rel, sv.id, sv.integral),
+      lead: [toggle(rel, sv.id, sv.integral), cellIcon(by[sv.id] || sv)],
       trail: [starButton(sv.id), infoButton(sv.id)],
     })));
 
@@ -3276,6 +3304,12 @@ function productIcon(item) {
 // partCount is how many services a Marktleistung brings, included and optional:
 // what the tile calls a bundle's elements. A Marktleistung of one service is not
 // called a bundle.
+// cellIcon is the same symbol at the size of a row of the cascade, so the two
+// layouts show one product with one picture.
+function cellIcon(item) {
+  return el('span', { class: 'cell-icon', 'aria-hidden': 'true' }, drawIcon((item && item.icon) || '', 1.5));
+}
+
 function partCount(rel, id) {
   return (((rel.includes || {})[id]) || []).length + (((rel.options || {})[id]) || []).length;
 }
@@ -3389,7 +3423,10 @@ function renderProductPage(rel, item) {
   return el('div', { class: 'product-page' },
     state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null,
     el('div', { class: 'page-top' },
-      el('button', { class: 'linkish', onclick: back }, `‹ ${t('page.back')}`),
+      // A button, not a link in the corner: the way back to the catalogue is the
+      // one thing every reader of this page needs, and a link that small went
+      // unseen.
+      el('button', { class: 'secondary page-back', onclick: back }, `\u2039 ${t('page.back')}`),
       el('strong', {}, t('page.title')),
       el('span', { class: 'page-fav' }, starButton(item.id), ' ', t('page.favourite'))),
     el('div', { class: 'page-banner' },
@@ -4134,12 +4171,6 @@ async function cancel(order) {
   }
 }
 
-// --- The orders table --------------------------------------------------------
-//
-// The mockups put a search field directly above the column it searches, which is
-// the arrangement that needs no legend: what a field filters is the thing it is
-// sitting on.
-
 // personName is who a principal id belongs to, or the id where nothing knows.
 //
 // The fallback is the point. A deleted account, a directory that would not load, a
@@ -4151,137 +4182,71 @@ function personName(id) {
   return state.directory.get(id) || id;
 }
 
-// matchesFilters reports whether one order survives the column searches. Case
-// blind and substring, because somebody typing "gen" into a status field means
-// "genehmigt" and should not have to know how it is spelled internally.
-function matchesFilters(o) {
-  const f = state.filters;
-  const like = (hay, needle) => !needle
-    || String(hay || '').toLowerCase().includes(needle.toLowerCase());
-  const placed = new Date(o.createdAt / 1e6).toLocaleDateString(locale);
-  // The name the column shows *and* the id behind it: somebody who pasted an id
-  // meant to find that row, and somebody who typed a name meant the same.
-  return (like(personName(o.recipient), f.person) || like(o.recipient, f.person))
-    && like(placed, f.date)
-    && like(o.id, f.order)
-    && like(t(deriveStatus(o)), f.status)
-    // The organisation column has no source; a filter over nothing must not
-    // silently hide every row, so an empty field is the only one that matches.
-    && (!f.company);
+// orderNote is one order behind an entry of "my services": its number, when it
+// was placed, how it stands as a whole, for whom where that is not the reader, and
+// what can be done to it as a whole — withdraw what has not happened yet, and, for
+// whoever may, follow its process.
+function orderNote(o) {
+  return el('div', { class: 'svc-order-head' },
+    el('strong', {}, o.id),
+    el('span', { class: 'muted' },
+      ` \u00b7 ${new Date(o.createdAt / 1e6).toLocaleDateString(locale)} \u00b7 ${t(deriveStatus(o))}`),
+    o.recipient && o.recipient !== state.meID
+      ? el('span', { class: 'muted' }, ` \u00b7 ${t('tbl.person')}: ${personName(o.recipient)}`) : null,
+    // An order in front of somebody because they hold one of its tasks, not
+    // because it is theirs. Said, so nobody mistakes it for one they placed.
+    o.held ? el('span', { class: 'muted' }, ` \u00b7 ${t('task.held')}`) : null,
+    !o.held && cancellable(o)
+      ? el('button', {
+        class: 'linkish', disabled: state.busy, onclick: () => cancel(o),
+      }, t('portal.cancel'))
+      : null,
+    state.mayFollowProcess
+      ? el('button', {
+        class: 'linkish', title: t('proc.open'), disabled: state.busy, onclick: () => followProcess(o),
+      }, t('proc.open'))
+      : null,
+    followNote(o));
 }
 
-function filterCell(key, label) {
-  return el('td', {},
-    el('input', {
-      type: 'search', value: state.filters[key], placeholder: label, 'aria-label': label,
-      oninput: (e) => {
-        state.filters[key] = e.target.value;
-        // Re-rendering replaces the node, so the caret would jump to the end of a
-        // field somebody is editing in the middle. Patch the rows and leave the
-        // filter row alone.
-        repaintOrderRows();
-      },
-    }));
-}
-
-let orderRowsNode = null;
-
-function repaintOrderRows() {
-  if (!orderRowsNode) return;
-  // The same two steps render() takes, and for the same reason: a correction's
-  // form is inside these rows, it does not survive its container being replaced,
-  // and typing in a column filter must not empty a cost centre somebody is in the
-  // middle of fixing.
-  harvest();
-  orderRowsNode.replaceChildren(...orderRowBodies());
-  mountConfigForms();
-}
-
-function orderRowBodies() {
-  const rows = state.orders.filter(matchesFilters);
-  if (!rows.length) {
-    return [el('tr', {}, el('td', { colspan: '6', class: 'muted' }, t('tbl.noMatch')))];
-  }
-  return rows.map((o) => el('tr', {},
-    // Organisation: rendered because the layout has the column, empty because an
-    // order carries no organisation. The note under the table says so once,
-    // rather than each row implying the data went missing.
-    el('td', { class: 'muted org' }),
-    el('td', { 'data-label': t('tbl.person') }, personName(o.recipient)),
-    el('td', { 'data-label': t('tbl.placed') }, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
-    el('td', { 'data-label': t('tbl.order') }, o.id,
-      // An order in front of somebody because they hold one of its tasks, not
-      // because it is theirs. Said, so nobody mistakes it for one they placed.
-      o.held ? el('div', { class: 'muted' }, t('task.held')) : null),
-    el('td', {},
-      !o.held && cancellable(o)
-        ? el('button', {
-          class: 'sq',
-          'aria-label': t('portal.cancel'),
-          title: t('portal.cancel'),
-          disabled: state.busy,
-          onclick: () => cancel(o),
-        }, 'X')
-        : null,
-      // Offered to whoever may follow it. An ordinary orderer reads the positions
-      // below instead, which is the same question answered out of the order's own
-      // record and without an operations surface.
-      state.mayFollowProcess
-        ? el('button', {
-          class: 'linkish',
-          title: t('proc.open'),
-          disabled: state.busy,
-          onclick: () => followProcess(o),
-        }, t('proc.open'))
-        : null,
-      // And what it found, under the button that asked. The one answer that is not
-      // drawn here is the one that navigates away.
-      followNote(o)),
-    el('td', { 'data-label': t('tbl.status') },
-      t(deriveStatus(o)),
-      el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
-        el('span', { class: `dot ${l.status}` }),
-        ' ', lineLabel(l), ' \u2014 ', t(`status.${l.status}`),
-        l.blockedBy && l.blockedBy.length
-          ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
-        l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
-        amendedNote(l),
-        !o.held && returnable(o, l)
-          ? el('button', {
-            class: 'linkish',
-            disabled: state.busy,
-            onclick: () => giveBack(o, l),
-          }, state.busy ? t('portal.returning') : t('portal.return'))
-          : null,
-        !o.held && withdrawable(l)
-          ? el('button', {
-            class: 'linkish',
-            disabled: state.busy,
-            onclick: () => withdrawLine(o, l),
-          }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
-          : null,
-        // No link into a process here. A position row carried two — where the
-        // position stands, and the position's own instance — and neither was read
-        // as useful by the people this page is for: the status beside the name
-        // already answers "what is happening to my laptop" out of the order's own
-        // record. The order's link above is the one that stayed.
-        !o.held && correctable(l)
-          ? el('button', {
-            class: 'linkish',
-            disabled: state.busy,
-            onclick: () => {
-              harvest();
-              state.editing = state.editing === `${o.id}|${lineKey(l)}` ? '' : `${o.id}|${lineKey(l)}`;
-              state.configError = '';
-              render();
-            },
-          }, t('line.details'))
-          : null,
-        ...(!o.held ? actionButtons(o, l) : []),
-        actionSentNote(o, l),
-        detailsPanel(o, l),
-        actionPanel(o, l),
-        taskList(o, l)))))));
+// lineItem is one position of an order, as "my services" lists it under the
+// Marktleistung it belongs to: its light, its name and status, why it waits or
+// was refused, and what can be done to it — give it back, withdraw it, correct its
+// details — with the open tasks of the processes working it beneath. The actions a
+// held position offers are not here but in the entry's own row of actions
+// (entryActions), where they are found without reading every position.
+function lineItem(o, l) {
+  return el('li', {},
+    el('span', { class: `dot ${l.status}` }),
+    ' ', lineLabel(l), ' \u2014 ', t(`status.${l.status}`),
+    l.blockedBy && l.blockedBy.length
+      ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
+    l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
+    amendedNote(l),
+    !o.held && returnable(o, l)
+      ? el('button', {
+        class: 'linkish', disabled: state.busy, onclick: () => giveBack(o, l),
+      }, state.busy ? t('portal.returning') : t('portal.return'))
+      : null,
+    !o.held && withdrawable(l)
+      ? el('button', {
+        class: 'linkish', disabled: state.busy, onclick: () => withdrawLine(o, l),
+      }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
+      : null,
+    !o.held && correctable(l)
+      ? el('button', {
+        class: 'linkish',
+        disabled: state.busy,
+        onclick: () => {
+          harvest();
+          state.editing = state.editing === `${o.id}|${lineKey(l)}` ? '' : `${o.id}|${lineKey(l)}`;
+          state.configError = '';
+          render();
+        },
+      }, t('line.details'))
+      : null,
+    detailsPanel(o, l),
+    taskList(o, l));
 }
 
 // --- Actions on a held position (ADR-0429) ------------------------------------
@@ -4719,34 +4684,6 @@ function amendedNote(line) {
     ` (${t('line.amended')}${was.length ? `, ${t('line.amendedFrom')} ${was.join(' / ')}` : ''})`);
 }
 
-function renderOrders() {
-  if (!state.orders.length) {
-    return el('div', { class: 'empty' }, el('p', {}, t('portal.noOrders')));
-  }
-  orderRowsNode = el('tbody', {}, orderRowBodies());
-  return el('div', {},
-    el('div', { class: 'tablewrap' },
-      el('table', { class: 'table orders' },
-        el('thead', {},
-          el('tr', { class: 'filters' },
-            filterCell('company', t('tbl.searchCompany')),
-            filterCell('person', t('tbl.searchPerson')),
-            filterCell('date', t('tbl.searchDate')),
-            filterCell('order', t('tbl.searchOrder')),
-            el('td', {}),
-            filterCell('status', t('tbl.searchStatus'))),
-          el('tr', {},
-            el('th', {}, t('tbl.company')),
-            el('th', {}, t('tbl.person')),
-            el('th', {}, t('tbl.placed')),
-            el('th', {}, t('tbl.order')),
-            el('th', {}, ''),
-            el('th', {}, t('tbl.status')))),
-        orderRowsNode)),
-    state.tasksTruncated ? el('p', { class: 'note' }, t('task.truncated')) : null,
-    el('p', { class: 'note' }, t('note.noCompany')));
-}
-
 // --- What somebody currently holds ------------------------------------------
 //
 // Read from the inventory, not assembled from the orders on this page: the order
@@ -4919,6 +4856,206 @@ function lackingOf(rel, id) {
   return descendantsOf(rel, id).filter((d) => !state.held.has(d.id) && !orderedAlready(d.id) && by[d.id]);
 }
 
+// --- "My services": what somebody holds and what they ordered, in one place ----
+//
+// The shop used to answer two questions on two screens: "what do I have" and
+// "what did I order". They are the same things seen at two moments, and a person
+// looking for their laptop had to know whether it was still an order or already a
+// service to know which screen to open. So there is one screen: an entry per
+// Marktleistung and per person it is for, lit and drawn as a pie by how far it is
+// provisioned, and opened to the orders and positions behind it, the tasks they
+// wait on, and the actions — the intermediate events its lifecycle process takes —
+// that can be asked of it.
+//
+// The entries for the reader come from the inventory first, as they did: the order
+// that granted a right is deleted by retention long before the right ends
+// (ADR-0312). The orders on the page add what is still on its way, what was
+// refused or withdrawn, and the orders placed for other people or waiting on one of
+// the reader's tasks, which have no inventory here to be read from.
+
+// entryWho is whom an order is for, as "my services" files it: "me" for the reader,
+// else the recipient's principal id.
+function entryWho(o) {
+  const who = o.recipient || o.orderer || '';
+  return !who || who === state.meID ? 'me' : who;
+}
+
+// serviceEntries are the rows of "my services", one per person and Marktleistung,
+// each with the order positions behind it, newest order first.
+function serviceEntries(rel) {
+  const entries = new Map();
+  const entryFor = (who, id) => {
+    const key = `${who}|${id}`;
+    if (!entries.has(key)) entries.set(key, { key, who, mine: who === 'me', id, refs: [] });
+    return entries.get(key);
+  };
+  // What the reader holds or has on its way, filed under the Marktleistung it came
+  // with — ownerAmong, the basket's rule, so a case offered by two phones sits
+  // under the phone this person has.
+  const open = building(state.orders, state.meID);
+  const ids = [...new Set([...state.held.keys(), ...open.keys()])];
+  const offerings = ids.filter((id) => levelOf(rel, id) === 'offering');
+  const ownerOf = ownerAmong(rel, new Set(offerings));
+  for (const id of ids) {
+    entryFor('me', levelOf(rel, id) === 'offering' ? id : (ownerOf(id) || rootOf(rel, id)));
+  }
+  // Every position of every order, under the Marktleistung of the same order it
+  // belongs to. A product this catalogue no longer carries is its own entry: an
+  // order for it still has to say what was ordered.
+  const by = itemsById(rel);
+  for (const o of state.orders || []) {
+    const lines = o.lines || [];
+    const roots = new Set(lines.map((l) => l.itemId)
+      .filter((id) => !by[id] || levelOf(rel, id) === 'offering'));
+    const owner = ownerAmong(rel, roots);
+    const who = entryWho(o);
+    for (const l of lines) {
+      const id = roots.has(l.itemId) ? l.itemId : (owner(l.itemId) || rootOf(rel, l.itemId));
+      entryFor(who, id).refs.push({ order: o, line: l });
+    }
+  }
+  return [...entries.values()];
+}
+
+// ordersState is how an entry stands read off its positions alone — for somebody
+// else's entry, which has no inventory on this page, and for one of the reader's
+// that holds nothing any more. The newest position of each product counts.
+function ordersState(e) {
+  const newest = new Map();
+  for (const r of e.refs) if (!newest.has(r.line.itemId)) newest.set(r.line.itemId, r.line);
+  const lines = [...newest.values()];
+  const ready = lines.filter((l) => l.status === 'done' || l.status === 'skipped').length;
+  const prog = { ready, total: lines.length || 1 };
+  let status = 'done';
+  if (lines.some((l) => l.status === 'running')) status = 'running';
+  else if (lines.some((l) => l.status === 'pending' || l.status === 'blocked')) status = 'pending';
+  else if (lines.some((l) => l.status === 'returning')) status = 'returning';
+  else if (ready < lines.length) {
+    const own = newest.get(e.id) || lines.find((l) => l.status !== 'done' && l.status !== 'skipped');
+    status = own ? own.status : 'cancelled';
+  }
+  prog.status = status;
+  const n = e.refs.filter((r) => r.line.itemId === e.id && (r.line.status === 'done' || r.line.status === 'returning')).length;
+  let label = t('services.ready');
+  if (status === 'running' || status === 'pending') label = progressText(prog);
+  else if (status !== 'done') label = t(`status.${status}`);
+  return { status, label, n, prog, meta: null };
+}
+
+// entryState is an entry's light, pie and words. The reader's own entries are read
+// as before, off the inventory and the orders still on their way (serviceState);
+// the rest off their positions.
+function entryState(rel, e, open, lineOf) {
+  const parts = [e.id, ...descendantsOf(rel, e.id).map((d) => d.id)];
+  const current = e.mine && parts.some((p) => state.held.has(p) || open.has(p));
+  const st = current ? serviceState(rel, e.id, open, lineOf) : ordersState(e);
+  const tasks = e.refs.filter((r) => tasksOf(r.order, r.line).length).length;
+  let phase = 'ended';
+  if (st.status === 'done') phase = 'ready';
+  else if (['running', 'pending', 'blocked', 'returning'].includes(st.status)) phase = 'building';
+  return { ...st, tasks, phase };
+}
+
+// entryMatches is the filter above "my services": whose entries, the phase chosen,
+// and the words typed — matched against the name, the person it is for, the
+// order numbers behind it and the words of its status.
+function entryMatches(rel, e, st) {
+  const f = state.svc;
+  if (f.who === 'me' && !e.mine) return false;
+  if (f.who === 'others' && e.mine) return false;
+  if (f.phase === 'task' ? !st.tasks : (f.phase && f.phase !== st.phase)) return false;
+  const q = f.q.trim().toLowerCase();
+  if (!q) return true;
+  const by = itemsById(rel);
+  const hay = [
+    textOf((by[e.id] || {}).texts, e.id), e.id, st.label,
+    e.mine ? '' : `${personName(e.who)} ${e.who}`,
+    ...e.refs.map((r) => `${r.order.id} ${lineLabel(r.line)}`),
+  ].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+// entryActions are the actions a held position of the entry offers — the
+// intermediate events its lifecycle process listens for, a larger mailbox, a
+// password reset — as buttons, each named after the part it acts on where that is
+// not the Marktleistung itself, with the open action's form beneath.
+function entryActions(e) {
+  const held = e.refs.filter((r) => !r.order.held
+    && (state.lineActions.get(`${r.order.id}|${lineKey(r.line)}`) || []).length);
+  if (!held.length) return null;
+  return el('div', { class: 'svc-actions' },
+    el('strong', {}, t('services.actions')),
+    held.map((r) => el('div', { class: 'svc-action-row' },
+      r.line.itemId !== e.id || held.length > 1 ? el('span', { class: 'muted' }, `${lineLabel(r.line)}:`) : null,
+      actionButtons(r.order, r.line),
+      actionSentNote(r.order, r.line),
+      actionPanel(r.order, r.line))));
+}
+
+// entryDetail is an entry opened: its actions first, because they are what
+// somebody opens a service for, then every order behind it with its positions
+// and their tasks, and last what a held Marktleistung lacks, to order on its own.
+function entryDetail(rel, e) {
+  const orders = [];
+  for (const r of e.refs) if (!orders.includes(r.order)) orders.push(r.order);
+  const lacking = e.mine ? lackingOf(rel, e.id) : [];
+  const nameOf = (id) => textOf((itemsById(rel)[id] || {}).texts, id);
+  return el('div', { class: 'svc-detail' },
+    entryActions(e),
+    orders.map((o) => el('div', { class: 'svc-order-block' },
+      orderNote(o),
+      el('ul', { class: 'lines' },
+        e.refs.filter((r) => r.order === o).map((r) => lineItem(o, r.line))))),
+    orders.length ? null : el('p', { class: 'muted' }, t('services.noOrder')),
+    lacking.length
+      ? el('div', { class: 'svc-lacking' },
+        el('span', { class: 'muted' }, `${t('services.notHeld')}:`),
+        lacking.map((d) => el('span', { class: 'svc-offer' }, toggle(rel, d.id, d.integral), ' ', nameOf(d.id))))
+      : null);
+}
+
+// toggleEntry opens an entry, or closes the one open.
+function toggleEntry(e) {
+  harvest();
+  state.svcOpen = state.svcOpen === e.key ? '' : e.key;
+  state.info = '';
+  render();
+}
+
+// servicesFilterBar narrows "my services": for whom, the phase, and a search. The
+// search repaints the entries and not the bar, so the caret stays where it is
+// while somebody types.
+function servicesFilterBar(repaint) {
+  const pick = (key, options, label) => el('select', {
+    class: 'svc-filter', 'aria-label': label,
+    onchange: (ev) => { state.svc[key] = ev.target.value; state.svcOpen = ''; render(); },
+  }, options.map(([v, text]) => el('option', {
+    value: v, ...(state.svc[key] === v ? { selected: 'selected' } : {}),
+  }, text)));
+  return el('div', { class: 'svc-bar' },
+    pick('who', [['me', t('services.who.me')], ['others', t('services.who.others')], ['all', t('services.who.all')]],
+      t('services.who')),
+    pick('phase', [['', t('services.phase.all')], ['ready', t('services.phase.ready')],
+      ['building', t('services.phase.building')], ['task', t('services.phase.task')],
+      ['ended', t('services.phase.ended')]], t('services.phase')),
+    el('input', {
+      type: 'search', class: 'svc-find', value: state.svc.q,
+      placeholder: t('services.find'), 'aria-label': t('services.find'),
+      oninput: (ev) => { state.svc.q = ev.target.value; repaint(); },
+    }));
+}
+
+// entryMeta is the line under an entry's name: its status, for whom where that is
+// not the reader, and whether a task waits on it.
+function entryMeta(e, st) {
+  return [
+    el('span', { class: `svc-state ${st.status}` }, st.status === 'done' ? t('services.ready') : st.label),
+    st.meta && st.meta !== st.label ? el('span', {}, st.meta) : null,
+    e.mine ? null : el('span', { class: 'svc-for' }, `${t('services.for')} ${personName(e.who)}`),
+    st.tasks ? el('span', { class: 'svc-task' }, t('services.taskOpen')) : null,
+  ];
+}
+
 // pieIcon is a Marktleistung's catalogue icon drawn as how far it is provisioned:
 // the whole icon in grey, and over it the share that is ready in the catalogue's
 // colour, filled clockwise like a pie. Full, it is the catalogue's own tile.
@@ -4933,215 +5070,178 @@ function pieIcon(item, prog, label) {
 }
 
 // renderServicesList is "my services" for a catalogue in the tile layout: one row
-// per Marktleistung, grouped under its heading, each with its catalogue icon as a
-// pie of how far it is provisioned, how many of it are held, since when, and the
-// order that granted it.
-function renderServicesList(rel, offerings, open, lineOf) {
+// per entry, grouped under its heading, each with its catalogue icon as a pie of
+// how far it is provisioned, how many of it are held, since when, and the order
+// behind it; a row opened shows its actions, orders, positions and tasks.
+function renderServicesList(rel, shown, open, lineOf) {
   const by = itemsById(rel);
-  const groups = headingsHeld(rel, by, offerings, 'category');
+  const groups = headingsHeld(rel, by, shown.map((x) => x.e.id), 'category');
   const nameOf = (id) => textOf((by[id] || {}).texts, id);
-  const row = (id) => {
-    const st = serviceState(rel, id, open, lineOf);
-    const found = lineOf.get(id);
+  const row = ({ e, st }) => {
+    const found = e.mine ? lineOf.get(e.id) : null;
     const can = found && returnable(found.order, found.line);
-    const entry = state.heldEntry.get(id);
-    const orderID = (entry && entry.orderId) || (found && found.order.id) || '';
-    const since = state.held.get(id);
-    return el('div', { class: 'svc-row' },
-      pieIcon(by[id], st.prog, st.label),
-      el('div', { class: 'svc-name' },
-        el('strong', {}, nameOf(id)),
-        el('span', { class: `muted svc-state ${st.status}` }, st.status === 'done' ? t('services.ready') : st.label),
-        lackingOf(rel, id).length
-          ? el('div', { class: 'svc-lacking' },
-            el('span', { class: 'muted' }, `${t('services.notHeld')}:`),
-            lackingOf(rel, id).map((d) => el('span', { class: 'svc-offer' },
-              toggle(rel, d.id, d.integral), ' ', nameOf(d.id))))
-          : null),
-      el('div', { class: 'svc-qty', 'data-label': t('services.col.qty') }, `${Math.max(st.n, 1)}\u00d7`),
-      el('div', { class: 'svc-since', 'data-label': t('services.col.since') },
-        since ? new Date(since / 1e6).toLocaleDateString(locale) : '\u2014'),
-      el('div', { class: 'svc-order', 'data-label': t('services.col.order') }, orderID || '\u2014'),
-      el('div', { class: 'svc-act' },
-        can
-          ? el('button', {
-            class: 'sq', 'aria-label': t('act.cancelLines'), title: t('act.cancelLines'),
-            disabled: state.busy, onclick: () => giveBack(found.order, found.line),
-          }, 'X')
-          : null,
-        infoButton(id)));
+    const entry = e.mine ? state.heldEntry.get(e.id) : null;
+    const newest = e.refs[0] && e.refs[0].order;
+    const orderID = (entry && entry.orderId) || (found && found.order.id) || (newest && newest.id) || '';
+    const since = (e.mine && state.held.get(e.id)) || (newest && newest.createdAt);
+    const opened = state.svcOpen === e.key;
+    return el('div', { class: opened ? 'svc-entry open' : 'svc-entry', 'data-entry': e.key },
+      el('div', { class: 'svc-row' },
+        pieIcon(by[e.id], st.prog, st.label),
+        el('div', { class: 'svc-name' },
+          el('button', {
+            class: 'svc-open', 'aria-expanded': opened ? 'true' : 'false', onclick: () => toggleEntry(e),
+          }, el('strong', {}, nameOf(e.id)), el('span', { class: 'svc-caret', 'aria-hidden': 'true' }, opened ? '▴' : '▾')),
+          el('span', { class: 'muted svc-meta' }, entryMeta(e, st))),
+        el('div', { class: 'svc-qty', 'data-label': t('services.col.qty') }, `${Math.max(st.n, 1)}×`),
+        el('div', { class: 'svc-since', 'data-label': t('services.col.since') },
+          since ? new Date(since / 1e6).toLocaleDateString(locale) : '—'),
+        el('div', { class: 'svc-order', 'data-label': t('services.col.order') }, orderID || '—'),
+        el('div', { class: 'svc-act' },
+          can
+            ? el('button', {
+              class: 'sq', 'aria-label': t('act.cancelLines'), title: t('act.cancelLines'),
+              disabled: state.busy, onclick: () => giveBack(found.order, found.line),
+            }, 'X')
+            : null,
+          infoButton(e.id))),
+      opened ? entryDetail(rel, e) : null);
   };
   const head = el('div', { class: 'svc-row svc-head', 'aria-hidden': 'true' },
     el('span', {}), el('span', {}, t('services.col.service')), el('span', {}, t('services.col.qty')),
     el('span', {}, t('services.col.since')), el('span', {}, t('services.col.order')), el('span', {}));
-  const sorted = (ids) => [...ids].sort((a, b) => nameOf(a).localeCompare(nameOf(b), locale));
+  const sorted = (list) => [...list].sort((a, b) => nameOf(a.e.id).localeCompare(nameOf(b.e.id), locale)
+    || a.e.who.localeCompare(b.e.who));
+  if (!shown.length) return el('p', { class: 'muted svc-none' }, t('services.noMatch'));
   return el('div', { class: 'svc-list' },
     head,
     groups.map((g) => el('section', { class: 'svc-group' },
       el('h3', { class: 'svc-heading' }, g.text || t('cat.none')),
-      sorted(offerings.filter((id) => filedUnder(by[rootOf(rel, id)], 'category') === g.key)).map(row))),
-    state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null);
+      sorted(shown.filter((x) => filedUnder(by[rootOf(rel, x.e.id)], 'category') === g.key)).map(row))));
 }
 
-function renderServices() {
-  const rel = state.release || {};
+// renderServicesCascade is "my services" in the cascade: the catalogue's columns —
+// heading, group, Marktleistung — read off the entries shown, each Marktleistung
+// with its pie, and beside it, once one is chosen, what the list opens under a
+// row: its actions, orders, positions and tasks.
+function renderServicesCascade(rel, shown) {
   const by = itemsById(rel);
-  const open = building(state.orders, state.meID);
-  const ids = [...new Set([...state.held.keys(), ...open.keys()])];
-  if (!ids.length) {
-    return el('div', { class: 'empty' }, el('p', {}, t('services.none')));
-  }
-  // Which order granted each right, where one on this page still does — that is
-  // what makes a return possible from here at all. It is deliberately not how the
-  // *list* is built: the inventory is, because the order behind a right is
-  // deleted by retention long before the right ends (ADR-0312), and a list
-  // assembled from orders would start losing services on the ninetieth day.
-  const lineOf = grantingLines(state.orders, state.meID);
-
-  // A held position: its name, the give-back where an order still allows one, and
-  // its information. `open` makes the name the way into the next column, as the
-  // catalogue's product column does.
-  const row = (id, opener) => {
-    const found = lineOf.get(id);
-    const can = found && returnable(found.order, found.line);
-    return cell({
-      ...(opener || {}),
-      lead: serviceState(rel, id, open, lineOf).lead,
-      meta: serviceState(rel, id, open, lineOf).meta,
-      text: textOf((by[id] || {}).texts, id),
-      trail: [
-        can
-          ? el('button', {
-            class: 'sq',
-            'aria-label': t('act.cancelLines'),
-            title: t('act.cancelLines'),
-            disabled: state.busy,
-            onclick: () => giveBack(found.order, found.line),
-          }, 'X')
-          : null,
-        infoButton(id),
-      ],
-    });
-  };
-
-  // Laid out across the same levels the catalogue and the basket use, from the same
-  // rule, so somebody reading what they hold sees it under the name they ordered it
-  // under. This was a third derivation of the level, and it disagreed with the
-  // other two about a product that has no parts.
-  const at = (level) => ids.filter((id) => levelOf(rel, id) === level);
-
-  // And read the way the catalogue is read: a cascade, where choosing a heading
-  // narrows the groups, choosing a group narrows the products, and choosing a
-  // product shows what is behind it. The four columns used to be four independent
-  // lists, so a service sat beside whichever product happened to share its line
-  // and nothing on the screen said which one it belonged to.
-  //
-  // Each held service hangs under the held product it came with — ownerAmong, the
-  // basket's rule, so a case offered by two phones sits under the phone this
-  // person has. A service whose product they do not hold still gets its product
-  // as a line, shown without a give-back, because it is how the service is found.
-  const held = at('offering');
-  const ownerOf = ownerAmong(rel, new Set(held));
-  const services = at('service');
-  const productOf = (id) => ownerOf(id) || rootOf(rel, id);
-  const offerings = [...new Set([...held, ...services.map(productOf)])];
-
-  // "My services" lists Marktleistungen only: what somebody ordered and uses. The
-  // services a Marktleistung is assembled from are its parts, counted in its light
-  // and its pie, and not rows of their own. A catalogue in the tile layout shows
-  // them as a list with its icons.
-  if (tileLayout()) return renderServicesList(rel, offerings, open, lineOf);
-
-  // The same position the catalogue stands at — category, group, product and the
-  // column a narrow screen shows — so a heading chosen in one screen is the heading
-  // the other opens on, and somebody switching between "what can I order" and
-  // "what do I have" keeps their place.
-  const where = {
-    heading: state.category, group: state.group, offering: state.offering, step: state.step,
-  };
+  const where = { heading: state.category, group: state.group, step: state.step };
   const choose = (next) => {
     if ('heading' in next) state.category = next.heading;
     if ('group' in next) state.group = next.group;
-    if ('offering' in next) state.offering = next.offering;
+    if ('open' in next) state.svcOpen = next.open;
     if ('step' in next) state.step = next.step;
     state.info = '';
     render();
   };
-  const inCat = offerings.filter((id) => where.heading === null || filedUnder(by[id], 'category') === where.heading);
-  const inGroup = inCat.filter((id) => where.group === null || filedUnder(by[id], 'productGroup') === where.group);
-  const sortByName = (list) => [...list].sort((a, b) =>
-    textOf((by[a] || {}).texts, a).localeCompare(textOf((by[b] || {}).texts, b), locale));
-
-  // A Marktleistung is the last level here, unless it lacks something it could
-  // carry: then choosing it opens what it lacks, to order on its own.
-  const productCell = (id) => {
-    const lacks = lackingOf(rel, id).length > 0;
-    const opener = lacks ? {
-      open: where.offering === id,
-      onOpen: () => choose({ offering: where.offering === id ? '' : id, step: where.offering === id ? 2 : 3 }),
-    } : {};
-    return held.includes(id)
-      ? row(id, opener)
-      : cell({
-        text: textOf((by[id] || {}).texts, id),
-        lead: serviceState(rel, id, open, lineOf).lead,
-        meta: serviceState(rel, id, open, lineOf).meta,
-        trail: infoButton(id),
-      });
-  };
-  const lacking = where.offering ? lackingOf(rel, where.offering) : [];
-  const missingCol = lacking.length
-    ? el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('services.notHeld')),
-      lacking.map((d) => cell({
-        text: textOf((by[d.id] || {}).texts, d.id),
-        lead: toggle(rel, d.id, d.integral),
-        trail: infoButton(d.id),
-      })))
-    : null;
-
+  const ids = shown.map((x) => x.e.id);
+  const inCat = shown.filter((x) => where.heading === null || filedUnder(by[x.e.id], 'category') === where.heading);
+  const inGroup = inCat.filter((x) => where.group === null || filedUnder(by[x.e.id], 'productGroup') === where.group);
+  const nameOf = (id) => textOf((by[id] || {}).texts, id);
+  const sorted = [...inGroup].sort((a, b) => nameOf(a.e.id).localeCompare(nameOf(b.e.id), locale)
+    || a.e.who.localeCompare(b.e.who));
+  const chosen = shown.find((x) => x.e.key === state.svcOpen);
+  // A narrow screen shows one column; with nothing chosen there is no fourth.
+  if (!chosen && where.step > 2) where.step = 2;
   return el('div', {},
     where.step > 0
       ? el('div', { class: 'stepper' },
         el('button', {
           class: 'secondary step-back',
           onclick: () => choose({ step: Math.max(0, where.step - 1) }),
-        }, `\u2039 ${t('step.back')}`))
+        }, `‹ ${t('step.back')}`))
       : null,
-    el('div', { class: missingCol ? 'cascade' : 'cascade three', 'data-step': String(where.step) },
+    el('div', { class: chosen ? 'cascade svc-cascade' : 'cascade three', 'data-step': String(where.step) },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
         cell({
           text: t('cat.all'),
           open: where.heading === null,
-          onOpen: () => choose({ heading: null, group: null, offering: '', step: 1 }),
+          onOpen: () => choose({ heading: null, group: null, open: '', step: 1 }),
         }),
-        // The headings of what this person actually holds, not the whole
-        // catalogue's: this screen answers "what do I have", and a heading with
-        // nothing of theirs under it would be a column of other people's shelves.
-        headingsHeld(rel, by, offerings, 'category').map((c) => cell({
+        // The headings of what is shown, not the whole catalogue's: this screen
+        // answers "what do I have", and a heading with nothing of theirs under it
+        // would be a column of other people's shelves.
+        headingsHeld(rel, by, ids, 'category').map((c) => cell({
           text: c.text || t('cat.none'),
           open: where.heading === c.key,
-          onOpen: () => choose({ heading: where.heading === c.key ? null : c.key, group: null, offering: '', step: 1 }),
+          onOpen: () => choose({ heading: where.heading === c.key ? null : c.key, group: null, open: '', step: 1 }),
         }))),
-      // The product group beside the heading, read off what this person holds under
-      // the heading chosen, for the same reason the heading is.
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.group')),
         cell({
           text: t('group.all'),
           open: where.group === null,
-          onOpen: () => choose({ group: null, offering: '', step: 2 }),
+          onOpen: () => choose({ group: null, open: '', step: 2 }),
         }),
-        headingsHeld(rel, by, inCat, 'productGroup').map((g) => cell({
+        headingsHeld(rel, by, inCat.map((x) => x.e.id), 'productGroup').map((g) => cell({
           text: g.text || t('group.none'),
           open: where.group === g.key,
-          onOpen: () => choose({ group: where.group === g.key ? null : g.key, offering: '', step: 2 }),
+          onOpen: () => choose({ group: where.group === g.key ? null : g.key, open: '', step: 2 }),
         }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
-        sortByName(inGroup).map(productCell)),
-      missingCol),
+        sorted.length ? sorted.map(({ e, st }) => cell({
+          lead: pieIcon(by[e.id], st.prog, st.label),
+          text: nameOf(e.id),
+          meta: entryMeta(e, st),
+          open: state.svcOpen === e.key,
+          onOpen: () => choose({ open: state.svcOpen === e.key ? '' : e.key, step: state.svcOpen === e.key ? 2 : 3 }),
+          trail: infoButton(e.id),
+        })) : el('p', { class: 'muted' }, t('services.noMatch'))),
+      chosen
+        ? el('div', { class: 'col' },
+          el('div', { class: 'colhead' }, t('services.col.detail')),
+          entryDetail(rel, chosen.e))
+        : null));
+}
+
+// repaintServices redraws the entries under the filter while somebody types into
+// its search. The same two steps render() takes, and for the same reason: a
+// correction's or an action's form is inside the entries, it does not survive its
+// container being replaced, and a keystroke in the search must not empty a cost
+// centre somebody is in the middle of fixing.
+function repaintServices(node, body) {
+  harvest();
+  node.replaceChildren(body());
+  mountConfigForms();
+}
+
+function renderServices() {
+  const rel = state.release || {};
+  const by = itemsById(rel);
+  const open = building(state.orders, state.meID);
+  // Which order granted each right, where one on this page still does — that is
+  // what makes a return possible from here at all. It is deliberately not how the
+  // reader's entries are found: the inventory is (ADR-0312).
+  const lineOf = grantingLines(state.orders, state.meID);
+  const entries = serviceEntries(rel).map((e) => ({ e, st: entryState(rel, e, open, lineOf) }));
+  if (!entries.length) {
+    return el('div', { class: 'empty' }, el('p', {}, t('services.none')));
+  }
+  const body = () => {
+    const shown = entries.filter(({ e, st }) => entryMatches(rel, e, st));
+    return tileLayout() ? renderServicesList(rel, shown, open, lineOf) : renderServicesCascade(rel, shown);
+  };
+  const bodyNode = el('div', { class: 'svc-body' }, body());
+  const repaint = () => repaintServices(bodyNode, body);
+  // Tasks the reader may answer on entries the filter hides: said, with the way
+  // to them, so an approver reading their own services does not miss the order
+  // waiting on them.
+  const hidden = entries.filter(({ e, st }) => st.tasks && !entryMatches(rel, e, st)
+    && e.refs.some((r) => tasksOf(r.order, r.line).some((x) => x.mayWork))).length;
+  return el('div', {},
+    servicesFilterBar(repaint),
+    hidden
+      ? el('p', { class: 'note svc-hidden-tasks' }, fill(t('services.tasksHidden'), hidden), ' ',
+        el('button', {
+          class: 'linkish',
+          onclick: () => { state.svc = { who: 'all', q: '', phase: 'task' }; state.svcOpen = ''; render(); },
+        }, t('services.showTasks')))
+      : null,
+    bodyNode,
+    state.tasksTruncated ? el('p', { class: 'note' }, t('task.truncated')) : null,
     state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null);
 }
 
@@ -5207,6 +5307,13 @@ function renderMark() {
 // affordance beside the first, and whoever is signed in at the far right.
 function renderNav() {
   const go = (view) => () => {
+    // "My services" opens on the product the catalogue stands at, so somebody
+    // switching between "what can I order" and "what do I have" keeps their place.
+    if (view === 'services' && state.view !== 'services' && state.offering) state.svcOpen = `me|${state.offering}`;
+    // And back: an entry chosen in "My services" is no product chosen in the
+    // catalogue, so a narrow screen goes back to the products, not to an empty
+    // column of services.
+    if (view === 'catalog' && state.step > 2 && !state.offering) state.step = 2;
     state.view = view;
     state.inBasket = false;
     state.info = '';
@@ -5220,7 +5327,6 @@ function renderNav() {
 
   return el('nav', { class: 'nav' },
     link('catalog', 'nav.catalog'),
-    link('orders', 'nav.orders'),
     link('services', 'nav.services'),
     state.reports.team > 0 ? link('team', 'nav.team') : null,
     state.reports.organisations.length ? link('org', 'nav.org') : null,
@@ -5557,7 +5663,6 @@ function renderLoading() {
 
 function currentView() {
   if (!state.loaded) return renderLoading();
-  if (state.view === 'orders') return renderOrders();
   if (state.view === 'services') return renderServices();
   if (state.view === 'team' || state.view === 'org') return renderPeopleReport(state.view);
   return state.inBasket ? renderBasket() : renderCatalogue();
@@ -5614,8 +5719,7 @@ function render() {
         ' ', el('button', { onclick: load }, t('portal.retry'))) : null,
       state.view === 'catalog' ? renderForWhom() : null,
       el('h2', {}, t(state.inBasket ? 'basket.title'
-        : state.view === 'orders' ? 'nav.orders'
-          : state.view === 'services' ? 'nav.services'
+        : state.view === 'services' ? 'nav.services'
             : state.view === 'team' ? 'nav.team'
               : state.view === 'org' ? 'nav.org' : 'nav.catalog')),
       currentView(),

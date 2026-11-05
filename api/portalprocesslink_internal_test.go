@@ -21,7 +21,7 @@ import (
 // TestTheProcessLinkIsOfferedToWhoMayFollowIt.
 func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
 	src := readWeb(t, "shop.js")
-	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
+	rows := webRegion(t, src, "function orderNote(", "\n}")
 	if !strings.Contains(rows, "state.mayFollowProcess") {
 		t.Error("the row offers the process link to everybody, or to nobody, without " +
 			"asking whether this reader may follow it")
