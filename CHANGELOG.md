@@ -95,6 +95,11 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Changed
+- **An opened entry of "My services" is laid out in sections.** It starts with the product's name,
+  its pie and how it stands. Then come its parts, each with where it stands now (held, on its way,
+  no longer held, not held, not chosen) and the basket control for what can be added; its possible
+  events; and its orders. The newest order and any still moving are shown; settled older ones
+  wait behind "Show earlier orders".
 - **The Console's welcome card greets the person signed in by name.** Its heading reads
   "Welcome, Tina Muster" — the display name where one is set, else the username, as the
   account menu shows them — instead of "Welcome to atlas". With sign-in off there is
@@ -121,6 +126,11 @@ _Changed_ / _Removed_ for each version.
   the corner of a product page in the tile layout.
 
 ### Fixed
+- **"My services" no longer says "being set up" about parts nobody is providing.** An entry whose
+  missing parts were given back, withdrawn or never delivered, with nothing on its way, read
+  "being set up: 4 of 7 ready". It now reads "incomplete: 4 of 7 held", and the status filter has
+  "incomplete" of its own. Its pie stays the share held. A position the order found "already held"
+  says so as it stands now when the part has been given back since.
 - **The test environment installs the AD services with its own directory.** `examples/ad-dienste`
   went into the M365 test environment with the example DNs of its tables
   (`…,DC=contoso,DC=local`), so the domain controller answered with an LDAP referral and the order

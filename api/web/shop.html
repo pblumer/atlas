@@ -170,6 +170,23 @@
   .svc-action-row > button.linkish:hover:not(:disabled) { border-color:var(--accent); }
   .svc-action-row > .card { flex-basis:100%; }
   .svc-link { display:flex; justify-content:flex-end; }
+  /* An entry opened: what it is, what it is made of, what can be asked of it, the
+     orders behind it — each a section under its own heading. */
+  .svc-detail-head { display:flex; align-items:center; gap:12px; }
+  .svc-detail-title { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .svc-detail-title h3 { margin:0; font-size:18px; }
+  .svc-detail-title .muted { font-size:13px; }
+  .svc-section { display:flex; flex-direction:column; gap:6px; padding-top:10px; border-top:1px solid var(--border); }
+  .svc-section > h4 { margin:0; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .svc-parts { display:grid; grid-template-columns:auto minmax(0, 1fr) auto auto auto; gap:6px 12px; align-items:center; font-size:14px; }
+  .svc-part { display:contents; }
+  .svc-part > .dot { margin:0; }
+  .svc-part-kind { font-size:12px; }
+  .svc-part-state.done { color:var(--ok); }
+  .svc-part-state.none, .svc-part-state.returned, .svc-part-state.cancelled, .svc-part-state.rejected { color:var(--muted); }
+  .dot.incomplete, .dot.none { background:transparent; border:1px solid var(--border-strong); }
+  .svc-state.incomplete { color:var(--muted); }
+  .svc-older { align-self:flex-start; }
   .link-note { font-size:12px; margin-left:6px; }
   .svc-order-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 4px; }
   .svc-order-block .lines { margin-top:4px; }
