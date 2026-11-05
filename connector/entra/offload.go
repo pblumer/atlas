@@ -57,6 +57,12 @@ type Op struct {
 	// ("/users/delta", "/groups/delta").
 	IsDelta  bool
 	ListPath string
+	// SelectOnly marks a listing Graph answers whole and lets a request shape only by
+	// $select: list-subscribed-skus, whose /subscribedSkus refuses $filter and documents
+	// no $top, $search or $count (ADR-draft-entra-subscribed-skus). Its request carries
+	// the select and nothing else, and the query fields a listing otherwise takes are
+	// refused rather than sent to a 400.
+	SelectOnly bool
 	// IsBinary marks an operation whose answer is bytes rather than an object: a
 	// photo (ADR-0367). Like a listing it needs a result variable —
 	// a read that discards what it read is one nothing asked for — and unlike every
@@ -102,8 +108,8 @@ func (o Op) needsResult() bool {
 // and its manager, list, update, enable, disable, reset-password, delete), the group
 // (create, read, list, update, delete, restore and list the deleted, and members and
 // owners), and the Team a group backs (create, add members and owners, create a
-// channel, archive) — plus guest invitation, a Viva Engage community, and licence and
-// directory-role assignment.
+// channel, archive) — plus guest invitation, a Viva Engage community, licence and
+// directory-role assignment, and the tenant's licence subscriptions.
 var Ops = map[string]Op{
 	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":    {Method: "GET", NeedsUser: true, Selects: true, Label: "read a user"},
@@ -153,6 +159,11 @@ var Ops = map[string]Op{
 	"invite-guest":        {Method: "POST", NeedsAttributes: true, Label: "invite a guest user"},
 	"restore-group":       {Method: "POST", NeedsGroup: true, Label: "restore a deleted group"},
 	"list-deleted-groups": {Method: "GET", IsList: true, ListPath: "/directory/deletedItems/microsoft.graph.group", Label: "list deleted groups"},
+	// The tenant's licence subscriptions, one item per SKU with its prepaidUnits (bought:
+	// enabled, warning, suspended, lockedOut) and consumedUnits (assigned) — what a
+	// process watching a licence quota compares (ADR-draft-entra-subscribed-skus).
+	// Microsoft documents LicenseAssignment.Read.All as the least privileged permission.
+	"list-subscribed-skus": {Method: "GET", IsList: true, SelectOnly: true, ListPath: "/subscribedSkus", Label: "list subscribed licence SKUs"},
 	// A Viva Engage community is backed by a Microsoft 365 group — its groupId — as a
 	// Team is, so its members and admins are then managed with add-group-member and
 	// add-group-owner on that group rather than with operations of its own. The user is
@@ -723,6 +734,9 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
 	}
+	if spec.SelectOnly && (strings.TrimSpace(j.Filter) != "" || strings.TrimSpace(j.Search) != "" || j.Advanced || j.PageSize > 0) {
+		return fmt.Errorf("entra: operation %q takes only a select; Graph answers %s whole and refuses a filter, a search, an advanced query and a page size there", j.Operation, spec.ListPath)
+	}
 	if j.Operation == "set-sync-behavior" {
 		if err := checkSyncBehavior(j.Attributes); err != nil {
 			return err
@@ -796,6 +810,10 @@ func request(j Job, spec Op, baseURL string) Request {
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
 	base := strings.TrimRight(baseURL, "/")
 	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced(), Binary: spec.IsBinary}
+	if spec.SelectOnly {
+		r.Path, r.Eventual = spec.ListPath+selectQuery(j), false
+		return r
+	}
 	if spec.IsList {
 		r.Path = listPath(j, spec.ListPath)
 		return r

@@ -40,6 +40,8 @@ mock_provider "azuread" {
         "Mail.Send"                  = "b633e1c5-b582-4048-a93e-9f11b44c7e96"
         "User.Invite.All"            = "09850681-111b-4a89-9bed-3f2cae46d706"
         "Sites.Read.All"             = "332a536c-c7ef-4017-ab91-336970924f0d"
+        "LicenseAssignment.Read.All" = "e2f98668-2877-4f38-a2f4-8202e0717aa1"
+        "AuditLog.Read.All"          = "b0afded3-3588-46d8-8b3d-9842eff778da"
       }
       oauth2_permission_scope_ids = {
         "openid"  = "37f7f235-527c-4136-accd-4a02d197296e"
@@ -591,6 +593,10 @@ run "shared_tenant_reads_all_sites_only_when_asked" {
   assert {
     condition     = contains(var.entra_graph_permissions, "User.Invite.All")
     error_message = "The Entra app invites the SharePoint team site's guests."
+  }
+  assert {
+    condition     = contains(var.entra_graph_permissions, "LicenseAssignment.Read.All") && contains(var.entra_graph_permissions, "AuditLog.Read.All")
+    error_message = "The Entra app reads the licence stock (list-subscribed-skus) and the users' last sign-in (signInActivity)."
   }
 }
 
