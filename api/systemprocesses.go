@@ -102,6 +102,12 @@ func sha256Hex(b []byte) string {
 func (s *Server) latestDeploymentFor(pid string) (*deployment, bool) {
 	var best *deployment
 	for _, d := range s.deployments {
+		// Only what atlas deployed into the system project is compared: a copy of the
+		// id filed elsewhere is tenant content, and must not stand in for the embedded
+		// process (systemprocessguard.go).
+		if d.ProjectID != systemProjectID {
+			continue
+		}
 		if d.ProcessID == pid && (best == nil || d.Version > best.Version) {
 			best = d
 		}
@@ -129,6 +135,7 @@ func (s *Server) ensureSystemProcesses(now int64) error {
 	for _, p := range procs {
 		s.systemPIDs[p.processID] = true
 	}
+	s.reportSystemProcessCopies()
 
 	// Seed forms (idempotent overwrite) filed under the system project. A server
 	// that switched the shop off files none of the shop's machinery: not its

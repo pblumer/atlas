@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "m365-lizenz-wechsel",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenz wechseln · Change the licence**\n\nDie neue Lizenzstufe; ein teurerer Wechsel braucht eine Genehmigung. · The new tier; a more expensive change needs approval."
+    },
+    {
+      "key": "neueVariante",
+      "type": "radio",
+      "label": "Neue Variante · New variant",
+      "values": [
+        {
+          "label": "Standard (E3)",
+          "value": "standard"
+        },
+        {
+          "label": "Erweitert (E5) · Extended (E5)",
+          "value": "erweitert"
+        },
+        {
+          "label": "Frontline (F3)",
+          "value": "frontline"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "lizenzvertragNeu",
+      "type": "textfield",
+      "label": "Anderer Lizenzvertrag (optional) · Other licence contract (optional)",
+      "description": "Leer bleibt der bisherige Vertrag. · Empty keeps the current contract.",
+      "validate": {
+        "pattern": "^(|LV-[A-Za-z0-9-]+)$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

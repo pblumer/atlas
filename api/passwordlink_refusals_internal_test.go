@@ -66,17 +66,26 @@ func TestNoLinkWithoutItsIngredients(t *testing.T) {
 	}
 
 	d := mailDirectory{srv}
-	if _, err := d.PasswordLink(passwordLinkProcessID, "", []string{"a@example.org"}, nil, nil); err == nil {
+	var sysKey uint64
+	srv.do(func() {
+		if dep := srv.latestDeploymentOf(passwordLinkProcessID); dep != nil {
+			sysKey = dep.Key
+		}
+	})
+	if sysKey == 0 {
+		t.Fatal("the system process proc_passwort_link is not deployed")
+	}
+	if _, err := d.PasswordLink(sysKey, passwordLinkProcessID, "", []string{"a@example.org"}, nil, nil); err == nil {
 		t.Error("an empty account name minted a link")
 	}
-	if _, err := d.PasswordLink(passwordLinkProcessID, "niemand", []string{"a@example.org"}, nil, nil); err == nil {
+	if _, err := d.PasswordLink(sysKey, passwordLinkProcessID, "niemand", []string{"a@example.org"}, nil, nil); err == nil {
 		t.Error("an unknown account minted a link")
 	}
 	noMail := User{ID: "usr_e00000000000000000000002", Username: "ohne", Source: SourceLocal}
 	if err := srv.users.Save(noMail); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.PasswordLink(passwordLinkProcessID, "ohne", []string{"a@example.org"}, nil, nil); err == nil {
+	if _, err := d.PasswordLink(sysKey, passwordLinkProcessID, "ohne", []string{"a@example.org"}, nil, nil); err == nil {
 		t.Error("an account without an address minted a link")
 	}
 

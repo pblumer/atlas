@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzSku: welche Lizenz eine Variante des Microsoft-365-Katalogs bzw. eine SKU aus dem Tenant im Lizenzmanagement ist.
+  Eingaben: variante (standard | erweitert | frontline, aus m365-lizenz) oder skuId (GUID aus list-subscribed-skus)
+  Ausgaben: kurz (der Schlüssel der Mengen in den Verträgen: E3, E5, F3), skuId, produkt
+  hitPolicy FIRST: zuerst die Varianten, dann die SKUs. Keine Auffangregel: Eine SKU, die das Lizenzmanagement nicht
+  führt, bleibt ohne kurz und wird im Abgleich nicht gezählt.
+  ANNAHME, VOR DEM EINSATZ PRÜFEN: dieselben SKU-IDs wie M365Lizenzprofil (Microsofts Liste «Product names and service
+  plan identifiers for licensing»). Wer die SKUs in M365Lizenzprofil ändert, ändert sie hier mit.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzSku" name="LzSku" namespace="http://atlas/dmn">
+  <inputData id="id_skuId" name="skuId"/>
+  <inputData id="id_variante" name="variante"/>
+  <decision id="LzSku" name="LzSku">
+    <informationRequirement id="ir_skuId"><requiredInput href="#id_skuId"/></informationRequirement>
+    <informationRequirement id="ir_variante"><requiredInput href="#id_variante"/></informationRequirement>
+    <decisionTable id="dt_LzSku" hitPolicy="FIRST">
+      <input id="in_0" label="variante"><inputExpression id="ie_0" typeRef="string"><text>variante</text></inputExpression></input>
+      <input id="in_1" label="skuId"><inputExpression id="ie_1" typeRef="string"><text>skuId</text></inputExpression></input>
+      <output id="out_0" label="kurz" name="kurz" typeRef="string"/>
+      <output id="out_1" label="skuId" name="skuId" typeRef="string"/>
+      <output id="out_2" label="produkt" name="produkt" typeRef="string"/>
+      <rule id="r1">
+        <description>Variante standard im Microsoft-365-Katalog</description>
+        <inputEntry id="r1_i0"><text>"standard"</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"E3"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"05e9a617-0261-4cee-bb44-138d3ef5d965"</text></outputEntry>
+        <outputEntry id="r1_o2"><text>"Microsoft 365 E3"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Variante erweitert im Microsoft-365-Katalog</description>
+        <inputEntry id="r2_i0"><text>"erweitert"</text></inputEntry>
+        <inputEntry id="r2_i1"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"E5"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"06ebc4ee-1bb5-47dd-8120-11324bc54e06"</text></outputEntry>
+        <outputEntry id="r2_o2"><text>"Microsoft 365 E5"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Variante frontline im Microsoft-365-Katalog</description>
+        <inputEntry id="r3_i0"><text>"frontline"</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"F3"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"66b55226-6b4f-492c-910c-a3b7a3c9d993"</text></outputEntry>
+        <outputEntry id="r3_o2"><text>"Microsoft 365 F3"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>SKU Microsoft 365 E3 aus dem Tenant</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <inputEntry id="r4_i1"><text>"05e9a617-0261-4cee-bb44-138d3ef5d965"</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"E3"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"05e9a617-0261-4cee-bb44-138d3ef5d965"</text></outputEntry>
+        <outputEntry id="r4_o2"><text>"Microsoft 365 E3"</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>SKU Microsoft 365 E5 aus dem Tenant</description>
+        <inputEntry id="r5_i0"><text>-</text></inputEntry>
+        <inputEntry id="r5_i1"><text>"06ebc4ee-1bb5-47dd-8120-11324bc54e06"</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"E5"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"06ebc4ee-1bb5-47dd-8120-11324bc54e06"</text></outputEntry>
+        <outputEntry id="r5_o2"><text>"Microsoft 365 E5"</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>SKU Microsoft 365 F3 aus dem Tenant</description>
+        <inputEntry id="r6_i0"><text>-</text></inputEntry>
+        <inputEntry id="r6_i1"><text>"66b55226-6b4f-492c-910c-a3b7a3c9d993"</text></inputEntry>
+        <outputEntry id="r6_o0"><text>"F3"</text></outputEntry>
+        <outputEntry id="r6_o1"><text>"66b55226-6b4f-492c-910c-a3b7a3c9d993"</text></outputEntry>
+        <outputEntry id="r6_o2"><text>"Microsoft 365 F3"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

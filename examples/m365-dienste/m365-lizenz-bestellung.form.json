@@ -1,0 +1,53 @@
+{
+  "type": "default",
+  "id": "m365-lizenz-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenz mit Postfach · Licence with mailbox**\n\nBenutzername der Person, die die Lizenz erhält, und der Lizenzvertrag, auf den sie bezogen wird. · User name of the person who receives the licence, and the licence contract it is drawn from."
+    },
+    {
+      "key": "upn",
+      "type": "select",
+      "label": "Benutzername · User principal name",
+      "validate": {
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "surname",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
+      }
+    },
+    {
+      "key": "lizenzvertrag",
+      "type": "textfield",
+      "label": "Lizenzvertrag · Licence contract",
+      "description": "Die Vertragsnummer (LV-…) aus dem Lizenzmanagement. Leer gilt der Standardvertrag (LIZENZ_VERTRAG_STANDARD). Nur wirksam, wenn das Lizenzmanagement eingeschaltet ist. · The contract number; empty means the standard contract.",
+      "validate": {
+        "pattern": "^(|LV-[A-Za-z0-9-]+)$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-aufstockung-genehmigen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Aufstockung genehmigen · Approve the increase**\n\nZusätzlich · Additional: E3 {{zusatz.E3}}, E5 {{zusatz.E5}}, F3 {{zusatz.F3}}"
+    },
+    {
+      "key": "kontingentText",
+      "type": "textarea",
+      "label": "Kontingent im EA · Quota in the EA",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Genehmigen · Approve",
+          "value": "genehmigt"
+        },
+        {
+          "label": "Ablehnen · Reject",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

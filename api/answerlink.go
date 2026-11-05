@@ -246,6 +246,7 @@ func (s *Server) handlePublicAnswerPage(w http.ResponseWriter, r *http.Request) 
 	// The page must not hand its address on: the token is in the fragment, which a
 	// browser does not send, and no-referrer keeps even the path at home.
 	h.Set("Referrer-Policy", "no-referrer")
+	setNoFraming(h)
 	_, _ = w.Write(page)
 }
 

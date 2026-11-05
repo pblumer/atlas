@@ -95,6 +95,8 @@
   .dot.returning { background:var(--accent-soft); border:1px solid var(--accent); }
   .dot.blocked { background:var(--accent-soft); border:1px solid var(--border-strong); }
   .dot.running { background:var(--accent); }
+  /* The light at the head of a row of "my services" (serviceState in shop.js). */
+  .cell > .dot { flex:none; margin:6px 2px 0 2px; }
   button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
                    border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; margin-top:8px; }
   /* Withdrawing is a plain button, not a red one. Taking back something you
@@ -139,6 +141,36 @@
      (ADR-0417). */
   .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
              gap:12px; overflow-x:auto; }
+  /* "My services" stops at the Marktleistung: three columns, not four. */
+  .cascade.three { grid-template-columns:repeat(3, minmax(220px, 1fr)); }
+  /* "My services" in the tile layout: a list, each Marktleistung with its catalogue
+     icon as a pie of how far it is provisioned (pieIcon in shop.js). */
+  .svc-list { margin-top:8px; }
+  .svc-row { display:grid; grid-template-columns:48px minmax(0, 3fr) 80px 110px minmax(0, 1.4fr) 76px;
+             gap:14px; align-items:center; padding:10px 4px; border-bottom:1px solid var(--border); }
+  .svc-head { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+              padding-bottom:6px; }
+  .svc-heading { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+                 margin:18px 0 0; padding:0 4px 6px; border-bottom:1px solid var(--border-strong); }
+  .svc-name { display:flex; flex-direction:column; gap:2px; min-width:0; overflow-wrap:break-word; }
+  .svc-state.done { color:var(--ok); }
+  .svc-act { display:flex; gap:6px; justify-content:flex-end; }
+  .svc-lacking { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; margin-top:4px; font-size:13px; }
+  .svc-offer { display:inline-flex; align-items:center; gap:4px; }
+  .pie-icon { position:relative; width:44px; height:44px; flex:none; border-radius:6px; overflow:hidden; }
+  .pie-icon > span { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .pie-grey { background:var(--border); color:var(--muted); }
+  .pie-done { background:var(--accent); color:var(--accent-ink);
+              -webkit-mask-image:conic-gradient(#000 0 var(--share), transparent var(--share) 100%);
+              mask-image:conic-gradient(#000 0 var(--share), transparent var(--share) 100%); }
+  .pie-icon svg { width:30px; height:30px; }
+  @media (max-width:760px) {
+    .svc-row { grid-template-columns:48px minmax(0, 1fr) auto; }
+    .svc-head { display:none; }
+    .svc-qty, .svc-since, .svc-order { grid-column:2; font-size:13px; color:var(--muted); }
+    .svc-qty::before, .svc-since::before, .svc-order::before { content:attr(data-label) ": "; }
+    .svc-act { grid-column:3; grid-row:1; }
+  }
   .col { min-width:0; }
   /* The basket's lines, one per offering. The grid makes each line as tall as its
      tallest cell, which is what keeps one offering's services from sliding beside
@@ -193,6 +225,8 @@
             stroke-linecap:round; stroke-linejoin:round; }
   .sq svg.filled path { fill:currentColor; }
   .sq svg .cut { stroke:var(--surface); stroke-width:4.4; }
+  .sq svg .solid { fill:currentColor; stroke:none; }
+  .sq svg .stem { stroke-width:3.4; }
   /* The "i" opens its panel over the page (infoDialog in shop.js), where the
      person is looking, instead of under the last row of a long catalogue. */
   .info-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:flex-start;
@@ -358,6 +392,7 @@
     .stepper .step-back { margin-top:0; }
     .step-path { min-width:0; overflow-wrap:break-word; }
     .cascade { grid-template-columns:1fr; overflow-x:visible; }
+    .cascade.three { grid-template-columns:1fr; }
     .cascade[data-step] > .col { display:none; }
     .cascade[data-step="0"] > .col:nth-child(1),
     .cascade[data-step="1"] > .col:nth-child(2),
@@ -480,6 +515,7 @@
   .page-section { border-bottom:1px solid var(--border); padding:12px 0; }
   .page-section summary { font-weight:600; font-size:17px; cursor:pointer; }
   .page-body { padding-top:8px; }
+  .page-part { text-align:left; padding:0; font:inherit; }
   @media (max-width:760px) {
     .tile-track { grid-auto-columns:85%; }
     .page-columns { grid-template-columns:1fr; }

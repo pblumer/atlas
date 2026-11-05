@@ -1,6 +1,6 @@
 # ADR-0111: Completing the incident model — retry backoff and timer-FEEL failure incidents
 
-- **Status:** Accepted (amended 2026-11-04: the in-process runner backs off too; see «Amendment (2026-11-04)»)
+- **Status:** Accepted (amended 2026-11-04: the in-process runner and Atlas's own worker back off too; see «Amendment (2026-11-04)»)
 - **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
@@ -204,6 +204,16 @@ incident as a transient one. A runner built without `SetRetryBackoff` — the li
 what tests that drive a failing handler to its incident rely on — retries at once as before; the
 API test helpers pass `WithJobRetryBackoff(nil)` for the same reason.
 External workers keep supplying their own backoff through the fail endpoint.
+
+**Follow-up (2026-11-04): Atlas's own worker backs off as well.** "External workers keep
+supplying their own backoff" was true of the endpoint, not of `atlas worker`: `worker.Worker`
+sent `retries` and `message` and no `retryBackoff`, so a built-in connector offloaded to a
+supervised or remote worker (ADR-0168) — the test environment runs Entra that way — still spent
+its three attempts within a few seconds and raised the same 404 incident on `add-group-owner`.
+`worker.Options` gains `RetryBackoff`, defaulting to `job.DefaultRetryBackoff`, and the worker
+sends the delay in milliseconds with every failure that leaves retries; a connector job now waits
+the same 75 seconds wherever it runs. `NoRetryBackoff` restores the immediate retry, which the
+worker tests that drive a failing job to its incident use.
 
 ## Links
 

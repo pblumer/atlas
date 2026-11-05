@@ -18,7 +18,7 @@ Das Projekt ist für **Entwicklung und temporäre Tests** gedacht, nicht für de
 
 | Worker Type | Worker in der Console | Ziel | Berechtigungen der App |
 |---|---|---|---|
-| `entra` ([ADR-0172](../../../docs/adr/0172-entra-id-connector.md)) | `ucc_entra` | Microsoft Graph: Benutzer, Gruppen, Teams | `User.ReadWrite.All`, `Group.ReadWrite.All`, `TeamMember.ReadWrite.All`, `Channel.Create`, `TeamSettings.ReadWrite.All`; Zertifikat |
+| `entra` ([ADR-0172](../../../docs/adr/0172-entra-id-connector.md)) | `ucc_entra` | Microsoft Graph: Benutzer, Gruppen, Teams | `User.ReadWrite.All`, `Group.ReadWrite.All`, `TeamMember.ReadWrite.All`, `Channel.Create`, `TeamSettings.ReadWrite.All`, `User.Invite.All`, `LicenseAssignment.Read.All` (Lizenzbestand, `list-subscribed-skus`), `AuditLog.Read.All` (letzte Anmeldung, `signInActivity`; nur mit Entra ID P1/P2 im Tenant); Zertifikat |
 | `exchange` ([ADR-0462](../../../docs/adr/0462-exchange-worker.md)) | `ucc_exchange` | Exchange Online | `Exchange.ManageAsApp` + Rolle *Exchange Administrator*; Zertifikat |
 | `sharepoint` ([ADR-0141](../../../docs/adr/0141-sharepoint-connector.md)) | `ucc_sharepoint` | SharePoint Online | `Sites.ReadWrite.All`; Zertifikat |
 | `teamsphone` ([ADR-0463](../../../docs/adr/0463-teams-phone-worker.md)) | `ucc_teams` | Teams Phone (PowerShell) | `User.ReadWrite.All` + Rolle *Teams Administrator*; Zertifikat |
@@ -161,6 +161,25 @@ mit `ATLAS_TOKEN` eines Tokens mit Rolle `modeler`):
 ```bash
 ATLAS_TOKEN=atlasat_... ../../../examples/m365-dienste/installieren.sh "$(tofu output -raw atlas_url)" antworten.json
 ```
+
+Das Lizenzmanagement (`examples/lizenzmanagement`: Lizenzverträge, Kontingentprüfung der
+Lizenzbestellung, täglicher Abgleich, Verrechnung) installiert nach `install-m365-dienste.py`:
+
+```bash
+python3 scripts/install-lizenzmanagement.py --cafile out/caddy-root.crt --vertrag-pruefen
+```
+
+Es legt die Gruppen Lizenz-Tenantverantwortung, Lizenz-Chef, Lizenzmanagement, Lizenz-Finanzen
+und Lizenz-Integrations-Manager an, setzt `LzSku` auf die erste SKU von `license_sku_ids`
+(dieselbe wie `M365Lizenzprofil`), importiert und veröffentlicht Applikation, Architektur und
+Katalog, übernimmt die Vorschläge der Capability-Landkarte, setzt die Konstanten
+(`EA_JAHRESTAG` der nächste 1. Juli) und startet das Tenant-Kontingent. `--vertrag-pruefen`
+schaltet in `beispiel-m365-dienste` `LIZENZ_VERTRAG_PRUEFEN = ein`; danach braucht jede
+Lizenzbestellung einen Lizenzvertrag (`--standardvertrag LV-…` für Bestellungen ohne). Die
+Berechtigungen `LicenseAssignment.Read.All` und `AuditLog.Read.All` des Entra-Workers stehen in
+`variables.tf`. Am Tenant ändert das Skript nichts. `install-m365-dienste.py` ersetzt bei jedem Lauf
+alle Konstanten von `beispiel-m365-dienste`; danach `install-lizenzmanagement.py --vertrag-pruefen`
+wiederholen.
 
 Mit `atlas_tls = "internal"` lehnt `curl` das Zertifikat ab, solange Caddys
 Stammzertifikat nicht vertraut ist; es liegt auf dem Server unter

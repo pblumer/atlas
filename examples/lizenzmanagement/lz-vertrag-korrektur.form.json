@@ -1,0 +1,49 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-korrektur",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Angaben korrigieren · Correct the order**\n\nDas PSP-Element wurde zurückgewiesen. · The WBS element was rejected."
+    },
+    {
+      "key": "pspHinweis",
+      "type": "textarea",
+      "label": "Grund · Reason",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "psp",
+      "type": "textfield",
+      "label": "PSP-Element · WBS element",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kunde",
+      "type": "textfield",
+      "label": "Kunde · Customer",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "projekt",
+      "type": "textfield",
+      "label": "Projekt · Project",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

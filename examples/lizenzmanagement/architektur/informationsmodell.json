@@ -1,0 +1,669 @@
+{
+  "name": "Lizenzmanagement",
+  "documentation": "Informationsmodell des Beispiels lizenzmanagement: Lizenzverträge mit ihren Bezügen, das Tenant-Kontingent mit seinem Tagesstand und den Nachkäufen, die Verrechnung. Den Stand halten zwei Arten lange laufender Instanzen (Vertragsbuch, Tenant-Kontingent); Personendaten hält keine Klasse, nur die Objekt-ID eines Kontos.",
+  "classes": [
+    {
+      "id": "cls-sku",
+      "name": "Sku",
+      "documentation": "Die SKUs, die das Lizenzmanagement führt (LzSku).",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "E3",
+        "E5",
+        "F3"
+      ],
+      "x": 40,
+      "y": 40
+    },
+    {
+      "id": "cls-exportform",
+      "name": "ExportForm",
+      "documentation": "In welcher Form die Verrechnung eines Vertrags geht (LzExportForm).",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "csv",
+        "mail",
+        "sap"
+      ],
+      "x": 300,
+      "y": 40
+    },
+    {
+      "id": "cls-vertragszustand",
+      "name": "Vertragszustand",
+      "documentation": "Der Zustand eines Lizenzvertrags im Vertragsbuch.",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "Aktiv",
+        "Abgelaufen",
+        "Beendet"
+      ],
+      "x": 560,
+      "y": 40
+    },
+    {
+      "id": "cls-lizenzvertrag",
+      "name": "Lizenzvertrag",
+      "stereotype": "businessObject",
+      "documentation": "Eine Menge Lizenzen pro SKU für einen Kunden oder ein Projekt, für eine Laufzeit, verrechnet auf ein PSP-Element. Gehalten von einer lange laufenden Instanz von proc_lz_vertragsbuch (das Vertragsbuch); belegt und reserviert sind gezählte Bezüge und Reservationen, keine Zähler.",
+      "attributes": [
+        {
+          "name": "nummer",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "LV- und die Bestellnummer."
+        },
+        {
+          "name": "kunde",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "projekt",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "psp",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "mengen",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Menge pro SKU (Kontext E3, E5, F3)."
+        },
+        {
+          "name": "beginn",
+          "type": "date",
+          "multiplicity": "1"
+        },
+        {
+          "name": "ende",
+          "type": "date",
+          "multiplicity": "1"
+        },
+        {
+          "name": "zustand",
+          "type": "Vertragszustand",
+          "multiplicity": "1"
+        },
+        {
+          "name": "integrationsManager",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Die Atlas-Kennung der Person, für die bestellt wurde; keine Adresse."
+        },
+        {
+          "name": "exportForm",
+          "type": "ExportForm",
+          "multiplicity": "1"
+        },
+        {
+          "name": "exportAn",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "entzugsregel",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Kennung der Entscheidung (LzEntzugStandard oder die des Kunden)."
+        },
+        {
+          "name": "reduktion",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Senken oder Beenden am Jahrestag (P7), für die Karenz (P8)."
+        }
+      ],
+      "identity": [
+        "nummer"
+      ],
+      "x": 40,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Abgelaufen",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Beendet",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-lizenzvertrag-1",
+            "from": "Aktiv",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-lizenzvertrag-2",
+            "from": "Aktiv",
+            "to": "Abgelaufen"
+          },
+          {
+            "id": "t-lizenzvertrag-3",
+            "from": "Aktiv",
+            "to": "Beendet"
+          },
+          {
+            "id": "t-lizenzvertrag-4",
+            "from": "Abgelaufen",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-lizenzvertrag-5",
+            "from": "Abgelaufen",
+            "to": "Beendet"
+          }
+        ],
+        "statesFrom": "Vertragszustand"
+      }
+    },
+    {
+      "id": "cls-lizenzbezug",
+      "name": "Lizenzbezug",
+      "stereotype": "businessObject",
+      "documentation": "Eine bezogene Lizenz: Position im Microsoft-365-Shop (orderId/positionId), SKU, Objekt-ID des Kontos in Entra ID, Beginn und Ende. Grundlage der Verrechnung (P6) und der Entzugsregel (P8). Bewusst ohne Namen.",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "orderId/positionId, bei übernommenen Lizenzen uebernahme/<Objekt-ID>."
+        },
+        {
+          "name": "sku",
+          "type": "Sku",
+          "multiplicity": "1"
+        },
+        {
+          "name": "konto",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Objekt-ID in Entra ID."
+        },
+        {
+          "name": "von",
+          "type": "date",
+          "multiplicity": "1"
+        },
+        {
+          "name": "bis",
+          "type": "date",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "ueberzug",
+          "type": "boolean",
+          "multiplicity": "1"
+        },
+        {
+          "name": "quelle",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "identity": [
+        "id"
+      ],
+      "x": 400,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Reserviert",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Belegt",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Freigegeben",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-lizenzbezug-1",
+            "from": "Reserviert",
+            "to": "Belegt"
+          },
+          {
+            "id": "t-lizenzbezug-2",
+            "from": "Reserviert",
+            "to": "Freigegeben"
+          },
+          {
+            "id": "t-lizenzbezug-3",
+            "from": "Belegt",
+            "to": "Freigegeben"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-tenantkontingent",
+      "name": "TenantKontingent",
+      "stereotype": "businessObject",
+      "documentation": "Das Tenant-Kontingent: eine lange laufende Instanz von proc_lz_tenantbuch mit dem Stand pro Tag und SKU, dem letzten Stand jedes Vertrags, den offenen Nachkäufen und dem nächsten Jahrestag.",
+      "attributes": [
+        {
+          "name": "eaJahrestag",
+          "type": "date",
+          "multiplicity": "1"
+        },
+        {
+          "name": "eaEnde",
+          "type": "date",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 760,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Gefuehrt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Geschlossen",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-tenantkontingent-1",
+            "from": "Gefuehrt",
+            "to": "Gefuehrt"
+          },
+          {
+            "id": "t-tenantkontingent-2",
+            "from": "Gefuehrt",
+            "to": "Geschlossen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-tagesstand",
+      "name": "Tagesstand",
+      "stereotype": "businessObject",
+      "documentation": "Ein Tag im Tenant-Kontingent: pro SKU gekauft, belegt, gesperrt (Entra list-subscribed-skus) und belegt laut Atlas.",
+      "identity": [
+        "datum",
+        "sku"
+      ],
+      "attributes": [
+        {
+          "name": "datum",
+          "type": "date",
+          "multiplicity": "1"
+        },
+        {
+          "name": "sku",
+          "type": "Sku",
+          "multiplicity": "1"
+        },
+        {
+          "name": "gekauft",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "belegt",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "gesperrt",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "belegtAtlas",
+          "type": "number",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 760,
+      "y": 520
+    },
+    {
+      "id": "cls-nachkauf",
+      "name": "Nachkauf",
+      "stereotype": "businessObject",
+      "documentation": "Eine offene oder entschiedene Aufgabe «Im EA nachkaufen» für eine SKU.",
+      "attributes": [
+        {
+          "name": "sku",
+          "type": "Sku",
+          "multiplicity": "1"
+        },
+        {
+          "name": "seit",
+          "type": "date",
+          "multiplicity": "1"
+        },
+        {
+          "name": "menge",
+          "type": "number",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "entscheid",
+          "type": "string",
+          "multiplicity": "0..1"
+        }
+      ],
+      "x": 1060,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Offen",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Gekauft",
+            "x": 200,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Abgelehnt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-nachkauf-1",
+            "from": "Offen",
+            "to": "Gekauft"
+          },
+          {
+            "id": "t-nachkauf-2",
+            "from": "Offen",
+            "to": "Abgelehnt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-verrechnungsposition",
+      "name": "Verrechnungsposition",
+      "stereotype": "businessObject",
+      "documentation": "Eine Zeile der monatlichen Verrechnung: Vertrag, SKU, anteilig bezogene Lizenzen, Überzug, Preis und Betrag.",
+      "attributes": [
+        {
+          "name": "vertrag",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "sku",
+          "type": "Sku",
+          "multiplicity": "1"
+        },
+        {
+          "name": "menge",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "ueberzug",
+          "type": "boolean",
+          "multiplicity": "1"
+        },
+        {
+          "name": "preis",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "betrag",
+          "type": "number",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 40,
+      "y": 520,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Berechnet",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Zugestellt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-verrechnungsposition-1",
+            "from": "Berechnet",
+            "to": "Zugestellt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-katalogposition",
+      "name": "Katalogposition",
+      "stereotype": "businessObject",
+      "identity": [
+        "orderId",
+        "positionId"
+      ],
+      "documentation": "Die bestellte Position im Atlas-Shop, an die jeder Prozess sein Ergebnis meldet.",
+      "attributes": [
+        {
+          "name": "orderId",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "positionId",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 400,
+      "y": 520,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Bestellt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Erledigt",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Fehlgeschlagen",
+            "x": 360,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Zurueckgegeben",
+            "x": 520,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-katalogposition-1",
+            "from": "Bestellt",
+            "to": "Erledigt"
+          },
+          {
+            "id": "t-katalogposition-2",
+            "from": "Bestellt",
+            "to": "Fehlgeschlagen"
+          },
+          {
+            "id": "t-katalogposition-3",
+            "from": "Erledigt",
+            "to": "Zurueckgegeben"
+          }
+        ]
+      }
+    }
+  ],
+  "associations": [
+    {
+      "id": "assoc-1",
+      "name": "führt",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-lizenzvertrag",
+        "role": "vertrag",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-lizenzbezug",
+        "role": "bezuege",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-2",
+      "name": "summiert",
+      "kind": "association",
+      "from": {
+        "classId": "cls-tenantkontingent",
+        "role": "tenant",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-lizenzvertrag",
+        "role": "vertraege",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-3",
+      "name": "hält",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-tenantkontingent",
+        "role": "tenant",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-tagesstand",
+        "role": "stand",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-4",
+      "name": "öffnet",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-tenantkontingent",
+        "role": "tenant",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-nachkauf",
+        "role": "nachkauf",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-5",
+      "name": "wird verrechnet als",
+      "kind": "association",
+      "from": {
+        "classId": "cls-lizenzbezug",
+        "role": "bezug",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-verrechnungsposition",
+        "role": "position",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-6",
+      "name": "bestellt als",
+      "kind": "association",
+      "from": {
+        "classId": "cls-lizenzvertrag",
+        "role": "vertrag",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-katalogposition",
+        "role": "position",
+        "multiplicity": "1"
+      }
+    }
+  ],
+  "stores": [
+    {
+      "id": "store-1",
+      "name": "Entra ID: Abos",
+      "documentation": "Die SKUs des Tenants mit gekauften und belegten Lizenzen (Microsoft Graph subscribedSkus).",
+      "class": "Tagesstand",
+      "worker": "ucc_entra",
+      "mode": "read",
+      "x": 40,
+      "y": 800
+    },
+    {
+      "id": "store-2",
+      "name": "Entra ID: Konten",
+      "documentation": "Organisationseinheit, Funktion, Art und letzte Anmeldung der Konten mit Lizenz (P8, P9).",
+      "class": "Lizenzbezug",
+      "worker": "ucc_entra",
+      "mode": "read",
+      "x": 300,
+      "y": 800
+    }
+  ]
+}

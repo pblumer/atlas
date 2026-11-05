@@ -517,6 +517,14 @@ var (
 	// it will be refused with the author watching.
 	DeploymentReloadedWithProblems = newEvent("deployment.reloaded_with_problems")
 
+	// DeploymentTookSystemProcessID reports, at startup, a deployed definition outside
+	// the system project whose process id is one of atlas's system processes. Since
+	// 0.23.1 no such deploy is accepted and such a copy has no system rights, but an
+	// earlier server ran it in the system process's place: a modeler could make
+	// themselves an administrator that way. The operator checks who deployed it
+	// (deployedBy), what it did, and deletes it.
+	DeploymentTookSystemProcessID = newEvent("deployment.took_system_process_id")
+
 	// DeploymentDiagramUpdated reports a layout-only adjustment to a deployed
 	// definition's diagram (ADR-0251): the picture the
 	// Operations views draw changed while the process behind it did not. It is on

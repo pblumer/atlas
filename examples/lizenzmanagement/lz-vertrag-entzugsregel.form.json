@@ -1,0 +1,22 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-entzugsregel",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Entzugsregel · Withdrawal rule**\n\nDie Kennung der Entscheidungstabelle, die in der Abo-Karenz die Reihenfolge des Entzugs bestimmt. Eingaben: organisationseinheit, funktion, bezogenSeit, tageSeitBezug, extern, sku, tageSeitAnmeldung; Ausgaben: aktion (entziehen, behalten), prioritaet. · The id of the decision table that orders the withdrawal in the grace period."
+    },
+    {
+      "key": "entzugsregelId",
+      "type": "textfield",
+      "label": "Entscheidung · Decision",
+      "validate": {
+        "required": true
+      },
+      "defaultValue": "LzEntzugStandard",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

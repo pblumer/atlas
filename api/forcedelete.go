@@ -178,8 +178,8 @@ func (s *Server) forceDeleteProcess(w http.ResponseWriter, r *http.Request, key 
 		found = true
 		processID = d.ProcessID
 		// A bootstrap-deployed platform process is platform-managed (ADR-0122):
-		// force does not reach it.
-		if s.systemPIDs[d.ProcessID] {
+		// force does not reach it. A copy of its id filed elsewhere is not one.
+		if s.isSystemDeployment(d) {
 			protected = true
 			return
 		}

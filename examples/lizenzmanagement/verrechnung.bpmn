@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_lz_verrechnung" targetNamespace="http://atlas/beispiel/lizenzmanagement">
+  <itemDefinition id="item_Verrechnungsposition" structureRef="Verrechnungsposition"/>
+  <itemDefinition id="item_TenantKontingent" structureRef="TenantKontingent"/>
+  <process id="proc_lz_verrechnung" name="Lizenzmanagement: Monatliche Verrechnung" isExecutable="true">
+    <documentation>P6: Am ersten des Monats (07:00 UTC, Vorschlag; das Konzept nennt den ersten Arbeitstag) verrechnet Atlas den Vormonat: Jeder Kunde zahlt die Lizenzen, die seine Personen im Monat bezogen haben, auf sein PSP-Element, anteilig nach Tagen; ein Überzug ist eine eigene Zeile. Ein Vertrag, der im Monat aktiv war, wird verrechnet, auch wenn er inzwischen beendet ist. Pro Vertrag läuft proc_lz_verrechnung_vertrag (Mehrfach-Instanz, parallel). Danach erhält der Chef die Übersicht: pro SKU, was im EA bezahlt wird (die gekaufte Menge im Tenant) und was weiterverrechnet wird, mit der Differenz und den Überzügen.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/><atlas:constant name="GRUPPE_CHEF" type="string" source="application" value="Lizenz-Chef"/></atlas:constants></extensionElements>
+    <dataObject id="do_verrechnungsposition" name="Verrechnungsposition" itemSubjectRef="item_Verrechnungsposition"/>
+    <dataObject id="do_tenantkontingent" name="TenantKontingent" itemSubjectRef="item_TenantKontingent"/>
+    <startEvent id="s" name="Monatlich"><documentation>Cron 0 7 1 * * (UTC): am ersten des Monats.</documentation><outgoing>f_s__sc_monat</outgoing><timerEventDefinition><timeCycle>0 7 1 * *</timeCycle></timerEventDefinition></startEvent>
+    <scriptTask id="sc_monat" name="Vormonat bestimmen"><extensionElements><zeebe:script expression='={t: today(), erster: date(t.year, t.month, 1), von: string(date((erster - duration("P1D")).year, (erster - duration("P1D")).month, 1)), bis: string(erster - duration("P1D"))}' resultVariable="monat"/></extensionElements><incoming>f_s__sc_monat</incoming><outgoing>f_sc_monat__ca_vertraege</outgoing></scriptTask>
+    <callActivity id="ca_vertraege" name="Verträge des Monats lesen"><extensionElements><zeebe:calledElement processId="proc_lz_buchen" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source='="TENANT"' target="buchId"/><zeebe:input source='={aktion: "lesen", tage: 45, ref: "verrechnung/" + monat.von}' target="auftrag"/><zeebe:output source="=antwort" target="tenantStand"/></zeebe:ioMapping></extensionElements><incoming>f_sc_monat__ca_vertraege</incoming><outgoing>f_ca_vertraege__sc_auswahl</outgoing></callActivity>
+    <scriptTask id="sc_auswahl" name="Verträge wählen"><documentation>Alle Verträge, deren Laufzeit den Monat berührt, auch die beendeten.</documentation><extensionElements><zeebe:script expression="=tenantStand.vertraege[date(beginn) &lt;= date(monat.bis) and date(ende) &gt;= date(monat.von)]" resultVariable="vertraegeMonat"/></extensionElements><incoming>f_ca_vertraege__sc_auswahl</incoming><outgoing>f_sc_auswahl__ca_vertrag</outgoing></scriptTask>
+    <callActivity id="ca_vertrag" name="Pro Vertrag verrechnen"><documentation>proc_lz_verrechnung_vertrag je Vertrag, parallel. Ergebnis je Vertrag: Positionen und Betrag.</documentation><extensionElements><zeebe:calledElement processId="proc_lz_verrechnung_vertrag" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source="=v.nummer" target="nummer"/><zeebe:input source="=monat" target="monat"/><zeebe:output source="=abrechnung" target="abrechnung"/></zeebe:ioMapping></extensionElements><incoming>f_sc_auswahl__ca_vertrag</incoming><outgoing>f_ca_vertrag__sc_uebersicht</outgoing><multiInstanceLoopCharacteristics><extensionElements><zeebe:loopCharacteristics inputCollection="=vertraegeMonat" inputElement="v" outputCollection="abrechnungen" outputElement="=abrechnung"/></extensionElements></multiInstanceLoopCharacteristics></callActivity>
+    <scriptTask id="sc_uebersicht" name="Übersicht erstellen"><documentation>Pro SKU: im EA gezahlt (gekauft laut letztem Stand des Monats), weiterverrechnet (Summe der Positionen), Differenz, davon Überzug. Die Differenz trägt ihr als Wiederverkäufer.</documentation><extensionElements><zeebe:script expression='={stand: if count(tenantStand.verlauf[date(datum) &lt;= date(monat.bis)]) = 0 then null else tenantStand.verlauf[date(datum) &lt;= date(monat.bis)][count(tenantStand.verlauf[date(datum) &lt;= date(monat.bis)])], pos: flatten(for a in abrechnungen return a.positionen), skus: distinct values(concatenate(for x in pos return x.sku, if stand = null then [] else for s in stand.skus return s.sku)), zeilen: for s in skus return {sku: s, gekauft: if stand = null or count(stand.skus[sku = s]) = 0 then 0 else stand.skus[sku = s][1].gekauft, verrechnet: sum(concatenate([0], for x in pos[sku = s] return x.menge)), ueberzug: sum(concatenate([0], for x in pos[sku = s and ueberzug = true] return x.menge)), betrag: sum(concatenate([0], for x in pos[sku = s] return x.betrag))}, text: "Verrechnung " + monat.von + " bis " + monat.bis + "\n" + string join(for z in zeilen return z.sku + ": im EA " + string(z.gekauft) + ", weiterverrechnet " + string(z.verrechnet) + " (davon Überzug " + string(z.ueberzug) + "), Differenz " + string(z.gekauft - z.verrechnet) + ", Betrag " + string(z.betrag), "\n")}' resultVariable="uebersicht"/></extensionElements><incoming>f_ca_vertrag__sc_uebersicht</incoming><outgoing>f_sc_uebersicht__ut_uebersicht</outgoing></scriptTask>
+    <userTask id="ut_uebersicht" name="Übersicht prüfen"><documentation>Der Chef nimmt die Übersicht zur Kenntnis; Fragen gehen als Kommentar an das Lizenzmanagement.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="=application.GRUPPE_CHEF"/><zeebe:formDefinition formId="lz-verrechnung-uebersicht"/><zeebe:ioMapping><zeebe:input source="=uebersicht.text" target="uebersichtText"/></zeebe:ioMapping></extensionElements><incoming>f_sc_uebersicht__ut_uebersicht</incoming><outgoing>f_ut_uebersicht__e</outgoing></userTask>
+    <endEvent id="e" name="Verrechnet"><incoming>f_ut_uebersicht__e</incoming></endEvent>
+    <sequenceFlow id="f_s__sc_monat" sourceRef="s" targetRef="sc_monat"/>
+    <sequenceFlow id="f_sc_monat__ca_vertraege" sourceRef="sc_monat" targetRef="ca_vertraege"/>
+    <sequenceFlow id="f_ca_vertraege__sc_auswahl" sourceRef="ca_vertraege" targetRef="sc_auswahl"/>
+    <sequenceFlow id="f_sc_auswahl__ca_vertrag" sourceRef="sc_auswahl" targetRef="ca_vertrag"/>
+    <sequenceFlow id="f_ca_vertrag__sc_uebersicht" sourceRef="ca_vertrag" targetRef="sc_uebersicht"/>
+    <sequenceFlow id="f_sc_uebersicht__ut_uebersicht" sourceRef="sc_uebersicht" targetRef="ut_uebersicht"/>
+    <sequenceFlow id="f_ut_uebersicht__e" sourceRef="ut_uebersicht" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_lz_verrechnung_diagram">
+    <bpmndi:BPMNPlane id="proc_lz_verrechnung_plane" bpmnElement="proc_lz_verrechnung">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="102" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="89" y="142" width="62" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_monat_di" bpmnElement="sc_monat"><omgdc:Bounds x="240" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_vertraege_di" bpmnElement="ca_vertraege"><omgdc:Bounds x="410" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_auswahl_di" bpmnElement="sc_auswahl"><omgdc:Bounds x="580" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_vertrag_di" bpmnElement="ca_vertrag"><omgdc:Bounds x="750" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_uebersicht_di" bpmnElement="sc_uebersicht"><omgdc:Bounds x="920" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_uebersicht_di" bpmnElement="ut_uebersicht"><omgdc:Bounds x="1090" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="1292" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1276" y="142" width="69" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__sc_monat_di" bpmnElement="f_s__sc_monat"><omgdi:waypoint x="138" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_monat__ca_vertraege_di" bpmnElement="f_sc_monat__ca_vertraege"><omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_vertraege__sc_auswahl_di" bpmnElement="f_ca_vertraege__sc_auswahl"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="580" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_auswahl__ca_vertrag_di" bpmnElement="f_sc_auswahl__ca_vertrag"><omgdi:waypoint x="680" y="120"/><omgdi:waypoint x="750" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_vertrag__sc_uebersicht_di" bpmnElement="f_ca_vertrag__sc_uebersicht"><omgdi:waypoint x="850" y="120"/><omgdi:waypoint x="920" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_uebersicht__ut_uebersicht_di" bpmnElement="f_sc_uebersicht__ut_uebersicht"><omgdi:waypoint x="1020" y="120"/><omgdi:waypoint x="1090" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_uebersicht__e_di" bpmnElement="f_ut_uebersicht__e"><omgdi:waypoint x="1190" y="120"/><omgdi:waypoint x="1292" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

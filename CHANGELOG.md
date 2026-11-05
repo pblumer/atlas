@@ -12,6 +12,109 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
+  starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
+  come — running or done, total and finished products, and refreshed, refused or skipped per product. A second
+  refresh of the catalogue while one runs is refused with 409. The MCP tool `atlas_refresh_catalog_content` now
+  starts in the background and follows the refresh for up to 45 seconds, inside an agent host's one-minute
+  limit, and the new tool `atlas_catalog_refresh_status` follows the rest, so an agent no longer publishes a
+  catalogue half way through its refresh. Without `?wait=false` the route answers as before.
+- **Example: licence management for Microsoft 365.** A new example package,
+  `examples/lizenzmanagement` (application «Beispiel: Lizenzmanagement», hub bundle
+  `lizenzmanagement`), keeps licence contracts per customer and project with a WBS element
+  and a quantity per SKU, approved by the person responsible for the tenant, and checks every
+  licence order of `m365-dienste` against them (P1–P9 of the concept: contract and its
+  actions, quota check with a race-free reservation and approved overdrafts, the daily
+  comparison with the tenant through `list-subscribed-skus` and the purchase task in the EA,
+  monthly billing per WBS element, the EA anniversary and the 90-day grace period with a
+  withdrawal rule each customer sets as a decision table, and the one-off take-over of the
+  licences in use). The state lives in long-running instances, one contract book per contract
+  and one tenant book, that take bookings as messages one after another and apply each in a
+  single script task, so two simultaneous orders never both get the last seat; requests and
+  answers go through `POST /api/v1/messages` with a time to live. It brings its information
+  model and capability proposals (format 4), installers and a handbook card. The M365 devenv
+  installs it with `scripts/install-lizenzmanagement.py`.
+- **M365 example: licences against a contract, and changing a licence.** With the
+  application constant `LIZENZ_VERTRAG_PRUEFEN = ein`, `m365-dienste/lizenz.bpmn` asks the
+  order form for the licence contract, calls the quota check of the licence management
+  before assigning, books the use afterwards and releases it on return; without it the
+  package behaves as before and installs without the licence management. A new action
+  «Lizenz wechseln» changes the variant (E3 → E5 and back), with approval for a more
+  expensive one, in direct mode as one atomic `assign-license`. A return now withdraws the
+  variant the account holds rather than the one ordered.
+- **The Entra Worker reads the tenant's licence stock.** A new operation,
+  `list-subscribed-skus`, reads Microsoft Graph's `GET /subscribedSkus`. Like the other
+  Entra listings, the result variable receives a JSON array with one item per SKU:
+  `skuId`, `skuPartNumber`, `capabilityStatus`, `appliesTo`, `consumedUnits` (assigned)
+  and `prepaidUnits {enabled, warning, suspended, lockedOut}` (bought). It takes only a
+  `select`, because Graph refuses anything else there, so the compiler refuses filter,
+  search, advancedQuery and pageSize on it. The permission is `LicenseAssignment.Read.All`.
+  A user's last sign-in is read by naming `signInActivity` in the `select` of `list-users`
+  or `get-user`, which needs `AuditLog.Read.All` and Entra ID P1 or P2. The M365 devenv
+  grants both permissions to the Entra worker app. See ADR-0531
+  and `docs/entra-permissions.md`.
+
+### Fixed
+- **The top bar stays in view while a page scrolls.** In every app the bar with the app
+  switcher, the view names and the account menu disappeared after a little less than one
+  window of scrolling: it is sticky, a sticky bar only sticks inside its parent, and the
+  page's body was held to exactly the window's height. The body now grows with its
+  content and is at least the window's height, so the bar stays at the top of the window
+  however far a page scrolls.
+
+## [0.23.1] — 2026-11-05
+
+**A security release: upgrade every installation on which somebody who is not an
+administrator may deploy.** A model that took the process id of an atlas system process
+was started in its place and acted with its rights, so an account with the modeler role
+could make itself an administrator. Revoking a password brought back the activation links
+of the week before, and the preview outbox showed a password link that a model had cut
+apart.
+
+**Read this before upgrading from 0.23.0.**
+
+- **Look for copies of system processes.** At startup the server warns
+  `deployment.took_system_process_id` for every definition outside the system project that
+  carries the id of a system process (`proc_benutzer_aufnahme`, `proc_passwort_link`,
+  `proc_benutzer_offboarding`, `proc_benutzer_review`, `atlas-auftrag-erfuellung`,
+  `atlas-genehmigung-*`). Such a copy no longer acts as one, but an earlier version ran it
+  with the system process's rights: check who deployed it (`deployedBy`), which accounts
+  it created or changed, and delete it. With none, the server says nothing.
+- **A deploy under a system process id is refused** with 403 outside the system project,
+  through every door: a deploy, a project or application publish, an import.
+- **The preview outbox keeps only the envelope of a mail that carried a password link.**
+  Its subject and both bodies read "[password link withheld by the preview]".
+- **Links stay valid across the upgrade.** An account that was never revoked is signed as
+  before; only a revoke changes what its links are signed over.
+
+### Changed
+- **A part of a Marktleistung opens its description from the product page.** In the tile layout's product
+  page, each included or optional part listed under the scope is a button that opens the part's own
+  description in the same panel as the "i", over the page; closing it leaves the reader where they were.
+
+### Fixed
+
+- **Only atlas's own deployment of a system process acts as one.** A model in any project
+  could take the id of a system process, became its newest version and was started in its
+  place — for a forgotten password, a registration, an order — with the rights the
+  platform keeps for it: provisioning accounts, minting password links, speaking under an
+  atlas.* event. A process id of a system process is now deployed into the system project
+  or not at all, every check of those rights asks whether the deployment is the system
+  project's rather than what its process is called, "the" system process is looked up in
+  the system project alone, and a copy deployed before may be deleted (ADR-0122, amended).
+- **Revoking a password kills the links sent before it.** A revoke returned the account to
+  the empty hash an activation link had been signed over, so the account's activation
+  link of the past seven days — used or not — opened it again. A password link is now also
+  signed over the number of revokes the account has seen (ADR-0526, amended).
+- **The preview outbox withholds a password link however the model wrote it.** It replaced
+  only the link as minted, so a model that put the link in pieces left it readable to an
+  operator. A mail that carried a link now keeps its envelope and loses its subject and
+  bodies (ADR-0526, amended).
+- **The pages a link opens cannot be framed.** `/public/password` and `/public/answer` send
+  `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`.
+
 ## [0.23.0] — 2026-11-04
 
 **A password is set by its owner, never typed by an administrator or mailed.** Registration
@@ -220,6 +323,14 @@ as it runs 0.23.0:
   (ADR-0526).
 
 ### Changed
+- **"My services" lists Marktleistungen, with how far each is provisioned and how many are held.** The
+  services a Marktleistung is assembled from are no longer rows of their own; a held Marktleistung that lacks a
+  part opens only what it lacks, to order again. Each row carries the order list's coloured light — ready, or
+  still being set up with "2 of 3 ready" — and the count of what is held and on its way. In a catalogue with
+  the tile layout "My services" is a list instead: each Marktleistung under its heading, with its catalogue
+  icon drawn grey and filled clockwise in the catalogue's colour like a pie as its parts are provisioned, the
+  quantity, since when it is held and the order that granted it. The information button is a plain "i"
+  without a ring.
 - **A product page in the tile layout is two columns and has one basket button.** The product's
   description stands open in the wide column, and who it is for, what comes with it, approval and
   price fold in the narrow column beside it. The page's own "Put in the basket" and "Go to the
@@ -243,6 +354,8 @@ as it runs 0.23.0:
   (ADR-0526).
 
 ### Fixed
+- **The SharePoint team site's actions find the site on a shared tenant.** Return, guest, owner, quota, deletion and restore built the alias from the ordered URL alone, while provisioning took it from the naming rule with `NAME_PREFIX` in front; with a prefix set they found neither the group nor the inventory entry, so a deletion deleted nothing and stopped on an incident at «Inventar nachführen». They now put the prefix in front as the rule does (`m365-dienste` 1.0.13).
+- **A connector job run by `atlas worker` waits before its next attempt, too.** The retry delay of ADR-0111's amendment (15 s, 60 s before the last attempt) applied only to jobs the server runs itself; a connector offloaded to a supervised or remote worker — Entra in the M365 test environment — still retried at once and raised `Request_ResourceNotFound` on the owner of a group created a moment earlier. The worker now sends the same delay with every failure that leaves retries (`worker.Options.RetryBackoff`, `NoRetryBackoff`).
 - **The SharePoint team site diagram keeps its end label clear.** The fallback flow from the manual quota task to «Site bereit» crossed the event's label; the label now sits above the event (`m365-dienste` 1.0.11).
 - **The moving example no longer drifts into the past.** `umzug` started with the fixed moving date 2026-10-01, which has since passed, so the card's case — a move in two weeks against three months' notice — no longer held. Without a moving date the model now computes one two weeks from today, and "Install and start" passes none; a date given in the start form is used as before.
 - **Installing the workshop twice leaves one decision reference.** The handbook's workshop install added a `bw-vorpruefung` reference to the Bewerbermanagement application on every click, although the upload overwrites the model in place; it now checks for the reference first, as the examples chapter does, and names the model by the reference the upload reports.
@@ -17984,7 +18097,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/pblumer/atlas/compare/v0.20.0...v0.21.0

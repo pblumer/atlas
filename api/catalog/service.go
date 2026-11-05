@@ -38,6 +38,10 @@ type Service struct {
 	// enforcement off there is nobody to be rather than nobody who may.
 	admin func(*httpapi.Principal) bool
 
+	// refreshRuns is the progress of each catalogue's content refresh, kept in
+	// memory for the status route (refreshrun.go).
+	refreshRuns refreshRuns
+
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own once it has read
 	// the environment.

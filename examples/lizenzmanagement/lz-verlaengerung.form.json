@@ -1,0 +1,57 @@
+{
+  "type": "default",
+  "id": "lz-verlaengerung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Verlängerung bestätigen · Confirm the renewal**\n\nDie im EA am Jahrestag {{eaJahrestag}} tatsächlich verlängerte Menge. · The quantity actually renewed in the EA."
+    },
+    {
+      "key": "verlaengertE3",
+      "type": "textfield",
+      "label": "Verlängert E3 · Renewed E3",
+      "validate": {
+        "required": true,
+        "pattern": "^[0-9]{1,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "verlaengertE5",
+      "type": "textfield",
+      "label": "Verlängert E5 · Renewed E5",
+      "validate": {
+        "required": true,
+        "pattern": "^[0-9]{1,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "verlaengertF3",
+      "type": "textfield",
+      "label": "Verlängert F3 · Renewed F3",
+      "validate": {
+        "required": true,
+        "pattern": "^[0-9]{1,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "neuesEaEnde",
+      "type": "textfield",
+      "label": "Neues Ende der EA-Laufzeit (nur bei der Erneuerung) · New end of the EA term",
+      "validate": {
+        "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

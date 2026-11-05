@@ -104,6 +104,9 @@ type Server struct {
 	Down bool
 	// Redirect sends every request to another address.
 	Redirect string
+	// Hold, when set, makes every request wait until the channel is closed, so a
+	// test can catch a caller while it is in the middle of its requests.
+	Hold chan struct{}
 
 	watched map[string]bool
 	changes []change
@@ -234,8 +237,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.Seen = append(s.Seen, r.Method+" "+r.URL.Path)
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	s.Tokens = append(s.Tokens, tok)
-	down, redirect := s.Down, s.Redirect
+	down, redirect, hold := s.Down, s.Redirect, s.Hold
 	s.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
 	if redirect != "" {
 		http.Redirect(w, r, redirect+r.URL.Path, http.StatusFound)
 		return

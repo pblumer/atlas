@@ -1,0 +1,23 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-verlaengern",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Verlängern · Extend**"
+    },
+    {
+      "key": "neuesEnde",
+      "type": "textfield",
+      "label": "Neues Ende · New end",
+      "description": "JJJJ-MM-TT, nicht nach dem Ende der EA-Laufzeit. · Not after the end of the EA term.",
+      "validate": {
+        "required": true,
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

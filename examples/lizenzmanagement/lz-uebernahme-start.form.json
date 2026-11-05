@@ -1,0 +1,23 @@
+{
+  "type": "default",
+  "id": "lz-uebernahme-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Bestand übernehmen · Take over the licences in use**\n\nLizenzen ohne Vertrag werden Kunden und Verträgen zugeordnet. · Licences without a contract are assigned to customers and contracts."
+    },
+    {
+      "key": "stichtag",
+      "type": "textfield",
+      "label": "Stichtag · Reference date",
+      "description": "JJJJ-MM-TT",
+      "validate": {
+        "required": true,
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

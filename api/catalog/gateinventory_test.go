@@ -133,6 +133,7 @@ var catalogGates = []handlerGate{
 	{name: "HandleContentUnlink", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `{"reason":"because"}`, id: true, product: true},
 	{name: "HandleCatalogContentRefresh", kind: gated, want: http.StatusNotFound, method: "POST", id: true},
+	{name: "HandleCatalogContentRefreshStatus", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
 	{name: "HandleMyCatalogs", kind: ungated, method: "GET",

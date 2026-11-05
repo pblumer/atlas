@@ -239,6 +239,15 @@ const STRINGS = {
     'info.no': 'nein',
     'services.none': 'Sie beziehen zurzeit keine Leistungen.',
     'services.notHeld': 'Nicht bezogen',
+    'services.held': 'Vorhanden',
+    'services.ready': 'Bereit',
+    'services.progress': 'Im Aufbau: {done} von {total} bereit',
+    'services.col.service': 'Leistung',
+    'services.col.qty': 'Menge',
+    'services.col.since': 'Seit',
+    'services.col.order': 'Bestellung',
+    'services.count': '{n} vorhanden',
+    'services.building': '{n} im Aufbau',
     'fav.mark': 'Als Favorit merken',
     'act.add': 'In den Warenkorb legen',
     'act.remove': 'Aus dem Warenkorb nehmen',
@@ -491,6 +500,15 @@ const STRINGS = {
     'info.no': 'no',
     'services.none': 'You currently hold no services.',
     'services.notHeld': 'Not held',
+    'services.held': 'Held',
+    'services.ready': 'Ready',
+    'services.progress': 'Being set up: {done} of {total} ready',
+    'services.col.service': 'Service',
+    'services.col.qty': 'Quantity',
+    'services.col.since': 'Since',
+    'services.col.order': 'Order',
+    'services.count': '{n} held',
+    'services.building': '{n} being set up',
     'fav.mark': 'Mark as favourite',
     'act.add': 'Put in the basket',
     'act.remove': 'Take out of the basket',
@@ -743,6 +761,15 @@ const STRINGS = {
     'info.no': 'non',
     'services.none': 'Vous ne détenez actuellement aucune prestation.',
     'services.notHeld': 'Non détenu',
+    'services.held': 'Disponible',
+    'services.ready': 'Prête',
+    'services.progress': 'En cours : {done} sur {total} prêts',
+    'services.col.service': 'Prestation',
+    'services.col.qty': 'Quantité',
+    'services.col.since': 'Depuis',
+    'services.col.order': 'Commande',
+    'services.count': '{n} disponible(s)',
+    'services.building': '{n} en cours de mise en place',
     'fav.mark': 'Ajouter aux favoris',
     'act.add': 'Mettre dans le panier',
     'act.remove': 'Retirer du panier',
@@ -994,6 +1021,15 @@ const STRINGS = {
     'info.no': 'no',
     'services.none': 'Al momento non detiene alcuna prestazione.',
     'services.notHeld': 'Non detenuto',
+    'services.held': 'Disponibile',
+    'services.ready': 'Pronta',
+    'services.progress': 'In allestimento: {done} di {total} pronti',
+    'services.col.service': 'Prestazione',
+    'services.col.qty': 'Quantità',
+    'services.col.since': 'Dal',
+    'services.col.order': 'Ordine',
+    'services.count': '{n} disponibili',
+    'services.building': '{n} in allestimento',
     'fav.mark': 'Aggiungere ai preferiti',
     'act.add': 'Mettere nel carrello',
     'act.remove': 'Togliere dal carrello',
@@ -1406,6 +1442,8 @@ const state = {
   // ends, and a catalogue that marked from orders would stop marking on the
   // ninetieth day (ADR-0312).
   held: new Map(),
+  heldCount: new Map(),
+  heldEntry: new Map(),
   // principals is the directory as it was read, and directory is the same thing as
   // principalId -> name.
   //
@@ -1931,6 +1969,8 @@ function forgetTheReader() {
   state.releaseOf = {};
   state.orders = [];
   state.held = new Map();
+  state.heldCount = new Map();
+  state.heldEntry = new Map();
   state.favourites = new Set();
   state.principals = [];
   state.directory = new Map();
@@ -2060,11 +2100,21 @@ async function loadOrdersAndTasks() {
 // a list missing, not a catalogue missing (ADR-0377).
 async function loadHeld() {
   let held = new Map();
+  const count = new Map();
+  const first = new Map();
   try {
     const inv = await api('/api/v1/inventory');
     held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
+    // How many of each: a product that may be held more than once (two licences,
+    // two monitors) is one entry per right, and "my services" says how many.
+    for (const i of (inv && inv.items) || []) {
+      count.set(i.itemId, (count.get(i.itemId) || 0) + 1);
+      if (!first.has(i.itemId)) first.set(i.itemId, i);
+    }
   } catch { /* nobody holds anything when there is nobody */ }
   state.held = held;
+  state.heldCount = count;
+  state.heldEntry = first;
 }
 
 // loadReports asks which reports with names this reader may open. A failure offers
@@ -2643,10 +2693,10 @@ const ICONS = {
     ['path', { d: 'M2.5 0.8L22.5 23.2', class: 'cut' }],
     ['path', { d: 'M2.5 0.8L22.5 23.2' }],
   ],
+  // A plain "i", without the ring it was drawn in: a filled dot and a stem.
   info: [
-    ['circle', { cx: '12', cy: '12', r: '11.1' }],
-    ['circle', { cx: '12', cy: '5.7', r: '2.1' }],
-    ['rect', { x: '10.3', y: '9.3', width: '3.4', height: '11.1', rx: '0.3' }],
+    ['circle', { cx: '12', cy: '4.6', r: '2.2', class: 'solid' }],
+    ['path', { d: 'M12 10.2V20.8', class: 'stem' }],
   ],
 };
 
@@ -3328,8 +3378,16 @@ function renderProductPage(rel, item) {
   const section = (title, open, ...body) => el('details', {
     class: 'page-section', ...(open ? { open: 'open' } : {}),
   }, el('summary', {}, title), el('div', { class: 'page-body' }, ...body));
+  // A part of the Marktleistung, included or optional, opens its own description
+  // in the same panel the "i" opens, over the page.
+  const partButton = (p) => el('button', {
+    class: 'linkish page-part', 'aria-haspopup': 'dialog',
+    onclick: () => { state.info = p.id; render(); focusInfoDialog(); },
+  }, textOf(p.texts, p.id));
+  const by = itemsById(rel);
 
   return el('div', { class: 'product-page' },
+    state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null,
     el('div', { class: 'page-top' },
       el('button', { class: 'linkish', onclick: back }, `‹ ${t('page.back')}`),
       el('strong', {}, t('page.title')),
@@ -3350,12 +3408,12 @@ function renderProductPage(rel, item) {
         included.length || optional.length
           ? section(t('page.scope'), true,
             included.length ? el('p', {}, el('strong', {}, t('page.included'))) : null,
-            included.length ? el('ul', {}, included.map((i) => el('li', {}, textOf(i.texts, i.id)))) : null,
+            included.length ? el('ul', {}, included.map((i) => el('li', {}, partButton(i)))) : null,
             optional.length ? el('p', {}, el('strong', {}, t('page.options'))) : null,
             // Listed, not offered: an option ordered from here would land in the
             // basket without the Marktleistung it belongs to. The basket offers each
             // one beside its Marktleistung, where taking it means taking it with that.
-            optional.length ? el('ul', {}, optional.map((o) => el('li', {}, textOf(o.texts, o.id)))) : null,
+            optional.length ? el('ul', {}, optional.map((o) => el('li', {}, partButton(o)))) : null,
             el('p', { class: 'muted' }, t('page.form')))
           : null,
         section(t('page.approval'), false, el('p', {}, approval)),
@@ -4781,10 +4839,155 @@ function headingsHeld(rel, by, ids, field) {
   return headingsOf(ids.map((id) => by[rootOf(rel, id)] || {}), field);
 }
 
+// building is what this person has ordered for themselves and does not hold yet:
+// per product, how many positions are on their way and the furthest state one of
+// them has reached, so "my services" can show a thing still being set up beside
+// the things already there. Read from the open lines of the orders on this page.
+function building(orders, meID) {
+  const rank = { blocked: 0, pending: 1, running: 2 };
+  const out = new Map();
+  for (const o of orders || []) {
+    if (meID && o.recipient && o.recipient !== meID) continue;
+    for (const l of o.lines || []) {
+      if (!(l.status in rank)) continue;
+      const was = out.get(l.itemId);
+      out.set(l.itemId, {
+        count: (was ? was.count : 0) + 1,
+        status: was && rank[was.status] >= rank[l.status] ? was.status : l.status,
+      });
+    }
+  }
+  return out;
+}
+
+// progressOf is how far a Marktleistung this person holds or has ordered is
+// provisioned: of the offering itself, every part it always brings, and every
+// option they took, how many they hold. The rest are on their way. It is what the
+// light and the pie of "my services" show.
+function progressOf(rel, id, open) {
+  const by = itemsById(rel);
+  const item = by[id] || { id };
+  const taken = (p) => state.held.has(p.id) || open.has(p.id);
+  const parts = [id, ...offeringParts(rel, item, 'includes').map((p) => p.id),
+    ...offeringParts(rel, item, 'options').filter(taken).map((p) => p.id)];
+  const unique = [...new Set(parts)];
+  const ready = unique.filter((p) => state.held.has(p)).length;
+  let status = 'done';
+  if (ready < unique.length) {
+    status = unique.some((p) => (open.get(p) || {}).status === 'running') ? 'running' : 'pending';
+  }
+  return { ready, total: unique.length, status };
+}
+
+// serviceState is the light and the words beside a row of "my services", the same
+// lights the order list draws per position: green where the Marktleistung and
+// everything it brings is there, the order's running or waiting colour while a part
+// of it is still being set up, and how many of it somebody holds.
+function serviceState(rel, id, open, lineOf) {
+  const n = state.heldCount.get(id) || (state.held.has(id) ? 1 : 0);
+  const coming = open.get(id);
+  const giving = lineOf.get(id);
+  const prog = progressOf(rel, id, open);
+  let status = prog.status;
+  let label = status === 'done' ? t('services.ready') : progressText(prog);
+  if (giving && giving.line.status === 'returning') { status = 'returning'; label = t('status.returning'); }
+  const parts = [];
+  if (n > 1 || (n && coming)) parts.push(fill(t('services.count'), n));
+  if (coming) parts.push(fill(t('services.building'), coming.count));
+  if (status !== 'done' && status !== 'returning' && !coming) parts.push(progressText(prog));
+  return {
+    status, label, n, prog,
+    lead: el('span', { class: `dot ${status}`, title: label, role: 'img', 'aria-label': label }),
+    meta: parts.length ? parts.join(' \u00b7 ') : null,
+  };
+}
+
+function progressText(prog) {
+  return t('services.progress').replace('{done}', String(prog.ready)).replace('{total}', String(prog.total));
+}
+
+// lackingOf is what a held Marktleistung carries and this person does not hold:
+// an option never taken, or a part given back or withdrawn on its own, and not
+// already ordered again. "My services" offers it, with the catalogue's control,
+// because this is where somebody looks for what their bundle lacks — the
+// catalogue lists a part only beneath its product, and offers no Marktleistung of
+// its own for it (ADR-0312, amended 2026-10-28). These are offers, not services
+// held: the list of what somebody has stays a list of Marktleistungen.
+function lackingOf(rel, id) {
+  const by = itemsById(rel);
+  if (!state.held.has(id)) return [];
+  return descendantsOf(rel, id).filter((d) => !state.held.has(d.id) && !orderedAlready(d.id) && by[d.id]);
+}
+
+// pieIcon is a Marktleistung's catalogue icon drawn as how far it is provisioned:
+// the whole icon in grey, and over it the share that is ready in the catalogue's
+// colour, filled clockwise like a pie. Full, it is the catalogue's own tile.
+function pieIcon(item, prog, label) {
+  const share = prog.total ? Math.round((prog.ready / prog.total) * 100) : 100;
+  return el('span', {
+    class: 'pie-icon', style: `--share:${share}%`, role: 'img', 'aria-label': label, title: label,
+    'data-share': String(share),
+  },
+  el('span', { class: 'pie-grey' }, drawIcon((item && item.icon) || '', 1.5)),
+  el('span', { class: 'pie-done' }, drawIcon((item && item.icon) || '', 1.5)));
+}
+
+// renderServicesList is "my services" for a catalogue in the tile layout: one row
+// per Marktleistung, grouped under its heading, each with its catalogue icon as a
+// pie of how far it is provisioned, how many of it are held, since when, and the
+// order that granted it.
+function renderServicesList(rel, offerings, open, lineOf) {
+  const by = itemsById(rel);
+  const groups = headingsHeld(rel, by, offerings, 'category');
+  const nameOf = (id) => textOf((by[id] || {}).texts, id);
+  const row = (id) => {
+    const st = serviceState(rel, id, open, lineOf);
+    const found = lineOf.get(id);
+    const can = found && returnable(found.order, found.line);
+    const entry = state.heldEntry.get(id);
+    const orderID = (entry && entry.orderId) || (found && found.order.id) || '';
+    const since = state.held.get(id);
+    return el('div', { class: 'svc-row' },
+      pieIcon(by[id], st.prog, st.label),
+      el('div', { class: 'svc-name' },
+        el('strong', {}, nameOf(id)),
+        el('span', { class: `muted svc-state ${st.status}` }, st.status === 'done' ? t('services.ready') : st.label),
+        lackingOf(rel, id).length
+          ? el('div', { class: 'svc-lacking' },
+            el('span', { class: 'muted' }, `${t('services.notHeld')}:`),
+            lackingOf(rel, id).map((d) => el('span', { class: 'svc-offer' },
+              toggle(rel, d.id, d.integral), ' ', nameOf(d.id))))
+          : null),
+      el('div', { class: 'svc-qty', 'data-label': t('services.col.qty') }, `${Math.max(st.n, 1)}\u00d7`),
+      el('div', { class: 'svc-since', 'data-label': t('services.col.since') },
+        since ? new Date(since / 1e6).toLocaleDateString(locale) : '\u2014'),
+      el('div', { class: 'svc-order', 'data-label': t('services.col.order') }, orderID || '\u2014'),
+      el('div', { class: 'svc-act' },
+        can
+          ? el('button', {
+            class: 'sq', 'aria-label': t('act.cancelLines'), title: t('act.cancelLines'),
+            disabled: state.busy, onclick: () => giveBack(found.order, found.line),
+          }, 'X')
+          : null,
+        infoButton(id)));
+  };
+  const head = el('div', { class: 'svc-row svc-head', 'aria-hidden': 'true' },
+    el('span', {}), el('span', {}, t('services.col.service')), el('span', {}, t('services.col.qty')),
+    el('span', {}, t('services.col.since')), el('span', {}, t('services.col.order')), el('span', {}));
+  const sorted = (ids) => [...ids].sort((a, b) => nameOf(a).localeCompare(nameOf(b), locale));
+  return el('div', { class: 'svc-list' },
+    head,
+    groups.map((g) => el('section', { class: 'svc-group' },
+      el('h3', { class: 'svc-heading' }, g.text || t('cat.none')),
+      sorted(offerings.filter((id) => filedUnder(by[rootOf(rel, id)], 'category') === g.key)).map(row))),
+    state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null);
+}
+
 function renderServices() {
   const rel = state.release || {};
   const by = itemsById(rel);
-  const ids = [...state.held.keys()];
+  const open = building(state.orders, state.meID);
+  const ids = [...new Set([...state.held.keys(), ...open.keys()])];
   if (!ids.length) {
     return el('div', { class: 'empty' }, el('p', {}, t('services.none')));
   }
@@ -4798,11 +5001,13 @@ function renderServices() {
   // A held position: its name, the give-back where an order still allows one, and
   // its information. `open` makes the name the way into the next column, as the
   // catalogue's product column does.
-  const row = (id, open) => {
+  const row = (id, opener) => {
     const found = lineOf.get(id);
     const can = found && returnable(found.order, found.line);
     return cell({
-      ...(open || {}),
+      ...(opener || {}),
+      lead: serviceState(rel, id, open, lineOf).lead,
+      meta: serviceState(rel, id, open, lineOf).meta,
       text: textOf((by[id] || {}).texts, id),
       trail: [
         can
@@ -4841,6 +5046,12 @@ function renderServices() {
   const productOf = (id) => ownerOf(id) || rootOf(rel, id);
   const offerings = [...new Set([...held, ...services.map(productOf)])];
 
+  // "My services" lists Marktleistungen only: what somebody ordered and uses. The
+  // services a Marktleistung is assembled from are its parts, counted in its light
+  // and its pie, and not rows of their own. A catalogue in the tile layout shows
+  // them as a list with its icons.
+  if (tileLayout()) return renderServicesList(rel, offerings, open, lineOf);
+
   // The same position the catalogue stands at — category, group, product and the
   // column a narrow screen shows — so a heading chosen in one screen is the heading
   // the other opens on, and somebody switching between "what can I order" and
@@ -4861,33 +5072,33 @@ function renderServices() {
   const sortByName = (list) => [...list].sort((a, b) =>
     textOf((by[a] || {}).texts, a).localeCompare(textOf((by[b] || {}).texts, b), locale));
 
+  // A Marktleistung is the last level here, unless it lacks something it could
+  // carry: then choosing it opens what it lacks, to order on its own.
   const productCell = (id) => {
-    const open = {
+    const lacks = lackingOf(rel, id).length > 0;
+    const opener = lacks ? {
       open: where.offering === id,
       onOpen: () => choose({ offering: where.offering === id ? '' : id, step: where.offering === id ? 2 : 3 }),
-    };
+    } : {};
     return held.includes(id)
-      ? row(id, open)
-      : cell({ ...open, text: textOf((by[id] || {}).texts, id), trail: infoButton(id) });
+      ? row(id, opener)
+      : cell({
+        text: textOf((by[id] || {}).texts, id),
+        lead: serviceState(rel, id, open, lineOf).lead,
+        meta: serviceState(rel, id, open, lineOf).meta,
+        trail: infoButton(id),
+      });
   };
-
-  // What a held product carries and this person does not hold: an option never
-  // taken, or a part given back or withdrawn on its own. It is offered here, with
-  // the catalogue's control, because this is where somebody looks for what their
-  // bundle lacks — the catalogue lists a part only beneath its product, and offers
-  // no Marktleistung of its own for it (ADR-0312, amended 2026-10-28).
-  const lacking = where.offering && held.includes(where.offering)
-    ? descendantsOf(rel, where.offering)
-      .filter((d) => !state.held.has(d.id) && !orderedAlready(d.id) && by[d.id])
-    : [];
+  const lacking = where.offering ? lackingOf(rel, where.offering) : [];
   const missingCol = lacking.length
-    ? [el('div', { class: 'colhead' }, t('services.notHeld')),
-      ...lacking.map((d) => cell({
+    ? el('div', { class: 'col' },
+      el('div', { class: 'colhead' }, t('services.notHeld')),
+      lacking.map((d) => cell({
         text: textOf((by[d.id] || {}).texts, d.id),
         lead: toggle(rel, d.id, d.integral),
         trail: infoButton(d.id),
-      }))]
-    : [];
+      })))
+    : null;
 
   return el('div', {},
     where.step > 0
@@ -4897,7 +5108,7 @@ function renderServices() {
           onclick: () => choose({ step: Math.max(0, where.step - 1) }),
         }, `\u2039 ${t('step.back')}`))
       : null,
-    el('div', { class: 'cascade', 'data-step': String(where.step) },
+    el('div', { class: missingCol ? 'cascade' : 'cascade three', 'data-step': String(where.step) },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
         cell({
@@ -4930,10 +5141,7 @@ function renderServices() {
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
         sortByName(inGroup).map(productCell)),
-      el('div', { class: 'col' },
-        el('div', { class: 'colhead' }, t('col.service')),
-        where.offering ? services.filter((id) => productOf(id) === where.offering).map((id) => row(id)) : [],
-        missingCol)),
+      missingCol),
     state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null);
 }
 

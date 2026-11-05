@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzPspPruefung: ob ein PSP-Element das Format hat, das die Verrechnung braucht (P1 Task 2).
+  Eingabe:  psp (Text, ohne Leerzeichen und in Grossbuchstaben)
+  Ausgaben: gueltig (Wahrheitswert), grund (für die Aufgabe «Angaben korrigieren»)
+  VORSCHLAG: das Format P-nnnn-nn-nn (Projekt) oder K-nnnnnn (Kunde). Massgebend ist die Struktur im SAP der eigenen
+  Organisation; später kann an dieser Stelle eine Abfrage gegen SAP stehen.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzPspPruefung" name="LzPspPruefung" namespace="http://atlas/dmn">
+  <inputData id="id_psp" name="psp"/>
+  <decision id="LzPspPruefung" name="LzPspPruefung">
+    <informationRequirement id="ir_psp"><requiredInput href="#id_psp"/></informationRequirement>
+    <decisionTable id="dt_LzPspPruefung" hitPolicy="FIRST">
+      <input id="in_0" label="psp"><inputExpression id="ie_0" typeRef="string"><text>psp</text></inputExpression></input>
+      <output id="out_0" label="gueltig" name="gueltig" typeRef="boolean"/>
+      <output id="out_1" label="grund" name="grund" typeRef="string"/>
+      <rule id="r1">
+        <description>Leer</description>
+        <inputEntry id="r1_i0"><text>null, ""</text></inputEntry>
+        <outputEntry id="r1_o0"><text>false</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Das PSP-Element fehlt."</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Projekt-PSP P-nnnn-nn-nn</description>
+        <inputEntry id="r2_i0"><text>matches(?, "^P-[0-9]{4}-[0-9]{2}-[0-9]{2}$")</text></inputEntry>
+        <outputEntry id="r2_o0"><text>true</text></outputEntry>
+        <outputEntry id="r2_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Kunden-PSP K-nnnnnn</description>
+        <inputEntry id="r3_i0"><text>matches(?, "^K-[0-9]{6}$")</text></inputEntry>
+        <outputEntry id="r3_o0"><text>true</text></outputEntry>
+        <outputEntry id="r3_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Alles andere: ungültig (fail-closed)</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>false</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Das PSP-Element hat nicht das Format P-nnnn-nn-nn (Projekt) oder K-nnnnnn (Kunde)."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

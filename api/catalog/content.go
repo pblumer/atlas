@@ -676,13 +676,87 @@ type catalogRefresh struct {
 // HandleCatalogContentRefresh refreshes every bound product a catalogue offers
 // (§ 7), each all or nothing on its own. A product homed in a catalogue the
 // caller does not maintain is skipped and said so.
+//
+// By default it answers when the last product is done, with one line per product.
+// With ?wait=false it answers at once with 202 and the run's progress, and the
+// refresh goes on in the background; GET on the same path reads how far it has
+// come. A client that cannot wait as long as a large catalogue takes — an agent's
+// tool call is cut off after a minute — can then tell a refresh still running from
+// one that has finished, instead of publishing half way through. One refresh of a
+// catalogue runs at a time: a second asks while the first is running is refused
+// with 409 and the first one's progress.
 func (s *Service) HandleCatalogContentRefresh(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	p := httpapi.PrincipalFrom(r.Context())
+	id, p, items, mine, ok := s.catalogRefreshTargets(w, r)
+	if !ok || s.noSources(w) {
+		return
+	}
+	run, started := s.refreshRuns.start(id, p, len(items), s.now())
+	if !started {
+		httpapi.JSON(w, http.StatusConflict, run)
+		return
+	}
+	// The products are refreshed to the end even when the caller stops waiting.
+	// A catalogue of a few dozen bound products takes longer than a client such
+	// as the MCP adapter waits, and a batch cut off half way leaves some products
+	// refreshed and the rest as they were; finishing it means asking again finds
+	// them refreshed. Each product stays bounded by fetchTimeout, and the caller's
+	// identity is kept.
+	ctx := context.WithoutCancel(r.Context())
+	if r.URL.Query().Get("wait") == "false" {
+		go s.runCatalogRefresh(ctx, p, id, items, mine)
+		httpapi.JSON(w, http.StatusAccepted, run)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, s.runCatalogRefresh(ctx, p, id, items, mine))
+}
+
+// HandleCatalogContentRefreshStatus answers how far the running refresh of a
+// catalogue has come, or how the last one ended: its state (running or done),
+// how many bound products it covers and has finished, and one line per finished
+// product. Progress is kept in memory, so a server restarted since knows none
+// and answers 404.
+func (s *Service) HandleCatalogContentRefreshStatus(w http.ResponseWriter, r *http.Request) {
+	id, _, _, _, ok := s.catalogRefreshTargets(w, r)
+	if !ok {
+		return
+	}
+	run, found := s.refreshRuns.get(id)
+	if !found {
+		httpapi.Error(w, http.StatusNotFound, "no content refresh of catalogue "+id+" since this server started")
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, run)
+}
+
+// runCatalogRefresh refreshes the products one after the other, recording each
+// line in the catalogue's run as it is done, and answers every line.
+func (s *Service) runCatalogRefresh(ctx context.Context, p *httpapi.Principal, id string,
+	items []Item, mine map[string]bool) []catalogRefresh {
+	out := []catalogRefresh{}
+	for _, it := range items {
+		line := catalogRefresh{Item: it.ID, Status: "refreshed"}
+		if !mine[it.ID] {
+			line.Status, line.Message = "skipped", "its home catalogue is maintained by somebody else"
+		} else if res := s.refresh(ctx, p, it, 0); res.status != http.StatusOK {
+			line.Status, line.Message, line.Problems = "refused", res.message, res.problems
+		}
+		out = append(out, line)
+		s.refreshRuns.record(id, line)
+	}
+	s.refreshRuns.finish(id, s.now())
+	return out
+}
+
+// catalogRefreshTargets is the gate both refresh routes share — the catalogue
+// exists, the caller reads and edits it — and the bound products it offers, each
+// marked with whether the caller maintains its home catalogue. It has answered
+// the request when ok is false.
+func (s *Service) catalogRefreshTargets(w http.ResponseWriter, r *http.Request) (
+	id string, p *httpapi.Principal, items []Item, mine map[string]bool, ok bool) {
+	id = r.PathValue("id")
+	p = httpapi.PrincipalFrom(r.Context())
 	var (
 		found, allowed bool
-		items          []Item
-		mine           map[string]bool
 		err            error
 	)
 	s.loop.Do(func() {
@@ -716,39 +790,15 @@ func (s *Service) HandleCatalogContentRefresh(w http.ResponseWriter, r *http.Req
 	switch {
 	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read catalogue: "+err.Error())
-		return
+		return id, p, nil, nil, false
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
-		return
+		return id, p, nil, nil, false
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+id)
-		return
+		return id, p, nil, nil, false
 	}
-	if s.noSources(w) {
-		return
-	}
-	// The products are refreshed to the end even when the caller stops waiting.
-	// A catalogue of a few dozen bound products takes longer than a client such
-	// as the MCP adapter (thirty seconds) waits, and a batch cut off half way
-	// leaves some products refreshed and the rest as they were; finishing it
-	// means asking again finds them refreshed. Each product stays bounded by
-	// fetchTimeout, and the caller's identity is kept.
-	ctx := context.WithoutCancel(r.Context())
-	out := []catalogRefresh{}
-	for _, it := range items {
-		if !mine[it.ID] {
-			out = append(out, catalogRefresh{Item: it.ID, Status: "skipped",
-				Message: "its home catalogue is maintained by somebody else"})
-			continue
-		}
-		res := s.refresh(ctx, p, it, 0)
-		line := catalogRefresh{Item: it.ID, Status: "refreshed"}
-		if res.status != http.StatusOK {
-			line.Status, line.Message, line.Problems = "refused", res.message, res.problems
-		}
-		out = append(out, line)
-	}
-	httpapi.JSON(w, http.StatusOK, out)
+	return id, p, items, mine, true
 }
 
 // HandleContentUnlink removes one language page of a product's binding, or the

@@ -94,7 +94,7 @@ func (s *Server) handleEventListeners(w http.ResponseWriter, _ *http.Request) {
 				l := eventListener{
 					Type: name, Channel: ch, ProcessID: d.ProcessID, ProcessName: d.Name,
 					Version: d.Version, DefinitionKey: d.Key, ProjectID: d.ProjectID,
-					System: s.systemPIDs[d.ProcessID], Element: element, Role: role, Inactive: d.inactive,
+					System: s.isSystemDeployment(d), Element: element, Role: role, Inactive: d.inactive,
 				}
 				if e, ok := eventcatalog.Lookup(name); ok {
 					l.Catalogued, l.Personal = true, e.PersonalFields()

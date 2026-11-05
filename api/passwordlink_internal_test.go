@@ -324,7 +324,7 @@ func TestForgotPasswordAnswersAlike(t *testing.T) {
 		}
 	}
 	msg := mailsTo(srv, "anna@example.org")[0]
-	if !strings.Contains(msg.Subject, "Neues Passwort") || !strings.Contains(msg.Body, mail.WithheldText) {
+	if !strings.Contains(msg.Subject, mail.WithheldText) || !strings.Contains(msg.Body, mail.WithheldText) {
 		t.Errorf("the recovery mail = %q / %q", msg.Subject, msg.Body)
 	}
 	// Asking changed nothing: the old password still works until a new one is set.
@@ -364,20 +364,33 @@ func TestPasswordLinkMailGoesToTheOwnerOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := mailDirectory{srv}
-	if _, err := d.PasswordLink(passwordLinkProcessID, "bob", []string{"bob@example.org"}, nil, nil); err != nil {
+	var sysKey uint64
+	srv.do(func() {
+		if dep := srv.latestDeploymentOf(passwordLinkProcessID); dep != nil {
+			sysKey = dep.Key
+		}
+	})
+	if sysKey == 0 {
+		t.Fatal("the system process proc_passwort_link is not deployed")
+	}
+	if _, err := d.PasswordLink(sysKey, passwordLinkProcessID, "bob", []string{"bob@example.org"}, nil, nil); err != nil {
 		t.Errorf("to the owner: %v", err)
 	}
 	for name, c := range map[string]struct {
+		key         uint64
 		proc        string
 		to, cc, bcc []string
 	}{
-		"another address":      {passwordLinkProcessID, []string{"mallory@example.org"}, nil, nil},
-		"a second recipient":   {passwordLinkProcessID, []string{"bob@example.org", "mallory@example.org"}, nil, nil},
-		"a copy":               {passwordLinkProcessID, []string{"bob@example.org"}, []string{"mallory@example.org"}, nil},
-		"a blind copy":         {passwordLinkProcessID, []string{"bob@example.org"}, nil, []string{"mallory@example.org"}},
-		"not a system process": {"tenant_proc", []string{"bob@example.org"}, nil, nil},
+		"another address":      {sysKey, passwordLinkProcessID, []string{"mallory@example.org"}, nil, nil},
+		"a second recipient":   {sysKey, passwordLinkProcessID, []string{"bob@example.org", "mallory@example.org"}, nil, nil},
+		"a copy":               {sysKey, passwordLinkProcessID, []string{"bob@example.org"}, []string{"mallory@example.org"}, nil},
+		"a blind copy":         {sysKey, passwordLinkProcessID, []string{"bob@example.org"}, nil, []string{"mallory@example.org"}},
+		"not a system process": {0, "tenant_proc", []string{"bob@example.org"}, nil, nil},
+		// The id alone is not enough: a definition that is not the system project's
+		// mints nothing, whatever it calls its process.
+		"a system process id elsewhere": {sysKey + 1_000_000, passwordLinkProcessID, []string{"bob@example.org"}, nil, nil},
 	} {
-		if _, err := d.PasswordLink(c.proc, "bob", c.to, c.cc, c.bcc); err == nil {
+		if _, err := d.PasswordLink(c.key, c.proc, "bob", c.to, c.cc, c.bcc); err == nil {
 			t.Errorf("%s: a link was minted", name)
 		}
 	}
