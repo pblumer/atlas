@@ -622,6 +622,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0532](0532-exchange-room-lists-and-places.md) | Rooms Outlook can find — room lists and Places metadata in the Exchange Worker | Accepted | Landed |
 | [0533](0533-modeler-walks-and-restores-versions.md) | The Modeler walks a process's versions and restores one as the draft | Accepted | Landed |
 | [0534](0534-informationstransfer-operations.md) | Worker operations for transferring resources between two accounts | Accepted | Landed |
+| [0535](0535-worker-types-as-distributed-artifacts.md) | Worker Types are signed artifacts that atlas launches and atlas hub distributes | Accepted | Partial |
 
 ## The two states of a record
 

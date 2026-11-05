@@ -99,7 +99,7 @@ dmn/        DMN registry, resolver, validation, and the business-rule-task worke
 connector/  Worker Type implementations — one package per type (ADR-0203)
 worker/     The built-in Worker Types served out of process (`atlas worker`), over workersdk
 workersdk/  The Worker protocol client, importing nothing of the engine: the seed of the
-            Worker SDK (ADR-draft-worker-types-as-distributed-artifacts)
+            Worker SDK (ADR-0535)
 api/        HTTP API, web UI, command submission and queries
   runloop/    The single-writer boundary: a service reaches shared state only through it
   httpapi/    Response envelope, client IP, request principal — what every handler uses

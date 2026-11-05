@@ -1,4 +1,4 @@
-# ADR-DRAFT: Worker Types are signed artifacts that atlas launches and atlas hub distributes
+# ADR-0535: Worker Types are signed artifacts that atlas launches and atlas hub distributes
 
 - **Status:** Accepted
 - **Implementation:** Partial

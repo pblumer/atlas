@@ -15,7 +15,7 @@ const modulePath = "github.com/pblumer/atlas"
 // sdkMayImport are the packages of this module the SDK still depends on. Both are
 // leaves — they import nothing of atlas themselves, which the test below also checks —
 // and both are debts to pay before workersdk becomes a module of its own
-// (ADR-draft-worker-types-as-distributed-artifacts, migration step 1): the log event
+// (ADR-0535, migration step 1): the log event
 // names, and the lookup query and page a form lookup carries. Adding to this list is a
 // decision against that record, not a fix for a failing test.
 var sdkMayImport = map[string]bool{

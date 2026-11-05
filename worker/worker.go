@@ -9,7 +9,7 @@
 // The protocol client itself — leasing, completing, failing, throwing, answering
 // queries, asking before acting — lives in package workersdk, which imports nothing of
 // the engine so that a Worker Type built outside this repository can depend on it
-// (ADR-draft-worker-types-as-distributed-artifacts). This package holds what is
+// (ADR-0535). This package holds what is
 // specific to the Worker Types atlas ships ([BuiltinConnectors] and the handlers behind
 // it) and keeps the client's names as aliases, so code written against worker.New,
 // worker.Options or worker.BPMNError is unchanged.

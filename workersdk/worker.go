@@ -3,7 +3,7 @@
 // Worker Type serves, and asking before acting where the server governs the Worker
 // (ADR-0007, ADR-0168, ADR-0473, ADR-0475).
 //
-// It is the seed of the Worker SDK of ADR-draft-worker-types-as-distributed-artifacts:
+// It is the seed of the Worker SDK of ADR-0535:
 // what a Worker Type built outside this repository depends on. That is why it imports
 // nothing of the engine — not job, not state, not compiler — and a test holds it to
 // that (sdk_deps_test.go). The built-in Worker Types in package worker are written

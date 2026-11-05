@@ -2,7 +2,7 @@ package worker
 
 // The fake atlas server and the names the Worker Type tests here reach for. They lived
 // beside the protocol client's own tests until that client moved to workersdk
-// (ADR-draft-worker-types-as-distributed-artifacts); the Worker Type tests that ask
+// (ADR-0535); the Worker Type tests that ask
 // before acting still need a server to ask, so this is a copy of that harness rather
 // than an import of another package's test file.
 
