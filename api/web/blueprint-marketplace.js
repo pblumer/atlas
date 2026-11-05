@@ -159,7 +159,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
             await reload();
           }
         } catch (err) {
-          if (!closed) notify(t("blueprint.failed") + ": " + (err.message || err), "err");
+          if (!closed) notify(t("blueprint.importFailed") + ": " + (err.message || err), "err");
         } finally {
           busy = false;
           if (!closed) install.disabled = false;

@@ -8258,6 +8258,15 @@ button.im-problem:hover { background: var(--accent-soft); }
 .import-choices .import-new ul { margin: 6px 0 0; max-height: 25vh; overflow: auto; }
 .import-choices .import-group { margin-top: 14px; }
 .import-choices .import-group h3 { font-size: 13px; margin: 0 0 2px; }
+/* Beside each row, what happens to it as its boxes stand; a model other applications
+   use too is set apart, because replacing it changes their decisions. */
+.import-choices .import-detail { margin-left: 1.6em; }
+.import-choices .import-fate { color: var(--muted); }
+.import-choices .import-fate-replace { color: var(--accent-text); }
+.import-choices .import-warning { margin: 2px 0 0 1.6em; padding: 4px 8px; border-radius: 4px;
+  background: var(--warn-soft); color: var(--warn); }
+.import-choices .import-target { margin: 0 0 6px; }
+.import-blocked { color: var(--warn); max-width: 60%; }
 
 /* What an application's processes need from the installation and no source download
    carries, before the download and after an import (ADR-0467). */

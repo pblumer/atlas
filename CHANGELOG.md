@@ -70,7 +70,11 @@ _Changed_ / _Removed_ for each version.
   grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
+### Changed
+- **An import replaces a decision model other applications use only when you name it.** A model whose handle a decision outside the application resolves no longer refuses the import after the dialog. The plan lists it with `sharedWith`, naming the decisions and applications that change with it, and only a named `overwrite` replaces it, never `overwrite=*` and never its being behind (ADR-0467). Replacing it needs the editor role on those applications, and a protected application's decision is never changed. The Console's import dialog shows the decisions, starts the box unticked and leaves it out of "Tick all". `atlas import --overwrite all` leaves it undecided, and `atlas_hub_import_release` describes the rule.
+
 ### Fixed
+- **"Tick all" in the import dialog takes artifacts another application holds as well.** It also takes their content, and "Tick none" clears both. Each row now names the artifact's kind and name and says what happens to it as its boxes stand: replaced, kept, moved from which application into which, or left behind. The dialog names the application it imports into. The import button waits, with the reason beside it, until every artifact another application holds is taken, since the server refuses the package without them. A failed hub import is reported as "Import failed" rather than "Could not load Blueprint".
 - **The top bar stays in view while a page scrolls.** In every app the bar with the app
   switcher, the view names and the account menu disappeared after a little less than one
   window of scrolling: it is sticky, a sticky bar only sticks inside its parent, and the
