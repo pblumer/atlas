@@ -601,7 +601,13 @@ Beschränkung auf eine OU bietet die Datenquelle nicht.
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
 7. **Die Tabellen `AdBerechtigungen` und `AdOe`** mit den Gruppen und OUs des eigenen
    Verzeichnisses, und die Auswahl der Organisationseinheiten im Formular
-   `ad-versetzung-bestellung` passend zu `AdOe`.
+   `ad-versetzung-bestellung` passend zu `AdOe`. Bleiben die Beispiel-DNs
+   (`…,DC=contoso,DC=local`) stehen, antwortet der Domänencontroller mit einem LDAP-Referral und
+   die Bestellung bleibt mit einem Incident stehen. Die Testumgebung
+   ([`deploy/opentofu/m365-devenv`](../../deploy/opentofu/m365-devenv/README.md), «Beispiele
+   einspielen») erledigt das mit `scripts/install-ad-dienste.py`: Es setzt die Tabellen und die
+   Konstanten auf die Test-OU der Umgebung, und `ad-setup.ps1` legt dort die genannten OUs und
+   Gruppen an.
 
 ## Installieren
 

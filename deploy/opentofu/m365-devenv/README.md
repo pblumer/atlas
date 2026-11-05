@@ -46,7 +46,7 @@ Lizenzmanagement (Lizenzbestand und letzte Anmeldung).
   `ldaps://dc01.<ad_domain_name>:636`, Zugangsdaten aus dem Vault-Eintrag `m365-ucc_ad`).
 - **«Forms may search»** (`formLookups`, ADR-0473) schaltet der Bootstrap nur am Entra-Worker
   ein (Personensuche in den Bestellformularen). Die Personenfelder von `ad-dienste` suchen über
-  den AD-Worker, die Live-Prüfung der Site-URL im Bestellformular der SharePoint-Teamwebsite
+  den AD-Worker (dort schaltet ihn `scripts/install-ad-dienste.py` ein), die Live-Prüfung der Site-URL im Bestellformular der SharePoint-Teamwebsite
   fragt zusätzlich `ucc_sharepoint` und `ucc_exchange`. Bei diesen Workern den Schalter unter
   *Console → Workers* beim Bearbeiten des Workers einschalten; beim Anlegen bietet die Console
   ihn nicht an.
@@ -249,9 +249,9 @@ Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` 
 ## Beispiele einspielen
 
 Die Pakete unter `examples/` lassen sich mit ihrem `installieren.sh` in jede Atlas-Instanz
-einspielen. Für diese Umgebung gibt es zwei Skripte, die die Pakete vorher an den Tenant
+einspielen. Für diese Umgebung gibt es drei Skripte, die die Pakete vorher an den Tenant
 anpassen und als lokaler Administrator installieren (Passwort aus
-`tofu output -json atlas_admin`, nie ausgegeben). Beide brauchen `python3` und `tofu`, laufen
+`tofu output -json atlas_admin`, nie ausgegeben). Alle brauchen `python3` und `tofu`, laufen
 aus `deploy/opentofu/m365-devenv` nach `wait-atlas.sh`, dürfen beliebig oft laufen und ändern
 nichts in Azure oder im Tenant.
 
@@ -361,19 +361,73 @@ Die Berechtigungen, die das Lizenzmanagement am Entra-Worker braucht
 dieser Vorgabe gebaut wurde, erhält sie mit einem `tofu apply`. Die letzte Anmeldung liefert
 Graph nur in einem Tenant mit Entra ID P1 oder P2.
 
-### `examples/ad-dienste`
+### `scripts/install-ad-dienste.py`
 
-Den AD-Katalog bietet die Console unter «atlas hub» an (`atlas_hub = true`); ein Skript dieser
-Umgebung gibt es dafür nicht. Voraussetzungen hier: `enable_ad_dc`, der Worker
-`ad_verzeichnis` mit «Forms may search» (siehe «Inhalt») und die Konstanten `AD_*` des Pakets.
-`ad-setup.ps1` legt nur `OU=AtlasService` und `OU=AtlasTest` an, und das Bind-Konto darf nur
-unter `OU=AtlasTest` schreiben. Die OUs, die das Paket braucht (Gruppen, Admin-, Service-,
-Test-, externe, Funktions-, Rollen- und Schulungskonten, Kontakte: `AD_GRUPPEN_OU` bis
-`AD_KONTAKT_OU`), legt man deshalb von Hand unter `OU=AtlasTest` an und setzt die Konstanten
-darauf; `AD_PERSONEN_OU` ist `OU=AtlasTest` selbst. Die Gruppen `AD_IM_GRUPPE` und
-`AD_MAINFRAME_GRUPPE` sind Atlas-Gruppen (siehe
-[`examples/ad-dienste/README.md`](../../../examples/ad-dienste/README.md), «Voraussetzungen
-auf der Zielinstanz»).
+Die Active-Directory-Dienste (`examples/ad-dienste`) brauchen `enable_ad_dc` und den Worker
+`ad_verzeichnis` (siehe «Inhalt», `worker_names`):
+
+```bash
+python3 scripts/install-ad-dienste.py --cafile out/caddy-root.crt
+python3 scripts/install-ad-dienste.py --dry-run   # nur anpassen und zeigen, was hochginge
+```
+
+| Option | Vorgabe | Wirkung |
+|---|---|---|
+| `--cafile` | – | wie oben |
+| `--test-ou` | `tofu output -json ad_test_ou` (`OU=AtlasTest,DC=atlastest,DC=internal`) | Basis der Tabellen und der Konstanten |
+| `--upn-suffix` | Initial-Domain des Tenants | `AD_UPN_SUFFIX` |
+| `--dry-run` | – | passt das Paket an und gibt Dateien, DNs der Tabellen, Konstanten und Gruppen aus; meldet sich nirgends an |
+| `--tofu-dir`, `--example` | dieses Verzeichnis, `examples/ad-dienste` | woher die Ausgaben und das Paket kommen |
+
+Was es tut:
+
+1. Es leitet das Verzeichnis aus der Umgebung ab wie der Bootstrap: Test-OU ist die Ausgabe
+   `ad_test_ou` (`OU=AtlasTest` unter dem DN von `ad_domain_name`, `ad.tf`), die Domäne deren
+   `DC=`-Teil.
+2. Es passt eine Kopie des Pakets an: Jedes `DC=contoso,DC=local` in den Tabellen
+   `AdBerechtigungen` und `AdOe` wird zur Test-OU, etwa
+   `CN=SG-FIN-Fileshare-Finanzen-Aendern,OU=Berechtigungen,OU=Gruppen,OU=AtlasTest,DC=atlastest,DC=internal`
+   und `OU=FIN,OU=Personen,OU=AtlasTest,DC=atlastest,DC=internal`. Ein DN ausserhalb der
+   Gesamtstruktur beantwortet der Domänencontroller mit einem LDAP-Referral, und die Bestellung
+   bleibt mit einem Incident stehen. Die Fallbacks der Konstanten in den Prozessen erhalten die
+   Werte dieser Umgebung. Bleibt in irgendeiner hochzuladenden Datei ein `DC=contoso` stehen,
+   bricht es ab, bevor etwas hochgeladen ist.
+3. Es legt die Atlas-Gruppen `M365-Mitarbeitende` (Zielgruppe), `Informationssicherheit`,
+   `AD-Administration`, `Identity Management` und `Mainframe` an; angemeldete Testpersonen
+   kommen hinein, wie oben.
+4. Es lädt `ad-berechtigungen`, `ad-namensregel` und `ad-oe` hoch, importiert und
+   veröffentlicht die Applikation `beispiel-ad-dienste` und den Katalog mit den Platzhaltern
+   `zielgruppe-ad`, `informationssicherheit` und `ad-administration`.
+5. Es setzt die Konstanten `AD_DOMAIN_DN` (`DC=atlastest,DC=internal`), `AD_UPN_SUFFIX`,
+   `AD_PERSONEN_OU` (die Test-OU selbst), `AD_GRUPPEN_OU`, `AD_ADMIN_OU`, `AD_SERVICE_OU`,
+   `AD_TEST_OU`, `AD_EXTERN_OU`, `AD_KONTAKT_OU`, `AD_FUNKTION_OU`, `AD_ROLLEN_OU`,
+   `AD_SCHULUNG_OU` (`OU=Gruppen|Admins|Servicekonten|Testkonten|Extern|Kontakte|Funktionskonten|Rollenkonten|Schulungskonten,OU=Atlas,OU=AtlasTest,…`),
+   `AD_IM_GRUPPE = Identity Management`, `AD_MAINFRAME_GRUPPE = Mainframe` und
+   `ATLAS_API_BASE`. **Andere Konstanten der Applikation bleiben.**
+6. Es schaltet am Worker `ad_verzeichnis` «Forms may search» ein (die Personenfelder der
+   Formulare suchen über ihn) und sagt es im Protokoll; fehlt der Worker, sagt es das.
+
+Die OUs und Gruppen, die Tabellen und Konstanten nennen, legt `ad-setup.ps1` an (Phase 2 beim
+Aufbau): `OU=Atlas` mit den neun OUs oben, `OU=Personen` mit `FIN`, `HR` und `IT`,
+`OU=Gruppen` mit `OU=Berechtigungen` (`SG-FIN-Fileshare-Finanzen-Lesen`,
+`SG-FIN-Fileshare-Finanzen-Aendern`, `SG-APP-CRM-Benutzer`) und `OU=Organisation`
+(`SG-ORG-FIN-Alle`, `SG-ORG-FIN-Drucker`, `SG-ORG-HR-Alle`, `SG-ORG-IT-Alle`), alles unter
+`OU=AtlasTest`, wo das Bind-Konto schreiben darf. Ein Domänencontroller, der vorher gebaut
+wurde, erhält sie mit Phase 3 (idempotent; eine Änderung des Skripts ersetzt die VM nicht,
+`ignore_changes = [custom_data]`):
+
+```bash
+env=$(tofu output -raw environment_id)
+az vm run-command invoke -g "$env-rg" -n "$env-dc" --command-id RunPowerShellScript \
+  --scripts @scripts/ad-setup.ps1 --parameters Phase=3
+```
+
+Wer andere Gruppen oder OUs in den Tabellen will, ändert Tabellen und `ad-setup.ps1`
+gemeinsam; die Offline-Prüfung des Umschreibens hält beide zusammen:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_install_ad_dienste.py' -v
+```
 
 ## Geteilter Tenant (`shared_tenant = true`)
 
