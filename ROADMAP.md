@@ -2205,6 +2205,13 @@ dataset of up to 50 000 cases":
   compares it with a deployed version, ignoring the diagram. Deploy from a draft or a new diagram
   saves it first, so the draft stays what runs; a version opened read-only is deployed without
   touching the draft, and the Deploy panel says so.
+- ✅ **Stepping between versions, and restoring one as the draft**
+  ([ADR-draft-modeler-walks-and-restores-versions](docs/adr/draft-modeler-walks-and-restores-versions.md)):
+  arrows on the version chip open the version before or after the one shown (the draft after the
+  newest), and its panel lists every version. **Restore as draft** on a version warns when the draft
+  holds something the newest version does not, then saves the version as the draft and opens it, so
+  Deploy runs it as a new version. The restore cannot be undone; a checkpoint before it is
+  [ADR-0031](docs/adr/0031-diagram-version-history.md)'s.
 - ✅ **A model's source, in place** ([ADR-0457](docs/adr/0457-modeler-xml-source.md)):
   **XML source** in the process and decision editors' `⋯` menu shows the BPMN or DMN document as
   the canvas holds it, in the Modeler's code editor, and **Apply** rebuilds the canvas from a

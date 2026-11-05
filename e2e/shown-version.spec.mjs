@@ -309,3 +309,159 @@ test("a process with one version offers no comparison of versions", async ({ pag
   await expect(page.locator("#sv-pop")).toBeVisible();
   await expect(page.locator("#sv-pop button", { hasText: "Mit anderer Version vergleichen" })).toHaveCount(0);
 });
+
+// Walking the versions from the chip, and restoring one as the draft
+// (ADR-draft-modeler-walks-and-restores-versions). The author's question: step
+// between the deployed models of a process, take any of them back as the draft, and
+// deploy it again as a new version.
+
+const THREE = [
+  { key: 41, processId: "order", name: "Bestellung", version: 1, deployedAt: T0, deployedByName: "Alice Adams" },
+  { key: 42, processId: "order", name: "Bestellung", version: 2, deployedAt: T0 + 60, deployedByName: "Bob Brown" },
+  { key: 43, processId: "order", name: "Bestellung", version: 3, deployedAt: T0 + 120, deployedByName: "Carol Clark" },
+];
+// draftAhead is the draft against the newest version: saved after it, a different model.
+const draftAhead = {
+  processId: "order", savedAt: T0 + 500, savedByName: "Dana Dent", deployed: true,
+  key: 43, version: 3, latestVersion: 3, deployedAt: T0 + 120, sameModel: false,
+  difference: '<userTask id="p"> added', counts: { added: 1, removed: 0, changed: 0 },
+  changes: [{ kind: "added", id: "p", type: "userTask", name: "Prüfen", parent: "order" }],
+};
+
+const posts = (page) => page.evaluate(() =>
+  window.__writes.filter((w) => w.method === "POST").map((w) => w.url));
+
+// edit changes the diagram on the canvas, so leaving it has something to lose.
+const edit = (page) => page.evaluate(() => {
+  const m = window.__atlasModeler;
+  m.get("modeling").updateLabel(m.get("elementRegistry").get("Start_1"), "Eingang");
+});
+
+test("a version steps to the one before and after it, and lists every record", async ({ page }) => {
+  await setState(page, { processes: THREE, comparison: draftAhead });
+  await page.evaluate(() => window.__mountVersion(42));
+  await expect(page.locator("#sv-chip")).toHaveText("v2 von 3");
+  const older = page.locator(".sv-step.sv-older");
+  const newer = page.locator(".sv-step.sv-newer");
+  await expect(older).toHaveAttribute("href", "#/modeler/d/41");
+  await expect(older).toHaveAttribute("aria-label", "Ältere Version: v1");
+  await expect(newer).toHaveAttribute("href", "#/modeler/d/43");
+  expect(await oneRow(page), "the arrows must not push the bar into a second row").toBe(1);
+
+  await page.locator("#sv-chip").click();
+  const items = page.locator("#sv-pop .sv-vlist a");
+  await expect(items).toHaveCount(4);
+  await expect(items.nth(0)).toContainText("Entwurf");
+  await expect(items.nth(0)).toHaveAttribute("href", "#/modeler/draft/order");
+  await expect(items.nth(1)).toContainText("v3");
+  await expect(items.nth(1)).toContainText("neueste");
+  await expect(items.nth(2)).toHaveAttribute("aria-current", "page");
+  await expect(items.nth(3)).toContainText("Alice Adams");
+
+  await older.click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/d/41");
+});
+
+test("the newest version steps on to the draft, and the draft back to it", async ({ page }) => {
+  await setState(page, { processes: THREE, comparison: draftAhead });
+  await page.evaluate(() => window.__mountVersion(43));
+  await expect(page.locator(".sv-step.sv-newer")).toHaveAttribute("href", "#/modeler/draft/order");
+  await expect(page.locator(".sv-step.sv-newer")).toHaveAttribute("aria-label", "Zum Entwurf");
+
+  await page.evaluate(() => window.__mountDraft());
+  await expect(page.locator("#sv-chip")).toHaveText("Entwurf · v3 + Änderungen");
+  await expect(page.locator(".sv-step.sv-older")).toHaveAttribute("href", "#/modeler/d/43");
+  await expect(page.locator(".sv-step.sv-newer")).toBeDisabled();
+  expect(await oneRow(page)).toBe(1);
+});
+
+test("a draft never deployed, and a version that is all there is, show no arrows", async ({ page }) => {
+  await setState(page, { comparison: { processId: "order", savedAt: T0, deployed: false, sameModel: false } });
+  await page.evaluate(() => window.__mountDraft());
+  await expect(page.locator("#sv-chip")).toHaveText("Entwurf · nicht deployt");
+  await expect(page.locator(".sv-step")).toHaveCount(0);
+
+  await setState(page, { processes: [THREE[0]], comparison: null });
+  await page.evaluate(() => window.__mountVersion(41));
+  await expect(page.locator("#sv-chip")).toHaveText("v1 · neueste");
+  await expect(page.locator(".sv-step")).toHaveCount(0);
+});
+
+test("an edited version is not left for another without asking", async ({ page }) => {
+  await setState(page, { processes: THREE, comparison: draftAhead });
+  await page.evaluate(() => window.__mountVersion(42));
+  await expect(page.locator(".sv-step.sv-older")).toBeVisible();
+  await edit(page);
+
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator(".sv-step.sv-older").click();
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => location.hash)).not.toBe("#/modeler/d/41");
+
+  page.once("dialog", (d) => d.accept());
+  await page.locator(".sv-step.sv-older").click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/d/41");
+  expect(await posts(page), "a version's edits are given up, not saved as a draft").toEqual([]);
+});
+
+test("Restore as draft says what the draft loses, replaces it, and opens the draft", async ({ page }) => {
+  await setState(page, { processes: THREE, comparison: draftAhead, draftExists: true });
+  page.on("dialog", (d) => { throw new Error(`no browser dialog expected: ${d.message()}`); });
+  await page.evaluate(() => window.__mountVersion(41));
+  await page.locator("#sv-chip").click();
+  await page.locator("#sv-pop button", { hasText: "v1 als Entwurf übernehmen" }).click();
+
+  const modal = page.locator(".sv-restore");
+  await expect(modal.locator("h2")).toHaveText("v1 als Entwurf übernehmen?");
+  await expect(modal).toContainText("Alice Adams");
+  await expect(modal).toContainText("Dana Dent");
+  const warn = modal.locator("#sv-restore-warn");
+  await expect(warn).toContainText("nicht das Modell der neuesten Version v3");
+  await expect(warn).toContainText("geht verloren");
+  await expect(warn).toContainText("1 neu");
+
+  // The differences open over the dialog, and Escape closes them first.
+  await warn.locator("button", { hasText: "Alle Unterschiede anzeigen" }).click();
+  await expect(page.locator(".vc-modal .vc-item")).toContainText("Prüfen");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".vc-modal")).toHaveCount(0);
+  await expect(modal).toBeVisible();
+
+  const ok = modal.locator("[data-sv-restore-ok]");
+  await expect(ok).toHaveText("Entwurf durch v1 ersetzen");
+  await expect(ok).toHaveClass(/danger/);
+  await ok.click();
+  await expect(modal).toHaveCount(0);
+  // The first save is refused because the draft exists; the dialog's yes answers it.
+  expect(await posts(page)).toEqual(["/api/v1/drafts?from=", "/api/v1/drafts?from=order"]);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/draft/order");
+});
+
+test("Restore when the process has no draft makes the version its draft, without a warning", async ({ page }) => {
+  await setState(page, { processes: THREE, comparison: null });
+  await page.evaluate(() => window.__mountVersion(42));
+  await page.locator("#sv-chip").click();
+  await page.locator("#sv-pop button", { hasText: "v2 als Entwurf übernehmen" }).click();
+  const modal = page.locator(".sv-restore");
+  await expect(modal).toContainText("Dieser Prozess hat keinen Entwurf");
+  await expect(modal.locator("#sv-restore-warn")).toHaveCount(0);
+  await expect(modal.locator("[data-sv-restore-ok]")).toHaveText("v2 zum Entwurf machen");
+  await expect(modal.locator("[data-sv-restore-ok]")).not.toHaveClass(/danger/);
+
+  // Cancel leaves everything as it was.
+  await modal.locator("[data-sv-restore-cancel]").click();
+  await expect(modal).toHaveCount(0);
+  expect(await posts(page)).toEqual([]);
+});
+
+test("a version the draft already is offers no restore", async ({ page }) => {
+  await setState(page, {
+    processes: THREE,
+    comparison: { ...draftAhead, key: 42, version: 2, sameModel: true, changes: [], counts: {} },
+  });
+  await page.evaluate(() => window.__mountVersion(42));
+  await page.locator("#sv-chip").click();
+  await expect(page.locator("#sv-pop")).toBeVisible();
+  await expect(page.locator("#sv-pop button", { hasText: "als Entwurf übernehmen" })).toHaveCount(0);
+  await expect(page.locator("#sv-pop .sv-vlist a.current")).toContainText("= Entwurf");
+});
