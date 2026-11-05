@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // A site lookup answers the one question an order form asks before somebody takes a

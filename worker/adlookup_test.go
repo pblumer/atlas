@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // The AD Worker Type answers form lookups for the directories it holds by name, over

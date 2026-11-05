@@ -12,6 +12,13 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+- **The Worker SDK depends on nothing of atlas.** The form-lookup wire shape moved from
+  `connector/lookup` to `workersdk/lookup`, and the protocol client's own warnings go to a
+  logger the Worker Type chooses (`workersdk.Options.Logger`, the default logger when unset)
+  with the same `event=worker.poll_failed` as before. A Worker Type built outside this
+  repository now pulls in only `workersdk` and the standard library; a test keeps it so.
+
 ## [0.24.0] — 2026-11-05
 
 **The shop becomes one place to follow what one holds.** "My services" and "My orders" are

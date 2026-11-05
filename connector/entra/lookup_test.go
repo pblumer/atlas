@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // lookupClient answers one scripted response per call and keeps every request, so a

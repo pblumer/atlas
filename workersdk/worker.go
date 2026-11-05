@@ -31,8 +31,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/pblumer/atlas/logging"
 )
 
 // Job is one leased job as the engine hands it over.
@@ -236,6 +234,12 @@ type Options struct {
 	NoRetryBackoff bool
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
+	// Logger receives the few lines the worker writes itself — a poll that failed and
+	// will be retried, a query answer the server did not take. Each carries the event
+	// name under the key "event" ([EventPollFailed]), so an operator can alert on it
+	// whatever logger a Worker Type uses. Nil means [slog.Default]; atlas's own worker
+	// leaves it nil, so these lines go through the handler `atlas worker` installs.
+	Logger *slog.Logger
 }
 
 // Defaults, chosen so an unconfigured worker is safe rather than surprising: it
@@ -252,12 +256,19 @@ const (
 	DefaultMaxQueries = 4
 )
 
+// EventPollFailed is the event name the worker's own warnings carry under the key
+// "event": a poll that failed and will be retried, or a query answer the server did not
+// take. It is atlas's registered event worker.poll_failed (ADR-0142); a test in package
+// worker holds the two equal, because this package may not import atlas's catalogue.
+const EventPollFailed = "worker.poll_failed"
+
 // Worker leases jobs of the types it handles and reports what happened. Build one
 // with [New].
 type Worker struct {
-	opts  Options
-	http  *http.Client
-	types []string
+	opts   Options
+	http   *http.Client
+	logger *slog.Logger
+	types  []string
 	// queryTypes are the job types this worker answers queries for, sorted.
 	queryTypes []string
 }
@@ -279,7 +290,10 @@ func New(opts Options) *Worker {
 	if opts.MaxQueries <= 0 {
 		opts.MaxQueries = DefaultMaxQueries
 	}
-	w := &Worker{opts: opts, http: opts.HTTP}
+	w := &Worker{opts: opts, http: opts.HTTP, logger: opts.Logger}
+	if w.logger == nil {
+		w.logger = slog.Default()
+	}
 	if w.http == nil {
 		// One request may block for a whole poll and is followed by the work itself, so
 		// the client's ceiling is the poll plus the lease rather than a short timeout.
@@ -383,7 +397,7 @@ func (w *Worker) serve(ctx context.Context, jobType string) {
 		// and retried; only cancellation ends the loop. A supervised worker that
 		// exited here would flap against its supervisor for as long as the deploy
 		// took.
-		logging.Warn(logging.WorkerPollFailed, "a job poll failed; retrying",
+		w.warn("a job poll failed; retrying",
 			slog.String("worker", w.opts.ID), slog.String("type", jobType),
 			slog.String("error", err.Error()))
 		select {
@@ -568,6 +582,13 @@ func (w *Worker) throwError(ctx context.Context, j Job, be *BPMNError) error {
 		body["errorMessage"] = be.Message
 	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/error", body, nil)
+}
+
+// warn writes one of the worker's own warnings, its event name first so it reads before
+// the payload in text output.
+func (w *Worker) warn(msg string, attrs ...slog.Attr) {
+	w.logger.LogAttrs(context.Background(), slog.LevelWarn, msg,
+		append([]slog.Attr{slog.String("event", EventPollFailed)}, attrs...)...)
 }
 
 // call posts a JSON body and decodes a JSON reply into out (nil to discard it).

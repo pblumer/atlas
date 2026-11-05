@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/workersdk"
 )
 
@@ -27,5 +28,14 @@ func TestABPMNErrorIsOneTypeOnBothPaths(t *testing.T) {
 	var fromJob any = &job.BPMNError{Code: "X"}
 	if _, ok := fromJob.(*workersdk.BPMNError); !ok {
 		t.Fatal("job.BPMNError is not workersdk.BPMNError; a shared handler would throw on one path and fail on the other")
+	}
+}
+
+// TestTheSDKsWarningsCarryTheRegisteredEventName keeps the protocol client's own log
+// lines alertable: workersdk may not import atlas's event catalogue, so it names the
+// event itself, and that name must be the one the catalogue registers (ADR-0142).
+func TestTheSDKsWarningsCarryTheRegisteredEventName(t *testing.T) {
+	if got, want := workersdk.EventPollFailed, logging.WorkerPollFailed.String(); got != want {
+		t.Errorf("workersdk.EventPollFailed = %q, the catalogue registers %q", got, want)
 	}
 }

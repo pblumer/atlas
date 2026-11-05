@@ -20,7 +20,6 @@ import (
 	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
-	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
@@ -33,6 +32,7 @@ import (
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/logging"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // Worker Types this worker can serve out of process (ADR-0168).

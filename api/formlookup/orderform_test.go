@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // orderFormQuery posts a search from a product's order form in the shop, the way
