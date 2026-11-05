@@ -1,6 +1,7 @@
 package ad
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -376,5 +377,45 @@ func TestSearchScope(t *testing.T) {
 		if got := searchScope(in); got != want {
 			t.Errorf("searchScope(%q) = %d, want %d", in, got, want)
 		}
+	}
+}
+
+// TestGoConnSearchEncodesBinaryAttributes drives the real adapter: objectGUID,
+// objectSid and mS-DS-ConsistencyGuid cross the wire as bytes, and a search answers
+// them as standard base64 of those bytes — named in any case — rather than as the
+// bytes forced into a string, which no process can compare or pass on. Base64 of
+// objectGUID as AD stores it is Entra's onPremisesImmutableId
+// (ADR-draft-informationstransfer-operations). A text attribute is unchanged.
+func TestGoConnSearchEncodesBinaryAttributes(t *testing.T) {
+	guid := []byte{0x5c, 0x2a, 0x0b, 0x6f, 0x91, 0x3e, 0x4a, 0x47, 0x8b, 0x00, 0xff, 0x10, 0x22, 0x33, 0x44, 0x55}
+	sid := []byte{0x01, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x15, 0x00}
+	d := startTestDirectory(t, &testDirectory{
+		searchDN: "cn=Arno,dc=x",
+		searchAttrs: map[string][]string{
+			"cn": {"Arno"}, "ObjectGUID": {string(guid)}, "objectSid": {string(sid)},
+			"ms-DS-ConsistencyGuid": {string(guid)},
+		},
+	})
+	conn, err := NewDialer().Dial(d.URL, "", "", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	entries, err := conn.Search(SearchRequest{BaseDN: "dc=x", Filter: "(cn=Arno)"})
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("Search = %+v, %v", entries, err)
+	}
+	a := entries[0].Attributes
+	if got, want := a["ObjectGUID"], base64.StdEncoding.EncodeToString(guid); len(got) != 1 || got[0] != want {
+		t.Errorf("objectGUID = %q, want [%s]", got, want)
+	}
+	if got, want := a["ms-DS-ConsistencyGuid"], base64.StdEncoding.EncodeToString(guid); len(got) != 1 || got[0] != want {
+		t.Errorf("mS-DS-ConsistencyGuid = %q, want [%s]", got, want)
+	}
+	if got, want := a["objectSid"], base64.StdEncoding.EncodeToString(sid); len(got) != 1 || got[0] != want {
+		t.Errorf("objectSid = %q, want [%s]", got, want)
+	}
+	if got := a["cn"]; len(got) != 1 || got[0] != "Arno" {
+		t.Errorf("cn = %q, want the text untouched", got)
 	}
 }

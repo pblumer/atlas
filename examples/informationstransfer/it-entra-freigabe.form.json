@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "it-entra-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Entra-Transfer freigeben · Release the Entra ID transfer**\n\nSzenario · Scenario: **{{variantId}}**\n\nBisheriges Cloud-Konto (bleibt) · Previous cloud account (kept): {{quelleKonto.entries[1].attributes.userPrincipalName[1]}}, Objekt-ID {{cloudAlt[1].id}}\n\nNeues Cloud-Konto (wird **endgültig gelöscht**) · New cloud account (**permanently deleted**): {{zielKonto.entries[1].attributes.userPrincipalName[1]}}, Objekt-ID {{cloudNeu[1].id}}\n\nSource Anchor (onPremisesImmutableId) · Source anchor: {{zielGuid.entries[1].attributes.objectGUID[1]}} (ObjectGUID von · of {{ziel}})\n\nAblauf · Steps: beide Konten in den Papierkorb, das neue endgültig löschen (nicht rückgängig zu machen), das bisherige wiederherstellen, Source Anchor setzen. Danach verknüpft Entra Connect das bisherige Cloud-Konto mit dem neuen AD-Konto (Hard Match); Teams, OneDrive, SharePoint und Berechtigungen bleiben."
+    },
+    {
+      "key": "freigabe",
+      "type": "radio",
+      "label": "Entra-Transfer · Entra ID transfer",
+      "values": [
+        {
+          "label": "Freigegeben · Released",
+          "value": "freigegeben"
+        },
+        {
+          "label": "Abgelehnt · Refused",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bestaetigt",
+      "type": "checkbox",
+      "label": "Ich habe beide Konten und die Löschung geprüft · I have checked both accounts and the deletion",
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kommentarFreigabe",
+      "type": "textarea",
+      "label": "Kommentar · Comment",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

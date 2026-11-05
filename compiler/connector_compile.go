@@ -253,6 +253,11 @@ type entraOp struct {
 	// (ADR-0531). It takes a select and maxUsers like any listing,
 	// and refuses filter, search, advancedQuery and pageSize, which would be a 400.
 	selectOnly bool
+	// alwaysAdvanced marks a listing Graph answers only as an advanced query —
+	// list-user-groups, an OData cast on memberOf
+	// (ADR-draft-informationstransfer-operations). It compiles as one whatever the
+	// model says, and advancedQuery="false" on it is refused rather than overridden.
+	alwaysAdvanced bool
 }
 
 var entraOps = map[string]entraOp{
@@ -299,6 +304,11 @@ var entraOps = map[string]entraOp{
 	// 2026-11-04). The attributes are {"isCloudManaged": true|false}.
 	"get-sync-behavior": {needsUser: true},
 	"set-sync-behavior": {needsUser: true, needsAttributes: true},
+	// A transfer from one account to another: the groups a user is a direct member of,
+	// and the users' recycle bin (ADR-draft-informationstransfer-operations).
+	"list-user-groups":        {needsUser: true, isList: true, alwaysAdvanced: true},
+	"restore-user":            {needsUser: true},
+	"permanently-delete-user": {needsUser: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -429,6 +439,12 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	if spec.alwaysAdvanced {
+		if strings.EqualFold(strings.TrimSpace(cn.AdvancedQuery), "false") {
+			return 0, fmt.Errorf("compiler: entra task %q sets advancedQuery=\"false\" on operation %q, which Graph answers only as an advanced query; it is always an advanced query, so leave advancedQuery out", st.Id, op)
+		}
+		advanced = true
+	}
 	return b.AddEntraConnectorTask(EntraConfig{
 		Connector:     strings.TrimSpace(cn.Connector),
 		ConnectorExpr: connectorExpr,
@@ -487,7 +503,7 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 // happens to say instead. There are three classes:
 //
 //   - filter, search, advancedQuery — a listing only (list-users, list-groups,
-//     list-deleted-groups). Graph's delta endpoint runs none of them, so they are an
+//     list-deleted-groups, list-user-groups). Graph's delta endpoint runs none of them, so they are an
 //     error on a delta op too.
 //   - select — a listing, a delta query, or a single-object read (get-user, get-group,
 //     get-user-manager): each returns something whose properties can be projected.
@@ -502,7 +518,7 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		{"advancedQuery", cn.AdvancedQuery},
 	} {
 		if strings.TrimSpace(a.raw) != "" && !spec.isList {
-			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users, list-groups and list-deleted-groups)", taskID, a.what, op, a.what)
+			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users, list-groups, list-deleted-groups and list-user-groups)", taskID, a.what, op, a.what)
 		}
 	}
 	if spec.selectOnly {
@@ -518,7 +534,7 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		}
 	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups, list-subscribed-skus and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups, list-user-groups, list-subscribed-skus and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
@@ -543,7 +559,7 @@ func entraListBound(taskID, op string, isList bool, what, raw string, def, max i
 		return 0, nil
 	}
 	if !isList {
-		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups, list-deleted-groups and the delta operations)", taskID, what, op, what)
+		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups, list-deleted-groups, list-user-groups and the delta operations)", taskID, what, op, what)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {

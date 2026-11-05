@@ -1,0 +1,18 @@
+{
+  "type": "default",
+  "id": "it-telefonie",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Telefonie-Verwaltung nachführen · Update the telephony records**\n\nIn Teams Phone ist die Nummer {{rufnummer.phoneNumbers}} von der Quelle ({{quelleKonto.entries[1].attributes.displayName[1]}} ({{quelle}}, {{quelleKonto.entries[1].attributes.userPrincipalName[1]}})) auf das Ziel ({{zielKonto.entries[1].attributes.displayName[1]}} ({{ziel}}, {{zielKonto.entries[1].attributes.userPrincipalName[1]}})) übergegangen; übertragen wurde die erste. · The number moved from the source to the target in Teams Phone.\n\nBitte die Nummer in der Telefonie-Verwaltung nachführen (bei BIT: Mutation in Atiras) und die Aufgabe abschliessen. · Please update the telephony records and complete the task."
+    },
+    {
+      "key": "telefonieNachgefuehrt",
+      "type": "checkbox",
+      "label": "Nachgeführt · Updated",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

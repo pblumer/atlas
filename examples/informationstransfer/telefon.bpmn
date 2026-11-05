@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_it_telefon" targetNamespace="http://atlas/beispiel/informationstransfer">
+  <itemDefinition id="item_Rufnummer" structureRef="Rufnummer"/>
+  <dataStore id="ds_teams_phone_rufnummern" name="Teams Phone: Rufnummern"/>
+  <process id="proc_it_telefon" name="Informationstransfer: Telefonnummer" isExecutable="true" atlas:personal="quelle,ziel,begruendung,quelleKonto,zielKonto,pfQuelle,pfZiel,zuweisung" atlas:dataSubject="recipient">
+    <documentation>Die Telefonnummer geht in Teams Phone von der Quelle auf das Ziel über (bei BIT: Skype for Business). remove-phone-number nimmt der Quelle jede Nummer und sagt, welche es waren; ensure-phone-number gibt die erste davon dem Ziel (Direct Routing, wie in m365-dienste). Eine Person mit mehreren Nummern ist selten; die weiteren nennt die Aufgabe an das Telefonie-Team.
+
+Die Meldung an das Telefonie-Team bleibt eine Aufgabe (bei BIT die Mutation in Atiras): Es führt seine Verwaltung nach.
+
+Personendaten: Ob eine Nummer entzogen wurde, muss die Engine lesen, um weiterzugehen. Das Ergebnis von remove-phone-number (rufnummer) ist deshalb nicht versiegelt: Es enthält nur die Geschäftsnummer(n) aus dem Nummernplan des Tenants, keinen Namen. Wer auch das nicht im Klartext will, ersetzt den automatischen Teil durch die Aufgabe.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="GRUPPE_TELEFONIE" type="string" source="application" value="M365-Telefonie"/></atlas:constants></extensionElements>
+    <dataObject id="do_rufnummer" name="Rufnummer" itemSubjectRef="item_Rufnummer"/>
+    <startEvent id="s" name="Aufgerufen"><outgoing>f_s__gw_an</outgoing></startEvent>
+    <exclusiveGateway id="gw_an" name="Telefonnummer?" default="f_gw_an__e_nein"><incoming>f_s__gw_an</incoming><outgoing>f_gw_an__st_weg</outgoing><outgoing>f_gw_an__e_nein</outgoing></exclusiveGateway>
+    <endEvent id="e_nein" name="Nicht gewählt"><incoming>f_gw_an__e_nein</incoming></endEvent>
+    <serviceTask id="st_weg" name="Nummer der Quelle entziehen"><documentation>remove-phone-number mit der UPN der Quelle, ohne phoneNumber: alle ihre Nummern. rufnummer = {removed, phoneNumbers}.</documentation><extensionElements><atlas:teamsPhoneConnector connector="ucc_teams" operation="remove-phone-number" identity="=quelleKonto.entries[1].attributes.userPrincipalName[1]" resultVariable="rufnummer"/></extensionElements><incoming>f_gw_an__st_weg</incoming><outgoing>f_st_weg__gw_hatte</outgoing><dataOutputAssociation id="doa_st_weg"><targetRef>dor_st_weg</targetRef></dataOutputAssociation></serviceTask>
+    <exclusiveGateway id="gw_hatte" name="Nummer entzogen?" default="f_gw_hatte__sc_keine"><incoming>f_st_weg__gw_hatte</incoming><outgoing>f_gw_hatte__st_neu</outgoing><outgoing>f_gw_hatte__sc_keine</outgoing></exclusiveGateway>
+    <scriptTask id="sc_keine" name="Keine Nummer"><extensionElements><zeebe:script expression='={text: "Telefonnummer: Die Quelle hatte keine Nummer in Teams Phone."}' resultVariable="ergebnis"/></extensionElements><incoming>f_gw_hatte__sc_keine</incoming><outgoing>f_sc_keine__e_keine</outgoing></scriptTask>
+    <endEvent id="e_keine" name="Keine Nummer"><incoming>f_sc_keine__e_keine</incoming></endEvent>
+    <serviceTask id="st_neu" name="Nummer dem Ziel geben"><documentation>ensure-phone-number mit der UPN des Ziels und der ersten entzogenen Nummer. Scheitert sie, liegt die Nummer frei im Bestand des Tenants; der Incident nennt sie, ein Retry gibt sie dem Ziel.</documentation><extensionElements><atlas:teamsPhoneConnector connector="ucc_teams" operation="ensure-phone-number" identity="=zielKonto.entries[1].attributes.userPrincipalName[1]" phoneNumber="=rufnummer.phoneNumbers[1]" numberType="direct-routing" resultVariable="zuweisung"/></extensionElements><incoming>f_gw_hatte__st_neu</incoming><outgoing>f_st_neu__ut_telef</outgoing><dataOutputAssociation id="doa_st_neu"><targetRef>dor_st_neu</targetRef></dataOutputAssociation></serviceTask>
+    <userTask id="ut_telef" name="Telefonie-Team informieren"><documentation>Das Telefonie-Team (GRUPPE_TELEFONIE) führt die Nummer in seiner Verwaltung nach (bei BIT: Atiras-Mutation) und schliesst die Aufgabe ab.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="=application.GRUPPE_TELEFONIE"/><zeebe:formDefinition formId="it-telefonie"/></extensionElements><incoming>f_st_neu__ut_telef</incoming><outgoing>f_ut_telef__sc_ok</outgoing></userTask>
+    <scriptTask id="sc_ok" name="Ergebnis"><extensionElements><zeebe:script expression='={text: "Telefonnummer übertragen (" + string(count(rufnummer.phoneNumbers)) + " entzogen, die erste dem Ziel gegeben); das Telefonie-Team ist informiert."}' resultVariable="ergebnis"/></extensionElements><incoming>f_ut_telef__sc_ok</incoming><outgoing>f_sc_ok__e_ok</outgoing></scriptTask>
+    <endEvent id="e_ok" name="Übertragen"><incoming>f_sc_ok__e_ok</incoming></endEvent>
+    <dataObjectReference id="dor_st_weg" name="Rufnummer" dataObjectRef="do_rufnummer"><dataState name="Entzogen"/></dataObjectReference>
+    <dataObjectReference id="dor_st_neu" name="Rufnummer" dataObjectRef="do_rufnummer"><dataState name="Zugewiesen"/></dataObjectReference>
+    <dataStoreReference id="dsr_teams_phone_rufnummern" name="Teams Phone: Rufnummern" dataStoreRef="ds_teams_phone_rufnummern"/>
+    <sequenceFlow id="f_s__gw_an" sourceRef="s" targetRef="gw_an"/>
+    <sequenceFlow id="f_gw_an__st_weg" sourceRef="gw_an" targetRef="st_weg" name="ja"><conditionExpression>=optTelefon = "ja"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_an__e_nein" sourceRef="gw_an" targetRef="e_nein" name="nein"/>
+    <sequenceFlow id="f_st_weg__gw_hatte" sourceRef="st_weg" targetRef="gw_hatte"/>
+    <sequenceFlow id="f_gw_hatte__st_neu" sourceRef="gw_hatte" targetRef="st_neu" name="ja"><conditionExpression>=rufnummer.removed = true and count(rufnummer.phoneNumbers) &gt; 0</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_hatte__sc_keine" sourceRef="gw_hatte" targetRef="sc_keine" name="nein"/>
+    <sequenceFlow id="f_sc_keine__e_keine" sourceRef="sc_keine" targetRef="e_keine"/>
+    <sequenceFlow id="f_st_neu__ut_telef" sourceRef="st_neu" targetRef="ut_telef"/>
+    <sequenceFlow id="f_ut_telef__sc_ok" sourceRef="ut_telef" targetRef="sc_ok"/>
+    <sequenceFlow id="f_sc_ok__e_ok" sourceRef="sc_ok" targetRef="e_ok"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_it_telefon_diagram">
+    <bpmndi:BPMNPlane id="proc_it_telefon_plane" bpmnElement="proc_it_telefon">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="182" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_an_di" bpmnElement="gw_an" isMarkerVisible="true"><omgdc:Bounds x="305" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="238" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nein_di" bpmnElement="e_nein"><omgdc:Bounds x="312" y="292" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="280" y="332" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_weg_di" bpmnElement="st_weg"><omgdc:Bounds x="430" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_weg_di" bpmnElement="dor_st_weg"><omgdc:Bounds x="462" y="46" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="430" y="16" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_hatte_di" bpmnElement="gw_hatte" isMarkerVisible="true"><omgdc:Bounds x="605" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="538" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_keine_di" bpmnElement="sc_keine"><omgdc:Bounds x="730" y="270" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_keine_di" bpmnElement="e_keine"><omgdc:Bounds x="912" y="292" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="332" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_neu_di" bpmnElement="st_neu"><omgdc:Bounds x="730" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_neu_di" bpmnElement="dor_st_neu"><omgdc:Bounds x="762" y="46" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="16" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_telef_di" bpmnElement="ut_telef"><omgdc:Bounds x="880" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_ok_di" bpmnElement="sc_ok"><omgdc:Bounds x="1030" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok"><omgdc:Bounds x="1212" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="182" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__gw_an_di" bpmnElement="f_s__gw_an"><omgdi:waypoint x="198" y="160"/><omgdi:waypoint x="305" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_an__st_weg_di" bpmnElement="f_gw_an__st_weg"><omgdi:waypoint x="355" y="160"/><omgdi:waypoint x="430" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="361" y="140" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_an__e_nein_di" bpmnElement="f_gw_an__e_nein"><omgdi:waypoint x="330" y="185"/><omgdi:waypoint x="330" y="292"/><bpmndi:BPMNLabel><omgdc:Bounds x="336" y="191" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_weg__gw_hatte_di" bpmnElement="f_st_weg__gw_hatte"><omgdi:waypoint x="530" y="160"/><omgdi:waypoint x="605" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_hatte__st_neu_di" bpmnElement="f_gw_hatte__st_neu"><omgdi:waypoint x="655" y="160"/><omgdi:waypoint x="730" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="140" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_hatte__sc_keine_di" bpmnElement="f_gw_hatte__sc_keine"><omgdi:waypoint x="630" y="185"/><omgdi:waypoint x="630" y="310"/><omgdi:waypoint x="730" y="310"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="191" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_keine__e_keine_di" bpmnElement="f_sc_keine__e_keine"><omgdi:waypoint x="830" y="310"/><omgdi:waypoint x="912" y="310"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_neu__ut_telef_di" bpmnElement="f_st_neu__ut_telef"><omgdi:waypoint x="830" y="160"/><omgdi:waypoint x="880" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_telef__sc_ok_di" bpmnElement="f_ut_telef__sc_ok"><omgdi:waypoint x="980" y="160"/><omgdi:waypoint x="1030" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_ok__e_ok_di" bpmnElement="f_sc_ok__e_ok"><omgdi:waypoint x="1130" y="160"/><omgdi:waypoint x="1212" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="doa_st_weg_di" bpmnElement="doa_st_weg"><omgdi:waypoint x="480" y="120"/><omgdi:waypoint x="480" y="96"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="doa_st_neu_di" bpmnElement="doa_st_neu"><omgdi:waypoint x="780" y="120"/><omgdi:waypoint x="780" y="96"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

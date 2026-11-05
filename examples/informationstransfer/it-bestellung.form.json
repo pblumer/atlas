@@ -1,0 +1,274 @@
+{
+  "type": "default",
+  "id": "it-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Informationstransfer · Transfer resources**\n\nÜberträgt Ressourcen vom bisherigen Konto (Quelle) auf das neue Konto (Ziel): bei einer Internalisierung, Externalisierung, einem Amts- oder Abteilungswechsel. Das Szenario ist die Variante. Ob die gewählten Optionen im Szenario zulässig sind, prüft Atlas gleich nach der Bestellung; die Gründe einer Ablehnung stehen danach in der Position. · Transfers resources from the previous account (source) to the new one (target). The scenario is the variant. Atlas checks right after the order whether the options fit the scenario; the reasons for a refusal appear in the order line."
+    },
+    {
+      "key": "quelle",
+      "type": "select",
+      "label": "Quellkonto (bisher) · Source account (previous)",
+      "description": "Suche im Active Directory nach Name, Anmeldename oder Mail; übermittelt wird der Anmeldename. · Search Active Directory; the logon name is submitted.",
+      "validate": {
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "ad",
+        "worker": "ad_verzeichnis",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "sn",
+          "mail",
+          "sAMAccountName"
+        ],
+        "option": {
+          "label": "displayName",
+          "description": "sAMAccountName",
+          "details": [
+            "department",
+            "mail"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
+      }
+    },
+    {
+      "key": "ziel",
+      "type": "select",
+      "label": "Zielkonto (neu) · Target account (new)",
+      "description": "Das Konto, das die Ressourcen erhält. · The account that receives the resources.",
+      "validate": {
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "ad",
+        "worker": "ad_verzeichnis",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "sn",
+          "mail",
+          "sAMAccountName"
+        ],
+        "option": {
+          "label": "displayName",
+          "description": "sAMAccountName",
+          "details": [
+            "department",
+            "mail"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
+      }
+    },
+    {
+      "key": "optMail",
+      "type": "radio",
+      "label": "Primäre Mailadresse und UPN übertragen · Transfer the primary e-mail address and UPN",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "description": "Das Ziel übernimmt Adresse und UPN der Quelle; sauber nur bei gleicher Mail-Domain. · The target takes over the source's address and UPN; clean only within the same mail domain.",
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "domainBestaetigt",
+      "type": "radio",
+      "label": "Auch bei verschiedener Mail-Domain? · Even across mail domains?",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "description": "Nur mit «Ja» überträgt Atlas die Adresse, wenn Quelle und Ziel nicht dieselbe Domain haben. · Only with “Yes” is the address transferred across domains.",
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "conditional": {
+        "hide": "=optMail != \"ja\""
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "optInhalt",
+      "type": "radio",
+      "label": "Postfachinhalt verschieben · Move the mailbox content",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "description": "Der Inhalt geht ins Zielpostfach; das Quellpostfach wird dabei gelöscht. · The content moves to the target mailbox; the source mailbox is deleted.",
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "type": "text",
+      "text": "**Kombiniert · Combined:** Adresse und Inhalt zusammen – die Quelle erhält kein Präfix transfered., ihr Postfach wird gelöscht. · Address and content together – the source gets no transfered. prefix; its mailbox is deleted.",
+      "conditional": {
+        "hide": "=not(optMail = \"ja\" and optInhalt = \"ja\")"
+      }
+    },
+    {
+      "key": "optKontingent",
+      "type": "radio",
+      "label": "Postfachkontingent übertragen · Transfer the mailbox quota",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "description": "Nur wenn das Quellpostfach mehr Platz hat. · Only if the source mailbox has more room.",
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "optTelefon",
+      "type": "radio",
+      "label": "Telefonnummer übertragen (Teams Phone) · Transfer the phone number",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "optRechte",
+      "type": "radio",
+      "label": "Berechtigungen übertragen (manuelle Gruppen) · Transfer access rights (manual groups)",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "optKuerzel",
+      "type": "radio",
+      "label": "Kürzel übertragen · Transfer the short code",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "description": "Nur wenn Atlas die Kürzel generiert. · Only where Atlas generates the codes.",
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "optEntra",
+      "type": "radio",
+      "label": "Entra-ID-Konto übertragen (nur Internalisierung) · Transfer the Entra ID account (internalisation only)",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "description": "Das bisherige Cloud-Konto bleibt mit Teams, OneDrive und SharePoint und wird mit dem neuen AD-Konto verknüpft; das neue Cloud-Konto wird endgültig gelöscht. Informationssicherheit gibt frei. · The previous cloud account stays and is linked to the new AD account; the new cloud account is permanently deleted.",
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}
