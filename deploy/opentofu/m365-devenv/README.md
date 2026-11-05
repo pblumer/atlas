@@ -177,7 +177,9 @@ Katalog, übernimmt die Vorschläge der Capability-Landkarte, setzt die Konstant
 schaltet in `beispiel-m365-dienste` `LIZENZ_VERTRAG_PRUEFEN = ein`; danach braucht jede
 Lizenzbestellung einen Lizenzvertrag (`--standardvertrag LV-…` für Bestellungen ohne). Die
 Berechtigungen `LicenseAssignment.Read.All` und `AuditLog.Read.All` des Entra-Workers stehen in
-`variables.tf`. Am Tenant ändert das Skript nichts.
+`variables.tf`. Am Tenant ändert das Skript nichts. `install-m365-dienste.py` ersetzt bei jedem Lauf
+alle Konstanten von `beispiel-m365-dienste`; danach `install-lizenzmanagement.py --vertrag-pruefen`
+wiederholen.
 
 Mit `atlas_tls = "internal"` lehnt `curl` das Zertifikat ab, solange Caddys
 Stammzertifikat nicht vertraut ist; es liegt auf dem Server unter
