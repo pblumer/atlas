@@ -131,6 +131,16 @@ _Changed_ / _Removed_ for each version.
   the corner of a product page in the tile layout.
 
 ### Fixed
+- **The test environment installs the AD services with its own directory.** `examples/ad-dienste`
+  went into the M365 test environment with the example DNs of its tables
+  (`…,DC=contoso,DC=local`), so the domain controller answered with an LDAP referral and the order
+  stopped on an incident. `deploy/opentofu/m365-devenv/scripts/install-ad-dienste.py` now installs
+  it ready to order: it puts the tables `AdBerechtigungen` and `AdOe` under the environment's test
+  OU (`tofu output ad_test_ou`) and stops if a contoso DN is left in anything it uploads, uploads
+  the models, imports and publishes the application and the catalogue with their groups, sets the
+  `AD_*` constants beside any others and switches «Forms may search» on at `ad_verzeichnis`.
+  `ad-setup.ps1` creates the OUs and groups the tables and constants name (phase 3 for a running
+  domain controller), and a change to the script no longer replaces the domain controller.
 - **A meeting room of `m365-dienste` appears in Outlook's Room Finder.** «Sitzungszimmer
   (Raumpostfach)» created the room mailbox and wrote its location into `CustomAttribute4` only,
   so the room was bookable by its address and missing from "Browse all rooms" and the location
