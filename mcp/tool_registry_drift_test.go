@@ -71,6 +71,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_export_catalog_products":  "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate": "POST /api/v1/catalogs/{id}/import",
 	"atlas_catalog_deletion":         "GET /api/v1/catalogs/{id}/deletion",
+	"atlas_release_pruning":          "GET /api/v1/catalogs/{id}/releases/pruning",
+	"atlas_prune_releases":           "POST /api/v1/catalogs/{id}/releases/pruning",
 	"atlas_delete_catalog":           "DELETE /api/v1/catalogs/{id}",
 	"atlas_catalog_product_deletion": "GET /api/v1/catalog-products/{id}/deletion",
 	"atlas_delete_catalog_product":   "DELETE /api/v1/catalog-products/{id}",

@@ -144,6 +144,8 @@ func TestExchangeCompileRefusals(t *testing.T) {
 		{"cmdlet on a named op", `connector="c" operation="get-mailbox" cmdlet="Get-User" parameters='{"Identity":"a"}' resultVariable="r"`, "takes no cmdlet"},
 		{"generic without cmdlet", `connector="c" operation="run-get-cmdlet" resultVariable="r"`, "needs a cmdlet"},
 		{"generic write", `connector="c" operation="run-get-cmdlet" cmdlet="Remove-Mailbox" resultVariable="r"`, "Get- cmdlets only"},
+		{"set-place that sets nothing", `connector="c" operation="set-place" parameters='{"Identity":"a"}'`, "at least one of"},
+		{"room list without its switch", `connector="c" operation="create-room-list" parameters='{"Name":"RL-Bern","RoomList":false}'`, "sets RoomList itself"},
 		{"generic expression", `connector="c" operation="run-get-cmdlet" cmdlet="=welches" resultVariable="r"`, "Get- cmdlets only"},
 	}
 	for _, c := range cases {

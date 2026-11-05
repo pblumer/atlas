@@ -196,6 +196,9 @@ var wantAdminRoutes = []string{
 	// inventory — the evidence a product manager maintains a catalogue around, not
 	// something one may remove — and a production server switches it off altogether.
 	"GET /api/v1/catalogs/{id}/deletion",
+	// Pruning a catalogue's old releases (catalogpurge.go): the preview and the prune.
+	"GET /api/v1/catalogs/{id}/releases/pruning",
+	"POST /api/v1/catalogs/{id}/releases/pruning",
 	"DELETE /api/v1/catalogs/{id}",
 	"GET /api/v1/catalog-products/{id}/deletion",
 	"DELETE /api/v1/catalog-products/{id}",

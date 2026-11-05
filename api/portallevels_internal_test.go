@@ -32,7 +32,9 @@ func TestOneRuleNamesTheLevel(t *testing.T) {
 		{"the basket", "function renderBasket(", "\n// --- What a product needs"},
 		// The view that made "both" the wrong word: what somebody holds was laid out
 		// across the same columns and was reading depth for itself.
-		{"what the person holds", "function renderServices(", "\n// The brand mark"},
+		// Now "My services" files what somebody holds and ordered under the
+		// Marktleistung it belongs to, and that is where it asks.
+		{"what the person holds", "function serviceEntries(", "\n}"},
 	} {
 		if !strings.Contains(webRegion(t, src, view.from, view.to), "levelOf(") {
 			t.Errorf("%s names a level without asking the one rule that decides it, so "+

@@ -1103,6 +1103,22 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   if (gen === generation) {
     shownVersion = attachShownVersion(root.querySelector("#shown-version"), {
       api, which: () => ({ draftId: identity.draftId, key }),
+      // Stepping to another record leaves this diagram, so it asks what every door out
+      // of the editor asks first (makeKeepEdits): a draft is saved, a version's edits
+      // are given up only on a yes.
+      leave: async (href) => {
+        if (await keepForVersionSwitch()) openRecord(href);
+      },
+      // Restore as draft (ADR-0533): the
+      // version on screen is saved over the draft — the overwrite Save would offer,
+      // confirmed by the dialog the chip has shown — and the editor then reopens on
+      // the draft, so Deploy runs it as a new version.
+      restore: async () => {
+        if (!(await saveDraft(false, { overwrite: true }))) return false;
+        openRecord("#/modeler/draft/" + encodeURIComponent(identity.draftId));
+        return true;
+      },
+      dirty: () => identity.importedEdit || modeler.get("commandStack").canUndo(),
     });
     shownVersion.refresh();
   }
@@ -1129,6 +1145,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   });
   wireBarMenu(root);
   const { saveDraft } = wireActions(root, modeler, api, toast, projectId, identity, key);
+  const keepForVersionSwitch = makeKeepEdits(modeler, identity, saveDraft, tr("bpmn.keep.switchingVersion"));
   // A call activity's "+" is a door: double-clicking it (or the panel's Open button)
   // leaves this diagram for the one it calls, so the drill-down owns the save that
   // has to happen first — hence the saveDraft it is handed (ADR-0076).
@@ -4360,7 +4377,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
+    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups, room lists and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas, a room's place metadata for Room Finder) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
     // An envelope on Exchange blue: the mailbox this Worker Type administers, beside
     // Entra's directory account in the same group.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0364b8"/><rect x="3" y="4.5" width="10" height="7" rx="1" fill="#fff"/><path d="M3.5 5.2 8 8.6l4.5-3.4" fill="none" stroke="#0364b8" stroke-width="1.2"/></svg>`,
@@ -12005,6 +12022,17 @@ function markImportedEdit(identity) {
   if (collab && collab.markDirty) collab.markDirty();
 }
 
+// openRecord opens another record of the process — a version, or the draft — in the
+// Modeler (ADR-0533). The router mounts on
+// hashchange, and a hash that already names the target fires none: a first save
+// points the URL at the draft with replaceState, without remounting. So that case is
+// fired by hand, and the editor is remounted on the record as any navigation would
+// remount it.
+function openRecord(href) {
+  if (location.hash === href) window.dispatchEvent(new HashChangeEvent("hashchange"));
+  else location.hash = href;
+}
+
 // makeKeepEdits builds the "may we leave this diagram now" question every action that
 // navigates away has to ask: true once this diagram's work is safe. A session that
 // addresses a draft saves it; one that does not has nowhere to put the edits without
@@ -12049,7 +12077,11 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
   // about to navigate away (the call-activity drill-down) must not leave on a save that
   // failed. `retried` guards the one recovery below, so a repeated 409 stops rather
   // than looping.
-  async function saveDraft(retried) {
+  //
+  // opts.overwrite says the author has already agreed to replace the existing draft —
+  // Restore as draft asks in its own dialog, with what the draft would lose — so the
+  // 409 below is answered without asking a second time.
+  async function saveDraft(retried, opts) {
     saveBtn.disabled = true;
     try {
       const { xml } = await modeler.saveXML({ format: true });
@@ -12073,10 +12105,12 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         return true;
       }
       toast(tr("bpmn.toast.saved", { name: d.name || d.processId }), "ok");
-      if (identity.draftId !== d.processId) {
-        // First save of a new diagram: this session now addresses a stored draft, so the
-        // next save is a plain update and the URL points at it. replaceState rather than
-        // a navigation, so the canvas, its undo history and any live session stay put.
+      if (identity.draftId !== d.processId || identity.fromDeployment) {
+        // First save of a new diagram, or of a version opened read-only (which may have
+        // landed on its process's existing draft through the overwrite below): this
+        // session now addresses a stored draft, so the next save is a plain update and
+        // the URL points at it. replaceState rather than a navigation, so the canvas,
+        // its undo history and any live session stay put.
         identity.draftId = d.processId;
         identity.fromDeployment = false;
         history.replaceState(null, "", "#/modeler/draft/" + encodeURIComponent(d.processId));
@@ -12092,9 +12126,9 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       // refusal stands.
       const proc = draftKeyProcess(modeler);
       if (e.status === 409 && identity.fromDeployment && !retried && proc && proc.id) {
-        if (window.confirm(tr("bpmn.confirm.overwriteDraft", { error: e.message, id: proc.id }))) {
+        if ((opts && opts.overwrite) || window.confirm(tr("bpmn.confirm.overwriteDraft", { error: e.message, id: proc.id }))) {
           identity.draftId = proc.id; // the retry is then a plain update of that draft
-          return await saveDraft(true);
+          return await saveDraft(true, opts);
         }
       }
       toast(tr("bpmn.toast.saveFailed", { error: e.message }), "err");

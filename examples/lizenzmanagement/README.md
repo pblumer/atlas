@@ -50,7 +50,8 @@ Die Nummern P1–P9 sind die des Konzepts («Lizenzkontingente im EA mit Atlas»
 
 Entscheidungstabellen: `LzSku` (Variante bzw. SKU-ID → Kürzel E3/E5/F3), `LzPspPruefung`,
 `LzKontingent`, `LzAbgleich`, `LzNachkaufSchwelle`, `LzPreise`, `LzExportForm`,
-`LzEntzugStandard`, `LzKundeZuordnung`. Was in einer Tabelle als Beispielwert oder Vorschlag
+`LzEntzugStandard`, `LzKundeZuordnung`, je in der Datei gleichen Namens (`LzSku` in `lz-sku.dmn`,
+`LzNachkaufSchwelle` in `lz-nachkauf-schwelle.dmn` usw.). Was in einer Tabelle als Beispielwert oder Vorschlag
 steht (Preise, Schwellen, das Format des PSP-Elements, die Zuordnung zu Kunden, die
 Standard-Entzugsregel), sagt ihr Kommentar; alles ist vor dem Einsatz zu ersetzen.
 
@@ -138,6 +139,28 @@ Shop zurück, damit Entra, Bestand und Vertragsbuch in einem Weg nachgeführt we
 |---|---|---|---|
 | Lizenzmanagement: Verträge (`cat-lz-kunden`) | 700 | `{{zielgruppe}}` (Integrations Manager der Kunden) | Lizenzvertrag Microsoft 365 |
 | Lizenzmanagement: Betrieb (`cat-lz-betrieb`) | 710 | `{{tenant-verantwortung}}` | Lizenzvertrag Microsoft 365 |
+
+## Das Produkt «Lizenzvertrag Microsoft 365» (`lz-lizenzvertrag`)
+
+Eine Menge Lizenzen pro SKU (E3, E5, F3) für einen Kunden oder ein Projekt, für eine Laufzeit,
+verrechnet auf ein PSP-Element. Das Produkt hat keine Varianten und im Katalog keine
+Genehmigungsart (`approval: none`): Die Tenant-verantwortliche Person (`GRUPPE_TENANT`)
+genehmigt im Lebenszyklus-Prozess `proc_lz_vertrag` (`vertrag.bpmn`) selbst, weil sie dabei
+die Mengen anpassen darf und die Schätzung des Tenant-Kontingents sieht. Jede Aktion startet
+eine eigene Instanz über ihre Nachricht (ADR-0425); Änderungen antworten mit einer
+Shop-Aufgabe (`completed` oder `rejected`).
+
+| Aktion (`key`) | Nachricht | Formular | Ablauf |
+|---|---|---|---|
+| Bestellung (`provision`) | `lz.vertrag.bestellen` | `lz-vertrag-bestellung` | `LzPspPruefung` prüft das PSP-Element (sonst Aufgabe «Angaben korrigieren» an die bestellende Person, `lz-vertrag-korrektur`, nach `KORREKTUR_FRIST` fehlgeschlagen); das Tenant-Kontingent schätzt, was im EA frei bleibt; Aufgabe «Vertrag genehmigen» (`lz-vertrag-genehmigung`) an `GRUPPE_TENANT`, nach `GENEHMIGUNG_FRIST` ein Hinweis an den Chef; danach startet das Vertragsbuch, fehlende Lizenzen stossen «Im EA nachkaufen» an, der Integrations Manager erhält die Bestätigung |
+| Aufstocken (`aufstocken`) | `lz.vertrag.aufstocken` | `lz-vertrag-aufstocken` | Schätzung wie bei der Bestellung, Genehmigung durch `GRUPPE_TENANT` (`lz-vertrag-aufstockung-genehmigen`), das Vertragsbuch zählt die Zusätze dazu |
+| Senken (`senken`) | `lz.vertrag.senken` | `lz-vertrag-senken` | reicht die neue Menge für die Belegung nicht, wählt der Integrations Manager die Positionen, die abgeben (`lz-vertrag-personen`); ihre Lizenzen gehen über den Shop-Befehl `deprovision` an `m365-lizenz` zurück; danach gilt die neue Menge sofort |
+| Verlängern (`verlaengern`) | `lz.vertrag.verlaengern` | `lz-vertrag-verlaengern` | zulässig ist ein Ende ab heute und nicht nach `EA_ENDE`, sonst Ablehnung |
+| Entzugsregel ändern (`entzugsregel`) | `lz.vertrag.entzugsregel` | `lz-vertrag-entzugsregel` | sucht die deployte Entscheidung (oder `LzEntzugStandard`), prüft sie mit Testdaten über `POST /api/v1/decisions/evaluate` (Secret `atlas` mit Rolle modeler) und lehnt eine Tabelle ab, die weder `entziehen` mit Priorität noch `behalten` liefert |
+| Form der Verrechnung ändern (`verrechnung`) | `lz.vertrag.verrechnung` | `lz-vertrag-verrechnung` | `csv`, `mail` oder `sap` und der Empfänger, ab dem nächsten Monat |
+| Vertrag beenden (`deprovision`) | `lz.vertrag.beenden` | – | Aufgabe «Beenden bestätigen» (`lz-vertrag-beenden`) an `GRUPPE_TENANT` mit der Zahl der Betroffenen; jede Lizenz mit Position im Shop geht über `deprovision` an `m365-lizenz` zurück, übernommene Lizenzen (P9) ohne Position entzieht das Lizenzmanagement von Hand |
+
+Alle Aktionen nach der Bestellung lösen der Integrations Manager im Bestand und der Betrieb aus.
 
 Der Integrations Manager eines Vertrags ist die Person, für die er bestellt wird (das Feld «Für
 wen» des Shops). Atlas hält sie als Kennung des Atlas-Kontos, nicht als Adresse: Mails löst der

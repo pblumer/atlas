@@ -142,3 +142,19 @@ test("a part in the scope opens its own description in a panel", async ({ page }
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".product-page h2")).toHaveText("Android smartphone");
 });
+
+test("the way back to the catalogue is a button, not a link in the corner", async ({ page }) => {
+  await openProduct(page, "Android smartphone");
+  const back = page.locator(".product-page .page-top button.page-back");
+  await expect(back).toHaveText("‹ Back to the catalogue");
+  // Drawn as a button: a border and room around the words, not underlined text.
+  const style = await back.evaluate((e) => {
+    const s = getComputedStyle(e);
+    return { border: s.borderTopStyle, padding: parseFloat(s.paddingLeft) };
+  });
+  expect(style.border).toBe("solid");
+  expect(style.padding).toBeGreaterThanOrEqual(12);
+  await back.click();
+  await expect(page.locator(".product-page")).toHaveCount(0);
+  await expect(page.locator("button.tile", { hasText: "Android smartphone" })).toBeVisible();
+});

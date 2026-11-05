@@ -37,7 +37,7 @@ func TestTheAnswerAppearsWhereTheButtonWasPressed(t *testing.T) {
 		t.Error("nothing keeps what the lookup found for the row it was started " +
 			"from, so there is nothing a row could render")
 	}
-	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
+	rows := webRegion(t, src, "function orderNote(", "\n}")
 	if !strings.Contains(rows, "followNote(o)") {
 		t.Error("the order row draws no answer beside its own button, so pressing it " +
 			"changes nothing the reader can see")
@@ -82,7 +82,9 @@ func TestAnInstanceThisServerNoLongerHoldsIsNotFollowed(t *testing.T) {
 // API surface and have callers that are not this page.
 func TestThePositionRowsOfferNoProcessLinks(t *testing.T) {
 	src := readWeb(t, "shop.js")
-	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
+	// The order as "My services" shows it under an entry, and its positions.
+	rows := webRegion(t, src, "function orderNote(", "\n}") +
+		webRegion(t, src, "function lineItem(", "\n}")
 	for _, gone := range []struct{ frag, what string }{
 		{"proc.where", `the per-position "where does this stand" link`},
 		{"proc.openLine", "the per-position link into the position's own instance"},

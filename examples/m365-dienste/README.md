@@ -16,7 +16,7 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 25 Prozesse, 61 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 27 Prozesse, 61 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
 | `katalog.json` | Das Katalogdokument: vier Kataloge, achtzehn Produkte, vier Beziehungen |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -45,6 +45,13 @@ Der Katalog `cat-m365-hr` hat keine Zielgruppe und erreicht deshalb niemanden: I
 Person. Bestellt wird aus ihm nur vom Eintrittsprozess (siehe «Eintritt und Austritt (HR-Ereignis)»).
 Sein Rang muss trotzdem frei sein, weil das Veröffentlichen jeden Rang nur einmal zulässt.
 
+Die Testumgebung (`deploy/opentofu/m365-devenv`, `scripts/install-m365-dienste.py`) legt mit
+einem Exchange Server einen fünften Katalog an, der nicht in `katalog.json` steht:
+«Exchange Server (OnPrem)» (`cat-m365-onprem`, Rang 400, Zielgruppe wie
+`cat-m365-mitarbeitende`) mit Funktionspostfach, Verteiler, Postfachzugriff, Sitzungszimmer und
+Gerät als Kopien `…-onprem`, deren Prozesse den Worker `ucc_exchange_onprem` ansprechen
+(Applikation `beispiel-m365-dienste-onprem`).
+
 ## Die Produkte
 
 | Produkt | Worker | Genehmigung | Prozess | Aktionen nach der Bereitstellung |
@@ -57,7 +64,7 @@ Sein Rang muss trotzdem frei sein, weil das Veröffentlichen jeden Rang nur einm
 | Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person der verantwortlichen Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
 | Verteilerliste (`m365-verteiler`) | Exchange | keine | `verteiler.bpmn` (Lebenszyklus) | entfernen, Mitglied aufnehmen, Mitglied entfernen |
 | Zugriff auf ein Postfach (`m365-postfachzugriff`), 365 Tage befristet | Exchange | vorgesetzte Person der Person, die den Zugriff erhält, je nach Regel zusätzlich Informationssicherheit | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` (getrennte Prozesse) | Rückgabe |
-| Sitzungszimmer (`m365-raum`) | Exchange | `{{facility-management}}` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
+| Sitzungszimmer (`m365-raum`) | Exchange | `{{facility-management}}` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` (getrennte Prozesse), beide mit `raumliste.bpmn`; `raum-nachfuehren.bpmn` von Hand | Rückgabe |
 | Gerät (`m365-geraet`): Beamer, Fahrzeug, Leihgerät | Exchange | `{{facility-management}}` | `geraet-einrichten.bpmn`, `geraet-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, Entra | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
 | Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
@@ -81,6 +88,115 @@ Warteschlange oder Telefonzentrale frei, bevor es das Konto löscht. Ein Ressour
 nimmt eine Rufnummer nur mit Nutzungsort und der Lizenz *Microsoft Teams Phone Resource
 Account* an; beides gibt ihm der Entra-Worker gleich nach dem Anlegen.
 
+## Aktionen im Überblick
+
+Jede Aktion eines Produkts mit Lebenszyklus-Prozess startet über ihre Nachricht eine eigene
+Instanz dieses Prozesses (ADR-0425). «Bestand» heisst: die Person, die die Position hält, in
+ihrem Bestand im Shop; «Betrieb»: eine Person mit der Rolle operator. Die drei Produkte von
+`cat-m365-hr` bestellt der Eintrittsprozess, nicht eine Person im Shop. Die Tabelle folgt
+`katalog.json`.
+
+| Produkt | Aktion (`key`) | Nachricht | Art | Auslösbar im | Formular |
+|---|---|---|---|---|---|
+| `m365-lizenz` | Bestellung (`provision`) | `m365.lizenz.zuweisen` | Bereitstellung | Shop | `m365-lizenz-bestellung` |
+| `m365-lizenz` | Lizenz zurückgeben (`deprovision`) | `m365.lizenz.entziehen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-lizenz` | Lizenz wechseln (`wechseln`) | `m365.lizenz.wechseln` | Änderung | Bestand, Betrieb | `m365-lizenz-wechsel` |
+| `m365-lizenz` | Abwesenheitsnotiz setzen (`abwesenheit`) | `m365.postfach.abwesenheit` | Service | Bestand | `m365-abwesenheit` |
+| `m365-lizenz` | Abwesenheitsnotiz beenden (`abwesenheit-beenden`) | `m365.postfach.anwesend` | Service | Bestand | – |
+| `m365-lizenz` | Postfachkontingent erhöhen (`kontingent`) | `m365.postfach.kontingent` | Änderung | Bestand, Betrieb | `m365-postfach-kontingent` |
+| `m365-lizenz` | Weiterleitung setzen (`weiterleitung`) | `m365.postfach.weiterleitung` | Änderung | Bestand, Betrieb | `m365-postfach-weiterleitung` |
+| `m365-lizenz` | Weiterleitung aufheben (`weiterleitung-aus`) | `m365.postfach.weiterleitung-aus` | Änderung | Bestand, Betrieb | – |
+| `m365-lizenz` | Zusätzliche Mailadresse (`alias`) | `m365.postfach.adresse` | Änderung | Bestand, Betrieb | `m365-postfach-adresse` |
+| `m365-lizenz` | Mailadresse entfernen (`alias-weg`) | `m365.postfach.adresse-weg` | Änderung | Bestand, Betrieb | `m365-postfach-adresse` |
+| `m365-lizenz` | Kalenderstellvertretung erteilen (`stellvertretung`) | `m365.postfach.stellvertretung` | Änderung | Bestand, Betrieb | `m365-postfach-stellvertretung` |
+| `m365-lizenz` | Kalenderstellvertretung entziehen (`stellvertretung-weg`) | `m365.postfach.stellvertretung-weg` | Änderung | Bestand, Betrieb | `m365-postfach-stellvertretung` |
+| `m365-telefonie` | Bestellung (`provision`) | `m365.telefonie.einrichten` | Bereitstellung | Shop | `m365-person` |
+| `m365-telefonie` | Telefonie aufheben (`deprovision`) | `m365.telefonie.aufheben` | Rückgabe | Bestand, Betrieb | – |
+| `m365-team` | Bestellung (`provision`) | `m365.team.erstellen` | Bereitstellung | Shop | `m365-team-bestellung` |
+| `m365-team` | Team archivieren (`deprovision`) | `m365.team.archivieren` | Rückgabe | Bestand, Betrieb | – |
+| `m365-team` | Person aufnehmen (`mitglied`) | `m365.team.mitglied` | Änderung | Bestand, Betrieb | `m365-team-mitglied` |
+| `m365-team` | Kanal anlegen (`kanal`) | `m365.team.kanal` | Änderung | Bestand, Betrieb | `m365-team-kanal` |
+| `m365-sharepoint-site` | Bestellung (`provision`) | `m365.site.erstellen` | Bereitstellung | Shop | `m365-sharepoint-site-bestellung` |
+| `m365-sharepoint-site` | Site endgültig zurückgeben (`deprovision`) | `m365.site.rueckgabe` | Rückgabe | Bestand, Betrieb | – |
+| `m365-sharepoint-site` | Externe Person einladen (`gast`) | `m365.site.gast` | Änderung | Bestand, Betrieb | `m365-sharepoint-gast` |
+| `m365-sharepoint-site` | Site-Besitzer ändern (`besitzer`) | `m365.site.besitzer` | Änderung | Bestand, Betrieb | `m365-sharepoint-besitzer` |
+| `m365-sharepoint-site` | Speicherkontingent erhöhen (`kontingent`) | `m365.site.kontingent` | Änderung | Bestand, Betrieb | `m365-sharepoint-kontingent` |
+| `m365-sharepoint-site` | Site löschen (`loeschen`) | `m365.site.loeschen` | Änderung | Bestand, Betrieb | – |
+| `m365-sharepoint-site` | Gelöschte Site wiederherstellen (`wiederherstellen`) | `m365.site.wiederherstellen` | Änderung | Bestand, Betrieb | – |
+| `m365-engage` | Bestellung (`provision`) | `m365.community.erstellen` | Bereitstellung | Shop | `m365-engage-bestellung` |
+| `m365-engage` | Community löschen (`deprovision`) | `m365.community.loeschen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-engage` | Person aufnehmen (`mitglied`) | `m365.community.mitglied` | Änderung | Bestand, Betrieb | `m365-engage-person` |
+| `m365-engage` | Person entfernen (`mitglied-weg`) | `m365.community.mitglied-weg` | Änderung | Bestand, Betrieb | `m365-engage-person-weg` |
+| `m365-funktionspostfach` | Bestellung (`provision`) | `m365.funktionspostfach.erstellen` | Bereitstellung | Shop | `m365-funktionspostfach-bestellung` |
+| `m365-funktionspostfach` | Funktionspostfach entfernen (`deprovision`) | `m365.funktionspostfach.entfernen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-funktionspostfach` | Zugriff erteilen (`zugriff-erteilen`) | `m365.funktionspostfach.zugriff-erteilen` | Änderung | Bestand, Betrieb | `m365-postfach-person` |
+| `m365-funktionspostfach` | Zugriff entziehen (`zugriff-entziehen`) | `m365.funktionspostfach.zugriff-entziehen` | Änderung | Bestand, Betrieb | `m365-postfach-person` |
+| `m365-verteiler` | Bestellung (`provision`) | `m365.verteiler.erstellen` | Bereitstellung | Shop | `m365-verteiler-bestellung` |
+| `m365-verteiler` | Verteiler entfernen (`deprovision`) | `m365.verteiler.entfernen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-verteiler` | Mitglied aufnehmen (`mitglied-aufnehmen`) | `m365.verteiler.mitglied-aufnehmen` | Änderung | Bestand, Betrieb | `m365-postfach-person` |
+| `m365-verteiler` | Mitglied entfernen (`mitglied-entfernen`) | `m365.verteiler.mitglied-entfernen` | Änderung | Bestand, Betrieb | `m365-postfach-person` |
+| `m365-postfachzugriff` | Bestellung, Rückgabe (getrennte Prozesse `proc_m365_postfachzugriff_erteilen`, `proc_m365_postfachzugriff_entziehen`) | – | Bereitstellung, Rückgabe | Shop, Bestand | `m365-postfachzugriff-bestellung` |
+| `m365-raum` | Bestellung, Rückgabe (getrennte Prozesse `proc_m365_raum_einrichten`, `proc_m365_raum_entfernen`) | – | Bereitstellung, Rückgabe | Shop, Bestand | `m365-raum-bestellung` |
+| `m365-geraet` | Bestellung, Rückgabe (getrennte Prozesse `proc_m365_geraet_einrichten`, `proc_m365_geraet_entfernen`) | – | Bereitstellung, Rückgabe | Shop, Bestand | `m365-geraet-bestellung` |
+| `m365-warteschlange` | Bestellung (`provision`) | `m365.warteschlange.einrichten` | Bereitstellung | Shop | `m365-warteschlange-bestellung` |
+| `m365-warteschlange` | Warteschlange entfernen (`deprovision`) | `m365.warteschlange.entfernen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-warteschlange` | Agenten ändern (`agenten-aendern`) | `m365.warteschlange.agenten` | Änderung | Bestand, Betrieb | `m365-warteschlange-agenten` |
+| `m365-telefonzentrale` | Bestellung (`provision`) | `m365.telefonzentrale.einrichten` | Bereitstellung | Shop | `m365-telefonzentrale-bestellung` |
+| `m365-telefonzentrale` | Telefonzentrale entfernen (`deprovision`) | `m365.telefonzentrale.entfernen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-aufbewahrung` | Bestellung (`provision`) | `m365.aufbewahrung.einrichten` | Bereitstellung | Shop | `m365-aufbewahrung-bestellung` |
+| `m365-aufbewahrung` | Aufbewahrung aufheben (`deprovision`) | `m365.aufbewahrung.aufheben` | Rückgabe | Bestand, Betrieb | – |
+| `m365-eintritt` | Bestellung (`provision`) | `m365.eintritt.bereitstellen` | Bereitstellung | Shop | – |
+| `m365-eintritt` | Eintrittspaket zurückgeben (`deprovision`) | `m365.eintritt.zurueckgeben` | Rückgabe | Betrieb | – |
+| `m365-eintritt-lizenz` | Bestellung (`provision`) | `m365.lizenz.zuweisen` | Bereitstellung | Shop | `m365-eintritt-lizenz-bestellung` |
+| `m365-eintritt-lizenz` | Lizenz zurückgeben (`deprovision`) | `m365.lizenz.entziehen` | Rückgabe | Betrieb | – |
+| `m365-eintritt-lizenz` | Lizenz wechseln (`wechseln`) | `m365.lizenz.wechseln` | Änderung | Bestand, Betrieb | `m365-lizenz-wechsel` |
+| `m365-eintritt-lizenz` | Abwesenheitsnotiz setzen (`abwesenheit`) | `m365.postfach.abwesenheit` | Service | Bestand | `m365-abwesenheit` |
+| `m365-eintritt-lizenz` | Abwesenheitsnotiz beenden (`abwesenheit-beenden`) | `m365.postfach.anwesend` | Service | Bestand | – |
+| `m365-eintritt-lizenz` | Postfachkontingent erhöhen (`kontingent`) | `m365.postfach.kontingent` | Änderung | Bestand, Betrieb | `m365-postfach-kontingent` |
+| `m365-eintritt-lizenz` | Weiterleitung setzen (`weiterleitung`) | `m365.postfach.weiterleitung` | Änderung | Bestand, Betrieb | `m365-postfach-weiterleitung` |
+| `m365-eintritt-lizenz` | Weiterleitung aufheben (`weiterleitung-aus`) | `m365.postfach.weiterleitung-aus` | Änderung | Bestand, Betrieb | – |
+| `m365-eintritt-lizenz` | Zusätzliche Mailadresse (`alias`) | `m365.postfach.adresse` | Änderung | Bestand, Betrieb | `m365-postfach-adresse` |
+| `m365-eintritt-lizenz` | Mailadresse entfernen (`alias-weg`) | `m365.postfach.adresse-weg` | Änderung | Bestand, Betrieb | `m365-postfach-adresse` |
+| `m365-eintritt-lizenz` | Kalenderstellvertretung erteilen (`stellvertretung`) | `m365.postfach.stellvertretung` | Änderung | Bestand, Betrieb | `m365-postfach-stellvertretung` |
+| `m365-eintritt-lizenz` | Kalenderstellvertretung entziehen (`stellvertretung-weg`) | `m365.postfach.stellvertretung-weg` | Änderung | Bestand, Betrieb | `m365-postfach-stellvertretung` |
+| `m365-oe-mitgliedschaften` | Bestellung (`provision`) | `m365.oe.zuweisen` | Bereitstellung | Shop | `m365-oe-bestellung` |
+| `m365-oe-mitgliedschaften` | Mitgliedschaften entfernen (`deprovision`) | `m365.oe.entziehen` | Rückgabe | Betrieb | – |
+| `m365-konto-hybrid` | Bestellung (`provision`) | `m365.konto.hybrid.anlegen` | Bereitstellung | Shop | `m365-konto-hybrid-bestellung` |
+| `m365-konto-hybrid` | Konto zurückgeben (sperren und aus der Synchronisation nehmen) (`deprovision`) | `m365.konto.hybrid.entfernen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-konto-cloud` | Bestellung (`provision`) | `m365.konto.cloud.uebernehmen` | Bereitstellung | Shop | `m365-person` |
+| `m365-konto-cloud` | Verwaltung an das AD zurückgeben (`deprovision`) | `m365.konto.cloud.zurueck` | Rückgabe | Betrieb | – |
+
+## Prozesse im Überblick
+
+Die 27 Prozesse des Pakets und was sie startet:
+
+| Prozess | Datei | Gestartet durch |
+|---|---|---|
+| `proc_m365_lizenz` (Lizenz und Postfach) | `lizenz.bpmn` | Aktionen von `m365-lizenz` und `m365-eintritt-lizenz` |
+| `proc_m365_telefonie` | `telefonie.bpmn` | Aktionen von `m365-telefonie` |
+| `proc_m365_team` | `team.bpmn` | Aktionen von `m365-team` |
+| `proc_m365_sharepoint_site` | `sharepoint-site.bpmn` | Aktionen von `m365-sharepoint-site` |
+| `proc_m365_engage_community` | `engage-community.bpmn` | Aktionen von `m365-engage` |
+| `proc_m365_funktionspostfach` | `funktionspostfach.bpmn` | Aktionen von `m365-funktionspostfach` |
+| `proc_m365_verteiler` | `verteiler.bpmn` | Aktionen von `m365-verteiler` |
+| `proc_m365_postfachzugriff_erteilen`, `proc_m365_postfachzugriff_entziehen` | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` | Bestellung und Rückgabe von `m365-postfachzugriff` |
+| `proc_m365_raum_einrichten`, `proc_m365_raum_entfernen` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` | Bestellung und Rückgabe von `m365-raum` |
+| `proc_m365_raumliste` (Sitzungszimmer auffindbar machen) | `raumliste.bpmn` | Call Activity aus `raum-einrichten.bpmn` und `raum-nachfuehren.bpmn` (siehe «Sitzungszimmer in der Raumsuche») |
+| `proc_m365_raum_nachfuehren` (Sitzungszimmer nachführen) | `raum-nachfuehren.bpmn` | von Hand in der Console |
+| `proc_m365_geraet_einrichten`, `proc_m365_geraet_entfernen` | `geraet-einrichten.bpmn`, `geraet-entfernen.bpmn` | Bestellung und Rückgabe von `m365-geraet` |
+| `proc_m365_warteschlange` | `warteschlange.bpmn` | Aktionen von `m365-warteschlange` |
+| `proc_m365_telefonzentrale` | `telefonzentrale.bpmn` | Aktionen von `m365-telefonzentrale` |
+| `proc_m365_aufbewahrung` | `aufbewahrung.bpmn` | Aktionen von `m365-aufbewahrung` |
+| `proc_m365_eintritt_paket` | `eintritt-paket.bpmn` | Aktionen von `m365-eintritt` |
+| `proc_m365_oe_mitgliedschaften` | `oe-mitgliedschaften.bpmn` | Aktionen von `m365-oe-mitgliedschaften` |
+| `proc_m365_hr_eintritt` (Eintritt und Austritt) | `hr-eintritt.bpmn` | Meldung des HR-Systems (siehe «Eintritt und Austritt (HR-Ereignis)») |
+| `proc_m365_konto_hybrid` | `konto-hybrid.bpmn` | Aktionen von `m365-konto-hybrid` |
+| `proc_m365_konto_in_cloud` | `konto-in-cloud.bpmn` | Aktionen von `m365-konto-cloud` |
+| `proc_m365_genehmigung_vorgesetzter` | `genehmigung-vorgesetzter.bpmn` | Genehmigungsart von Lizenz, Team, SharePoint-Teamwebsite, Community, Funktionspostfach und Postfachzugriff (siehe «Die Genehmigung durch die vorgesetzte Person») |
+| `proc_m365_partnerzugang` | `partnerzugang.bpmn` | öffentliches Formular (siehe «Die öffentlichen Formulare») |
+| `proc_m365_verteiler_anmeldung` | `verteiler-anmeldung.bpmn` | öffentliches Formular |
+| `proc_m365_governance_pruefung` | `governance-pruefung.bpmn` | wöchentlicher Timer, oder von Hand (siehe «Governance») |
+
 ## Das Postfach an der Lizenz
 
 Die Lizenz bringt das Postfach in Exchange Online mit; die Aktionen am Produkt `m365-lizenz`
@@ -89,6 +205,8 @@ Die Lizenz bringt das Postfach in Exchange Online mit; die Aktionen am Produkt `
 
 | Aktion | Formular | Ablauf | Ergebnis |
 |---|---|---|---|
+| Abwesenheitsnotiz setzen (`abwesenheit`, Service) | `m365-abwesenheit` | `set-auto-reply` mit `AutoReplyState` Scheduled für den Zeitraum von bis bis; interne und externe Nachricht sind derselbe Text, `ExternalAudience` All | `completed` |
+| Abwesenheitsnotiz beenden (`abwesenheit-beenden`, Service) | – | `set-auto-reply` mit `AutoReplyState` Disabled | `completed` |
 | Postfachkontingent erhöhen (`kontingent`) | `m365-postfach-kontingent` | `get-mailbox-statistics` liest die Belegung, `M365Postfachkontingent` entscheidet über Stufe und Lizenz, bei 100 GB prüft `M365-Administration` (Aufgabe «Kontingent prüfen»), `set-mailbox-quota` setzt die drei Grenzen | `completed`, bei Ablehnung `rejected` |
 | Weiterleitung setzen (`weiterleitung`) | `m365-postfach-weiterleitung` | Ziel nur in der eigenen Domain (`MAIL_DOMAIN`), sonst Ablehnung mit Grund; `set-forwarding`, auf Wunsch mit Kopie im Postfach | `completed`, bei fremder Domain `rejected` |
 | Weiterleitung aufheben (`weiterleitung-aus`) | – | `clear-forwarding` | `completed` |
@@ -96,6 +214,9 @@ Die Lizenz bringt das Postfach in Exchange Online mit; die Aktionen am Produkt `
 | Mailadresse entfernen (`alias-weg`) | `m365-postfach-adresse` | `remove-email-address` mit derselben Adresse | `completed` |
 | Kalenderstellvertretung erteilen (`stellvertretung`) | `m365-postfach-stellvertretung` | `run-get-cmdlet` mit `Get-MailboxFolderStatistics -FolderScope Calendar` liest den Namen des Kalenders, dann `add-folder-permission` auf `<upn>:\<Kalender>` mit `Editor` und `Delegate` | `completed` |
 | Kalenderstellvertretung entziehen (`stellvertretung-weg`) | `m365-postfach-stellvertretung` | Kalender lesen wie oben, `remove-folder-permission` | `completed` |
+
+Die Aktion «Lizenz wechseln» (`wechseln`) beschreibt «Lizenzverträge und Lizenz wechseln
+(Lizenzmanagement)».
 
 **Kontingent.** Exchange Online begrenzt die Grösse eines Postfachs nach der Lizenz: mit E3 und
 E5 auf 100 GB, mit F3 auf 2 GB. Einen grösseren Wert weist Exchange laut Microsofts Dokumentation
@@ -277,6 +398,65 @@ M365-Administration. Danach wird die Belegung umgebucht.
 
 Eine Call Activity nennt ihren Prozess über die id und findet ihn in jeder Applikation des
 Servers; fehlt er, bleibt das Token stehen, ohne Fehler beim Deployen. Darum die Konstante.
+
+## Sitzungszimmer in der Raumsuche
+
+Ein Raumpostfach allein ist in Outlook über seine Adresse buchbar, in der **Raumsuche** fehlt es
+(«Alle Räume durchsuchen», die Ortsvorschläge beim Planen einer Besprechung). Outlook zeigt Räume
+nur über **Raumlisten**: Verteilergruppen, die mit `New-DistributionGroup -RoomList` angelegt sind
+und Raumpostfächer als Mitglieder haben. Gefiltert wird nach den **Places-Angaben** des Raums, die
+`Set-Place` setzt: vor allem Ort (`City`), Stockwerk (`Floor`) und Plätze (`Capacity`), dazu
+`FloorLabel` und `Building`. Die Raumlisten erscheinen in der Raumsuche als Werte des Filters
+«Gebäude»; Microsoft empfiehlt, in einer Raumliste nur Räume eines Orts zu führen. Bis eine
+Änderung in der Raumsuche sichtbar ist, dauert es 24 bis 48 Stunden
+([Microsoft: Configure rooms and workspaces for Room Finder](https://learn.microsoft.com/en-us/microsoft-365-apps/outlook/calendaring/configure-room-finder-rooms-workspaces)).
+
+Das erledigt `raumliste.bpmn` («Sitzungszimmer auffindbar machen», `proc_m365_raumliste`), ein
+Prozess, den andere aufrufen:
+
+1. **Standort zerlegen.** Der Standort aus dem Bestellformular wird einfach gelesen: Ort ist der
+   Teil vor dem ersten Komma, Stockwerkbezeichnung der Rest, Stockwerk die erste Zahl im Rest.
+   «Bern, 5. Stock» ergibt Ort Bern, Stockwerk 5, Bezeichnung «5. Stock»; «Zürich, EG» ergibt
+   Stockwerk 0 (ebenso Erdgeschoss, Parterre); «Basel» ergibt nur den Ort. Was fehlt, setzt
+   `Set-Place` nicht.
+2. **Raumliste benennen.** Die Namensregel `M365Namensregel` mit dem Objekttyp `raumliste`
+   bildet eine Raumliste pro Ort: `<NAME_PREFIX>RL-<Ort>`, Alias `<NAME_PREFIX>rl-<ort>`
+   (Umlaute ausgeschrieben), Adresse `<alias>@<MAIL_DOMAIN>`. Im Testtenant also
+   `atlas-test-58o4-RL-Bern`. Lehnt die Regel ab (kein Ort, reserviert, zu lang), entsteht keine
+   Raumliste, der Raum erhält trotzdem seine Ortsangaben.
+3. **Raumliste sicherstellen.** Gibt es keine Raumliste mit diesem Alias
+   (`list-distribution-groups` mit `RecipientTypeDetails` `RoomList`), legt `create-room-list`
+   sie an.
+4. **Raum aufnehmen**, wenn er nicht schon Mitglied ist: Die Raumlisten des Raums findet der
+   Filter `Members -eq '<Distinguished Name>'`; ein zweites `Add-DistributionGroupMember`
+   wäre ein Fehler.
+5. **Ortsangaben setzen** mit `set-place`: `City` und `Building` = Ort, `Floor`, `FloorLabel`,
+   `Capacity` = Plätze. Nur wenn die Applikationskonstante `ORTSANGABEN` true ist (Vorgabe):
+   `Set-Place` gibt es nur in Exchange Online. Gegen einen Exchange Server weist der Worker die
+   Operation ab, bevor er etwas sendet; die Exchange-Server-Variante der Testumgebung setzt
+   `ORTSANGABEN` darum auf false und führt nur die Raumliste.
+
+**Wer ihn aufruft.** `raum-einrichten.bpmn` nach der Herkunftskennzeichnung, für jeden neuen Raum.
+`raum-entfernen.bpmn` nimmt den Raum vor dem Entfernen aus jeder Raumliste, in der er ist; eine
+Raumliste, die dadurch leer wird, bleibt für den nächsten Raum am selben Ort stehen.
+`raum-nachfuehren.bpmn` («Sitzungszimmer nachführen», von Hand gestartet) sucht jedes
+Raumpostfach mit der Kennzeichnung des Katalogs (`CustomAttribute1` = atlas-katalog,
+`CustomAttribute2` = m365-raum, mit `NAME_PREFIX` nur die mit diesem Präfix) und ruft ihn für jedes
+nacheinander auf, mit dem Standort aus `CustomAttribute4` und den Plätzen aus `ResourceCapacity`.
+So werden Räume repariert, die eingerichtet wurden, bevor die Bereitstellung die Raumliste
+selbst führte: einmal starten, und jeder Raum des Katalogs ist in der Raumliste seines Orts und
+hat seine Ortsangaben. Der Prozess darf beliebig oft laufen; er ergänzt nur, was fehlt.
+
+**Warum nicht über «Angaben ändern».** Das Sitzungszimmer hat getrennte Prozesse und keinen
+Lebenszyklus-Prozess, also keine Aktionen. «Angaben ändern» im Shop berichtigt die Angaben der
+Position und hält die Berichtigung fest; einen Prozess startet es nicht, und am Raumpostfach ändert
+es nichts (ADR-0359). Wer den Standort eines Raums ändern will, ändert `CustomAttribute4` des
+Postfachs und startet danach «Sitzungszimmer nachführen». Eine Raumliste, in der der Raum am alten
+Ort noch ist, verlässt er dabei nicht; das ist von Hand zu tun.
+
+**Berechtigung.** `Set-Place` braucht in Exchange Online die Rolle *Mail Recipients*; sie ist in
+den Rollen *Exchange-Empfängeradministrator* und *Exchange-Administrator* enthalten, die der
+Worker ohnehin hat. Raumlisten sind Verteilergruppen und brauchen nichts Zusätzliches.
 
 ## Gerät und Aufbewahrung
 
@@ -1056,7 +1236,7 @@ mit ihr. Die Capability-Landkarte gehört dem Server:
      ihn `"adminUrl"` im Bündel. `Sites.FullControl.All` gilt für alle Sites des Tenants; wer das
      nicht vergeben will, lässt es weg, und die Kontingente setzt weiter `M365-SharePoint`.
    - **Live-Prüfung der URL** im Bestellformular: Bei den drei Workern `ucc_entra`,
-     `ucc_sharepoint` und `ucc_exchange` in der Console den Schalter «formLookups»
+     `ucc_sharepoint` und `ucc_exchange` in der Console den Schalter «Forms may search» (`formLookups`)
      (Formular-Abfragen erlauben) einschalten. `ucc_exchange` ist dabei, weil die Gruppe der Site
      die Adresse `<url>@<Domain>` erhält und ein Funktionspostfach, ein Verteiler oder ein
      Kontakt sie schon tragen kann. Der SharePoint-Worker muss dafür als Worker Instance laufen
@@ -1095,6 +1275,7 @@ mit ihr. Die Capability-Landkarte gehört dem Server:
    | `LIZENZ_PRUEFINTERVALL` | `PT10M` | In den Gruppenmodi: wie lange der Prozess zwischen zwei Prüfungen wartet, ob die Lizenz aktiv ist (ISO-8601-Dauer) |
    | `LIZENZ_PRUEFUNGEN` | `18` | In den Gruppenmodi: wie oft er prüft, bevor `M365-Administration` die Aufgabe «Lizenz klären» erhält (18 × 10 Minuten = drei Stunden) |
    | `AD_DOMAIN_DN` | `DC=contoso,DC=ch` | Im Modus `ad-gruppe`: wo im AD das Konto der Person gesucht wird |
+   | `ORTSANGABEN` | `true` (Typ **json**) | Ob die Sitzungszimmer ihre Ortsangaben mit `Set-Place` erhalten (siehe «Sitzungszimmer in der Raumsuche»). `false` gegen einen Exchange Server, der kein `Set-Place` kennt |
    | `AD_LIZENZ_OU` | `OU=Lizenzen,OU=Gruppen,DC=contoso,DC=ch` | Im Modus `ad-gruppe`: die OU der Lizenzgruppen; der DN einer Gruppe ist `CN=<adGruppe>,<AD_LIZENZ_OU>` |
 6. **Die Liste «Site-Inventar»** auf der Site aus `SITE_INVENTAR`, von Hand angelegt, mit den
    Spalten `Title` (vorhanden), `Alias`, `SiteUrl`, `GroupId`, `Sprache` und `Position`
@@ -1239,7 +1420,10 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
 - **Sitzungszimmer** bestellt und zurückgegeben (Genehmigung durch die Rolle Facility-Management): Raumpostfach
   mit Präfix `RM`, `ResourceCapacity`, Buchungsregeln `AutoAccept`, keine Überschneidungen,
   180 Tage, Herkunftskennzeichnung mit dem Standort; die Rückgabe findet es über die
-  Kennzeichnung und entfernt es.
+  Kennzeichnung und entfernt es. Raumliste und Ortsangaben (`raumliste.bpmn`,
+  `raum-nachfuehren.bpmn`) sind aus der Dokumentation von Microsoft gebaut und noch nicht an
+  einem Tenant gelaufen; geprüft sind sie gegen die Operationstabelle des Workers und mit den
+  Tests unten.
 - **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
   zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
   (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).
@@ -1466,5 +1650,9 @@ jedes Formular ist vorhanden, jedes Bestellformular liefert nur Text (keine Zahl
 Checkboxen oder Mehrfachauswahlen), jede Antwort eines Bestellformulars ist als Personendatum
 deklariert oder als nicht personenbezogen markiert, jeder Platzhalter wird gefragt, und
 `atlas.json` nennt genau die Prozesse und Formulare dieses Verzeichnisses.
+Für die Sitzungszimmer rechnet `TestM365RoomListFollowsTheLocation` die Zerlegung des
+Standorts und den Namen der Raumliste nach, und `TestM365RoomsReachRoomFinderOnEveryPath` hält
+fest, dass Bereitstellung und Nachführung `proc_m365_raumliste` aufrufen und die Rückgabe den Raum
+vor dem Entfernen aus seinen Raumlisten nimmt.
 `go test ./api/layout` hält alle Diagramme an die Layout-Regeln (keine Überlappungen,
 keine Kreuzungen, Beschriftungen frei).
