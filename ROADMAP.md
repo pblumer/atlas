@@ -2525,7 +2525,7 @@ tests](docs/planning/capability-driven-automation-program.md) are the
 review checklist. Treat `Proposed`, `Partial`, `Merged`, and `Landed`
 as distinct states.
 
-## Milestone IOT — Device Automation 🔲
+## Milestone IOT — Device Automation 🚧
 
 A [delivery programme](docs/planning/device-automation-program.md) for IoT automation:
 a `device` Worker Type that drives outputs and turns physical inputs into messages, from
@@ -2534,15 +2534,17 @@ a Raspberry Pi hosting the server down to a microcontroller speaking the job pro
 is **Accepted / Not started**.
 
 - 🔲 **IOT0 — Decision and threat model.** The direction is decided; the threat model for a physically exposed device credential is open.
-- 🔲 **IOT1 — Linux outputs.** `digital.write`, `digital.read` and `pulse` in pure Go against the GPIO character device, outputs addressed by name, safe states and an on-duration watchdog enforced on the device.
+- 🚧 **IOT1 — Tasks drive a device.** `digital.write`, `digital.read` and `pulse` in pure Go against the GPIO character device, outputs addressed by name, safe states and an on-duration watchdog enforced on the device; the device core runs on a Pi Zero 2 W, the task wiring is next.
+- 🔲 **IOT10 — Adopt a device in the Console.** The device fetches its configuration and its own revocable token; the server never logs in to a device.
 - 🔲 **IOT2 — Inputs and the device token scope.** Debounced edges published as idempotent messages; a credential that reaches only the job protocol and the device's declared message names.
-- 🔲 **IOT3 — E-paper displays.** `display.show` with a declarative layout, rendered on the device, unchanged pictures skipped, a stale marker as the display's safe state.
+- 🚧 **IOT3 — E-paper displays.** The driver draws on the reference panel; next is `display.show` with a declarative layout, rendered on the device, unchanged pictures skipped, a stale marker as the display's safe state.
 - 🔲 **IOT4 — PWM, I2C and 1-Wire.**
 - 🔲 **IOT5 — Microcontroller client** and a protocol conformance suite.
 - 🔲 **IOT6 — Edge server on a Pi**, with measured sizing.
 - 🔲 **IOT7 — Coupling an edge Atlas with a central one**, on the cross-instance messaging of [ADR-0373](docs/adr/0373-published-process-interface.md), [ADR-0369](docs/adr/0369-cross-instance-message-addressing.md) and [ADR-0372](docs/adr/0372-peer-message-delivery-worker.md), none of it built yet.
 - 🔲 **IOT8 — People acting through a device**, decided with IAE.
 - 🔲 **IOT9 — MQTT bridge** for off-the-shelf devices (own ADR).
+- 🔲 **IOT11 — Signed software updates** for a fleet of devices (own ADR).
 
 ## Milestone CIM — Cross-instance messaging 🔲
 

@@ -46,15 +46,21 @@ I6).
 | Slice | Status | Depends on | Closure gate |
 |---|---|---|---|
 | **IOT0 — Decision and threat model** | 🚧 ADR accepted, threat model open | — | Threat model for a physically exposed device credential: theft, revocation, message flooding, replay of a captured request |
-| **IOT1 — Linux outputs** | 🚧 next | — | `device` Worker Type with `digital.write`, `digital.read`, `pulse`; outputs addressed by name; safe state at start and shutdown; on-duration watchdog on the device; pulse deduplicated by job key; tests against a fake chip; setup doc and handbook card; runs with the existing `worker` scope |
-| **IOT2 — Inputs and device scope** | 🔲 | IOT0, IOT1 | Edges and debounce publish messages with a stable `messageId`; `device` scope limited to declared message names; rate limit per token; negative tests for undeclared names |
-| **IOT3 — E-paper display** | 🔲 | IOT1 | `display.show` on one reference panel: layout resolved on lease, rasterised on the device, unchanged pictures skipped, refresh interval honoured, stale marker; no bitmap in a process variable |
+| **IOT1 — Tasks drive a device** (step a) | 🚧 increment 1 done | — | `device` Worker Type with `digital.write`, `digital.read`, `pulse`; outputs addressed by name; safe state at start and shutdown; on-duration watchdog on the device; pulse deduplicated by job key; tests against a fake chip; setup doc and handbook card; runs with the existing `worker` scope |
+| **IOT10 — Adopt a device in the Console** (step b) | 🔲 | IOT0, IOT1 | Pull, not push: generic image with a single-use enrolment code; pending device; adoption names it and states its wiring, creating the Worker; a device-scoped token bound to it; configuration fetched at start and on change; revocation in one action |
+| **IOT2 — Inputs and device scope** (step c) | 🔲 | IOT10 | Edges and debounce publish messages with a stable `messageId`; `device` scope limited to declared message names; rate limit per token; negative tests for undeclared names |
+| **IOT3 — E-paper display** (step d) | 🚧 driver done | IOT1 | `display.show` on one reference panel: layout resolved on lease, rasterised on the device, unchanged pictures skipped, refresh interval honoured, stale marker; no bitmap in a process variable |
 | **IOT4 — PWM, I2C, 1-Wire** | 🔲 | IOT1 | `pwm.set`, `i2c.read`/`i2c.write`, `onewire.read` against configured devices |
-| **IOT5 — Microcontroller client** | 🔲 | IOT1, IOT2 | MicroPython client for a Pico 2 W and a protocol conformance suite; measured TLS long-poll within the device's RAM |
+| **IOT5 — Microcontroller client** (step e, Pico W class) | 🔲 | IOT1, IOT10 | MicroPython client for a Pico 2 W and a protocol conformance suite; measured TLS long-poll within the device's RAM |
 | **IOT6 — Edge server on a Pi** | 🔲 | IOT1 | Measured sizing on Pi Zero W, Zero 2 W and Pi 5; example application; handbook |
 | **IOT7 — Edge and central coupling** | 🔲 | IOT6 | Builds on the cross-instance messaging already decided — ADR-0373 (published interface), ADR-0369 (address and envelope), ADR-0372 (peer delivery as a Worker job), ADR-0371 (Proposed) — none of which is built yet; IOT7 adds what an edge node may do while its peer is unreachable |
 | **IOT8 — People acting through a device** | 🔲 | IOT2, IOT3 | Decided with the [IAE programme](identity-aware-execution-program.md): to whom a button press is attributed before a device may complete human work |
 | **IOT9 — MQTT bridge** | 🔲 | IOT2 | Own ADR; a job completes on the effect, not on broker delivery |
+| **IOT11 — Signed software updates** | 🔲 | IOT10 | Own ADR: updates fetched, verified on the device, with a way back when one fails |
+
+### The owner's order (2026-11-05)
+
+a) tasks drive a device (IOT1), b) adoption in the Console (IOT10), c) inputs as events (IOT2), d) `display.show` (IOT3), e) the Pico W class (IOT5). Adoption is pull, not push: the device fetches its configuration and token; the server never logs in to a device.
 
 ### Why IOT1 comes first
 

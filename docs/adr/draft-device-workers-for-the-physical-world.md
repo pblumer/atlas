@@ -1,6 +1,6 @@
 # ADR-DRAFT: Device Workers — GPIO, buses, displays and inputs of the physical world
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-05: a device is adopted in the Console and fetches its configuration itself, see «Adoption»; the slices are reordered to the owner's delivery order)
 - **Implementation:** Partial
 - **Date:** 2026-11-05
 - **Deciders:** Atlas maintainers
@@ -185,6 +185,42 @@ A new token scope `device` reaches the job protocol routes of the `worker` scope
 declare. A stolen device can then work its own jobs and raise its own events, and
 nothing else. One token per device, revocable on its own.
 
+### Adoption: a device fetches what it is
+
+*Amendment, 2026-11-05, decided by the programme owner.* An operator picks a device in
+the Console and gives it a Worker. "Deploying a Worker" onto a device therefore means
+**assigning it a configuration**, never pushing software to it, and the device fetches
+that configuration itself, over the same outbound connection it leases jobs on.
+
+1. **One generic image per tier.** An SD-card image for the Linux tier, a firmware file
+   for a microcontroller. It carries the server's address and a short-lived,
+   single-use enrolment code, nothing else — no wiring, no long-lived credential.
+2. **The device introduces itself.** At first start it presents the code and describes
+   itself: model, serial, the GPIO chips and lines it has, the buses it found. The
+   server keeps it as a *pending device* in a design-time store; nothing about it is a
+   process event.
+3. **An operator adopts it.** In the Console the operator names it and states its
+   wiring — outputs, inputs, displays — which creates a Worker of type `device`. Only
+   then does the server issue the device its own token, of scope `device`, bound to
+   that one Worker. The device collects the token once, keeps it in a file only its
+   account can read, and the enrolment code is spent.
+4. **The device fetches its configuration** at start and whenever it changes. A new
+   wiring is applied between jobs: every output goes to its safe state, the lines are
+   released and claimed again as configured.
+5. **Revocation is one action.** A lost or stolen device is revoked in the Console; its
+   token stops working, and with it every job and message route it had.
+
+**Pushing from the server was weighed and rejected.** It would need the server to reach
+each device — through a home router or a site network it usually cannot — and to hold a
+login (SSH) for every device, so one leaked server credential opens every device. A
+microcontroller has no SSH at all. Fetching keeps every connection outbound and every
+credential on the device it belongs to.
+
+**Software is a separate matter.** Assigning a configuration never installs code. Updating
+the worker or the firmware on many devices needs signed updates the device verifies
+before it applies them, with a way back when one fails; that is its own slice and its
+own record.
+
 ### Safety that holds without Atlas
 
 - The device applies each output's safe state at start, at orderly shutdown, and
@@ -231,26 +267,32 @@ milliseconds to seconds and not bounded.
 
 ### Slices
 
-The order below is the delivery order. The `device` token scope was first in this
-record's draft; it moved behind the Linux outputs because its message allowlist refers
-to the inputs a device Worker declares, and that Worker is what the first slice
-creates. Outputs need nothing beyond today's `worker` scope.
+The order below is the delivery order the programme owner set on 2026-11-05. The
+`device` token scope was first in this record's draft; it moved behind the Linux
+outputs because its message allowlist refers to the inputs a device Worker declares,
+and that Worker is what the first slice creates. Outputs need nothing beyond today's
+`worker` scope.
 
 1. Linux tier: `digital.write`, `digital.read`, `pulse`, safe state and on-duration
-   watchdog, tested against a fake gpiochip.
-2. Inputs to messages (edges, debounce, `messageId`) together with the token scope
-   `device` and its message-name allowlist, after a threat model for physically
-   exposed credentials.
-3. `display.show` on the Linux tier for one reference e-paper panel on a Pi Zero:
-   layout, rasteriser, content hash, refresh interval, stale marker.
-4. `pwm.set`, `i2c.*`, `onewire.read`.
-5. Microcontroller reference client and the protocol conformance suite.
-6. Edge server on a Pi: sizing measured, an example application, the handbook card.
-7. Coupling an edge Atlas with a central one, on the cross-instance messaging that
+   watchdog, tested against a fake gpiochip — then the compiler element, the reserved
+   job type, the server's `device` kind and `atlas worker --connector device`, so a
+   task drives an output.
+2. Adoption: enrolment codes, pending devices, adopting one in the Console, the
+   `device` token scope bound to its Worker, the device fetching its configuration —
+   after a threat model for physically exposed credentials.
+3. Inputs to messages (edges, debounce, `messageId`), with the scope's message-name
+   allowlist.
+4. `display.show` on the Linux tier for the reference e-paper panel: layout,
+   rasteriser, content hash, refresh interval, stale marker.
+5. Microcontroller reference client (Pico W class) and the protocol conformance suite.
+6. `pwm.set`, `i2c.*`, `onewire.read`.
+7. Edge server on a Pi: sizing measured, an example application, the handbook card.
+8. Coupling an edge Atlas with a central one, on the cross-instance messaging that
    ADR-0373, ADR-0369 and ADR-0372 decide and that is not built yet.
-8. People acting through a device (a button that approves), decided with the
+9. People acting through a device (a button that approves), decided with the
    Identity-aware Execution programme.
-9. MQTT bridge for off-the-shelf devices, in its own record.
+10. Signed software updates for a fleet of devices, in their own record.
+11. MQTT bridge for off-the-shelf devices, in its own record.
 
 ## As built
 

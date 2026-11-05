@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-05",
   "plan": "../../planning/device-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-iot--device-automation-",
-  "next_action": "Review IOT1 increment 1 and the IOT3 driver on branch claude/focused-gauss-i29wni; then IOT1 increment 2: compiler element, reserved job type, server Worker kind and atlas worker --connector device, so a model drives an output and, after it, the display.",
+  "next_action": "IOT1 increment 2 (step a): the <atlas:deviceConnector> compiler element, reserved job type, worker-only device kind in the server and atlas worker --connector device, so a BPMN task switches an output on the reference Pi Zero 2 W; in parallel IOT0's threat model, which gates step b (adoption).",
   "slices": [
     {
       "id": "IOT0",
@@ -21,17 +21,17 @@
     },
     {
       "id": "IOT1",
-      "title": "Linux outputs: digital.write, digital.read, pulse",
+      "title": "Tasks drive a device: Linux outputs end to end",
       "status": "active",
       "owner": "pblumer",
       "depends_on": [],
       "issues": [],
       "prs": [],
-      "note": "First, because every later slice configures a device Worker and this slice creates it. Increment 1 on branch claude/focused-gauss-i29wni: connector/device and its catalog — named outputs with safe state, on-duration watchdog and pulse deduplication by job key, the GPIO v2 character-device ABI in pure Go with its layout pinned by test, a FakeChip; 98.4% statement coverage; the opt-in hardware test passed on the reference Pi Zero 2 W (gpiochip0 line 26) on 2026-11-05. Next increments: compiler element and reserved job type, server Worker kind and atlas worker --connector device; then Modeler, setup doc and handbook. Runs with today's worker token scope."
+      "note": "Step a of the owner's order (2026-11-05). Increment 1 done on branch claude/focused-gauss-i29wni: connector/device and its catalog — named outputs with safe state, on-duration watchdog, pulse deduplication by job key, the GPIO v2 character-device ABI in pure Go pinned by test, a FakeChip; 98.4% coverage; the opt-in hardware test passed on the reference Pi Zero 2 W (gpiochip0 line 26). Increment 2 next: the <atlas:deviceConnector> compiler element, the reserved job type, the server's worker-only device kind and atlas worker --connector device, with the wiring read on the device; runs with today's worker token scope."
     },
     {
-      "id": "IOT2",
-      "title": "Inputs to messages and the device token scope",
+      "id": "IOT10",
+      "title": "Adopt a device in the Console",
       "status": "planned",
       "owner": "unassigned",
       "depends_on": [
@@ -40,7 +40,19 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Edges and debounce on the device, POST /api/v1/messages with timeToLiveMs and a messageId of device id, boot id and counter; a device scope reaching the job protocol and only the message names the Worker's inputs declare."
+      "note": "Step b, decided by the owner on 2026-11-05 (pull, not push): a generic image or firmware with the server's address and a single-use enrolment code; the device introduces itself and waits as a pending device; an operator adopts it in the Console, names it and states its wiring, which creates the device Worker; the server issues a device-scoped token bound to that Worker; the device fetches its configuration at start and on change and applies it between jobs; revocation in one action. No SSH from the server."
+    },
+    {
+      "id": "IOT2",
+      "title": "Inputs to messages and the device token scope",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT10"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Step c: edges and debounce on the device, POST /api/v1/messages with timeToLiveMs and a messageId of device id, boot id and counter; the device scope's allowlist of the message names the Worker's inputs declare."
     },
     {
       "id": "IOT3",
@@ -52,7 +64,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Started ahead of its turn at the owner's request on 2026-11-05, a recorded exception to the limit of two active slices. Driver increment on branch claude/focused-gauss-i29wni: connector/device/epaper drives the Waveshare 2.13inch V2, V3 and V4 panels (register sequences restated from Waveshare's drivers and pinned by test), draws a 250×122 Frame with the Go fonts, and talks to the HAT through the device core's Chip and spidev; an opt-in hardware test (ATLAS_EPAPER_HW=<model>) draws a test picture. On the reference Pi Zero 2 W the V3 sequence drew the test picture and V2 left the panel blank (2026-11-05): the reference panel is waveshare-2in13-v3. Open: partial refresh, content hash, refresh interval, stale marker, the model's layout and display.show itself."
+      "note": "Started ahead of its turn at the owner's request on 2026-11-05, a recorded exception to the limit of two active slices. Driver increment on branch claude/focused-gauss-i29wni: connector/device/epaper drives the Waveshare 2.13inch V2, V3 and V4 panels (register sequences restated from Waveshare's drivers and pinned by test), draws a 250×122 Frame with the Go fonts, and talks to the HAT through the device core's Chip and spidev; an opt-in hardware test (ATLAS_EPAPER_HW=<model>) draws a test picture. On the reference Pi Zero 2 W the V3 sequence drew the test picture and V2 left the panel blank (2026-11-05): the reference panel is waveshare-2in13-v3. Step d of the owner's order for display.show itself. Open: partial refresh, content hash, refresh interval, stale marker, the model's layout and display.show itself."
     },
     {
       "id": "IOT4",
@@ -73,11 +85,11 @@
       "owner": "unassigned",
       "depends_on": [
         "IOT1",
-        "IOT2"
+        "IOT10"
       ],
       "issues": [],
       "prs": [],
-      "note": "MicroPython reference client for a Pico 2 W; a conformance suite any client can be run against. Settles the open question on TLS long-poll within the microcontroller's RAM and how that tier renders text."
+      "note": "Step e: a MicroPython reference client for the Pico W class (the owner has a Pico WH; a Pico 2 W has more memory), adopted like any device; a conformance suite any client can be run against. Settles TLS within the microcontroller's RAM and whether it verifies certificates, and renders text through a bitmap the server prepares on lease."
     },
     {
       "id": "IOT6",
@@ -127,6 +139,18 @@
       "issues": [],
       "prs": [],
       "note": "Own ADR. Broker QoS acknowledges delivery to the broker, not the effect; a request/response pattern is needed before a job may complete on it."
+    },
+    {
+      "id": "IOT11",
+      "title": "Signed software updates for a fleet",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IOT10"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Own ADR: worker binaries and firmware updated over the outbound connection, signed and verified on the device before they apply, with a way back when an update fails (an A/B image on a microcontroller); likely on atlas hub's signing."
     }
   ]
 }
