@@ -22,7 +22,8 @@ function installShop() {
     items: [
       item("android", "Android Smartphone", "Android smartphone",
         Object.assign({ descriptions: { de: "Diensttelefon mit Android.", en: "Company phone running Android." } }, work)),
-      item("android-hw", "Hardware Android", "Android hardware"),
+      item("android-hw", "Hardware Android", "Android hardware",
+        { descriptions: { de: "Das Gerät selbst.", en: "The device itself." } }),
       item("iphone", "Apple iPhone", "Apple iPhone", work),
     ],
     includes: { android: ["android-hw"] },
@@ -128,4 +129,16 @@ test("the bottom row stays in reach while a long page scrolls", async ({ page })
   // And it still answers there.
   await row.locator("button.primary").click();
   await expect(page.locator(".product-page")).toHaveCount(0);
+});
+
+test("a part in the scope opens its own description in a panel", async ({ page }) => {
+  await openProduct(page, "Android smartphone");
+  await page.locator(".product-page .page-side button.page-part", { hasText: "Android hardware" }).click();
+  const dialog = page.getByRole("dialog", { name: "Android hardware" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("The device itself.");
+  // Closing it leaves the reader on the product page.
+  await dialog.locator(".info-close").click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".product-page h2")).toHaveText("Android smartphone");
 });

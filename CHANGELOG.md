@@ -74,6 +74,11 @@ apart.
 - **Links stay valid across the upgrade.** An account that was never revoked is signed as
   before; only a revoke changes what its links are signed over.
 
+### Changed
+- **A part of a Marktleistung opens its description from the product page.** In the tile layout's product
+  page, each included or optional part listed under the scope is a button that opens the part's own
+  description in the same panel as the "i", over the page; closing it leaves the reader where they were.
+
 ### Fixed
 
 - **Only atlas's own deployment of a system process acts as one.** A model in any project
