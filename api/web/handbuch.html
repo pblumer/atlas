@@ -80,6 +80,8 @@ pre code{background:transparent;border:0;padding:0}
 kbd{font-family:ui-monospace,monospace;font-size:.82em;background:var(--card);
   border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px}
 
+.hb-module{display:inline-block;vertical-align:-5px;margin-right:8px}
+.hb-module svg{display:block}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
 /* When a runbook was last read against the real thing. A runbook names menu paths in
@@ -438,24 +440,26 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <h3 data-l="de">Die Apps im Überblick</h3><h3 data-l="en">The apps at a glance</h3>
       <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps. Das Menü zeigt nur,
         was deine <a href="#konten">Rolle</a> erreicht – wer keine Modelle bearbeiten darf, sieht Modeler,
-        Panorama und Data gar nicht erst.</p>
+        Panorama und Data gar nicht erst. Jede App hat ein eigenes Symbol in ihrer Farbe: dasselbe im
+        Menü, in der Kopfzeile neben dem Namen der offenen App und hier auf ihrer Karte.</p>
       <p data-l="en">Switch between the apps via the grid menu (⊞) in the top-left corner. The menu offers only
         what your <a href="#konten">role</a> reaches – somebody who may not edit models is not shown the Modeler,
-        Panorama or Data at all.</p>
+        Panorama or Data at all. Each app has a symbol of its own in its own colour: the same in the menu, in
+        the top bar beside the open app's name, and here on its card.</p>
       <div class="grid2">
-        <div class="card"><b>Console</b>
+        <div class="card"><span class="hb-module" data-module="console" aria-hidden="true"></span><b>Console</b>
           <p class="lead" data-l="de">Überblick über Deployments und Engine-Gesundheit – und die Stelle, an der
             <a href="#formulare">Worker</a> und ihre Zugangsdaten eingerichtet werden. Dein Startpunkt.</p>
           <p class="lead" data-l="en">Overview of deployments and engine health – and where
             <a href="#formulare">workers</a> and their credentials are configured. Your starting point.</p>
           <a class="applink" href="/#/console">→ Console</a></div>
-        <div class="card"><b>Modeler</b>
+        <div class="card"><span class="hb-module" data-module="modeler" aria-hidden="true"></span><b>Modeler</b>
           <p class="lead" data-l="de">BPMN- und DMN-Modelle im Browser zeichnen, im
             <a href="#playground">Playground</a> durchrechnen und deployen.</p>
           <p class="lead" data-l="en">Draw BPMN and DMN models in the browser, run them through the
             <a href="#playground">Playground</a>, and deploy them.</p>
           <a class="applink" href="/#/modeler">→ Modeler</a></div>
-        <div class="card"><b>Tasks</b>
+        <div class="card"><span class="hb-module" data-module="tasks" aria-hidden="true"></span><b>Tasks</b>
           <p class="lead" data-l="de">Der Posteingang für menschliche Aufgaben (User-Tasks) mit Formularen.
             Genehmigungen stehen hier ebenfalls, und sie werden hier auch entschieden: Eine Genehmigung ist eine
             User-Task. Die Zeile nennt das Produkt und die Kosten, die Detailansicht nennt Empfänger, Besteller
@@ -466,7 +470,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             names the recipient, the orderer and the order, and Approve or Reject sends the decision — with the
             reason a rejection needs.</p>
           <a class="applink" href="/#/tasks">→ Tasks</a></div>
-        <div class="card"><b>Shop</b>
+        <div class="card"><span class="hb-module" data-module="portal" aria-hidden="true"></span><b>Shop</b>
           <p class="lead" data-l="de">Der Shop: den eigenen Katalog durchsehen, etwas bestellen und
             sehen, wo eine Bestellung steht – bis hin zur Rückgabe. Eine eigene Seite, nicht Teil dieser
             Oberfläche, und sie trägt die Farben des Katalogs, dem man zugeordnet ist.</p>
@@ -474,7 +478,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             something, and see where an order stands – down to giving it back. A page of its own rather than a
             view of this shell, and it wears the brand of the catalogue you belong to.</p>
           <a class="applink" href="/shop.html">→ Shop</a></div>
-        <div class="card"><b>Catalogue</b>
+        <div class="card"><span class="hb-module" data-module="catalog" aria-hidden="true"></span><b>Catalogue</b>
           <p class="lead" data-l="de">Hier wird der Katalog gefüllt: Produkte erfassen, sie an
             die Prozesse binden, die sie bereitstellen und entziehen, festlegen was was enthält
             und was zuerst da sein muss – und veröffentlichen. Bis zur ersten Veröffentlichung
@@ -484,23 +488,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             to exist first – and publish. Until the first release the shop shows nobody
             anything.</p>
           <a class="applink" href="/#/catalog">→ Catalogue</a></div>
-        <div class="card"><b>Operations</b>
+        <div class="card"><span class="hb-module" data-module="operations" aria-hidden="true"></span><b>Operations</b>
           <p class="lead" data-l="de">Laufende Instanzen beobachten, Incidents lösen, Entscheidungen prüfen.</p>
           <p class="lead" data-l="en">Watch running instances, resolve incidents, inspect decisions.</p>
           <a class="applink" href="/#/operations">→ Operations</a></div>
-        <div class="card"><b>Panorama</b>
+        <div class="card"><span class="hb-module" data-module="panorama" aria-hidden="true"></span><b>Panorama</b>
           <p class="lead" data-l="de">Die <a href="#panorama">Landschaft</a>: welche Prozesse, Worker und
             Entscheidungen es gibt und wie sie zusammenhängen – abgeleitet aus dem, was deployt ist.</p>
           <p class="lead" data-l="en">The <a href="#panorama">landscape</a>: which processes, workers and
             decisions exist and how they hang together – derived from what is actually deployed.</p>
           <a class="applink" href="/#/panorama/starmap">→ Panorama</a></div>
-        <div class="card"><b>Data</b>
+        <div class="card"><span class="hb-module" data-module="data" aria-hidden="true"></span><b>Data</b>
           <p class="lead" data-l="de">Das <a href="#infomodell">Informationsmodell</a>: was ein «Auftrag» in
             deiner Landschaft <i>ist</i> – als UML-Klassendiagramm über allen Prozessen einer Applikation.</p>
           <p class="lead" data-l="en">The <a href="#infomodell">information model</a>: what an "order"
             <i>is</i> in your landscape – a UML class diagram above every process of an application.</p>
           <a class="applink" href="/#/data">→ Data</a></div>
       </div>
+
+      <script type="module">import { moduleSymbol } from "./module-icons.js";
+        // Each card's symbol, drawn from the Console's own table of them (module-icons.js),
+        // so the handbook shows what the drawer and the top bar show and keeps no copy.
+        for (const el of document.querySelectorAll("#willkommen [data-module]")) el.innerHTML = moduleSymbol(el.dataset.module, 22);
+      </script>
 
       <div id="systemuebersicht" style="scroll-margin-top:66px"></div>
       <h3 data-l="de">Systemübersicht: wie atlas gebaut ist</h3>
