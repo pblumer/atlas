@@ -1,4 +1,4 @@
-package worker
+package workersdk
 
 import (
 	"context"
@@ -63,8 +63,11 @@ func Authorize(ctx context.Context) (*Authorization, error) {
 	return ask(ctx)
 }
 
-// withAuthorizer puts the question for j within reach of its handler.
-func (w *Worker) withAuthorizer(ctx context.Context, j Job) context.Context {
+// AuthorizingContext puts the question for j within reach of its handler: [Authorize]
+// called with the context it returns asks the server about j. The worker does this for
+// every job it runs; it is exported so a handler run outside the poll loop — in a
+// Worker Type's own test — can be asked the same way.
+func (w *Worker) AuthorizingContext(ctx context.Context, j Job) context.Context {
 	return context.WithValue(ctx, authorizerKey{}, func(ctx context.Context) (*Authorization, error) {
 		var out Authorization
 		var header http.Header

@@ -1,9 +1,9 @@
 # ADR-DRAFT: Worker Types are signed artifacts that atlas launches and atlas hub distributes
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-11-05
-- **Deciders:** pblumer (maintainer)
+- **Deciders:** pblumer (maintainer; approval to implement on 2026-11-05)
 - **Open question:** under which licence the Worker SDK and the protocol specification are
   published, and whether a Worker Type that links an AGPL-3.0-only SDK and is distributed
   through atlas hub must itself be AGPL. The licence of the SDK decides whether commercial
@@ -263,6 +263,15 @@ interval and at every start.
 one and the Console shows whether it does. This is evidence, not a gate, until a later
 record makes it one.
 
+**What the registry signature attests.** Under ADR-0499 a known publisher is *attested
+by the registry operator*. For a Blueprint that is harmless; for executable code with
+access to production credentials it means the operator of the public atlas hub vouches
+for code somebody else wrote. Whether that attestation stands for a review, an automated
+scan, a verified publisher identity or nothing beyond listing is a product and liability
+decision this record does not take. **No third-party Worker Type is listed in the public
+atlas hub before a separate record decides it.** First-party and organisation-internal
+registries are not affected: their operator vouches for their own code.
+
 ### 8. Trust policy per installation
 
 The operator decides, per installation:
@@ -379,6 +388,19 @@ Configured Workers move to the Worker record of ADR-0208 with `workerTypeId` and
 - Bad: the real Worker Types need sockets, database drivers, certificate stores and
   PowerShell, which WASI covers poorly or not at all; third-party code in the engine
   process contradicts ADR-0203 and ADR-0208.
+
+## As built
+
+**2026-11-05 — step 1, first slice.** The protocol client (`worker.go`, `query.go`,
+`authorize.go`) moved from package `worker` to a new package `workersdk`. It imports no
+engine package; `TestTheSDKImportsNothingOfTheEngine` walks its imports transitively and
+admits only `logging` and `connector/lookup`, both leaves and both still to be removed
+before `workersdk` becomes a module of its own. `BPMNError` is now defined in `workersdk`
+and `job.BPMNError` is an alias of it; the retry policy is restated in
+`workersdk.DefaultRetryBackoff` and held equal to `job.DefaultRetryBackoff` by a test.
+Package `worker` keeps every old name as an alias. Not yet done in step 1: its own Go
+module, the language-neutral protocol contract, the handshake, and moving the built-in
+Worker Types off the engine packages they still import (`job`, `compiler`, `expr`, `dmn`).
 
 ## Links
 

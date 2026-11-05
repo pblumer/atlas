@@ -126,6 +126,12 @@ apart.
   before; only a revoke changes what its links are signed over.
 
 ### Changed
+- **The Worker protocol client is its own package, free of the engine.** Leasing, completing,
+  failing and throwing a job, answering form lookups and asking before acting now live in
+  `workersdk`, which imports nothing of the engine — not `job`, not `state`, so not the storage
+  engine either — and a test holds it to that. It is the first step of the Worker SDK that Worker
+  Types built outside this repository will depend on. Package `worker` keeps every old name as an
+  alias, so `atlas worker` and code written against `worker.New` behave as before.
 - **A part of a Marktleistung opens its description from the product page.** In the tile layout's product
   page, each included or optional part listed under the scope is a button that opens the part's own
   description in the same panel as the "i", over the page; closing it leaves the reader where they were.

@@ -1,4 +1,4 @@
-package worker
+package workersdk
 
 import (
 	"bytes"
@@ -65,7 +65,7 @@ func answerJSON(status int, body string) http.HandlerFunc {
 func askFor(t *testing.T, opts Options, j Job) (*Authorization, error) {
 	t.Helper()
 	w := New(opts)
-	return Authorize(w.withAuthorizer(context.Background(), j))
+	return Authorize(w.AuthorizingContext(context.Background(), j))
 }
 
 const permitWithCredential = `{"enforcement":"enforce","permitted":true,"enforced":true,

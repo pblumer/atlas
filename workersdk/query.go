@@ -1,4 +1,4 @@
-package worker
+package workersdk
 
 import (
 	"context"
