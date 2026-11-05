@@ -56,6 +56,14 @@ _Changed_ / _Removed_ for each version.
   grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
+### Fixed
+- **The top bar stays in view while a page scrolls.** In every app the bar with the app
+  switcher, the view names and the account menu disappeared after a little less than one
+  window of scrolling: it is sticky, a sticky bar only sticks inside its parent, and the
+  page's body was held to exactly the window's height. The body now grows with its
+  content and is at least the window's height, so the bar stays at the top of the window
+  however far a page scrolls.
+
 ## [0.23.1] — 2026-11-05
 
 **A security release: upgrade every installation on which somebody who is not an

@@ -470,8 +470,14 @@
 * { box-sizing: border-box; }
 /* An id/class `display` rule outranks the UA [hidden] rule; restore it explicitly. */
 [hidden] { display: none !important; }
-html, body { height: 100%; }
+/* The body grows with its content and is at least the window's height. It must not
+   be held to exactly the window (`height: 100%`): the top bar is sticky, a sticky box
+   only sticks inside its parent, and a body one window tall carried the bar out of
+   sight after a little less than one window of scrolling. The full-height views
+   (.editor, the information model) size themselves from the viewport, not the body. */
+html { height: 100%; }
 body {
+  min-height: 100%;
   margin: 0;
   font: 14px/1.5 var(--font-sans);
   color: var(--text);
