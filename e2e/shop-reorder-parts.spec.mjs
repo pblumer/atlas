@@ -130,14 +130,16 @@ test("my services offers what a held bundle is missing, and the basket takes it"
   // The iPhone lacks its hardware and its case, so it opens what it lacks.
   await page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first().locator("button.label").click();
   const col = page.locator(".cascade > .col:nth-child(4)");
-  // Only what it lacks: "My services" lists no service it holds.
-  await expect(col.locator(".colhead")).toHaveText(["Not held"]);
-  await expect(col.locator(".cell .label")).toHaveText(["Apple iPhone hardware", "Smartphone case"]);
+  // Only what it lacks, in the entry's details: "My services" lists no service
+  // it holds as an offer.
+  await expect(col.locator(".colhead")).toHaveText(["Details"]);
+  await expect(col.locator(".svc-lacking .svc-offer")).toHaveText(["Apple iPhone hardware", "Smartphone case"]);
   // Both are offers: the hardware because it was given back, the case because it
   // was never taken.
-  await serviceRow(page, "Apple iPhone hardware").locator("button.sq").first().click();
-  await serviceRow(page, "Smartphone case").locator("button.sq").first().click();
-  await expect(serviceRow(page, "Smartphone case").locator("button.sq").first()).toHaveAttribute("aria-pressed", "true");
+  const offer = (name) => col.locator(".svc-offer", { hasText: name }).locator("button.sq").first();
+  await offer("Apple iPhone hardware").click();
+  await offer("Smartphone case").click();
+  await expect(offer("Smartphone case")).toHaveAttribute("aria-pressed", "true");
   // The way on to the basket is on this screen, not only in the catalogue.
   await page.getByRole("button", { name: /Add to basket.*\(2\)/ }).click();
   await page.getByRole("button", { name: /order >/ }).click();
@@ -148,9 +150,11 @@ test("my services offers what a held bundle is missing, and the basket takes it"
 
 test("a bundle held whole offers nothing extra in my services", async ({ page }) => {
   await open(page, "My services");
-  // Held whole, it lacks nothing, so it opens nothing and no fourth column appears.
-  await expect(page.locator(".cascade .cell", { hasText: "Internal user account" }).locator("button.label")).toHaveCount(0);
-  await expect(page.locator(".cascade > .col")).toHaveCount(3);
+  // Held whole, it lacks nothing: opened, its details offer nothing to add.
+  await page.locator(".cascade .cell", { hasText: "Internal user account" }).locator("button.label").click();
+  await expect(page.locator(".cascade > .col")).toHaveCount(4);
+  await expect(page.locator(".svc-detail")).toBeVisible();
+  await expect(page.locator(".svc-detail .svc-lacking")).toHaveCount(0);
 });
 
 // Ordered again and not yet provisioned is not held, but it is coming: offering it a
@@ -165,5 +169,5 @@ test("a part already ordered again is not offered a second time", async ({ page 
   await expect(hw).toBeDisabled();
   // "My services" opens on the product the catalogue stands at.
   await page.getByRole("button", { name: "My services", exact: true }).click();
-  await expect(page.locator(".cascade > .col:nth-child(4) .cell .label")).toHaveText(["Smartphone case"]);
+  await expect(page.locator(".cascade > .col:nth-child(4) .svc-lacking .svc-offer")).toHaveText(["Smartphone case"]);
 });

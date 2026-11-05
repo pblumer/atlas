@@ -101,11 +101,13 @@ test("my services are a cascade, read like the catalogue", async ({ page }) => {
   await page.getByRole("button", { name: "Personal account", exact: true }).click();
   expect(await column(page, 3)).toEqual(["Internal user account"]);
 
-  // A Marktleistung is not a way into its parts: the case and the hardware are
-  // counted in the phone's light, not listed.
+  // A Marktleistung opens its details, not a column of its parts: the case and the
+  // hardware are counted in the phone's pie, and held whole it offers nothing.
   await page.getByRole("button", { name: "All", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Apple iPhone", exact: true })).toHaveCount(0);
-  await expect(page.locator(".cascade")).not.toContainText("Smartphone case");
+  await page.getByRole("button", { name: "Apple iPhone", exact: true }).click();
+  await expect(page.locator(".cascade > .col:nth-child(4) .colhead")).toHaveText("Details");
+  await expect(page.locator(".cascade .cell", { hasText: "Smartphone case" })).toHaveCount(0);
+  await expect(page.locator(".svc-detail .svc-lacking")).toHaveCount(0);
   expect(await page.evaluate(() => window.__unmatched)).toEqual([]);
 });
 

@@ -44,7 +44,8 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 	// And the view takes that answer rather than keeping its own reading beside it.
 	// Held by the region and not the file: the catalogue's columns legitimately read
 	// both fields, so a file-wide search proves nothing here.
-	view := webRegion(t, src, "function renderServices(", "\n}")
+	// The cascade of "My services" — the view with the two columns.
+	view := webRegion(t, src, "function renderServicesCascade(", "\n}")
 	// The column head is looked up by a key that ends in the field's own name, so a
 	// bare search for the field also matches the label. Blind it out, or the guard
 	// can never go green.
@@ -63,8 +64,8 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 	// listed under its product), and the group column from those of them under the
 	// heading chosen — the cascade the catalogue draws, read over what this person
 	// holds.
-	for _, want := range []string{"headingsHeld(rel, by, offerings, 'category')",
-		"headingsHeld(rel, by, inCat, 'productGroup')"} {
+	for _, want := range []string{"headingsHeld(rel, by, ids, 'category')",
+		"headingsHeld(rel, by, inCat.map((x) => x.e.id), 'productGroup')"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the services view does not build a column with %s, so this guard "+
 				"has lost its subject", want)

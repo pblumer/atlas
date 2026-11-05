@@ -235,21 +235,24 @@ test("an order is a card on a phone, and its task is answered inside it", async 
   page._errors = errors;
   await page.addInitScript(installOrders, FORM);
   await page.goto("/shop.html");
-  await page.getByRole("button", { name: "My orders" }).click();
-  await expect(page.getByText("ord_own")).toBeVisible({ timeout: 10000 });
-
-  // The column heads are gone and every cell names itself.
-  await expect(page.locator(".table.orders thead tr:not(.filters)")).toBeHidden();
+  // The order waiting on the reader's task is somebody else's: "My services" says
+  // so and leads to it, one column at a time on a phone.
+  await page.getByRole("button", { name: "My services" }).click();
+  await page.getByRole("button", { name: "Show" }).click();
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await page.getByRole("button", { name: "All groups" }).click();
+  await page.locator(".cell", { hasText: "For" }).filter({ visible: true }).locator("button.label").first().click();
+  await expect(page.getByText("ord_held")).toBeVisible({ timeout: 10000 });
   expect(await overflowing(page)).toEqual([]);
 
   await page.locator('li[data-task="22"]').getByRole("button", { name: "Work on it" }).click();
   const panel = page.locator('li[data-task="22"] .cfg');
   await expect(panel.getByLabel("Genehmigen")).toBeVisible({ timeout: 10000 });
-  // The checkbox is a checkbox: the table's field rule once stretched it across
-  // the cell and pushed its label off the card.
+  // The checkbox is a checkbox: a field rule once stretched it across the cell
+  // and pushed its label off the card.
   const box = await panel.getByLabel("Genehmigen").boundingBox();
   expect(box.width).toBeLessThan(40);
-  const card = await page.locator("tr", { hasText: "ord_held" }).boundingBox();
+  const card = await page.locator(".svc-order-block", { hasText: "ord_held" }).boundingBox();
   const label = await panel.locator("label", { hasText: "Genehmigen" }).boundingBox();
   expect(label.x + label.width).toBeLessThanOrEqual(card.x + card.width);
   expect(await overflowing(page)).toEqual([]);
