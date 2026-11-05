@@ -1,4 +1,4 @@
-# ADR-DRAFT: Device Workers — GPIO, buses and inputs of the physical world
+# ADR-DRAFT: Device Workers — GPIO, buses, displays and inputs of the physical world
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -8,12 +8,16 @@
   ARMv6, 512 MB) — resident memory, TLS long-poll cost, start time — and whether a
   MicroPython client on a Pico 2 W can hold a TLS long-poll against the job protocol
   within its RAM. Neither is measured; the tier boundaries below rest on that gap.
+  Also unsettled: whether a maintained pure-Go driver exists for the first reference
+  e-paper panel, or whether Atlas writes and keeps one; refresh limits are taken from
+  the panel's data sheet, not verified on hardware.
 - **Question checked:** 2026-11
 
 ## Context and problem statement
 
 Atlas should address IoT automation as an audience: a process that switches a relay,
-opens a valve, drives a motor or a LED, reads a sensor, and is started or continued
+opens a valve, drives a motor or a LED, shows a status on a small display — an
+e-paper HAT on a Pi Zero is the first case asked for — reads a sensor, and is started or continued
 by something that happens in the physical world — a button, a door contact, a
 temperature crossing a threshold.
 
@@ -87,6 +91,8 @@ A **Worker** of type `device` is one physical device (`pi-gewaechshaus`,
 - **Outputs:** name, pin or bus address, kind (digital, PWM), the **safe state**
   applied at start and on shutdown, and an optional **maximum on-duration** the device
   enforces itself.
+- **Displays:** name, panel model (which selects the driver), bus and control pins,
+  orientation, and the minimum interval between refreshes.
 - **Inputs:** name, pin, edge, debounce, and the **message name** and correlation-key
   template a change publishes.
 
@@ -103,8 +109,48 @@ Operations, first set:
 | `pwm.set` | set duty cycle and frequency | yes |
 | `i2c.read` / `i2c.write` | read or write registers of a configured bus device | write depends on the target |
 | `onewire.read` | read a configured 1-Wire sensor (e.g. DS18B20) | yes |
+| `display.show` | draw a layout on a named display | yes — skipped when the content is unchanged |
 
-SPI and UART follow when a concrete use asks for them.
+SPI is needed by the display drivers and is implemented with them, but is not an
+operation a model calls: a model that sends bytes to a panel controller is wiring
+knowledge in the wrong place. UART follows when a concrete use asks for it.
+
+### Displays
+
+A display is an output whose state is a picture. Three properties of e-paper decide
+how `display.show` behaves:
+
+- **The picture survives power loss.** That is the point of e-paper, and its danger:
+  a dead device keeps showing the last state as if it were current. The device
+  therefore draws a "as of" time into every picture itself, and redraws a stale
+  marker when it has lost the server for longer than its configured interval. This is
+  the display's safe state, enforced on the device like an output's on-duration.
+- **A refresh is slow and wears the panel.** A full refresh takes seconds and the
+  data sheets state a minimum interval and periodic full refreshes against ghosting.
+  The device hashes the rendered picture and skips a refresh that would show the same
+  one — which also makes a re-leased job harmless — and honours the minimum interval
+  by drawing the newest content when it is due. The job completes once the panel
+  reports the refresh finished, not when the bytes were sent.
+- **One screen, many writers.** Several process instances may address one display.
+  The first slice gives the whole display one layout, last write wins; named regions
+  that different processes own come later if use asks for them.
+
+**What travels.** The model states a small declarative layout: text lines with size
+and alignment, a QR code, a progress bar, one of a fixed set of icons. Its values may
+be FEEL or a feelers template (ADR-0487); the server resolves them into plain values
+when it leases the job, as for every Worker Type that runs on a worker (ADR-0168).
+The device lays out and rasterises: on the Linux tier in Go with an embedded font
+that covers Umlauts. A picture is never a process variable — a bitmap in a variable
+would be written into the log with every change.
+
+Rasterising on a microcontroller is the open part: MicroPython's built-in text
+rendering does not cover Umlauts. Whether that tier rasterises with its own font or
+receives a bitmap rendered for it on lease is decided in the microcontroller slice.
+
+Panels differ by controller and each needs its own initialisation; "e-paper" is not
+one driver. Atlas supports a named list of panel models, starting with one reference
+panel, and a display whose model is not on the list is refused when the Worker is
+configured rather than when a job reaches it.
 
 ### Tiers
 
@@ -189,10 +235,12 @@ milliseconds to seconds and not bounded.
 3. Linux tier: `digital.write`, `digital.read`, `pulse`, safe state and on-duration
    watchdog, tested against a fake gpiochip.
 4. Inputs to messages: edges, debounce, `messageId`.
-5. `pwm.set`, `i2c.*`, `onewire.read`.
-6. Microcontroller reference client and the protocol conformance suite.
-7. Edge server on a Pi: sizing measured, an example application, the handbook card.
-8. MQTT bridge for off-the-shelf devices, in its own record.
+5. `display.show` on the Linux tier for one reference e-paper panel on a Pi Zero:
+   layout, rasteriser, content hash, refresh interval, stale marker.
+6. `pwm.set`, `i2c.*`, `onewire.read`.
+7. Microcontroller reference client and the protocol conformance suite.
+8. Edge server on a Pi: sizing measured, an example application, the handbook card.
+9. MQTT bridge for off-the-shelf devices, in its own record.
 
 ## Pros and cons of the options
 
@@ -220,5 +268,6 @@ milliseconds to seconds and not bounded.
 - relates to [ADR-0203](0203-worker-execution-model.md) (Worker Type, Worker, Worker Instance)
 - relates to [ADR-0007](0007-job-worker-protocol.md), [ADR-0157](0157-worker-processes-supervision-and-console.md), [ADR-0168](0168-connector-work-on-a-worker.md)
 - relates to [ADR-0020](0020-message-correlation.md), [ADR-0035](0035-message-start-events.md), [ADR-0370](0370-durable-message-buffer.md)
+- relates to [ADR-0487](0487-mail-templates.md) (feelers templates for display text)
 - relates to [ADR-0010](0010-go-and-no-cgo.md), [ADR-0011](0011-single-binary-distribution-and-web-ui.md)
 - relates to [ADR-0289](0289-worker-type-setup-in-the-panel.md), [ADR-0167](0167-released-connectors-ship-in-the-marketplace.md) (what a new Worker Type owes)
