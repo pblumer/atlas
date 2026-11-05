@@ -1,7 +1,7 @@
 # ADR-DRAFT: Device Workers — GPIO, buses, displays and inputs of the physical world
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-11-05
 - **Deciders:** Atlas maintainers
 - **Open question:** How `atlas worker` behaves on the smallest Linux target (Pi Zero W,
@@ -250,6 +250,26 @@ creates. Outputs need nothing beyond today's `worker` scope.
 8. People acting through a device (a button that approves), decided with the
    Identity-aware Execution programme.
 9. MQTT bridge for off-the-shelf devices, in its own record.
+
+## As built
+
+IOT1, first increment — the device core, not yet reachable from a model:
+
+- `connector/device/catalog` — the operation table (`digital.write`, `digital.read`,
+  `pulse`), the name rule for lines and the pulse bounds a deploy and a run share.
+- `connector/device` — `Config` (chip, named outputs with `activeLow`, `safe` and
+  `maxOnMs`, named inputs with `bias`), `Open`/`Write`/`Read`/`Pulse`/`Safe`/`Close`
+  and `Execute` for a resolved job; outputs claimed already in their safe state, the
+  watchdog, pulse deduplication by job key (in memory, 4096 keys), and `RefusedError`
+  for a job no retry can fix.
+- The GPIO character device's v2 ABI laid out by hand (`cdev.go`), because Go aligns
+  64-bit fields to 4 bytes on 32-bit ARM and the kernel to 8; the layout and ioctl
+  numbers are pinned by test. The system call is exercised only against a file that
+  refuses it; the success path has not run on hardware yet.
+- `FakeChip`, for the tests and for a mock mode of the worker.
+
+Not yet: the compiler element, the reserved job type, the Worker kind in the server,
+`atlas worker --connector device`, the Modeler, the setup doc and the handbook card.
 
 ## Pros and cons of the options
 

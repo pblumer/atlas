@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-05",
   "plan": "../../planning/device-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-iot--device-automation-",
-  "next_action": "Review and merge the programme registration with ADR-draft-device-workers-for-the-physical-world (Accepted by the owner on 2026-11-05); then IOT1: the device Worker Type with digital.write, digital.read and pulse on the Linux tier, safe state and on-duration watchdog, tested against a fake gpiochip.",
+  "next_action": "Review the device core (IOT1 increment 1) with the programme registration; then IOT1 increment 2: the <atlas:deviceConnector> compiler element and reserved job type, the device Worker kind in the server, and atlas worker --connector device with a mock chip, so a model drives a relay end to end.",
   "slices": [
     {
       "id": "IOT0",
@@ -27,7 +27,7 @@
       "depends_on": [],
       "issues": [],
       "prs": [],
-      "note": "First, because every later slice configures a device Worker and this slice creates it. Pure Go against the GPIO character device (no sysfs, no cgo); safe state at start and shutdown, on-duration watchdog on the device, pulse deduplicated by job key; tested against a fake chip. Runs with today's worker token scope: outputs need no message route."
+      "note": "First, because every later slice configures a device Worker and this slice creates it. Increment 1 on branch claude/focused-gauss-i29wni: connector/device and its catalog — named outputs with safe state, on-duration watchdog and pulse deduplication by job key, the GPIO v2 character-device ABI in pure Go with its layout pinned by test, a FakeChip; 98.4% statement coverage, the ioctl success path not yet run on hardware. Next increments: compiler element and reserved job type, server Worker kind and atlas worker --connector device; then Modeler, setup doc and handbook. Runs with today's worker token scope."
     },
     {
       "id": "IOT2",

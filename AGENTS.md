@@ -175,6 +175,7 @@ connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)
 connector/script/      Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
 connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
+connector/device/      A device's GPIO outputs and inputs, by name, with safe states enforced on the device (ADR-draft-device-workers-for-the-physical-world)
 ```
 
 Adding a Worker Type is one package here plus one `managedConnectorKind` entry in
