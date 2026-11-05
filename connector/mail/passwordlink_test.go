@@ -24,7 +24,7 @@ type pwDirectory struct {
 
 func (*pwDirectory) Recipients(string) ([]string, error) { return nil, nil }
 
-func (d *pwDirectory) PasswordLink(processID, username string, to, _, _ []string) (string, error) {
+func (d *pwDirectory) PasswordLink(_ uint64, processID, username string, to, _, _ []string) (string, error) {
 	d.process, d.account, d.to = processID, username, to
 	return d.link, d.err
 }

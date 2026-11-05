@@ -144,16 +144,24 @@ func (o *Outbox) Clear() {
 // must not keep — a password link (ADR-0526).
 const WithheldText = "[password link withheld by the preview]"
 
-// withheld returns m with every string it must not keep replaced, in the subject and
-// both bodies, before it is framed — so the raw message does not carry it either.
+// withheld returns m without anything it must not keep, before it is framed — so the
+// raw message does not carry it either. A message that carried a password link keeps
+// its envelope and loses its subject and both bodies whole: the model wrote them, and
+// a model can put the link in pieces, reversed or encoded where no search for the
+// link itself would find it, for an operator reading the outbox to put together.
 func withheld(m Message) Message {
+	carried := false
 	for _, s := range m.Withhold {
-		if s == "" {
-			continue
+		if s != "" {
+			carried = true
+			break
 		}
-		m.Subject = strings.ReplaceAll(m.Subject, s, WithheldText)
-		m.Body = strings.ReplaceAll(m.Body, s, WithheldText)
-		m.HTML = strings.ReplaceAll(m.HTML, s, WithheldText)
+	}
+	if carried {
+		m.Subject, m.Body = WithheldText, WithheldText
+		if m.HTML != "" {
+			m.HTML = WithheldText
+		}
 	}
 	m.Withhold = nil
 	return m

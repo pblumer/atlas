@@ -123,7 +123,7 @@ type AnswerLinker interface {
 // only to the account's own address with nobody beside it. A [Directory] that can
 // implements it.
 type PasswordLinker interface {
-	PasswordLink(processID, username string, to, cc, bcc []string) (string, error)
+	PasswordLink(processDefKey uint64, processID, username string, to, cc, bcc []string) (string, error)
 }
 
 // DocumentStore puts a document into an object store a named Worker reaches. It is how
@@ -258,7 +258,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 			return Job{Connector: cp.Intern(detail.Connector), MessageID: strconv.FormatUint(jobKey, 10),
 				ResolveError: fmt.Sprintf("mail: this task carries the password link of %q, and nothing here mints password links", username)}, nil
 		}
-		link, err := linker.PasswordLink(cp.ProcessId(), username, to, cc, bcc)
+		link, err := linker.PasswordLink(ei.ProcessDefKey, cp.ProcessId(), username, to, cc, bcc)
 		if err != nil {
 			return Job{Connector: cp.Intern(detail.Connector), MessageID: strconv.FormatUint(jobKey, 10),
 				ResolveError: fmt.Sprintf("mail: the password link of %q: %v", username, err)}, nil

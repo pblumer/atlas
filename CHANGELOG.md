@@ -49,6 +49,52 @@ _Changed_ / _Removed_ for each version.
   grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
+## [0.23.1] — 2026-11-05
+
+**A security release: upgrade every installation on which somebody who is not an
+administrator may deploy.** A model that took the process id of an atlas system process
+was started in its place and acted with its rights, so an account with the modeler role
+could make itself an administrator. Revoking a password brought back the activation links
+of the week before, and the preview outbox showed a password link that a model had cut
+apart.
+
+**Read this before upgrading from 0.23.0.**
+
+- **Look for copies of system processes.** At startup the server warns
+  `deployment.took_system_process_id` for every definition outside the system project that
+  carries the id of a system process (`proc_benutzer_aufnahme`, `proc_passwort_link`,
+  `proc_benutzer_offboarding`, `proc_benutzer_review`, `atlas-auftrag-erfuellung`,
+  `atlas-genehmigung-*`). Such a copy no longer acts as one, but an earlier version ran it
+  with the system process's rights: check who deployed it (`deployedBy`), which accounts
+  it created or changed, and delete it. With none, the server says nothing.
+- **A deploy under a system process id is refused** with 403 outside the system project,
+  through every door: a deploy, a project or application publish, an import.
+- **The preview outbox keeps only the envelope of a mail that carried a password link.**
+  Its subject and both bodies read "[password link withheld by the preview]".
+- **Links stay valid across the upgrade.** An account that was never revoked is signed as
+  before; only a revoke changes what its links are signed over.
+
+### Fixed
+
+- **Only atlas's own deployment of a system process acts as one.** A model in any project
+  could take the id of a system process, became its newest version and was started in its
+  place — for a forgotten password, a registration, an order — with the rights the
+  platform keeps for it: provisioning accounts, minting password links, speaking under an
+  atlas.* event. A process id of a system process is now deployed into the system project
+  or not at all, every check of those rights asks whether the deployment is the system
+  project's rather than what its process is called, "the" system process is looked up in
+  the system project alone, and a copy deployed before may be deleted (ADR-0122, amended).
+- **Revoking a password kills the links sent before it.** A revoke returned the account to
+  the empty hash an activation link had been signed over, so the account's activation
+  link of the past seven days — used or not — opened it again. A password link is now also
+  signed over the number of revokes the account has seen (ADR-0526, amended).
+- **The preview outbox withholds a password link however the model wrote it.** It replaced
+  only the link as minted, so a model that put the link in pieces left it readable to an
+  operator. A mail that carried a link now keeps its envelope and loses its subject and
+  bodies (ADR-0526, amended).
+- **The pages a link opens cannot be framed.** `/public/password` and `/public/answer` send
+  `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`.
+
 ## [0.23.0] — 2026-11-04
 
 **A password is set by its owner, never typed by an administrator or mailed.** Registration
@@ -18021,7 +18067,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/pblumer/atlas/compare/v0.20.0...v0.21.0

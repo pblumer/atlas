@@ -75,7 +75,9 @@ func (s *Server) newestVersions() map[string]int32 {
 // system process, filed in the system project. Such a definition may speak for atlas
 // under an atlas.* name; any other that does is a finding. Runs on the loop.
 func (s *Server) isSystemDefinition(d *deployment) bool {
-	return s.systemPIDs[d.ProcessID] || d.ProjectID == systemProjectID
+	// The project, not the process id: a model elsewhere that took a system process's
+	// id is tenant content (systemprocessguard.go).
+	return d.ProjectID == systemProjectID
 }
 
 // deployedDefinition is what a listing derived from the definitions needs of one,

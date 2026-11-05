@@ -210,6 +210,33 @@ platform-owned and non-editable, not an arbitrary hand-editable tenant project.
   immediate operator action into a multi-step instance; heavy, and a poor fit for
   break-glass.
 
+## Amendment (2026-11-04): the deployment is the system process, not its id
+
+As built, "a system process" meant a process id in the bootstrap's list. The provisioning
+gate (ADR-0123), the password link (ADR-0526) and the atlas.* event names asked whether a
+running process had such an id, and "the" registration or password process was the newest
+deployment of the id, in any project. The deployment surface never refused the id, so a
+model in an ordinary project that took it became the newest version, was started in the
+system process's place and held its rights. The decision driver "not overwritable through
+the ordinary project/deployment surface" was not met.
+
+Now:
+
+- **The id is reserved.** A model that carries the process id of a system process is
+  deployed into the system project or refused, with 403, through every door: a deploy,
+  a project or application publish, an import. `deployModel`, which every door reaches,
+  refuses it on the compiled id as well. Only the bootstrap deploys into the system
+  project; the project's own guard keeps everybody else out of it.
+- **The rights belong to the deployment.** What may provision accounts, mint password
+  links, speak under an atlas.* name and be protected from deletion is a deployment in
+  the system project whose process id is a system process's (`isSystemDeployment`), and
+  "the" system process is looked up among those alone (`latestDeploymentOf`).
+- **A copy from before is reported.** A definition outside the system project with such an
+  id, deployed while the id was not yet reserved, keeps running as ordinary tenant
+  content and may be deleted. Each start warns `deployment.took_system_process_id` with
+  its key, project and `deployedBy`, because the server that accepted it ran it with the
+  system process's rights.
+
 ## Links
 
 - relates to ADR-0034 (projects as artifact containers), ADR-0071 (project

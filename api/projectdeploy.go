@@ -220,6 +220,17 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		}
 		dmnForDraft[i] = xmls
 	}
+	// The id of a system process is atlas's alone (ADR-0122), under the same "validate
+	// all, then deploy all" rule.
+	for _, d := range drafts {
+		if msg := s.reservedProcessRefusal([]byte(d.XML), d.ProjectID); msg != "" {
+			return bundleOutcome{status: http.StatusForbidden, proj: proj, resp: projectDeployResp{
+				ID: proj.ID, Name: proj.Name, Deployed: false,
+				Reason:      fmt.Sprintf("draft %q: %s", d.ProcessID, msg),
+				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
+			}}
+		}
+	}
 	// Who may listen to the personal data atlas emits (ADR-0435 §6), under the same
 	// "validate all, then deploy all" rule: one refused draft deploys none of the
 	// bundle.
@@ -276,7 +287,12 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			return
 		}
 		for i, d := range drafts {
-			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID, principalID(r))
+			dps, cErr, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID, principalID(r))
+			if pErr == nil && cErr != nil {
+				// Every draft compiled above; what deployModel still refuses (the id of
+				// a system process) must not be skipped in silence.
+				pErr = fmt.Errorf("draft %q: %w", d.ProcessID, cErr)
+			}
 			if pErr != nil {
 				persistErr = pErr
 				return

@@ -119,6 +119,18 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// The id of a system process is atlas's alone (ADR-0122), and an imported
+	// application is never the system project.
+	for _, a := range req.Artifacts {
+		if msg := s.reservedProcessRefusal([]byte(a.XML), ""); msg != "" {
+			httpapi.JSON(w, http.StatusForbidden, importBundleResp{
+				Application: name, Imported: false,
+				Reason:      fmt.Sprintf("artifact %q: %s", a.ProcessID, msg),
+				Definitions: []deployedProcess{},
+			})
+			return
+		}
+	}
 	// Who may listen to the personal data atlas emits (ADR-0435 §6): an import is a
 	// deploy, and an import credential is never an administrator's, so a listener on
 	// personal data is deployed on this server by an administrator, not shipped to it.
@@ -215,7 +227,12 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			for _, x := range a.DMNXMLs {
 				dmnXMLs = append(dmnXMLs, []byte(x))
 			}
-			dps, _, pErr := s.deployModel([]byte(a.XML), dmnXMLs, deployedAt, appID, principalID(r))
+			dps, cErr, pErr := s.deployModel([]byte(a.XML), dmnXMLs, deployedAt, appID, principalID(r))
+			if pErr == nil && cErr != nil {
+				// Every artifact compiled above; what deployModel still refuses (the id
+				// of a system process) must not be skipped in silence.
+				pErr = fmt.Errorf("artifact %q: %w", a.ProcessID, cErr)
+			}
 			if pErr != nil {
 				opErr = pErr
 				return

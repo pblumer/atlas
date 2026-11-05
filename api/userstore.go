@@ -187,8 +187,15 @@ type User struct {
 	AvatarFingerprint string `json:"avatarFingerprint,omitempty"`
 
 	PasswordHash string `json:"passwordHash,omitempty"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
+	// CredentialEpoch counts the times an administrator revoked this account's
+	// password (ADR-0526). It is signed into every password link, so a revoke kills the
+	// links minted before it even though it returns the hash to the empty value an
+	// earlier activation link was signed over. Zero, the value of every account that
+	// was never revoked, is left out of the signature, so links minted before the
+	// field existed keep holding.
+	CredentialEpoch uint64 `json:"credentialEpoch,omitempty"`
+	CreatedAt       int64  `json:"createdAt"`
+	UpdatedAt       int64  `json:"updatedAt"`
 
 	// RolesUpgradedAt is when this record's Roles were last written under the role
 	// model (ADR-0209). Zero means the record predates it,
