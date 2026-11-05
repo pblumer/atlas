@@ -59,6 +59,30 @@ MIT licence text:
 >
 > THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+## Waveshare e-Paper register sequences
+
+- **Component and version:** the full-update initialisation sequences and waveform tables of Waveshare's `epd2in13_V2.py` (V4.0, 2019-06-20), `epd2in13_V3.py` (V1.2, 2022-08-09) and `epd2in13_V4.py` (V1.0, 2023-06-25), and the HAT pin assignment of `epdconfig.py` (V1.2, 2022-10-29), as on the `master` branch on 2026-11-05.
+- **Canonical source:** https://github.com/waveshareteam/e-Paper (`RaspberryPi_JetsonNano/python/lib/waveshare_epd/`)
+- **Licence:** MIT-style permission notice in each file's header.
+- **Copyright:** the Waveshare team (as named in the files' headers).
+- **Distributed form:** modified. `connector/device/epaper/panel.go` and `hat.go` restate the register values, waveform bytes, reset timings and pin numbers as Go data; no Python source is distributed.
+
+Permission notice as it appears in those files:
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documnetation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to  whom the Software is furished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS OR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Go fonts (golang.org/x/image)
+
+- **Component and version:** `golang.org/x/image` v0.44.0 — the `font/opentype` rasteriser and the Go Regular and Go Bold TrueType fonts (`font/gofont/goregular`, `font/gofont/gobold`).
+- **Canonical source:** https://go.googlesource.com/image
+- **Licence:** BSD-3-Clause, the Go project's licence; the fonts, made by the Bigelow & Holmes foundry for the Go project, are under the same licence (`font/gofont/ttfs/README` of the module).
+- **Copyright:** Copyright 2009 The Go Authors.
+- **Distributed form:** unmodified object code and embedded font data in any binary that links `connector/device/epaper`.
+
 ## Camunda and Zeebe interoperability
 
 The project intentionally supports selected `zeebe:` XML extensions. Camunda and Zeebe names, schemas and public behavioural descriptions are not project-owned marks.

@@ -272,6 +272,18 @@ IOT1, first increment — the device core, not yet reachable from a model:
   set and read-back agreed, and a Device claimed, drove and released the line.
 - `FakeChip`, for the tests and for a mock mode of the worker.
 
+IOT3, started ahead of its turn at the owner's request (2026-11-05), as the driver
+under `display.show`:
+
+- `connector/device/epaper` — the Waveshare 2.13inch panels V2, V3 and V4 by model name,
+  their initialisation restated from Waveshare's own drivers and pinned line by line by
+  test; a landscape `Frame` (250×122) that is a `draw.Image`, laid out as Waveshare's
+  getbuffer lays it; text in the Go fonts, with Umlauts; the HAT link on the device
+  core's `Chip` (reset 17, data/command 25, busy 24, power 18) and spidev (mode 0,
+  4 MHz, writes of at most 4096 bytes); a busy wait bounded at 20 s.
+- Not yet: partial refresh, the content hash and refresh interval, the stale marker,
+  and the layout a model states — the driver draws what it is given.
+
 Not yet: the compiler element, the reserved job type, the Worker kind in the server,
 `atlas worker --connector device`, the Modeler, the setup doc and the handbook card.
 
