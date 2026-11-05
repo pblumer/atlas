@@ -159,6 +159,7 @@ place.
   and `docs/entra-permissions.md`.
 
 ### Changed
+- **An import replaces a decision model other applications use only when you name it.** A model whose handle a decision outside the application resolves no longer refuses the import after the dialog. The plan lists it with `sharedWith`, naming the decisions and applications that change with it, and only a named `overwrite` replaces it, never `overwrite=*` and never its being behind (ADR-0467). Replacing it needs the editor role on those applications, and a protected application's decision is never changed. The Console's import dialog shows the decisions, starts the box unticked and leaves it out of "Tick all". `atlas import --overwrite all` leaves it undecided, and `atlas_hub_import_release` describes the rule.
 - **The Console's welcome card greets the person signed in by name.** Its heading reads
   "Welcome, Tina Muster" — the display name where one is set, else the username, as the
   account menu shows them — instead of "Welcome to atlas". With sign-in off there is
@@ -185,6 +186,7 @@ place.
   the corner of a product page in the tile layout.
 
 ### Fixed
+- **"Tick all" in the import dialog takes artifacts another application holds as well.** It also takes their content, and "Tick none" clears both. Each row now names the artifact's kind and name and says what happens to it as its boxes stand: replaced, kept, moved from which application into which, or left behind. The dialog names the application it imports into. The import button waits, with the reason beside it, until every artifact another application holds is taken, since the server refuses the package without them. A failed hub import is reported as "Import failed" rather than "Could not load Blueprint".
 - **Saving a version over its draft moves the editor onto the draft.** A version opened in the
   Modeler and saved onto its process's existing draft (the overwrite Save offers) left the session
   addressing the version: the address still named it, and Deploy said the draft would be left

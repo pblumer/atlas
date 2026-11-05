@@ -264,7 +264,7 @@ func (c *importClient) plan(pkg importPackage, document []byte) (importPlan, err
 		return p, err
 	}
 	for _, a := range p.source.Artifacts {
-		p.artifacts = append(p.artifacts, planned{Artifact: a})
+		p.artifacts = append(p.artifacts, planned{Artifact: a, detail: sharedDetail(a)})
 	}
 	carried := map[string]bool{}
 	for _, k := range pkg.constants {
@@ -334,6 +334,24 @@ func (c *importClient) planConstants(src sourceImportBody, consts []packageConst
 	return out, nil
 }
 
+// sharedDetail names the decisions outside the application that change with a model
+// the import would replace (ADR-0467 amendment 2026-11-05): such a model is replaced
+// only when --overwrite names it, never by --overwrite all.
+func sharedDetail(a importplan.Artifact) string {
+	if len(a.SharedWith) == 0 {
+		return ""
+	}
+	uses := make([]string, 0, len(a.SharedWith))
+	for _, u := range a.SharedWith {
+		app := "an application you cannot see"
+		if u.Application != nil {
+			app = fmt.Sprintf("application %q", u.Application.Name)
+		}
+		uses = append(uses, fmt.Sprintf("decision %q in %s", u.Name, app))
+	}
+	return "also used by " + strings.Join(uses, ", ") + "; replaced only when --overwrite names it"
+}
+
 // decide settles each artifact's outcome as the flags decide it. An artifact another
 // application holds is taken only when --adopt names it, and its content is then
 // decided as an artifact of this application's would be (ADR-0467 amendment
@@ -362,6 +380,11 @@ func (p *importPlan) decide(d importplan.Decisions) {
 			continue
 		}
 		a.Outcome = d.Outcome(a.Ref, a.Status)
+		// A model other applications' decisions use is replaced only when named: not
+		// by --overwrite all, and not because it is behind.
+		if len(a.SharedWith) > 0 && a.Outcome == importplan.Updated && !d.Overwrite[a.Ref] {
+			a.Outcome = importplan.Undecided
+		}
 		a.decided = d.Overwrite[a.Ref] || d.Keep[a.Ref] || importplan.Asks(a.Status) && a.Outcome != importplan.Undecided
 	}
 }

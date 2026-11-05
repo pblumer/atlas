@@ -990,8 +990,48 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		return sourceImportResult{}, err
 	}
 	res.ModelsSkipped = models.skipped
+	inTree := map[string]bool{}
+	for _, d := range man.Decisions {
+		inTree[d.ID] = true
+	}
 	for _, m := range models.models {
-		note("model:"+m.handle, m.handle, m.exists, m.local, importplan.Hash(m.data), false)
+		ref := "model:" + m.handle
+		note(ref, m.handle, m.exists, m.local, importplan.Hash(m.data), false)
+		// A model replaced under a handle that a decision outside the application
+		// resolves changes that decision too (ADR-0467 amendment 2026-11-05). The
+		// plan names those decisions, and the model is written only when the caller
+		// names it under overwrite — never by * or because it is behind — and may
+		// edit every application whose decision changes with it. Keeping this
+		// server's model is always a way through.
+		if a := &res.Artifacts[len(res.Artifacts)-1]; m.exists && m.local != importplan.Hash(m.data) {
+			var holders []project
+			for _, rec := range refs {
+				if rec.ModelRef != m.handle || inTree[rec.ID] || rec.ProjectID == app.ID {
+					continue
+				}
+				use := importplan.Use{Decision: rec.ID, Name: rec.Name}
+				if holder, ok := byID[rec.ProjectID]; ok {
+					holders = append(holders, holder)
+					if caller.sees != nil && caller.sees(holder) {
+						use.Application = &importplan.Holder{ID: holder.ID, Name: holder.Name}
+					}
+				}
+				a.SharedWith = append(a.SharedWith, use)
+			}
+			if len(a.SharedWith) > 0 && a.Outcome == importplan.Updated {
+				if !decide.Overwrite[ref] {
+					a.Outcome = importplan.Undecided
+					delete(writes, ref)
+					undecided = append(undecided, ref)
+				} else {
+					for _, holder := range holders {
+						if err := mayChangeSharedModel(caller, holder, m.handle); err != nil {
+							return sourceImportResult{}, err
+						}
+					}
+				}
+			}
+		}
 		if outcome := res.Artifacts[len(res.Artifacts)-1].Outcome; outcome != importplan.Kept && outcome != importplan.Undecided {
 			res.Models++
 		}
@@ -1037,26 +1077,6 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 	}
 	res.Untracked = untrackedArtifacts(app.ID, man, drafts, forms, refs)
 
-	// A model replaced under a handle that a decision outside the application
-	// resolves would change that decision without its author knowing — whether the
-	// replacement was decided or follows from the model being behind. Only a model
-	// that is actually to be written is held to it, so keeping the local model is
-	// always a way through.
-	inTree := map[string]bool{}
-	for _, d := range man.Decisions {
-		inTree[d.ID] = true
-	}
-	for _, m := range models.models {
-		if !m.exists || m.local == importplan.Hash(m.data) || !writes["model:"+m.handle] {
-			continue
-		}
-		for _, rec := range refs {
-			if rec.ModelRef == m.handle && !inTree[rec.ID] && rec.ProjectID != app.ID {
-				return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf(
-					"decision model %q is stored here with other content, and a decision outside this application uses it; keep this server's model, or rename the model in the tree or on this server", m.handle)}
-			}
-		}
-	}
 	if decide.DryRun {
 		return res, nil
 	}
@@ -1167,6 +1187,23 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		return sourceImportResult{}, err
 	}
 	return res, nil
+}
+
+// mayChangeSharedModel refuses a shared model's replacement where the caller may not
+// edit an application whose decision resolves it, or where that application is the
+// protected system's.
+func mayChangeSharedModel(caller sourceCaller, holder project, handle string) error {
+	if holder.Protected {
+		return sourceRefusal{http.StatusForbidden, fmt.Sprintf(
+			"decision model %q is also used by a decision of a protected system application and cannot be replaced; keep this server's model", handle)}
+	}
+	if code, msg := caller.authorize(holder); code != 0 {
+		if code == http.StatusNotFound {
+			msg = fmt.Sprintf("decision model %q is also used by a decision of an application you cannot edit; keep this server's model", handle)
+		}
+		return sourceRefusal{code, msg}
+	}
+	return nil
 }
 
 // untrackedArtifacts names what is filed in the application here and not in the

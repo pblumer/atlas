@@ -330,6 +330,13 @@ application that holds it, and the import stops until somebody decides (ADR-0467
 - With `atlas import`, name it with `--adopt process:ID`. At a terminal the command asks.
 - Over MCP, pass it in `adopt`, only as the person decided.
 
+**Decision models other applications use.** A bundle's model can exist on the server
+with other content, while a decision of another application uses it. The plan then names that
+decision. The model is replaced only when somebody ticks it on its own, never by "Tick all".
+With `atlas import`, name it with `--overwrite model:HANDLE`; over MCP, pass it in `overwrite`.
+Replacing it changes that decision too and needs the editor role on its application. Leaving it
+unticked keeps this server's model (ADR-0467 amendment 2026-11-05).
+
 Adopting needs the editor role on the application the artifact leaves. There is no "adopt
 all". Artifacts of a *deleted* application do not block the import: they read as Ungrouped
 and are filed into the imported application.
