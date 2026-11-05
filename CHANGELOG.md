@@ -15,7 +15,9 @@ _Changed_ / _Removed_ for each version.
 ### Added
 - **Every app has a symbol, and the Console greets with a rocket built of them.** Each module — Console,
   Modeler, Data, Operations, Tasks, Panorama, Catalogue and Shop — has a symbol: a white
-  glyph on its own colour, which leads its entry in the app drawer. The Console's
+  glyph on its own colour, which leads its entry in the app drawer and stands beside
+  the open app's name in the top bar (left out where a 1024px bar has no room for it,
+  back on a phone). The Console's
   welcome card shows a rocket beside its text whose sections are the modules, each
   marked with its symbol: Operations at the engines, the Console in the command capsule,
   the Marketplace as the two boosters. The symbols are drawn once

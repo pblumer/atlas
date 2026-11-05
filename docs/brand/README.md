@@ -104,7 +104,9 @@ spans in those same pages, and `BUILTIN_MARK` in `api/web/logo.js` (both the
 
 Each module of atlas — each app the drawer offers — has a symbol: a white glyph in a
 24-unit box on a rounded tile in the module's colour. They tell the apps apart at a
-glance in the drawer and mark the sections of the welcome illustration's rocket.
+glance in the drawer, stand beside the open app's name in the top bar — next to the
+mark or an organisation's logo, never in its place — and mark the sections of the
+welcome illustration's rocket.
 
 | Module | Colour | Symbol |
 |--------|--------|--------|

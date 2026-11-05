@@ -499,6 +499,15 @@ b { font-weight: 600; }
 .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
 .brand b { font-size: 15px; }
 .topbrand:hover { text-decoration: none; }
+/* The open app's symbol beside its name (module-icons.js). Where the bar is tight —
+   a laptop's 1024px with an administrator's names — the name alone says where one
+   is and the symbol gives its room to the view names; on a phone it comes back. */
+.app-symbol { display: inline-flex; flex: none; }
+.app-symbol:empty { display: none; }
+.app-symbol .module-symbol { display: block; }
+@media (max-width: 1100px) and (min-width: 521px) {
+  .app-symbol { display: none; }
+}
 .mark {
   display: inline-grid; place-items: center;
   width: 24px; height: 24px; border-radius: 6px;

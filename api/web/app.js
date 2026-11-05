@@ -1753,6 +1753,10 @@ function paintMobileMenu(appId, route) {
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
+  // Beside the name, the app's symbol — the one its drawer entry leads with — so the
+  // bar says where one is at a glance, and on a phone, where the name gives way, too.
+  // It joins the mark (or an organisation's logo); it never replaces it.
+  document.getElementById("app-symbol").innerHTML = moduleSymbol(appId, 22);
   paintApps();
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) => {
@@ -12488,6 +12492,7 @@ async function route() {
   if (!AUTH.loaded) await loadAuth();
   if (AUTH.enabled && !AUTH.user) {
     document.getElementById("app-name").textContent = "atlas";
+    document.getElementById("app-symbol").innerHTML = ""; // no app is open yet
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     document.getElementById("mobile-more").hidden = true;
