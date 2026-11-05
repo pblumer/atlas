@@ -88,6 +88,10 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Changed
+- **The Console's welcome card greets the person signed in by name.** Its heading reads
+  "Welcome, Tina Muster" — the display name where one is set, else the username, as the
+  account menu shows them — instead of "Welcome to atlas". With sign-in off there is
+  nobody to name, and it still welcomes to atlas.
 - **The shop loads faster.** It asks for the newest release of each catalogue only, with the new
   `limit` query of `GET /api/v1/catalogs/{id}/releases`, which the server answers from a small index
   without reading the other releases: on the demo catalogue the shop had been reading all 222

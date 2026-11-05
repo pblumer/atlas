@@ -305,6 +305,13 @@ const initials = (name) => {
   return (p.length > 1 ? p[0][0] + p[1][0] : s.slice(0, 2)).toUpperCase();
 };
 
+// signedInName is how the Console names the person signed in — their display name
+// where they have one, else their username, as the account menu shows them — or ""
+// when nobody is (sign-in off, or not signed in yet).
+function signedInName() {
+  return AUTH.enabled && AUTH.user ? (AUTH.user.displayName || AUTH.user.username || "") : "";
+}
+
 // updateAccount reflects the signed-in user in the top-bar avatar and its menu.
 function updateAccount() {
   const btn = document.querySelector(".topbar .avatar");
@@ -2018,7 +2025,7 @@ async function viewConsoleDashboard() {
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
         }</span>
-        <h1>Welcome to atlas</h1>
+        <h1>${signedInName() ? `Welcome, ${esc(signedInName())}` : "Welcome to atlas"}</h1>
         <span id="welcome-version" class="welcome-version muted"></span>
       </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
