@@ -16,7 +16,7 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 25 Prozesse, 57 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 25 Prozesse, 61 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
 | `katalog.json` | Das Katalogdokument: vier Kataloge, achtzehn Produkte, vier Beziehungen |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -49,7 +49,7 @@ Sein Rang muss trotzdem frei sein, weil das Veröffentlichen jeden Rang nur einm
 
 | Produkt | Worker | Genehmigung | Prozess | Aktionen nach der Bereitstellung |
 |---|---|---|---|---|
-| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange, im Modus `ad-gruppe` AD | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen und beenden, Postfachkontingent erhöhen, Weiterleitung setzen und aufheben, Zusätzliche Mailadresse, Mailadresse entfernen, Kalenderstellvertretung erteilen und entziehen |
+| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange, im Modus `ad-gruppe` AD | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Lizenz wechseln, Abwesenheitsnotiz setzen und beenden, Postfachkontingent erhöhen, Weiterleitung setzen und aufheben, Zusätzliche Mailadresse, Mailadresse entfernen, Kalenderstellvertretung erteilen und entziehen |
 | Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, Teams Phone | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
 | Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person der verantwortlichen Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
 | SharePoint: Teamwebsite (`m365-sharepoint-site`) | Entra, SharePoint | vorgesetzte Person der Besitzerin oder des Besitzers | `sharepoint-site.bpmn` (Lebenszyklus) | Site endgültig zurückgeben, Externe Person einladen, Site-Besitzer ändern, Speicherkontingent erhöhen, Site löschen, Gelöschte Site wiederherstellen |
@@ -246,6 +246,37 @@ bestehende Mitgliedschaft abweisen, die AD-Suche und das Schreiben von `member` 
   das Konto nicht; dann ist der Filter in «Konto im AD suchen» anzupassen.
 - **Telefonie, Warteschlange und Telefonzentrale** weisen ihre Lizenzen weiter direkt zu; für sie
   hat `M365Lizenzprofil` keine Gruppe.
+
+## Lizenzverträge und Lizenz wechseln (Lizenzmanagement)
+
+Mit dem Beispiel `lizenzmanagement` zieht jede Lizenzbestellung von einem Lizenzvertrag ab, den
+die Tenant-verantwortliche Person genehmigt hat. Eingeschaltet wird das mit der
+Applikationskonstante **`LIZENZ_VERTRAG_PRUEFEN = ein`** (Fallback `aus`: alles wie vorher; das
+Paket bleibt ohne Lizenzmanagement installierbar). Was dann geschieht:
+
+- Das Bestellformular `m365-lizenz-bestellung` fragt den Lizenzvertrag (`LV-…`); leer gilt
+  `LIZENZ_VERTRAG_STANDARD`, auch für die Lizenz des Eintrittspakets.
+- Vor dem Lizenzprofil prüft und reserviert `proc_lz_kontingent` (Call Activity in die
+  Applikation Lizenzmanagement) den Platz. Kein Platz und kein genehmigter Überzug: Die Position
+  wird als fehlgeschlagen gemeldet.
+- Nach dem Zuweisen bucht `proc_lz_buchen` die Belegung (mit der Objekt-ID des Kontos), bei der
+  Rückgabe gibt es sie frei, im Vertrag, in dem die Position belegt ist.
+
+Die Rückgabe entzieht seit dieser Erweiterung die Variante, die das Konto **hält**
+(`get-user` mit `assignedLicenses` gegen die drei SKUs aus `M365Lizenzprofil`), nicht mehr
+blind die Variante der Position: Nach einem Wechsel wäre das die falsche.
+
+Die neue Aktion **«Lizenz wechseln»** (`wechseln`, Formular `m365-lizenz-wechsel`) wechselt auf
+eine andere Variante, optional in einen anderen Vertrag. Ein Wechsel auf eine teurere Variante
+(frontline < standard < erweitert) genehmigt M365-Administration (Vorschlag; die Suche nach der
+vorgesetzten Person gehört zur Genehmigungsart einer Bestellung, die eine Aktion nicht hat).
+Mit Lizenzmanagement prüft P3 die neue Variante. Im Modus `direkt` tauscht ein einziger
+`assign-license` die SKUs (die neue in `addLicenses`, die alte in `removeLicenses`), sodass das
+Postfach nie ohne Lizenz ist; in den Gruppenmodi ist der Tausch eine Aufgabe für
+M365-Administration. Danach wird die Belegung umgebucht.
+
+Eine Call Activity nennt ihren Prozess über die id und findet ihn in jeder Applikation des
+Servers; fehlt er, bleibt das Token stehen, ohne Fehler beim Deployen. Darum die Konstante.
 
 ## Gerät und Aufbewahrung
 

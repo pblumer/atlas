@@ -248,6 +248,11 @@ type entraOp struct {
 	// and a community whose id nobody kept cannot have its members added, the follow-up
 	// it is created for.
 	async bool
+	// selectOnly marks a listing Graph answers whole and shapes only by $select —
+	// list-subscribed-skus, whose /subscribedSkus refuses $filter
+	// (ADR-0531). It takes a select and maxUsers like any listing,
+	// and refuses filter, search, advancedQuery and pageSize, which would be a 400.
+	selectOnly bool
 }
 
 var entraOps = map[string]entraOp{
@@ -283,6 +288,9 @@ var entraOps = map[string]entraOp{
 	"invite-guest":        {needsAttributes: true},
 	"restore-group":       {needsGroup: true},
 	"list-deleted-groups": {isList: true},
+	// The tenant's licence subscriptions: prepaid and consumed units per SKU
+	// (ADR-0531).
+	"list-subscribed-skus": {isList: true, selectOnly: true},
 	// A Viva Engage community, backed by a Microsoft 365 group; the user is its first
 	// owner (ADR-0172, amended 2026-11-03).
 	"create-community": {needsUser: true, needsAttributes: true, async: true},
@@ -497,8 +505,20 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users, list-groups and list-deleted-groups)", taskID, a.what, op, a.what)
 		}
 	}
+	if spec.selectOnly {
+		for _, a := range []struct{ what, raw string }{
+			{"filter", cn.Filter},
+			{"search", cn.Search},
+			{"advancedQuery", cn.AdvancedQuery},
+			{"pageSize", cn.PageSize},
+		} {
+			if strings.TrimSpace(a.raw) != "" {
+				return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which Graph answers whole and shapes only by select", taskID, a.what, op)
+			}
+		}
+	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups, list-subscribed-skus and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)

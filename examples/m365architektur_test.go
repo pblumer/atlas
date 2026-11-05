@@ -21,9 +21,15 @@ import (
 
 const m365Dir = "m365-dienste"
 
-func m365InfoModel(t *testing.T) infomodel.Model {
+// architectureDirs are the packages that carry an architecture in format 4. The
+// Lizenzmanagement (examples/lizenzmanagement) follows the layout m365-dienste set.
+var architectureDirs = []string{m365Dir, lzDir}
+
+func m365InfoModel(t *testing.T) infomodel.Model { return infoModelOf(t, m365Dir) }
+
+func infoModelOf(t *testing.T, dir string) infomodel.Model {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(m365Dir, "architektur", "informationsmodell.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, "architektur", "informationsmodell.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,13 +53,15 @@ func m365InfoModel(t *testing.T) infomodel.Model {
 
 // TestM365InformationModelIsValid: the model passes the same validation a save does.
 func TestM365InformationModelIsValid(t *testing.T) {
-	m := m365InfoModel(t)
-	v := infomodel.Validate(m)
-	for _, f := range v.Findings {
-		t.Errorf("%s (%s %s%s %s): %s", f.Code, f.ClassID, f.AssociationID, f.StoreID, f.State, f.Message)
-	}
-	if !v.Valid {
-		t.Fatal("the information model of m365-dienste does not validate")
+	for _, dir := range architectureDirs {
+		m := infoModelOf(t, dir)
+		v := infomodel.Validate(m)
+		for _, f := range v.Findings {
+			t.Errorf("%s: %s (%s %s%s %s): %s", dir, f.Code, f.ClassID, f.AssociationID, f.StoreID, f.State, f.Message)
+		}
+		if !v.Valid {
+			t.Fatalf("the information model of %s does not validate", dir)
+		}
 	}
 }
 
@@ -92,7 +100,13 @@ type m365Defs struct {
 // class of the model, every state it writes is a state of that class's lifecycle, and
 // every data store it names is a store of the model.
 func TestM365ProcessDataMatchesTheModel(t *testing.T) {
-	m := m365InfoModel(t)
+	for _, dir := range architectureDirs {
+		processDataMatchesTheModel(t, dir)
+	}
+}
+
+func processDataMatchesTheModel(t *testing.T, dir string) {
+	m := infoModelOf(t, dir)
 	classes := map[string]infomodel.Class{}
 	for _, c := range m.Classes {
 		classes[c.Name] = c
@@ -101,7 +115,7 @@ func TestM365ProcessDataMatchesTheModel(t *testing.T) {
 	for _, s := range m.Stores {
 		stores[s.Name] = true
 	}
-	files, _ := filepath.Glob(filepath.Join(m365Dir, "*.bpmn"))
+	files, _ := filepath.Glob(filepath.Join(dir, "*.bpmn"))
 	if len(files) == 0 {
 		t.Fatal("no processes")
 	}
@@ -170,7 +184,13 @@ type m365Architecture struct {
 // realization, dependency and stage names a capability the file proposes, so a server
 // whose map is empty can adopt the whole map from it.
 func TestM365CapabilitiesAreValid(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(m365Dir, "architektur", "capabilities.json"))
+	for _, dir := range architectureDirs {
+		capabilitiesAreValid(t, dir)
+	}
+}
+
+func capabilitiesAreValid(t *testing.T, dir string) {
+	raw, err := os.ReadFile(filepath.Join(dir, "architektur", "capabilities.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +200,7 @@ func TestM365CapabilitiesAreValid(t *testing.T) {
 	if err := dec.Decode(&a); err != nil {
 		t.Fatal(err)
 	}
-	manRaw, err := os.ReadFile(filepath.Join(m365Dir, "atlas.json"))
+	manRaw, err := os.ReadFile(filepath.Join(dir, "atlas.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +216,7 @@ func TestM365CapabilitiesAreValid(t *testing.T) {
 	}
 	if man.FormatVersion != 4 || man.Architecture != "architektur/capabilities.json" ||
 		len(man.InformationModels) != 1 || man.InformationModels[0].Path != "architektur/informationsmodell.json" ||
-		man.InformationModels[0].Name != m365InfoModel(t).Name {
+		man.InformationModels[0].Name != infoModelOf(t, dir).Name {
 		t.Fatalf("atlas.json does not carry the architecture in format 4: %+v", man)
 	}
 	procs := map[string]bool{}

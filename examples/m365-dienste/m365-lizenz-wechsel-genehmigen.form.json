@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "m365-lizenz-wechsel-genehmigen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenzwechsel genehmigen · Approve the licence change**\n\nVon · From: {{wechsel.alt}} → nach · to: {{wechsel.neu}}"
+    },
+    {
+      "key": "wechselEntscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Genehmigen · Approve",
+          "value": "genehmigt"
+        },
+        {
+          "label": "Ablehnen · Reject",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "wechselBegruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

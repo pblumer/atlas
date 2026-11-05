@@ -1,0 +1,28 @@
+{
+  "type": "default",
+  "id": "lz-rueckfuehrung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Rückführung klären · Resolve the reduction**\n\nZu viele Personen tragen «behalten», oder die Regel reicht nicht. Weitere Positionen nennen oder die Verträge aufstocken. · Too many persons keep their licence."
+    },
+    {
+      "key": "entzugsplanText",
+      "type": "textarea",
+      "label": "Stand · State",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterePositionen",
+      "type": "textarea",
+      "label": "Weitere Positionen · More positions",
+      "description": "Eine Position je Zeile (orderId/positionId). · One per line.",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

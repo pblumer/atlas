@@ -12,6 +12,43 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Example: licence management for Microsoft 365.** A new example package,
+  `examples/lizenzmanagement` (application «Beispiel: Lizenzmanagement», hub bundle
+  `lizenzmanagement`), keeps licence contracts per customer and project with a WBS element
+  and a quantity per SKU, approved by the person responsible for the tenant, and checks every
+  licence order of `m365-dienste` against them (P1–P9 of the concept: contract and its
+  actions, quota check with a race-free reservation and approved overdrafts, the daily
+  comparison with the tenant through `list-subscribed-skus` and the purchase task in the EA,
+  monthly billing per WBS element, the EA anniversary and the 90-day grace period with a
+  withdrawal rule each customer sets as a decision table, and the one-off take-over of the
+  licences in use). The state lives in long-running instances, one contract book per contract
+  and one tenant book, that take bookings as messages one after another and apply each in a
+  single script task, so two simultaneous orders never both get the last seat; requests and
+  answers go through `POST /api/v1/messages` with a time to live. It brings its information
+  model and capability proposals (format 4), installers and a handbook card. The M365 devenv
+  installs it with `scripts/install-lizenzmanagement.py`.
+- **M365 example: licences against a contract, and changing a licence.** With the
+  application constant `LIZENZ_VERTRAG_PRUEFEN = ein`, `m365-dienste/lizenz.bpmn` asks the
+  order form for the licence contract, calls the quota check of the licence management
+  before assigning, books the use afterwards and releases it on return; without it the
+  package behaves as before and installs without the licence management. A new action
+  «Lizenz wechseln» changes the variant (E3 → E5 and back), with approval for a more
+  expensive one, in direct mode as one atomic `assign-license`. A return now withdraws the
+  variant the account holds rather than the one ordered.
+- **The Entra Worker reads the tenant's licence stock.** A new operation,
+  `list-subscribed-skus`, reads Microsoft Graph's `GET /subscribedSkus`. Like the other
+  Entra listings, the result variable receives a JSON array with one item per SKU:
+  `skuId`, `skuPartNumber`, `capabilityStatus`, `appliesTo`, `consumedUnits` (assigned)
+  and `prepaidUnits {enabled, warning, suspended, lockedOut}` (bought). It takes only a
+  `select`, because Graph refuses anything else there, so the compiler refuses filter,
+  search, advancedQuery and pageSize on it. The permission is `LicenseAssignment.Read.All`.
+  A user's last sign-in is read by naming `signInActivity` in the `select` of `list-users`
+  or `get-user`, which needs `AuditLog.Read.All` and Entra ID P1 or P2. The M365 devenv
+  grants both permissions to the Entra worker app. See ADR-0531
+  and `docs/entra-permissions.md`.
+
 ## [0.23.1] — 2026-11-05
 
 **A security release: upgrade every installation on which somebody who is not an
@@ -287,6 +324,8 @@ as it runs 0.23.0:
   (ADR-0526).
 
 ### Fixed
+- **The SharePoint team site's actions find the site on a shared tenant.** Return, guest, owner, quota, deletion and restore built the alias from the ordered URL alone, while provisioning took it from the naming rule with `NAME_PREFIX` in front; with a prefix set they found neither the group nor the inventory entry, so a deletion deleted nothing and stopped on an incident at «Inventar nachführen». They now put the prefix in front as the rule does (`m365-dienste` 1.0.13).
+- **A connector job run by `atlas worker` waits before its next attempt, too.** The retry delay of ADR-0111's amendment (15 s, 60 s before the last attempt) applied only to jobs the server runs itself; a connector offloaded to a supervised or remote worker — Entra in the M365 test environment — still retried at once and raised `Request_ResourceNotFound` on the owner of a group created a moment earlier. The worker now sends the same delay with every failure that leaves retries (`worker.Options.RetryBackoff`, `NoRetryBackoff`).
 - **The SharePoint team site diagram keeps its end label clear.** The fallback flow from the manual quota task to «Site bereit» crossed the event's label; the label now sits above the event (`m365-dienste` 1.0.11).
 - **The moving example no longer drifts into the past.** `umzug` started with the fixed moving date 2026-10-01, which has since passed, so the card's case — a move in two weeks against three months' notice — no longer held. Without a moving date the model now computes one two weeks from today, and "Install and start" passes none; a date given in the start form is used as before.
 - **Installing the workshop twice leaves one decision reference.** The handbook's workshop install added a `bw-vorpruefung` reference to the Bewerbermanagement application on every click, although the upload overwrites the model in place; it now checks for the reference first, as the examples chapter does, and names the model by the reference the upload reports.

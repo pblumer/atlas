@@ -1,0 +1,27 @@
+{
+  "type": "default",
+  "id": "m365-lizenz-wechsel-gruppen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenzwechsel in den Gruppen · Licence change through groups**\n\nBenutzername · User name: {{upn}}\n\nVon · From: {{wechsel.alt}} → nach · to: {{wechsel.neu}}. Zuerst in die Lizenzgruppe der neuen Variante aufnehmen, warten, bis Entra ID die Lizenz aktiv zeigt, dann aus der alten Gruppe entfernen. · First add to the new variant's licence group, wait until Entra ID shows the licence active, then remove from the old group."
+    },
+    {
+      "key": "wechselErledigt",
+      "type": "radio",
+      "label": "Erledigt · Done",
+      "values": [
+        {
+          "label": "Gewechselt · Changed",
+          "value": "ja"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

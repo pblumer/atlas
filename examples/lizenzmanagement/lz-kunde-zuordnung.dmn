@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzKundeZuordnung: welchem Kunden eine Lizenz ohne Vertrag bei der Übernahme des Bestands (P9) vorgeschlagen wird.
+  Eingaben: organisationseinheit (department in Entra ID), firma (companyName in Entra ID)
+  Ausgabe:  kunde (der Name, wie ihn die Verträge führen) oder "unbekannt"
+  BEISPIELWERTE, VOR DEM EINSATZ ERSETZEN. Das Konzept nennt die Domain der Adresse als zweites Merkmal; sie ist ein Teil
+  des Anmeldenamens und damit ein Personendatum, das die Engine nicht lesen darf. Die Tabelle liest deshalb companyName.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzKundeZuordnung" name="LzKundeZuordnung" namespace="http://atlas/dmn">
+  <inputData id="id_firma" name="firma"/>
+  <inputData id="id_organisationseinheit" name="organisationseinheit"/>
+  <decision id="LzKundeZuordnung" name="LzKundeZuordnung">
+    <informationRequirement id="ir_firma"><requiredInput href="#id_firma"/></informationRequirement>
+    <informationRequirement id="ir_organisationseinheit"><requiredInput href="#id_organisationseinheit"/></informationRequirement>
+    <decisionTable id="dt_LzKundeZuordnung" hitPolicy="FIRST">
+      <input id="in_0" label="organisationseinheit"><inputExpression id="ie_0" typeRef="string"><text>organisationseinheit</text></inputExpression></input>
+      <input id="in_1" label="firma"><inputExpression id="ie_1" typeRef="string"><text>firma</text></inputExpression></input>
+      <output id="out_0" label="kunde" name="kunde" typeRef="string"/>
+      <rule id="r1">
+        <description>Firma gepflegt</description>
+        <inputEntry id="r1_i0"><text>-</text></inputEntry>
+        <inputEntry id="r1_i1"><text>"Muster AG"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"Muster AG"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Firma gepflegt</description>
+        <inputEntry id="r2_i0"><text>-</text></inputEntry>
+        <inputEntry id="r2_i1"><text>"Beispiel GmbH"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"Beispiel GmbH"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Nach Organisationseinheit</description>
+        <inputEntry id="r3_i0"><text>starts with(?, "Muster")</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"Muster AG"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Sonst unbekannt</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"unbekannt"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

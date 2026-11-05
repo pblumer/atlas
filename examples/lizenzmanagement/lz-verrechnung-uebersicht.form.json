@@ -1,0 +1,19 @@
+{
+  "type": "default",
+  "id": "lz-verrechnung-uebersicht",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Übersicht der Verrechnung · Billing overview**\n\nZur Kenntnis; Fragen als Kommentar an das Lizenzmanagement. · For information."
+    },
+    {
+      "key": "uebersichtText",
+      "type": "textarea",
+      "label": "Übersicht · Overview",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "type": "default",
+  "id": "lz-nachkauf",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Im EA nachkaufen · Buy in the EA**\n\nSKU {{nkSku}} · gekauft {{nkGekauft}} · frei {{nkFrei}} · in Verträgen {{nkVertragsmenge}} · empfohlen {{nkEmpfehlung}}\n\nAnlass · Reason: {{nkAnlass}}"
+    },
+    {
+      "key": "nkVerlauf",
+      "type": "textarea",
+      "label": "Verlauf der letzten 90 Tage (gekauft/belegt) · Last 90 days (bought/used)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kaufEntscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Gekauft · Bought",
+          "value": "gekauft"
+        },
+        {
+          "label": "Nicht kaufen · Do not buy",
+          "value": "nicht kaufen"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kaufMenge",
+      "type": "textfield",
+      "label": "Gekaufte Menge · Quantity bought",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kaufDatum",
+      "type": "textfield",
+      "label": "Datum · Date",
+      "description": "JJJJ-MM-TT",
+      "validate": {
+        "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kaufGrund",
+      "type": "textarea",
+      "label": "Grund · Reason",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

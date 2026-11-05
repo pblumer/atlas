@@ -195,6 +195,24 @@
       "version": "1.0.12",
       "digest": "sha256:45c89f29bd9b14c06114c6af715fb5b2beb051790d8ef6d4c9c0eb9b7ea94417",
       "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.13",
+      "digest": "sha256:31b3f27b4eec6a74d17674b430ce7ebbde4430354e9feb1bcf2c70be6e6368bc",
+      "minAtlas": "0.23.0-0"
+    },
+    {
+      "bundle": "lizenzmanagement",
+      "version": "1.0.0",
+      "digest": "sha256:3b809c11095a274ee883e003f0ecba92cf2ae20fbeee2383d670630627ae823c",
+      "minAtlas": "0.23.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.14",
+      "digest": "sha256:85da631fa94cad44a436b5eae90513f7b2f5a27f9f21feb6a70e6d7a05f85930",
+      "minAtlas": "0.23.0-0"
     }
   ]
 }
