@@ -481,7 +481,7 @@ func (s *Server) readDocumentBytes(id string) ([]byte, error) {
 		return nil, err
 	}
 	defer rc.Close()
-	return io.ReadAll(io.LimitReader(rc, docs.MaxBytes()+1))
+	return io.ReadAll(io.LimitReader(rc, s.budgets().Document+1))
 }
 
 // --- the sweep ------------------------------------------------------------------

@@ -55,6 +55,7 @@ import (
 
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/internal/sharedread"
+	"github.com/pblumer/atlas/limits"
 )
 
 // RefKey is the key that marks a JSON object as a document reference.
@@ -145,7 +146,8 @@ type Store struct {
 
 // Options configure a Store.
 type Options struct {
-	// MaxBytes is the largest document accepted; zero or less means 35 MiB.
+	// MaxBytes is the largest document accepted, the installation's limits.Document;
+	// zero or less means the default document budget.
 	MaxBytes int64
 	// Default is the backend new documents are written to; nil is the local backend.
 	Default Backend
@@ -167,7 +169,7 @@ func Open(dir string, o Options) (*Store, error) {
 		backends: map[string]Backend{},
 	}
 	if s.maxBytes <= 0 {
-		s.maxBytes = 35 << 20
+		s.maxBytes = limits.Default().Document
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -218,7 +220,11 @@ func (s *Store) Put(ctx context.Context, name, declaredType, uploader string, bo
 
 	h := sha256.New()
 	head := &headBuffer{max: 512}
-	n, err := io.Copy(io.MultiWriter(tmp, h, head), io.LimitReader(body, s.maxBytes+1))
+	// limit is the installation's document budget (Options.MaxBytes, resolved by the
+	// caller from limits.Document); one byte past it tells an over-large upload apart
+	// from one exactly at the limit.
+	limit := s.maxBytes
+	n, err := io.Copy(io.MultiWriter(tmp, h, head), io.LimitReader(body, limit+1))
 	if err == nil {
 		err = tmp.Sync()
 	}
