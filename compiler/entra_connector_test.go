@@ -394,7 +394,7 @@ func TestEntraConnectorCreateCommunity(t *testing.T) {
 	}
 }
 
-// list-subscribed-skus (ADR-draft-entra-subscribed-skus) is a listing Graph answers
+// list-subscribed-skus (ADR-0531) is a listing Graph answers
 // whole: it needs a resultVariable, takes a select and keeps the default maxUsers bound,
 // and refuses every query field /subscribedSkus does not take, naming it.
 func TestEntraConnectorListSubscribedSkus(t *testing.T) {

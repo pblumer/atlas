@@ -23,7 +23,7 @@ _Changed_ / _Removed_ for each version.
   search, advancedQuery and pageSize on it. The permission is `LicenseAssignment.Read.All`.
   A user's last sign-in is read by naming `signInActivity` in the `select` of `list-users`
   or `get-user`, which needs `AuditLog.Read.All` and Entra ID P1 or P2. The M365 devenv
-  grants both permissions to the Entra worker app. See ADR-draft-entra-subscribed-skus
+  grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
 ## [0.23.0] — 2026-11-04

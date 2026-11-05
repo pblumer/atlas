@@ -250,7 +250,7 @@ type entraOp struct {
 	async bool
 	// selectOnly marks a listing Graph answers whole and shapes only by $select —
 	// list-subscribed-skus, whose /subscribedSkus refuses $filter
-	// (ADR-draft-entra-subscribed-skus). It takes a select and maxUsers like any listing,
+	// (ADR-0531). It takes a select and maxUsers like any listing,
 	// and refuses filter, search, advancedQuery and pageSize, which would be a 400.
 	selectOnly bool
 }
@@ -289,7 +289,7 @@ var entraOps = map[string]entraOp{
 	"restore-group":       {needsGroup: true},
 	"list-deleted-groups": {isList: true},
 	// The tenant's licence subscriptions: prepaid and consumed units per SKU
-	// (ADR-draft-entra-subscribed-skus).
+	// (ADR-0531).
 	"list-subscribed-skus": {isList: true, selectOnly: true},
 	// A Viva Engage community, backed by a Microsoft 365 group; the user is its first
 	// owner (ADR-0172, amended 2026-11-03).

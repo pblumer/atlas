@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Entra Worker reads the tenant's licence subscriptions and the last sign-in
+# ADR-0531: The Entra Worker reads the tenant's licence subscriptions and the last sign-in
 
 - **Status:** Accepted
 - **Implementation:** Landed

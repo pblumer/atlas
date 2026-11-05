@@ -59,7 +59,7 @@ type Op struct {
 	ListPath string
 	// SelectOnly marks a listing Graph answers whole and lets a request shape only by
 	// $select: list-subscribed-skus, whose /subscribedSkus refuses $filter and documents
-	// no $top, $search or $count (ADR-draft-entra-subscribed-skus). Its request carries
+	// no $top, $search or $count (ADR-0531). Its request carries
 	// the select and nothing else, and the query fields a listing otherwise takes are
 	// refused rather than sent to a 400.
 	SelectOnly bool
@@ -161,7 +161,7 @@ var Ops = map[string]Op{
 	"list-deleted-groups": {Method: "GET", IsList: true, ListPath: "/directory/deletedItems/microsoft.graph.group", Label: "list deleted groups"},
 	// The tenant's licence subscriptions, one item per SKU with its prepaidUnits (bought:
 	// enabled, warning, suspended, lockedOut) and consumedUnits (assigned) — what a
-	// process watching a licence quota compares (ADR-draft-entra-subscribed-skus).
+	// process watching a licence quota compares (ADR-0531).
 	// Microsoft documents LicenseAssignment.Read.All as the least privileged permission.
 	"list-subscribed-skus": {Method: "GET", IsList: true, SelectOnly: true, ListPath: "/subscribedSkus", Label: "list subscribed licence SKUs"},
 	// A Viva Engage community is backed by a Microsoft 365 group — its groupId — as a
