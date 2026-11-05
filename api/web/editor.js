@@ -1109,7 +1109,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       leave: async (href) => {
         if (await keepForVersionSwitch()) openRecord(href);
       },
-      // Restore as draft (ADR-draft-modeler-walks-and-restores-versions): the
+      // Restore as draft (ADR-0533): the
       // version on screen is saved over the draft — the overwrite Save would offer,
       // confirmed by the dialog the chip has shown — and the editor then reopens on
       // the draft, so Deploy runs it as a new version.
@@ -12023,7 +12023,7 @@ function markImportedEdit(identity) {
 }
 
 // openRecord opens another record of the process — a version, or the draft — in the
-// Modeler (ADR-draft-modeler-walks-and-restores-versions). The router mounts on
+// Modeler (ADR-0533). The router mounts on
 // hashchange, and a hash that already names the target fires none: a first save
 // points the URL at the draft with replaceState, without remounting. So that case is
 // fired by hand, and the editor is remounted on the record as any navigation would

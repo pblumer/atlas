@@ -2206,7 +2206,7 @@ dataset of up to 50 000 cases":
   saves it first, so the draft stays what runs; a version opened read-only is deployed without
   touching the draft, and the Deploy panel says so.
 - ✅ **Stepping between versions, and restoring one as the draft**
-  ([ADR-draft-modeler-walks-and-restores-versions](docs/adr/draft-modeler-walks-and-restores-versions.md)):
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)):
   arrows on the version chip open the version before or after the one shown (the draft after the
   newest), and its panel lists every version. **Restore as draft** on a version warns when the draft
   holds something the newest version does not, then saves the version as the draft and opens it, so

@@ -1598,7 +1598,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .sv-note { margin: 10px 0 0; line-height: 1.45; }
 .sv-note.warn { background: var(--warn-soft); color: var(--text); border-left: 3px solid var(--warn); padding: 6px 8px; border-radius: 4px; }
 .sv-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-/* The arrows beside the chip walk the process's records (ADR-draft-modeler-walks-and-restores-versions). They keep their
+/* The arrows beside the chip walk the process's records (ADR-0533). They keep their
    width, and the chip between them is what gives way when the bar is short of room. */
 .editor-bar .sv-step { flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: none;

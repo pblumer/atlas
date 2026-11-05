@@ -27,7 +27,7 @@
 // the draft above them. A version on screen offers "Restore as draft", which makes it
 // the draft again — after saying what of the draft that loses — and then opens the
 // draft, so the next Deploy runs it as a new version
-// (ADR-draft-modeler-walks-and-restores-versions).
+// (ADR-0533).
 //
 // draftStanding, versionStanding, versionSteps and restoreModel are pure functions of
 // what the server answered, so a browser test drives them without an editor around

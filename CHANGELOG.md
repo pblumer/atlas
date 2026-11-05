@@ -21,7 +21,7 @@ _Changed_ / _Removed_ for each version.
   confirming saves the version as the draft and reopens the editor on it, so the next Deploy runs it
   as a new version. Leaving through the arrows or the list keeps unsaved work as every other door
   out of the editor does
-  ([ADR-draft-modeler-walks-and-restores-versions](docs/adr/draft-modeler-walks-and-restores-versions.md)).
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
 - **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
   one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
   `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is
@@ -135,7 +135,7 @@ _Changed_ / _Removed_ for each version.
   addressing the version: the address still named it, and Deploy said the draft would be left
   alone although it had just been replaced. The session now addresses the draft, as after the
   first save of a version
-  ([ADR-draft-modeler-walks-and-restores-versions](docs/adr/draft-modeler-walks-and-restores-versions.md)).
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
 - **The test environment installs the AD services with its own directory.** `examples/ad-dienste`
   went into the M365 test environment with the example DNs of its tables
   (`…,DC=contoso,DC=local`), so the domain controller answered with an LDAP referral and the order

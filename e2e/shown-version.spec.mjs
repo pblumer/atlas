@@ -311,7 +311,7 @@ test("a process with one version offers no comparison of versions", async ({ pag
 });
 
 // Walking the versions from the chip, and restoring one as the draft
-// (ADR-draft-modeler-walks-and-restores-versions). The author's question: step
+// (ADR-0533). The author's question: step
 // between the deployed models of a process, take any of them back as the draft, and
 // deploy it again as a new version.
 
