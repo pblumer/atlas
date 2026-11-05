@@ -3378,8 +3378,16 @@ function renderProductPage(rel, item) {
   const section = (title, open, ...body) => el('details', {
     class: 'page-section', ...(open ? { open: 'open' } : {}),
   }, el('summary', {}, title), el('div', { class: 'page-body' }, ...body));
+  // A part of the Marktleistung, included or optional, opens its own description
+  // in the same panel the "i" opens, over the page.
+  const partButton = (p) => el('button', {
+    class: 'linkish page-part', 'aria-haspopup': 'dialog',
+    onclick: () => { state.info = p.id; render(); focusInfoDialog(); },
+  }, textOf(p.texts, p.id));
+  const by = itemsById(rel);
 
   return el('div', { class: 'product-page' },
+    state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null,
     el('div', { class: 'page-top' },
       el('button', { class: 'linkish', onclick: back }, `‹ ${t('page.back')}`),
       el('strong', {}, t('page.title')),
@@ -3400,12 +3408,12 @@ function renderProductPage(rel, item) {
         included.length || optional.length
           ? section(t('page.scope'), true,
             included.length ? el('p', {}, el('strong', {}, t('page.included'))) : null,
-            included.length ? el('ul', {}, included.map((i) => el('li', {}, textOf(i.texts, i.id)))) : null,
+            included.length ? el('ul', {}, included.map((i) => el('li', {}, partButton(i)))) : null,
             optional.length ? el('p', {}, el('strong', {}, t('page.options'))) : null,
             // Listed, not offered: an option ordered from here would land in the
             // basket without the Marktleistung it belongs to. The basket offers each
             // one beside its Marktleistung, where taking it means taking it with that.
-            optional.length ? el('ul', {}, optional.map((o) => el('li', {}, textOf(o.texts, o.id)))) : null,
+            optional.length ? el('ul', {}, optional.map((o) => el('li', {}, partButton(o)))) : null,
             el('p', { class: 'muted' }, t('page.form')))
           : null,
         section(t('page.approval'), false, el('p', {}, approval)),
