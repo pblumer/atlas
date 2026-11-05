@@ -94,6 +94,16 @@
       "path": "raum-entfernen.bpmn"
     },
     {
+      "id": "proc_m365_raum_nachfuehren",
+      "name": "Exchange: Sitzungszimmer nachführen",
+      "path": "raum-nachfuehren.bpmn"
+    },
+    {
+      "id": "proc_m365_raumliste",
+      "name": "Exchange: Sitzungszimmer auffindbar machen",
+      "path": "raumliste.bpmn"
+    },
+    {
       "id": "proc_m365_sharepoint_site",
       "name": "SharePoint: Team Site",
       "path": "sharepoint-site.bpmn"

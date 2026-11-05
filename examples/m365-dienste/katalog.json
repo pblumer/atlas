@@ -872,8 +872,8 @@
         "en": "Meeting room (room mailbox)"
       },
       "descriptions": {
-        "de": "Ein in Outlook und Teams buchbares Sitzungszimmer; Buchungen werden automatisch angenommen. Name nach der Namensregel (RM-…).",
-        "en": "A meeting room bookable in Outlook and Teams; bookings are accepted automatically. Named by the naming rule (RM-…)."
+        "de": "Ein in Outlook und Teams buchbares Sitzungszimmer, das die Raumsuche unter seinem Ort zeigt (Raumliste des Orts, Stockwerk, Plätze); Buchungen werden automatisch angenommen. Name nach der Namensregel (RM-…).",
+        "en": "A meeting room bookable in Outlook and Teams that Room Finder shows under its city (the city's room list, floor, seats); bookings are accepted automatically. Named by the naming rule (RM-…)."
       },
       "approval": {
         "kind": "role",

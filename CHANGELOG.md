@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Exchange Worker creates room lists and sets a room's Places metadata.** Three operations
+  for Outlook's Room Finder, which lists rooms only through room lists and filters them by city,
+  floor and capacity: `create-room-list` (`New-DistributionGroup -RoomList`, the switch set by the
+  operation, on Exchange Online and Exchange Server), `set-place` (`Set-Place` with `Capacity`,
+  `City`, `Building`, `Floor`, `FloorLabel`, `Label`, `Tags`, the address and the room's equipment;
+  at least one of them) and `get-place`. The two Places operations exist in Exchange Online only:
+  against an Exchange Server the Worker refuses them before anything is sent and says that city and
+  address are properties of the account there (ADR-0532).
 - **The handbook shows every app's symbol.** In "The apps at a glance", each app's card leads with
   its symbol, the same one the drawer and the top bar show, and the overview says so. The
   handbook keeps no copy: a module script draws the cards from `api/web/module-icons.js`.
@@ -75,8 +83,35 @@ _Changed_ / _Removed_ for each version.
   "Welcome, Tina Muster" — the display name where one is set, else the username, as the
   account menu shows them — instead of "Welcome to atlas". With sign-in off there is
   nobody to name, and it still welcomes to atlas.
+- **The shop's "My services" and "My orders" are one screen.** "My services" now lists, per
+  Marktleistung and per person it is for, what somebody holds and what they ordered: its catalogue
+  icon as a pie of how far it is provisioned, how many are held, since when and the order behind
+  it. Opened, an entry shows its possible events (the actions its lifecycle process takes, such
+  as a password reset), the orders and positions behind it with their tasks, and what a held
+  bundle lacks. A filter chooses for whom (me, others, everyone), a status (ready, being set up,
+  task open, ended) and searches by service, person or order; tasks waiting on the reader
+  outside the filter are pointed out. The cascade keeps its columns, now with the pies and a
+  details column; the tile layout is a list whose rows open in place. The "My orders" tab is gone.
+- **The cascade catalogue shows the products' icons.** Each Marktleistung and each part in the
+  cascade, and each search hit, carries the same icon as its tile.
+- **A product page's way back is a button.** "‹ Back to the catalogue" replaces the small link in
+  the corner of a product page in the tile layout.
 
 ### Fixed
+- **A meeting room of `m365-dienste` appears in Outlook's Room Finder.** «Sitzungszimmer
+  (Raumpostfach)» created the room mailbox and wrote its location into `CustomAttribute4` only,
+  so the room was bookable by its address and missing from "Browse all rooms" and the location
+  suggestions. The provisioning now calls a new process, `raumliste.bpmn`, which splits the
+  location («Bern, 5. Stock» into city Bern, floor 5), names the city's room list with the naming
+  rule (`<NAME_PREFIX>RL-<Ort>`, new object type `raumliste`), creates it when it is missing, adds
+  the room unless it is already a member and sets `City`, `Building`, `Floor`, `FloorLabel` and
+  `Capacity` with `Set-Place` while the application constant `ORTSANGABEN` is true (the Exchange
+  Server variant of the test environment sets it to false and copies the called process with its
+  callers). The return takes the room out of every room list before it removes the mailbox, and
+  «Sitzungszimmer nachführen» (`raum-nachfuehren.bpmn`, started by hand) runs the same process for
+  every room the catalogue created, which repairs the rooms provisioned before. A correction with
+  «Angaben ändern» starts no process for this product (ADR-0359); the README says how a location
+  is changed.
 - **The top bar stays in view while a page scrolls.** In every app the bar with the app
   switcher, the view names and the account menu disappeared after a little less than one
   window of scrolling: it is sticky, a sticky bar only sticks inside its parent, and the
@@ -217,7 +252,9 @@ as it runs 0.23.0:
 - **The shipped approval form requires a reason to reject.** It is reseeded at startup,
   so existing installations get it with the binary.
 - **Bundles of format 4 need 0.23.0.** An earlier server cannot import a bundle that
-  carries an information model or an architecture file.
+  carries an information model or an architecture file. `m365-dienste` 1.0.12, the
+  first bundle of format 4, therefore requires atlas 0.23.0 in the hub: a 0.22.0 server
+  refuses it as incompatible before downloading it and can still install 1.0.11.
 - **Observability.** Five log events are new: `auth.password_link_issued`,
   `auth.password_link_used`, `auth.password_changed`, `auth.password_recovery` and
   `auth.password_revoked`. The MCP tools grow from 180 to 181 with

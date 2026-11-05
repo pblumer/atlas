@@ -84,24 +84,24 @@ func TestThePortalOffersCorrectionWhereTheServerAllowsIt(t *testing.T) {
 
 // TestACorrectionInFlightSurvivesTheOrdersFilter.
 //
-// The correction's form lives inside the order rows, and those rows are replaced
-// on every keystroke in a column filter. Without the same two steps render() takes,
+// The correction's form lives inside the entries of "My services", and those are
+// replaced on every keystroke in its search. Without the same two steps render() takes,
 // typing "Muster" into the person filter would empty a cost centre somebody is in
 // the middle of fixing, with nothing on screen saying anything was lost.
 func TestACorrectionInFlightSurvivesTheOrdersFilter(t *testing.T) {
 	src := readWeb(t, "shop.js")
-	start := strings.Index(src, "function repaintOrderRows(")
+	start := strings.Index(src, "function repaintServices(")
 	if start < 0 {
-		t.Fatal("shop.js has no repaintOrderRows(); if it moved, this test now checks " +
+		t.Fatal("shop.js has no repaintServices(); if it moved, this test now checks " +
 			"nothing and says so instead")
 	}
 	body := src[start : start+strings.Index(src[start:], "\n}")]
 	if !strings.Contains(body, "harvest()") {
-		t.Error("repaintOrderRows does not capture what was typed before it replaces the " +
+		t.Error("repaintServices does not capture what was typed before it replaces the " +
 			"rows, so a filter keystroke empties a correction in progress")
 	}
 	if !strings.Contains(body, "mountConfigForms()") {
-		t.Error("repaintOrderRows does not rebuild the forms it replaced, so a filter " +
+		t.Error("repaintServices does not rebuild the forms it replaced, so a filter " +
 			"keystroke leaves an open correction showing nothing but its loading note")
 	}
 }

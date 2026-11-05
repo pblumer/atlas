@@ -226,6 +226,16 @@ def build_onprem(pkg, dst):
                 forms.add(a["form"])
             if a.get("message"):
                 messages.add(a["message"])
+    # A process a copied process calls (raum-einrichten calls proc_m365_raumliste) is
+    # copied too, and the call names the copy: the online process would run its tasks on
+    # the online worker.
+    todo = list(procs)
+    while todo:
+        src = open(os.path.join(pkg, path_of[todo.pop()]), encoding="utf-8").read()
+        for called in re.findall(r'<zeebe:calledElement processId="([^"]+)"', src):
+            if called in path_of and called not in procs:
+                procs.add(called)
+                todo.append(called)
     for pid in procs:
         forms |= set(re.findall(r'formId="([^"]+)"', open(os.path.join(pkg, path_of[pid]), encoding="utf-8").read()))
     forms.discard(None)
@@ -243,6 +253,8 @@ def build_onprem(pkg, dst):
         # The process id is an attribute value wherever it occurs (the process, its
         # diagram plane): replaced as a whole quoted value.
         src = src.replace(f'"{pid}"', f'"{proc(pid)}"')
+        for other in procs:
+            src = src.replace(f'processId="{other}"', f'processId="{proc(other)}"')
         src = re.sub(r'(<process id="[^"]+" name=")([^"]*)"', r'\g<1>\g<2> (Exchange Server)"', src, count=1)
         for m in messages:
             src = src.replace(f'name="{m}"', f'name="{message(m)}"')
@@ -492,6 +504,9 @@ def main():
             {"name": "NAME_PREFIX", "type": "json", "value": json.dumps(prefix)},
             {"name": "MAIL_DOMAIN", "type": "string", "value": onprem_domain},
             {"name": "ATLAS_API_BASE", "type": "string", "value": "http://127.0.0.1:8080"},
+            # Set-Place exists in Exchange Online only; the Exchange worker refuses it
+            # against the Exchange Server, so the room processes skip it (raumliste.bpmn).
+            {"name": "ORTSANGABEN", "type": "json", "value": "false"},
         ]})
         log(f"on-premises variant installed: catalogue cat-m365-onprem, worker {ONPREM_WORKER}, MAIL_DOMAIN={onprem_domain}")
     log("done")

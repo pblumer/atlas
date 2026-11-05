@@ -89,7 +89,10 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(installFixture, EXTEND_FORM);
   await page.goto("/shop.html");
-  await page.getByRole("button", { name: "My orders" }).click();
+  // The orders are under "My services" (one screen for what somebody holds and
+  // what they ordered); an entry opened shows its actions and positions.
+  await page.getByRole("button", { name: "My services" }).click();
+  await page.locator(".cell button.label", { hasText: "mailbox" }).click();
   await expect(page.getByText("ord_own")).toBeVisible({ timeout: 10000 });
   page._errors = errors;
 });
@@ -98,7 +101,8 @@ test.afterEach(async ({ page }) => {
   expect(page._errors, "no uncaught page errors").toEqual([]);
 });
 
-const mailbox = (page) => page.locator(".lines > li", { hasText: "mailbox" });
+// The opened entry: its row of actions, its orders and positions.
+const mailbox = (page) => page.locator(".svc-detail");
 const asked = (page) => page.evaluate(() => window.__asked);
 
 test("a held position offers its actions in the reader's language", async ({ page }) => {
@@ -150,7 +154,8 @@ test("a form left empty is not sent", async ({ page }) => {
 
 test("a return only an operator gives is not offered to the holder", async ({ page }) => {
   await expect(mailbox(page).getByRole("button", { name: "Return" })).toHaveCount(1);
-  const token = page.locator(".lines > li", { hasText: "token" });
+  await page.locator(".cell button.label", { hasText: "token" }).click();
+  const token = page.locator(".svc-detail .lines > li", { hasText: "token" });
   await expect(token).toBeVisible();
   await expect(token.getByRole("button", { name: "Return" })).toHaveCount(0);
 });

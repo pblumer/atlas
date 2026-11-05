@@ -143,6 +143,39 @@
              gap:12px; overflow-x:auto; }
   /* "My services" stops at the Marktleistung: three columns, not four. */
   .cascade.three { grid-template-columns:repeat(3, minmax(220px, 1fr)); }
+  /* ... and four once one is chosen, the last wider: it holds that Marktleistung's
+     actions, orders, positions and tasks. */
+  .svc-cascade { grid-template-columns:repeat(3, minmax(200px, 1fr)) minmax(320px, 2fr); }
+  /* The filter above "my services": for whom, the status, and a search. */
+  .svc-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:4px 0 12px; }
+  .svc-bar select, .svc-bar input { font:inherit; font-size:14px; padding:6px 8px;
+    border:1px solid var(--border-strong); border-radius:6px; background:var(--surface); color:var(--text); }
+  .svc-find { flex:1 1 260px; min-width:0; }
+  .svc-entry { border-bottom:1px solid var(--border); }
+  .svc-entry > .svc-row { border-bottom:0; }
+  .svc-entry.open { background:var(--bg); }
+  button.svc-open { background:none; border:0; padding:0; font:inherit; color:inherit; cursor:pointer;
+    text-align:left; display:inline-flex; gap:6px; align-items:baseline; }
+  button.svc-open:hover strong { text-decoration:underline; }
+  .svc-caret { color:var(--muted); font-size:12px; }
+  .svc-meta { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:13px; }
+  .svc-task { color:var(--accent-hover); font-weight:600; }
+  .svc-detail { padding:4px 4px 14px 62px; display:flex; flex-direction:column; gap:10px; font-size:14px; }
+  .col .svc-detail { padding:6px 0; }
+  .svc-actions { display:flex; flex-direction:column; gap:4px; }
+  .svc-action-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+  /* The possible events are buttons, not links: they ask a process to do something. */
+  .svc-action-row > button.linkish { border:1px solid var(--border-strong); border-radius:6px;
+    padding:5px 12px; background:var(--surface); color:var(--accent-hover); text-decoration:none; }
+  .svc-action-row > button.linkish:hover:not(:disabled) { border-color:var(--accent); }
+  .svc-action-row > .card { flex-basis:100%; }
+  .svc-order-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 4px; }
+  .svc-order-block .lines { margin-top:4px; }
+  .cell .pie-icon { width:32px; height:32px; border-radius:5px; }
+  .cell .pie-icon svg { width:22px; height:22px; }
+  .cell-icon { flex:none; width:28px; height:28px; border-radius:5px; display:inline-flex;
+    align-items:center; justify-content:center; background:var(--accent); color:var(--accent-ink); }
+  .cell-icon svg { width:20px; height:20px; }
   /* "My services" in the tile layout: a list, each Marktleistung with its catalogue
      icon as a pie of how far it is provisioned (pieIcon in shop.js). */
   .svc-list { margin-top:8px; }
@@ -170,6 +203,7 @@
     .svc-qty, .svc-since, .svc-order { grid-column:2; font-size:13px; color:var(--muted); }
     .svc-qty::before, .svc-since::before, .svc-order::before { content:attr(data-label) ": "; }
     .svc-act { grid-column:3; grid-row:1; }
+    .svc-detail { padding-left:4px; }
   }
   .col { min-width:0; }
   /* The basket's lines, one per offering. The grid makes each line as tall as its
@@ -305,8 +339,8 @@
              position:sticky; bottom:0; z-index:5; background:var(--bg);
              box-shadow:0 -6px 12px -10px rgba(0,0,0,.25); }
 
-  /* The orders table: a filter row above the header, exactly as the mockups draw
-     it — the search sits over the column it searches. */
+  /* The tables of the shop (the reports): a filter row, where one has it, above
+     the header. */
   .table { width:100%; border-collapse:collapse; font-size:14px; }
   .table th, .table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
                          vertical-align:top; }
@@ -414,22 +448,7 @@
       font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
       font-weight:600; padding:6px 0 2px; }
 
-    /* My orders: the table becomes a list of cards. Each cell says what it is,
-       because the column heads are gone; the filters sit two to a row above. */
     .tablewrap { overflow-x:visible; }
-    .table.orders, .table.orders tbody, .table.orders tr, .table.orders td { display:block; width:100%; }
-    .table.orders thead { display:block; }
-    .table.orders thead tr:not(.filters) { display:none; }
-    .table.orders .filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
-    .table.orders .filters td { padding:0; }
-    .table.orders .filters td:empty { display:none; }
-    .table.orders tbody tr { background:var(--surface); border:1px solid var(--border);
-                             border-radius:10px; padding:10px 12px; margin:0 0 12px; }
-    .table.orders tbody td { border-bottom:0; padding:3px 0; }
-    .table.orders tbody td:empty { display:none; }
-    .table.orders tbody td[data-label]::before { content:attr(data-label); display:block;
-      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
-      font-weight:600; }
     .lines .tasks { margin-left:8px; }
     /* A form opened in a row takes the card's width, not 640px of it. */
     .cfg { max-width:100%; }
@@ -495,6 +514,7 @@
   .tile-next { position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:44px; height:88px;
                border:1px solid var(--border); background:var(--surface); font-size:28px; cursor:pointer;
                box-shadow:-4px 0 8px rgba(0,0,0,.06); }
+  .product-page .page-back { font-size:15px; padding:8px 16px; }
   .product-page .page-top { display:flex; justify-content:space-between; align-items:center; padding:6px 0 12px; }
   .product-page .page-top strong { font-size:22px; font-weight:400; }
   .page-fav { display:flex; align-items:center; gap:6px; color:var(--muted); }

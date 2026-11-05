@@ -58,24 +58,27 @@ test("each held product carries a light and a count, and what is coming shows be
   await page.getByRole("button", { name: "My services", exact: true }).click();
   const row = (name) => page.locator(".cascade > .col:nth-child(3) .cell", { hasText: name });
 
-  // Held three times: green, and the count.
-  await expect(row("Functional account (F)").locator(".dot.done")).toHaveCount(1);
-  await expect(row("Functional account (F)").locator(".meta")).toHaveText("3 held");
+  // In the cascade too, each Marktleistung carries its catalogue icon as a pie.
+  // Held three times: a full pie, ready, and the count.
+  await expect(row("Functional account (F)").locator(".pie-icon")).toHaveAttribute("data-share", "100");
+  await expect(row("Functional account (F)").locator(".meta")).toContainText("Ready");
+  await expect(row("Functional account (F)").locator(".meta")).toContainText("3 held");
 
-  // Held once with a second on its way: green for the one there, and both counted.
-  await expect(row("Monitor 24-inch").locator(".dot.done")).toHaveCount(1);
-  await expect(row("Monitor 24-inch").locator(".meta")).toHaveText("1 held · 1 being set up");
+  // Held once with a second on its way: ready for the one there, and both counted.
+  await expect(row("Monitor 24-inch").locator(".pie-icon")).toHaveAttribute("data-share", "100");
+  await expect(row("Monitor 24-inch").locator(".meta")).toContainText("1 held · 1 being set up");
 
-  // Ordered and not yet there: listed all the same, in the order's waiting colour.
-  const phone = row("Android smartphone").locator(".dot");
-  await expect(phone).toHaveClass(/pending/);
+  // Ordered and not yet there: listed all the same, an empty pie.
+  const phone = row("Android smartphone").locator(".pie-icon");
+  await expect(phone).toHaveAttribute("data-share", "0");
   await expect(phone).toHaveAttribute("aria-label", "Being set up: 0 of 1 ready");
-  await expect(row("Android smartphone").locator(".meta")).toHaveText("1 being set up");
+  await expect(row("Android smartphone").locator(".meta")).toContainText("1 being set up");
 
-  // The lights are the order list's own.
-  await page.getByRole("button", { name: "My orders", exact: true }).click();
-  await expect(page.locator(".lines .dot.running")).toHaveCount(1);
-  await expect(page.locator(".lines .dot.pending")).toHaveCount(1);
+  // Opened, an entry shows the positions behind it with the order list's lights.
+  await row("Monitor 24-inch").locator("button.label").click();
+  await expect(page.locator(".svc-detail .lines .dot.running")).toHaveCount(1);
+  await row("Android smartphone").locator("button.label").click();
+  await expect(page.locator(".svc-detail .lines .dot.pending")).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 
