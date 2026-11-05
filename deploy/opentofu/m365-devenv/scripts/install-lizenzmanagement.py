@@ -72,8 +72,10 @@ def adapt(src, dst, sku):
     p = os.path.join(dst, "lz-sku.dmn")
     s = open(p, encoding="utf-8").read()
     for old in LZ_SKUS:
-        if s.count(old) != 2:
-            sys.exit(f"lz-sku.dmn: SKU {old} not found twice; has the package changed?")
+        # Each SKU stands in its variant row (output) and in its own row (input and output);
+        # LzSku is FIRST, so the variant rows still win when all three point at one SKU.
+        if s.count(old) != 3:
+            sys.exit(f"lz-sku.dmn: SKU {old} not found three times; has the package changed?")
         s = s.replace(old, sku)
     open(p, "w", encoding="utf-8").write(s)
 
