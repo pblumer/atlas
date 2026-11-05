@@ -997,6 +997,51 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_release_pruning",
+			Description: "Read what pruning a catalogue's releases would delete, without deleting " +
+				"anything: every release that is neither the newest (what the shop offers) nor " +
+				"named by an order (whose approval, corrections, actions and reports read it " +
+				"back), and every release that stays with why (`newest` or `orders`). A catalogue " +
+				"that is published often accumulates hundreds of releases. Administrators only. " +
+				"Call it before atlas_prune_releases and tell the person how many would go.",
+			InputSchema: catalogIDArg("The catalogue whose releases to preview pruning."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(withID(id, "/releases/pruning")))
+			},
+		},
+		{
+			Name: "atlas_prune_releases",
+			Description: "Prune a catalogue's releases: delete every release atlas_release_pruning " +
+				"names, which is every release that is neither the newest nor named by an " +
+				"order. Permanent — a pruned release cannot be restored — but it touches no " +
+				"order, running instance or hold, and the shop keeps offering the newest. " +
+				"Administrators only. `confirm` must repeat the catalogue id. Only call this when " +
+				"the person asked for the old releases to be removed.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      stringProp("The catalogue whose releases to prune."),
+					"confirm": stringProp("The catalogue id again. Anything else deletes nothing."),
+				},
+				"required": []any{"id", "confirm"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				confirm, err := argString(args, "confirm")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post(withID(id, "/releases/pruning?confirm="+url.QueryEscape(confirm)), "application/json", nil))
+			},
+		},
+		{
 			Name: "atlas_catalog_product_deletion",
 			Description: "Read what deleting a product FOR GOOD would remove, without removing " +
 				"anything: the catalogues that would stop offering it, the orders of nothing but " +

@@ -703,3 +703,139 @@ func (s *Server) deletePurged(sc purgeScope, at int64) error {
 	})
 	return err
 }
+
+// --- Pruning old releases -----------------------------------------------------
+//
+// Every publish freezes a release and nothing ever removes one short of deleting
+// the whole catalogue (ADR-0469), so a catalogue that is worked on accumulates
+// hundreds: the demo catalogue had 222 after a day of edits. Every reader that
+// lists a catalogue's releases (reports, conflicts, the architecture views) reads
+// and decodes all of them.
+//
+// A release has two jobs, and pruning keeps every release that still has one:
+//
+//   - The newest is what the shop offers. It is never pruned.
+//   - An order names the release it was placed against, and its approval, its
+//     corrections, its actions and its reports read that release back for as long
+//     as the order exists (ADR-0312). A release an order names is never pruned.
+//
+// Every other release is history nothing reads, and that is what goes. The plan and
+// the deletion are worked out in one turn of the run loop, which is the loop orders
+// are placed on, so an order placed against a release cannot slip between the two.
+//
+// Like the purge, the GET answers what the POST would remove and the POST has to
+// repeat the catalogue id. Unlike the purge it touches no order, no instance and no
+// hold, so it is not switched off by --catalogue-purge=false.
+
+// releasePrunePlan is what pruning one catalogue's releases removes and keeps.
+type releasePrunePlan struct {
+	Catalog string `json:"catalog"`
+	// Newest is the release the shop offers.
+	Newest string `json:"newest,omitempty"`
+	// Kept is every release that stays, and why.
+	Kept []releaseKept `json:"kept"`
+	// Releases is every release that goes, newest first.
+	Releases []string `json:"releases"`
+	Done     bool     `json:"done,omitempty"`
+}
+
+// releaseKept is one release that stays: the newest, or one orders name.
+type releaseKept struct {
+	Release string `json:"release"`
+	// Why is "newest" or "orders".
+	Why string `json:"why"`
+	// Orders is how many orders name it.
+	Orders int `json:"orders,omitempty"`
+}
+
+// planReleasePrune decides, over one catalogue's releases (newest first, as the
+// store lists them) and every order, which releases stay and which go.
+func planReleasePrune(id string, rels []catalog.Release, orders []order.Order) releasePrunePlan {
+	named := map[string]int{}
+	for _, o := range orders {
+		named[o.ReleaseID]++
+	}
+	plan := releasePrunePlan{Catalog: id, Kept: []releaseKept{}, Releases: []string{}}
+	for i, r := range rels {
+		switch {
+		case i == 0:
+			plan.Newest = r.ID
+			plan.Kept = append(plan.Kept, releaseKept{Release: r.ID, Why: "newest", Orders: named[r.ID]})
+		case named[r.ID] > 0:
+			plan.Kept = append(plan.Kept, releaseKept{Release: r.ID, Why: "orders", Orders: named[r.ID]})
+		default:
+			plan.Releases = append(plan.Releases, r.ID)
+		}
+	}
+	return plan
+}
+
+// pruneReleases plans, and with apply deletes, in one turn of the run loop.
+func (s *Server) pruneReleases(id string, apply bool) (releasePrunePlan, bool, error) {
+	var (
+		plan  releasePrunePlan
+		found bool
+		err   error
+	)
+	s.do(func() {
+		if _, found, err = s.catalogStore.Catalog(id); err != nil || !found {
+			return
+		}
+		var rels []catalog.Release
+		if rels, err = s.catalogStore.ReleasesOf(id); err != nil {
+			return
+		}
+		// The order store is read whole, as the purge reads it: it is the only way to
+		// find the orders placed against a release, and pruning is not the hot path.
+		var orders []order.Order
+		if orders, err = s.orderStore.All(); err != nil {
+			return
+		}
+		plan = planReleasePrune(id, rels, orders)
+		if !apply {
+			return
+		}
+		for _, rel := range plan.Releases {
+			if err = s.catalogStore.DeleteRelease(rel); err != nil {
+				return
+			}
+		}
+		plan.Done = true
+	})
+	return plan, found, err
+}
+
+// handleReleasePruning answers what pruning a catalogue's releases would remove.
+func (s *Server) handleReleasePruning(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	plan, found, err := s.pruneReleases(id, false)
+	switch {
+	case err != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read the releases: "+err.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, fmt.Sprintf("no catalogue %s", id))
+	default:
+		httpapi.JSON(w, http.StatusOK, plan)
+	}
+}
+
+// handlePruneReleases deletes a catalogue's releases that are neither the newest
+// nor named by an order.
+func (s *Server) handlePruneReleases(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if r.URL.Query().Get("confirm") != id {
+		httpapi.Error(w, http.StatusBadRequest, "nothing was deleted: repeat the catalogue id as "+
+			"?confirm="+id+" to prune its releases. GET …/releases/pruning answers what would go")
+		return
+	}
+	plan, found, err := s.pruneReleases(id, true)
+	switch {
+	case err != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "prune the releases: "+err.Error()+
+			". Run it again: what is already gone is not found twice")
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, fmt.Sprintf("no catalogue %s", id))
+	default:
+		httpapi.JSON(w, http.StatusOK, plan)
+	}
+}

@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
+  one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
+  `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is
+  neither the newest (what the shop offers) nor named by an order (whose approval, corrections,
+  actions and reports read it back), and every one that stays with why.
+  `POST …/releases/pruning?confirm=<id>` deletes them. It touches no order, instance or hold, and
+  is for administrators. The MCP tools are `atlas_release_pruning` and `atlas_prune_releases`.
 - **Links straight into the shop.** A product and an entry of "My services" have an address of their
   own (`#/product/<item>`, `#/services/<item>`, `#/services/<item>/<person>`), so they can be sent,
   bookmarked or opened from a mail; a part opens under its product with its description. The

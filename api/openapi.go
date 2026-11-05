@@ -1392,6 +1392,16 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
 			summary: "A catalogue's releases, newest first. Query limit (a positive whole number) answers only that many of the newest, read without reading the rest: the shop asks for limit=1", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
+		// Pruning a catalogue's old releases (catalogpurge.go): the GET answers what
+		// the POST would remove, and the POST has to repeat the id.
+		{"GET", "/api/v1/catalogs/{id}/releases/pruning", s.handleReleasePruning, apiOp{
+			summary: "What pruning a catalogue's releases would remove: every release that is neither the newest (what the shop offers) nor named by an order (whose approval, corrections, actions and reports read it back), and every release that stays with why. Nothing is changed",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The prune plan", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/releases/pruning", s.handlePruneReleases, apiOp{
+			summary: "Prune a catalogue's releases: delete every release GET …/releases/pruning names, which is every release that is neither the newest nor named by an order. Permanent; touches no order, instance or hold. Refused with 400 unless `?confirm=` repeats the catalogue id. Answers the plan it carried out, with `done: true`",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The prune plan carried out", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/unpublished", s.catalogs.HandleUnpublished, apiOp{
 			summary: "What publishing this catalogue would change for the people ordering: " +
 				"products it would add, products the shop is still offering that it would " +
