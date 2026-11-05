@@ -92,7 +92,9 @@ func hubTools() []Tool {
 				"existing application holds is planned as elsewhere, with heldBy (the application, when " +
 				"you may see it) and compared (unchanged or changed): it stops the import until the person " +
 				"decides to take it, named in adopt, which moves it into the release's application — and, " +
-				"if compared is changed, also needs overwrite or keep for its content. A capability or value stream the " +
+				"if compared is changed, also needs overwrite or keep for its content. A decision model " +
+				"other applications' decisions use too is listed with sharedWith: it is replaced only when " +
+				"named in overwrite (never by *), which changes those decisions as well. A capability or value stream the " +
 				"release needs and this server's capability map lacks is planned as gap (proposed says the release " +
 				"offers one): it stops the import until the person decides — adopt files the release's proposal in " +
 				"the map, map files it under an existing key, omit leaves it out; never decide that for them. A " +

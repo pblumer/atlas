@@ -219,6 +219,18 @@
       "version": "1.0.15",
       "digest": "sha256:b4a7b08a5186c600fcf36fb21c4da23cfbeb8354883c4c18e8539cf4b250837f",
       "minAtlas": "0.23.0-0"
+    },
+    {
+      "bundle": "informationstransfer",
+      "version": "1.0.0",
+      "digest": "sha256:5f53d8196cf79975c8108eb7849475b42926a1da44e48ca031a0c19c301b1f03",
+      "minAtlas": "0.23.0-0"
+    },
+    {
+      "bundle": "informationstransfer",
+      "version": "1.0.1",
+      "digest": "sha256:c4f757f718b4b65a13c790131e162f011855d26e26787fbedd9f9a80710de3b9",
+      "minAtlas": "0.24.0-0"
     }
   ]
 }

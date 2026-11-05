@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "it-genehmigung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Informationstransfer genehmigen · Approve the transfer**\n\nSzenario · Scenario: **{{variantId}}**\n\nQuelle · Source: {{quelleKonto.entries[1].attributes.displayName[1]}} ({{quelle}}, {{quelleKonto.entries[1].attributes.userPrincipalName[1]}})\n\nZiel · Target: {{zielKonto.entries[1].attributes.displayName[1]}} ({{ziel}}, {{zielKonto.entries[1].attributes.userPrincipalName[1]}})\n\nOptionen · Options: Adresse {{optMail}}, Inhalt {{optInhalt}}, Kontingent {{optKontingent}}, Telefon {{optTelefon}}, Berechtigungen {{optRechte}}, Kürzel {{optKuerzel}}, Entra {{optEntra}}\n\n**Was geschieht · What happens**\n\n{{#loop pruefung.hinweise}}- {{this}}\n{{/loop}}\n\nBegründung · Reason: {{begruendung}}\n\nGelöscht wird erst nach einer eigenen Freigabe unmittelbar davor. · Nothing is deleted without a separate release right before it."
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Genehmigt · Approved",
+          "value": "genehmigt"
+        },
+        {
+          "label": "Abgelehnt · Refused",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kommentar",
+      "type": "textarea",
+      "label": "Kommentar (bei Ablehnung an die bestellende Person) · Comment",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

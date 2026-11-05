@@ -114,10 +114,14 @@ export function entraResultShape(operation) {
       return t("pnl.ops.entra.result.listGroups");
     case "list-deleted-groups":
       return t("pnl.ops.entra.result.listDeletedGroups");
+    case "list-user-groups":
+      return t("pnl.ops.entra.result.listUserGroups");
     case "list-subscribed-skus":
       return t("pnl.ops.entra.result.listSubscribedSkus");
     case "restore-group":
       return t("pnl.ops.entra.result.restoreGroup");
+    case "restore-user":
+      return t("pnl.ops.entra.result.restoreUser");
     case "invite-guest":
       return t("pnl.ops.entra.result.inviteGuest");
     case "create-community":
@@ -146,6 +150,7 @@ export function entraResultShape(operation) {
     case "add-team-owner":
     case "archive-team":
     case "set-sync-behavior":
+    case "permanently-delete-user":
       return t("pnl.ops.entra.result.none");
     default:
       return t("pnl.ops.entra.result.default");
@@ -162,6 +167,7 @@ export function entraResultType(operation) {
     case "list-users":
     case "list-groups":
     case "list-deleted-groups":
+    case "list-user-groups":
     case "list-subscribed-skus":
       return "array";
     case "assign-license":
@@ -179,6 +185,7 @@ export function entraResultType(operation) {
     case "add-team-owner":
     case "archive-team":
     case "set-sync-behavior":
+    case "permanently-delete-user":
       return "";
     default:
       return "object";

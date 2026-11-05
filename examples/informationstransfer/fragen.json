@@ -1,0 +1,13 @@
+{
+  "zielgruppe": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Informationstransfer»: Identity Management und Administration",
+      "en": "Audience of \"Resource transfer\": Identity Management and administration"
+    },
+    "hint": {
+      "de": "Wer einen Informationstransfer bestellen darf. Genehmigt wird im Prozess von der Gruppe der Applikationskonstante GRUPPE_IDENTITY_MANAGEMENT, der Entra-Transfer von GRUPPE_INFORMATIONSSICHERHEIT (siehe README).",
+      "en": "Who may order a resource transfer. The process is approved by the group in the application constant GRUPPE_IDENTITY_MANAGEMENT, the Entra ID transfer by GRUPPE_INFORMATIONSSICHERHEIT (see README)."
+    }
+  }
+}

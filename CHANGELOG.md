@@ -12,7 +12,88 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-11-05
+
+**The shop becomes one place to follow what one holds.** "My services" and "My orders" are
+one screen that lists, per Marktleistung and per person, what is held and what was ordered,
+with its provisioning state, its possible events and the orders and tasks behind it. A product
+and an entry have an address of their own that can be sent or bookmarked, the shop reads its
+data again while it is in view, and it loads faster: it asks for the newest release of each
+catalogue only, from a small index, instead of every release on every load.
+
+**A catalogue's old releases can be pruned**, every one that is neither the newest nor named
+by an order, after a preview that says which go and why the others stay. A catalogue content
+refresh runs in the background and reports its progress, so an agent no longer publishes a
+catalogue half way through its refresh.
+
+**Licences are managed against a contract.** A new example, `examples/lizenzmanagement`,
+keeps Microsoft 365 licence contracts per customer and project, checks every licence order of
+`m365-dienste` against them without two orders taking the last seat, compares them daily with
+the tenant and bills per WBS element. The Entra Worker reads the tenant's licence stock
+(`list-subscribed-skus`, ADR-0531), and the Exchange Worker creates room lists and sets a
+room's Places metadata, so a meeting room of `m365-dienste` appears in Outlook's Room Finder
+(ADR-0532).
+
+**The Modeler steps between a process's versions and restores one as the draft**, with a
+warning when the draft it replaces holds work that is not deployed (ADR-0533).
+
+**Every app has a symbol**, shown in the app drawer, the top bar and the handbook, and the
+Console's welcome card greets the person signed in by name. The top bar stays in view while a
+page scrolls.
+
+Nothing in the log, the state or a deployment's format changed; 0.24.0 replaces 0.23.1 in
+place.
+
 ### Added
+- **Example: resource transfer between two accounts.** A new example package,
+  `examples/informationstransfer` (application «Beispiel: Informationstransfer», hub bundle
+  `informationstransfer`), moves the resources of a previous account to a new one on
+  internalisation, externalisation or a change of office or department, modelled on BIT's
+  «Transfer Resources»: primary address and UPN (with the `transfered.` prefix on the source, or
+  none when the content moves too), mailbox content, mailbox quota (only when the source has more,
+  compared in KB), Teams Phone number, direct manual group memberships in AD and Entra ID, the short
+  code, and on internalisation the Entra ID account by a hard match on `onPremisesImmutableId`. A
+  COLLECT decision table tells the orderer which combinations the scenario refuses and why, Identity
+  Management approves, every deletion is released by a person right before it, the Entra transfer
+  stays off until `ENTRA_TRANSFER = ein`, and the source is finally marked «Ressourcen transferiert».
+  Mailboxes live on Exchange Server or Exchange Online (`POSTFACH_SYSTEM`); what a platform cannot
+  do (moving content inside Exchange Online, Entra Connect, the telephony records) is a task. Accounts
+  and mailboxes stay sealed: the comparisons run in the AD Worker's search filters. The M365 devenv
+  installs it with `scripts/install-informationstransfer.py`.
+- **Worker operations for moving one account's resources to another.** Entra Worker:
+  `list-user-groups` lists the groups a user is a direct member of (always an advanced query),
+  `restore-user` takes a deleted user back out of the recycle bin and `permanently-delete-user`
+  removes one for good; an id not in the recycle bin fails the job (`Directory.Read.All`,
+  `User.DeleteRestore.All`). Exchange Worker, Exchange Server only: `disable-mailbox` disconnects a
+  mailbox and `restore-mailbox-content` copies a disconnected mailbox's content into another mailbox
+  (`New-MailboxRestoreRequest`, `AllowLegacyDNMismatch` set by the Worker). The AD Worker returns
+  `objectGUID`, `objectSid` and `mS-DS-ConsistencyGuid` as base64 of their bytes; for `objectGUID`
+  that is Entra's `onPremisesImmutableId` (ADR-0534).
+- **The Modeler steps between a process's versions and restores one as the draft.** Arrows on
+  either side of the editor bar's version chip open the version before or after the one shown, the
+  draft after the newest, and the chip's panel lists every version with who deployed it and when.
+  A version's panel offers **Restore as draft**: a dialog reads the draft against the newest
+  version and warns, with its differences, when replacing it loses something that is not deployed;
+  confirming saves the version as the draft and reopens the editor on it, so the next Deploy runs it
+  as a new version. Leaving through the arrows or the list keeps unsaved work as every other door
+  out of the editor does
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
+- **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
+  one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
+  `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is
+  neither the newest (what the shop offers) nor named by an order (whose approval, corrections,
+  actions and reports read it back), and every one that stays with why.
+  `POST …/releases/pruning?confirm=<id>` deletes them. It touches no order, instance or hold, and
+  is for administrators. The MCP tools are `atlas_release_pruning` and `atlas_prune_releases`.
+- **Links straight into the shop.** A product and an entry of "My services" have an address of their
+  own (`#/product/<item>`, `#/services/<item>`, `#/services/<item>/<person>`), so they can be sent,
+  bookmarked or opened from a mail; a part opens under its product with its description. The
+  address follows the page as it is used, the browser's back and forward step between product
+  pages, entries and views, and the product page and an opened entry carry a "Copy link" button.
+- **The shop keeps itself current.** Every thirty seconds while it is in view it reads the orders,
+  the tasks and what the reader holds again, and every few minutes, with an empty basket, the
+  catalogue. It redraws only when that disturbs nobody: not while a form or a description is open,
+  something is being sent or the focus is in a field.
 - **The Exchange Worker creates room lists and sets a room's Places metadata.** Three operations
   for Outlook's Room Finder, which lists rooms only through room lists and filters them by city,
   floor and capacity: `create-room-list` (`New-DistributionGroup -RoomList`, the switch set by the
@@ -35,7 +116,6 @@ _Changed_ / _Removed_ for each version.
   (`api/web/module-icons.js`); `scripts/brand/modules.py` writes their copies under
   `docs/brand/icons/modules/` and `scripts/brand/welcome.py` draws the rocket, and a test
   holds both to the drawing. On a phone the card leaves the picture out.
-
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
   come — running or done, total and finished products, and refreshed, refused or skipped per product. A second
@@ -78,7 +158,51 @@ _Changed_ / _Removed_ for each version.
   grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
+### Changed
+- **An import replaces a decision model other applications use only when you name it.** A model whose handle a decision outside the application resolves no longer refuses the import after the dialog. The plan lists it with `sharedWith`, naming the decisions and applications that change with it, and only a named `overwrite` replaces it, never `overwrite=*` and never its being behind (ADR-0467). Replacing it needs the editor role on those applications, and a protected application's decision is never changed. The Console's import dialog shows the decisions, starts the box unticked and leaves it out of "Tick all". `atlas import --overwrite all` leaves it undecided, and `atlas_hub_import_release` describes the rule.
+- **The Console's welcome card greets the person signed in by name.** Its heading reads
+  "Welcome, Tina Muster" — the display name where one is set, else the username, as the
+  account menu shows them — instead of "Welcome to atlas". With sign-in off there is
+  nobody to name, and it still welcomes to atlas.
+- **The shop loads faster.** It asks for the newest release of each catalogue only, with the new
+  `limit` query of `GET /api/v1/catalogs/{id}/releases`, which the server answers from a small index
+  without reading the other releases: on the demo catalogue the shop had been reading all 222
+  releases, 4.4 MB, on every load. A position's actions are read when its entry is opened, not
+  for every position on every load. And the page works out what it needs from a release once
+  rather than on every row, which takes a redraw of a large "My services" from about 110 ms to
+  about 15 ms.
+- **The shop's "My services" and "My orders" are one screen.** "My services" now lists, per
+  Marktleistung and per person it is for, what somebody holds and what they ordered: its catalogue
+  icon as a pie of how far it is provisioned, how many are held, since when and the order behind
+  it. Opened, an entry shows its possible events (the actions its lifecycle process takes, such
+  as a password reset), the orders and positions behind it with their tasks, and what a held
+  bundle lacks. A filter chooses for whom (me, others, everyone), a status (ready, being set up,
+  task open, ended) and searches by service, person or order; tasks waiting on the reader
+  outside the filter are pointed out. The cascade keeps its columns, now with the pies and a
+  details column; the tile layout is a list whose rows open in place. The "My orders" tab is gone.
+- **The cascade catalogue shows the products' icons.** Each Marktleistung and each part in the
+  cascade, and each search hit, carries the same icon as its tile.
+- **A product page's way back is a button.** "‹ Back to the catalogue" replaces the small link in
+  the corner of a product page in the tile layout.
+
 ### Fixed
+- **"Tick all" in the import dialog takes artifacts another application holds as well.** It also takes their content, and "Tick none" clears both. Each row now names the artifact's kind and name and says what happens to it as its boxes stand: replaced, kept, moved from which application into which, or left behind. The dialog names the application it imports into. The import button waits, with the reason beside it, until every artifact another application holds is taken, since the server refuses the package without them. A failed hub import is reported as "Import failed" rather than "Could not load Blueprint".
+- **Saving a version over its draft moves the editor onto the draft.** A version opened in the
+  Modeler and saved onto its process's existing draft (the overwrite Save offers) left the session
+  addressing the version: the address still named it, and Deploy said the draft would be left
+  alone although it had just been replaced. The session now addresses the draft, as after the
+  first save of a version
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
+- **The test environment installs the AD services with its own directory.** `examples/ad-dienste`
+  went into the M365 test environment with the example DNs of its tables
+  (`…,DC=contoso,DC=local`), so the domain controller answered with an LDAP referral and the order
+  stopped on an incident. `deploy/opentofu/m365-devenv/scripts/install-ad-dienste.py` now installs
+  it ready to order: it puts the tables `AdBerechtigungen` and `AdOe` under the environment's test
+  OU (`tofu output ad_test_ou`) and stops if a contoso DN is left in anything it uploads, uploads
+  the models, imports and publishes the application and the catalogue with their groups, sets the
+  `AD_*` constants beside any others and switches «Forms may search» on at `ad_verzeichnis`.
+  `ad-setup.ps1` creates the OUs and groups the tables and constants name (phase 3 for a running
+  domain controller), and a change to the script no longer replaces the domain controller.
 - **A meeting room of `m365-dienste` appears in Outlook's Room Finder.** «Sitzungszimmer
   (Raumpostfach)» created the room mailbox and wrote its location into `CustomAttribute4` only,
   so the room was bookable by its address and missing from "Browse all rooms" and the location
@@ -18139,7 +18263,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0

@@ -225,5 +225,5 @@ test("the page's own words stay readable in a regional locale", async ({ page })
 
   const shown = await page.locator("#app").innerText();
   expect(shown, "no untranslated key is rendered").not.toMatch(/\b(nav|portal|basket)\.[a-z]/);
-  expect(shown, "the German furniture under a de-DE locale").toContain("Meine Aufträge");
+  expect(shown, "the German furniture under a de-DE locale").toContain("Meine Leistungen");
 });

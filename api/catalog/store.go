@@ -42,6 +42,8 @@ type Store struct {
 	// read — the one thing that may change what an already published release
 	// shows (§ 9 of ADR-0491).
 	contents *sidecar.Store[ContentState]
+	// index is what NewestReleasesOf reads instead of every release (releaseindex.go).
+	index releaseIndex
 }
 
 // NewStore opens (creating if needed) the directories backing a catalogue.

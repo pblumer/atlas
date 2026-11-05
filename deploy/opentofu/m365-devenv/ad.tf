@@ -231,6 +231,13 @@ resource "azurerm_windows_virtual_machine" "ad" {
       url   = azurerm_key_vault_certificate.ldaps[0].secret_id
     }
   }
+
+  # The script runs once, at provisioning; a later change to it (phase 3 for
+  # examples/ad-dienste) must not replace a domain controller and its forest. A running
+  # one gets the change through Run Command (README, «Beispiele einspielen»).
+  lifecycle {
+    ignore_changes = [custom_data]
+  }
 }
 
 locals {

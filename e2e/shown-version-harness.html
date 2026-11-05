@@ -11,7 +11,9 @@
 
          window.__state is what the server "holds": a test sets the comparison and the
          process listing before mounting. Every write the editor makes is recorded in
-         order in window.__writes, which is the evidence for save-before-deploy. -->
+         order in window.__writes, which is the evidence for save-before-deploy, and for
+         Restore as draft saving the version over the draft
+         (ADR-0533). -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -70,6 +72,11 @@
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
         if (method === "POST" && /\/drafts/.test(url)) {
           window.__writes.push({ method, url });
+          // A draft of the process already exists: a save that does not name it as its
+          // own (?from= empty) is refused, as the server refuses it (ADR-0222).
+          if (window.__state.draftExists && /[?&]from=(&|$)/.test(url)) {
+            const e = new Error("a draft with process id order already exists"); e.status = 409; throw e;
+          }
           return { processId: "order", name: "Bestellung", savedAt: 1700000500 };
         }
         if (method === "POST" && /\/deployments/.test(url)) {
