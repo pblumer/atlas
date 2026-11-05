@@ -34,6 +34,9 @@ the tenant and bills per WBS element. The Entra Worker reads the tenant's licenc
 room's Places metadata, so a meeting room of `m365-dienste` appears in Outlook's Room Finder
 (ADR-0532).
 
+**The Modeler steps between a process's versions and restores one as the draft**, with a
+warning when the draft it replaces holds work that is not deployed (ADR-0533).
+
 **Every app has a symbol**, shown in the app drawer, the top bar and the handbook, and the
 Console's welcome card greets the person signed in by name. The top bar stays in view while a
 page scrolls.
