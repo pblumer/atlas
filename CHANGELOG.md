@@ -12,6 +12,38 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-11-05
+
+**The shop becomes one place to follow what one holds.** "My services" and "My orders" are
+one screen that lists, per Marktleistung and per person, what is held and what was ordered,
+with its provisioning state, its possible events and the orders and tasks behind it. A product
+and an entry have an address of their own that can be sent or bookmarked, the shop reads its
+data again while it is in view, and it loads faster: it asks for the newest release of each
+catalogue only, from a small index, instead of every release on every load.
+
+**A catalogue's old releases can be pruned**, every one that is neither the newest nor named
+by an order, after a preview that says which go and why the others stay. A catalogue content
+refresh runs in the background and reports its progress, so an agent no longer publishes a
+catalogue half way through its refresh.
+
+**Licences are managed against a contract.** A new example, `examples/lizenzmanagement`,
+keeps Microsoft 365 licence contracts per customer and project, checks every licence order of
+`m365-dienste` against them without two orders taking the last seat, compares them daily with
+the tenant and bills per WBS element. The Entra Worker reads the tenant's licence stock
+(`list-subscribed-skus`, ADR-0531), and the Exchange Worker creates room lists and sets a
+room's Places metadata, so a meeting room of `m365-dienste` appears in Outlook's Room Finder
+(ADR-0532).
+
+**The Modeler steps between a process's versions and restores one as the draft**, with a
+warning when the draft it replaces holds work that is not deployed (ADR-0533).
+
+**Every app has a symbol**, shown in the app drawer, the top bar and the handbook, and the
+Console's welcome card greets the person signed in by name. The top bar stays in view while a
+page scrolls.
+
+Nothing in the log, the state or a deployment's format changed; 0.24.0 replaces 0.23.1 in
+place.
+
 ### Added
 - **The Modeler steps between a process's versions and restores one as the draft.** Arrows on
   either side of the editor bar's version chip open the version before or after the one shown, the
@@ -60,7 +92,6 @@ _Changed_ / _Removed_ for each version.
   (`api/web/module-icons.js`); `scripts/brand/modules.py` writes their copies under
   `docs/brand/icons/modules/` and `scripts/brand/welcome.py` draws the rocket, and a test
   holds both to the drawing. On a phone the card leaves the picture out.
-
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
   come — running or done, total and finished products, and refreshed, refused or skipped per product. A second
@@ -18200,7 +18231,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0
