@@ -264,8 +264,12 @@ IOT1, first increment — the device core, not yet reachable from a model:
   for a job no retry can fix.
 - The GPIO character device's v2 ABI laid out by hand (`cdev.go`), because Go aligns
   64-bit fields to 4 bytes on 32-bit ARM and the kernel to 8; the layout and ioctl
-  numbers are pinned by test. The system call is exercised only against a file that
-  refuses it; the success path has not run on hardware yet.
+  numbers are pinned by test. In CI the system call is exercised only against a file
+  that refuses it. On hardware, `TestHardwareLineOnARealChip` (opt-in through
+  `ATLAS_DEVICE_HW`) passed on 2026-11-05 on a Raspberry Pi Zero 2 W, Raspberry Pi OS
+  Lite 64-bit, `gpiochip0` line 26 with nothing wired to it: both biases read as
+  expected, an output claimed high read high, a second claim was refused with EBUSY,
+  set and read-back agreed, and a Device claimed, drove and released the line.
 - `FakeChip`, for the tests and for a mock mode of the worker.
 
 Not yet: the compiler element, the reserved job type, the Worker kind in the server,
