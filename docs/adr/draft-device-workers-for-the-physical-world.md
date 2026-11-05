@@ -1,0 +1,224 @@
+# ADR-DRAFT: Device Workers — GPIO, buses and inputs of the physical world
+
+- **Status:** Proposed
+- **Implementation:** Not started
+- **Date:** 2026-11-05
+- **Deciders:** Atlas maintainers
+- **Open question:** How `atlas worker` behaves on the smallest Linux target (Pi Zero W,
+  ARMv6, 512 MB) — resident memory, TLS long-poll cost, start time — and whether a
+  MicroPython client on a Pico 2 W can hold a TLS long-poll against the job protocol
+  within its RAM. Neither is measured; the tier boundaries below rest on that gap.
+- **Question checked:** 2026-11
+
+## Context and problem statement
+
+Atlas should address IoT automation as an audience: a process that switches a relay,
+opens a valve, drives a motor or a LED, reads a sensor, and is started or continued
+by something that happens in the physical world — a button, a door contact, a
+temperature crossing a threshold.
+
+What exists today:
+
+- Release builds for `linux_arm64` and `linux_arm` (ARMv6, 32-bit Raspberry Pi OS).
+  A stripped ARMv6 build of `./cmd/atlas` measured 65.8 MB on 2026-11-05.
+- `atlas worker` is a client of the HTTP API that long-polls
+  `POST /api/v1/jobs/activate` and settles a job through `complete`, `fail` or
+  `error` (ADR-0007, ADR-0157). It connects outbound, so a device behind NAT needs no
+  open port. `--handle type=command` already lets any program work a model-authored
+  job type: GPIO can be driven today by a script, with no engine change.
+- A worker that names the Workers it holds in `connectors` is leased only their jobs
+  (ADR-0168, `handleActivateJobsByType`). Two devices of one Worker Type therefore do
+  not take each other's jobs, provided each is its own Worker.
+- `POST /api/v1/messages` correlates a message to a waiting catch event or starts a
+  process at a message start event (ADR-0020, ADR-0035). With `timeToLiveMs` and
+  `messageId` a retry within the lifetime is a no-op (ADR-0370).
+- The `worker` token scope reaches the job protocol and nothing else. It does **not**
+  reach `POST /api/v1/messages`; a device that should raise events needs a broader
+  token today.
+
+What is missing is not the transport but the product: no typed operations a modeler
+can pick, no place where a device's pins, safe states and inputs are configured, no
+narrow credential for a device that sits physically exposed, and no rules for the
+failure modes that only the physical world has.
+
+The physical world changes three assumptions every existing Worker Type relies on:
+
+1. **A failure is not only an incident.** A relay left closed when the network, the
+   engine or the device fails does damage that no replay undoes. The event log holds
+   the *order*, never the state of the output.
+2. **At-least-once becomes visible.** A job re-leased after a lost lease runs again.
+   Setting a level twice is harmless; a pulse that feeds an animal or opens a door
+   twice is not.
+3. **Inputs arrive at machine rate.** Every message is a durable event in the WAL. A
+   sensor sampled at 10 Hz and published as messages would fill the log with data
+   that belongs in a time-series store.
+
+## Decision drivers
+
+- Reach the smallest devices, not only a Pi that can host the whole server.
+- Keep the engine boundary unchanged: every physical side effect happens in a Worker
+  Instance after the job is durable (I2), nothing on the hot path (I1, I5).
+- End-to-end acknowledgement: a job completes only after the device performed the
+  effect, not after a broker accepted a message.
+- A device credential that, when the device is stolen, cannot do more than that
+  device was meant to do.
+- A safe physical state that holds without Atlas.
+- No cgo (ADR-0010); one binary for the server and the Linux worker (ADR-0011).
+
+## Considered options
+
+1. **Status quo: `--handle` with a script** (Python/gpiozero) per installation.
+2. **A built-in Linux GPIO Worker Type** in Go, served by `atlas worker`.
+3. **An MQTT bridge Worker Type**: Atlas publishes commands to a broker and turns
+   subscribed topics into messages.
+4. **A `device` Worker Type contract** with implementations per device tier, speaking
+   the native job protocol end to end; MQTT added later for off-the-shelf devices.
+
+## Decision outcome
+
+Proposed: **option 4 — a `device` Worker Type defined as a contract, implemented per
+tier, over the existing job protocol.**
+
+### The contract
+
+A **Worker** of type `device` is one physical device (`pi-gewaechshaus`,
+`pico-tuer-nord`). Its configuration — not the BPMN model — holds what is wired to it:
+
+- **Outputs:** name, pin or bus address, kind (digital, PWM), the **safe state**
+  applied at start and on shutdown, and an optional **maximum on-duration** the device
+  enforces itself.
+- **Inputs:** name, pin, edge, debounce, and the **message name** and correlation-key
+  template a change publishes.
+
+A model addresses outputs and inputs by name, never by pin number, so rewiring a
+device does not redeploy a process.
+
+Operations, first set:
+
+| Operation | Effect | Idempotent |
+| --- | --- | --- |
+| `digital.write` | set a named output to a level | yes |
+| `digital.read` | return the level of a named input or output | yes |
+| `pulse` | set a level for a bounded duration, then return to the safe state | no — deduplicated by job key |
+| `pwm.set` | set duty cycle and frequency | yes |
+| `i2c.read` / `i2c.write` | read or write registers of a configured bus device | write depends on the target |
+| `onewire.read` | read a configured 1-Wire sensor (e.g. DS18B20) | yes |
+
+SPI and UART follow when a concrete use asks for them.
+
+### Tiers
+
+| Tier | Device | What runs on it |
+| --- | --- | --- |
+| Edge server | Pi 4 / Pi 5 | `atlas serve` with the `device` Worker Type supervised locally; processes keep running without uplink |
+| Linux worker | Pi Zero 2 W (arm64), Pi Zero W (ARMv6) | `atlas worker --connector device`, built in Go against `/dev/gpiochip*` (no sysfs GPIO, no cgo) |
+| Microcontroller | Pico 2 W, ESP32 | a reference client in MicroPython speaking the same five HTTP calls; not the Atlas binary |
+
+The job protocol is small enough for the third tier: `jobs/activate`, `complete`,
+`fail`, `error`, and `messages`. A protocol conformance suite that any client can be
+run against belongs to this decision, so a third-party firmware can claim the
+contract rather than resemble it.
+
+### Inputs become messages
+
+A configured input publishes `POST /api/v1/messages` with the configured name, a
+correlation key from its template, a `timeToLiveMs`, and a `messageId` of
+*device id · boot id · counter*. The boot id keeps a counter reset by a reboot from
+colliding with a message still alive in the buffer, which the deduplication would
+otherwise drop as a retry.
+
+The device filters at the edge: debounce, change detection, thresholds. Atlas
+receives events that matter to a process, not samples. Telemetry belongs in a
+time-series store; this record does not make Atlas one.
+
+### A narrow device credential
+
+A new token scope `device` reaches the job protocol routes of the `worker` scope and
+`POST /api/v1/messages`, the latter limited to the message names the Worker's inputs
+declare. A stolen device can then work its own jobs and raise its own events, and
+nothing else. One token per device, revocable on its own.
+
+### Safety that holds without Atlas
+
+- The device applies each output's safe state at start, at orderly shutdown, and
+  when it loses the server for longer than a configured interval.
+- The maximum on-duration is enforced on the device, not by a BPMN timer: the timer
+  is the plan, the device limit is the guarantee.
+- A `pulse` remembers the job keys it executed and completes a re-leased one without
+  acting again. Across a reboot that memory is lost on the Linux tier only if it is
+  kept in RAM; the implementation slice decides whether to persist it, and documents
+  the case it leaves open.
+- Long physical actions are modelled as `digital.write` on, a BPMN timer, and
+  `digital.write` off — never as one job whose lease must outlast the action.
+
+### What Atlas is not here
+
+A supervisory controller: it decides *when* and *whether*. Regulation loops (PID,
+motor control) stay on the device; long-poll, lease and batch latencies are
+milliseconds to seconds and not bounded.
+
+### Invariants
+
+- I2: every effect runs in a Worker Instance on a job that is already durable; an
+  input enters only through the existing message API.
+- I1, I5: nothing new on the processor path; the operation set compiles to a reserved
+  job type like every other Worker Type.
+- I3, I4, I6: no new state, no new event kind in the first slices. Device presence
+  and health are runtime topology, not process events (ADR-0203).
+
+### Consequences
+
+- **Positive:** one contract from the Pi 5 to a microcontroller; the BPMN model names
+  outputs and inputs and stays independent of wiring and tier.
+- **Positive:** end-to-end acknowledgement — a job completes after the effect, which a
+  broker-first design cannot give.
+- **Positive:** inputs reuse message correlation, buffering and idempotency that
+  exist already.
+- **Negative:** a microcontroller client is code Atlas maintains outside Go, with its
+  own release and test path.
+- **Negative:** off-the-shelf devices that speak only MQTT (Shelly, Tasmota) are not
+  reached until the MQTT slice.
+- **Follow-ups / risks:** the measurements in the open question; a separate,
+  smaller edge binary would need its own record against ADR-0011; persisted pulse
+  deduplication; rate limiting of messages per device token.
+
+### Proposed slices
+
+1. Accept this record and a threat model for physically exposed credentials.
+2. Token scope `device` with the message-name allowlist (server only).
+3. Linux tier: `digital.write`, `digital.read`, `pulse`, safe state and on-duration
+   watchdog, tested against a fake gpiochip.
+4. Inputs to messages: edges, debounce, `messageId`.
+5. `pwm.set`, `i2c.*`, `onewire.read`.
+6. Microcontroller reference client and the protocol conformance suite.
+7. Edge server on a Pi: sizing measured, an example application, the handbook card.
+8. MQTT bridge for off-the-shelf devices, in its own record.
+
+## Pros and cons of the options
+
+### Option 1 — `--handle` with a script
+- Good: works today, no engine change, the whole Python sensor ecosystem.
+- Bad: no typed operations, no configuration in the Console, no narrow credential, no
+  safety rules; every installation writes its own. Not a product for an audience.
+
+### Option 2 — built-in Linux GPIO Worker Type only
+- Good: typed, governed, in Go, smallest change that is a product.
+- Bad: stops at devices that run Linux; the smallest devices are out of reach.
+
+### Option 3 — MQTT bridge
+- Good: reaches most off-the-shelf IoT devices at once; inputs come naturally.
+- Bad: needs a broker; QoS acknowledges delivery to the broker, so a job completes
+  before the relay switched unless a request/response pattern is added on top; a
+  second transport whose durability Atlas does not own.
+
+### Option 4 — `device` contract over the job protocol
+- Good: end-to-end acknowledgement, one contract across tiers, reuses messages.
+- Bad: the most work; a non-Go client to maintain.
+
+## Links
+
+- relates to [ADR-0203](0203-worker-execution-model.md) (Worker Type, Worker, Worker Instance)
+- relates to [ADR-0007](0007-job-worker-protocol.md), [ADR-0157](0157-worker-processes-supervision-and-console.md), [ADR-0168](0168-connector-work-on-a-worker.md)
+- relates to [ADR-0020](0020-message-correlation.md), [ADR-0035](0035-message-start-events.md), [ADR-0370](0370-durable-message-buffer.md)
+- relates to [ADR-0010](0010-go-and-no-cgo.md), [ADR-0011](0011-single-binary-distribution-and-web-ui.md)
+- relates to [ADR-0289](0289-worker-type-setup-in-the-panel.md), [ADR-0167](0167-released-connectors-ship-in-the-marketplace.md) (what a new Worker Type owes)
