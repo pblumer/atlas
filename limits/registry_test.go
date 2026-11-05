@@ -27,6 +27,14 @@ var ceilingCalls = map[string]int{
 //
 // Keyed by "<path>:<expression as it is printed>".
 var classified = map[string]string{
+	"api/workertypeinstall.go:install.MaxArtifactBytes + install.MaxManifestBytes + 1<<20": "the multipart " +
+		"envelope around one installed Worker Type: the artifact and manifest bounds of workertype/install plus " +
+		"room for the part headers. The artifact streams to disk and is never held in memory, so it is the " +
+		"package format's rule, not an installation's memory budget (ADR-0535)",
+	"api/workertypeinstall.go:install.MaxManifestBytes + 1": "the manifest bound workertype/install names " +
+		"(MaxManifestBytes), read here one byte over so an oversized manifest is refused, not truncated",
+	"workertype/install/install.go:MaxArtifactBytes + 1": "the named size bound of one installed Worker Type " +
+		"executable; it streams to disk while hashed, so it bounds the data directory, not memory (ADR-0535)",
 	"mcp/http.go:maxLine": "JSON-RPC framing, shared with the stdio transport where there is no HTTP body at " +
 		"all; it belongs to the protocol's own constants rather than to an operator's memory policy",
 	"cmd/atlas/apiclient.go:64 << 20": "the CLI reading an answer from a server it was pointed at — a " +

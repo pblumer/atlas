@@ -694,3 +694,25 @@ func waitUntil(t *testing.T, what string, cond func() bool) {
 		time.Sleep(2 * time.Millisecond)
 	}
 }
+
+// A result the worker cannot put into JSON is not completed with half of it: the
+// report fails, the lease runs out, and the job is offered again.
+func TestAResultThatIsNotJSONIsNotReported(t *testing.T) {
+	stub, ts := newProtoStub(t, map[string]http.HandlerFunc{
+		"/api/v1/jobs/activate": oneJob(`{"jobKey":4,"type":"call","retries":1,"leaseToken":1}`),
+	})
+	if err := runOnce(t, ts, workersdk.Options{Handlers: handling("call", workersdk.ExecFunc(func(context.Context, workersdk.Job) (map[string]any, error) {
+		return map[string]any{"fn": func() {}}, nil
+	}))}); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if got := len(stub.to("/api/v1/jobs/4/complete")); got != 0 {
+		t.Errorf("completions = %d, want none for a result that is not JSON", got)
+	}
+	// A server address that is not a URL fails the poll instead of panicking.
+	w := workersdk.New(workersdk.Options{Server: "http://bad\x7f", ID: "w",
+		Handlers: handling("call", workersdk.ExecFunc(func(context.Context, workersdk.Job) (map[string]any, error) { return nil, nil }))})
+	if err := w.RunOnce(context.Background()); err == nil {
+		t.Error("RunOnce against a malformed server address = nil")
+	}
+}

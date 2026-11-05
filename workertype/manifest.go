@@ -58,6 +58,9 @@ type Spec struct {
 	ConfigurationSchema string      `json:"configurationSchema"`
 	ModelerTemplate     string      `json:"modelerTemplate"`
 	Artifact            *Artifact   `json:"artifact,omitempty"`
+	// Artifacts are the runtime's executables, one per platform (ADR-0535 §1). A
+	// manifest names either Artifact (one platform) or Artifacts, not both.
+	Artifacts []Artifact `json:"artifacts,omitempty"`
 }
 
 // Runtime declares how the Worker runtime is supplied.
@@ -174,21 +177,61 @@ func (m Manifest) Validate() error {
 			return err
 		}
 	}
-	if m.Spec.Runtime.Mode == RuntimeExternal && m.Spec.Artifact == nil {
-		return errors.New("spec.artifact is required for an external runtime")
+	if m.Spec.Artifact != nil && len(m.Spec.Artifacts) > 0 {
+		return errors.New("spec.artifact and spec.artifacts are exclusive: name one platform or list them all")
+	}
+	if m.Spec.Runtime.Mode == RuntimeExternal && m.Spec.Artifact == nil && len(m.Spec.Artifacts) == 0 {
+		return errors.New("spec.artifact or spec.artifacts is required for an external runtime")
 	}
 	if m.Spec.Artifact != nil {
-		if strings.TrimSpace(m.Spec.Artifact.Platform) == "" {
-			return errors.New("spec.artifact.platform is required")
-		}
-		if strings.TrimSpace(m.Spec.Artifact.MediaType) == "" {
-			return errors.New("spec.artifact.mediaType is required")
-		}
-		if !digestPattern.MatchString(m.Spec.Artifact.Digest) {
-			return errors.New("spec.artifact.digest must be a lower-case sha256 digest")
+		if err := validateArtifact("spec.artifact", *m.Spec.Artifact); err != nil {
+			return err
 		}
 	}
+	platforms := make(map[string]struct{}, len(m.Spec.Artifacts))
+	for i, a := range m.Spec.Artifacts {
+		if err := validateArtifact(fmt.Sprintf("spec.artifacts[%d]", i), a); err != nil {
+			return err
+		}
+		if _, dup := platforms[a.Platform]; dup {
+			return fmt.Errorf("spec.artifacts names platform %q twice", a.Platform)
+		}
+		platforms[a.Platform] = struct{}{}
+	}
 	return nil
+}
+
+// MediaTypeExecutable is the media type of a native executable artifact: one binary
+// for one platform, launched as a process (ADR-0535 §1).
+const MediaTypeExecutable = "application/vnd.atlas.worker.executable"
+
+var platformPattern = regexp.MustCompile(`^[a-z0-9]+/[a-z0-9]+$`)
+
+func validateArtifact(field string, a Artifact) error {
+	switch {
+	case strings.TrimSpace(a.Platform) == "":
+		return fmt.Errorf("%s.platform is required", field)
+	case !platformPattern.MatchString(a.Platform):
+		return fmt.Errorf("%s.platform %q must be os/arch, such as linux/amd64", field, a.Platform)
+	case strings.TrimSpace(a.MediaType) == "":
+		return fmt.Errorf("%s.mediaType is required", field)
+	case !digestPattern.MatchString(a.Digest):
+		return fmt.Errorf("%s.digest must be a lower-case sha256 digest", field)
+	}
+	return nil
+}
+
+// ArtifactFor returns the artifact the manifest declares for platform ("os/arch").
+func (m Manifest) ArtifactFor(platform string) (Artifact, bool) {
+	if a := m.Spec.Artifact; a != nil && a.Platform == platform {
+		return *a, true
+	}
+	for _, a := range m.Spec.Artifacts {
+		if a.Platform == platform {
+			return a, true
+		}
+	}
+	return Artifact{}, false
 }
 
 // CompatibleWith reports whether an Atlas semantic version satisfies the
