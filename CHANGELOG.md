@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Every job carries an idempotency key, and every Worker Type operation says what a repeat
+  does.** A leased job's `idempotencyKey` (`atlas:<node id>:<job key>`) is the same for every
+  delivery of one task execution — a retry, a redelivery after a lease ran out, the retry an
+  incident's resolve starts — so a worker can hand it to a target that filters duplicates. A Worker
+  Type manifest must now declare, per operation, its `idempotency` (`natural`, `key`, `check` or
+  `none`) and its `effect` (`reversible` or `irreversible`), so a possible repeated effect is a
+  stated fact rather than an assumption.
 - **An installed Worker Type is configured from its own schema.** A Worker Type's manifest carries
   its configuration as a JSON Schema whose `writeOnly` properties are secrets. An administrator
   configures Workers of an installed type under `/api/v1/worker-types/installed/{id}/workers`: the
