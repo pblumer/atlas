@@ -8,6 +8,15 @@ implementation status.
 
 ## Library
 
+- **atlas-Applikationen — Von der Idee in den Betrieb** —
+  [dark screen PDF](atlas-applikationen-dark.pdf),
+  [print-friendly PDF](atlas-applikationen-print.pdf),
+  [standalone HTML](atlas-applikationen.html) and
+  [Markdown source](atlas-applikationen.md).
+  German technical whitepaper, **6 November 2026**, about process-application
+  architecture, development, releases, promotions, package import, atlas hub,
+  operational constraints and open implementation gaps. Based on the stated
+  ADR, code and test status; **not acceptance evidence** or certification.
 - **atlas hub — Signed Distribution of Process Applications** —
   [dark screen PDF](atlas-hub-signierte-verteilung-dark.pdf),
   [print-friendly PDF](atlas-hub-signierte-verteilung-print.pdf) and
