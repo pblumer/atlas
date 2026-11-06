@@ -134,6 +134,11 @@
     {
       "capability": "m365-zusammenarbeit",
       "kind": "process",
+      "processId": "proc_m365_sichtbarkeit_nachfuehren"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
       "processId": "proc_m365_team"
     }
   ],

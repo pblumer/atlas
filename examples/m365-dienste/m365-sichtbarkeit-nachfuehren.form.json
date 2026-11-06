@@ -1,0 +1,53 @@
+{
+  "type": "default",
+  "id": "m365-sichtbarkeit-nachfuehren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Sichtbarkeit nachführen · Correct the visibility**\n\nFür ein Team oder eine SharePoint-Teamwebsite, die der Katalog angelegt hat. Der Alias ist der mailNickname der Gruppe (Entra ID, oder regel.alias bzw. alias in der Instanz, die das Team oder die Site bereitgestellt hat). Ein gesetztes NAME_PREFIX wird ergänzt, wenn er fehlt. · For a team or SharePoint team site the catalogue created. The alias is the group's mailNickname (Entra ID, or regel.alias or alias in the instance that provisioned the team or site). A configured NAME_PREFIX is added when it is missing."
+    },
+    {
+      "key": "alias",
+      "type": "textfield",
+      "label": "Alias (mailNickname) · Alias (mailNickname)",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "neueSichtbarkeit",
+      "type": "radio",
+      "label": "Neue Sichtbarkeit · New visibility",
+      "values": [
+        {
+          "label": "Privat · Private",
+          "value": "Private"
+        },
+        {
+          "label": "Öffentlich in der Organisation · Public within the organisation",
+          "value": "Public"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung (ohne Personendaten) · Reason (no personal data)",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

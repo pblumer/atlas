@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "m365-sichtbarkeit",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Sichtbarkeit ändern · Change the visibility**\n\nPrivat: Nur Mitglieder sehen Inhalte und Unterhaltungen. Öffentlich: Alle in der Organisation finden das Team oder die Site, können beitreten und Inhalte lesen. · Private: only members see content and conversations. Public: everyone in the organisation can find the team or site, join it and read its content."
+    },
+    {
+      "key": "neueSichtbarkeit",
+      "type": "radio",
+      "label": "Neue Sichtbarkeit · New visibility",
+      "values": [
+        {
+          "label": "Privat · Private",
+          "value": "Private"
+        },
+        {
+          "label": "Öffentlich in der Organisation · Public within the organisation",
+          "value": "Public"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sichtbarkeitBegruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

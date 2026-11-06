@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-Microsoft Teams: Team. Lebenszyklus-Prozess (anlegen, archivieren, Mitglied, Kanal) mit Namensregel.
+Microsoft Teams: Team. Lebenszyklus-Prozess (anlegen, archivieren, Mitglied, Kanal, Sichtbarkeit) mit Namensregel.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
@@ -13,13 +13,14 @@ Microsoft Teams: Team. Lebenszyklus-Prozess (anlegen, archivieren, Mitglied, Kan
   <message id="m_m365_team_archivieren" name="m365.team.archivieren"/>
   <message id="m_m365_team_mitglied" name="m365.team.mitglied"/>
   <message id="m_m365_team_kanal" name="m365.team.kanal"/>
+  <message id="m_m365_team_sichtbarkeit" name="m365.team.sichtbarkeit"/>
   <itemDefinition id="item_Katalogposition" structureRef="Katalogposition"/>
   <itemDefinition id="item_M365Gruppe" structureRef="M365Gruppe"/>
   <itemDefinition id="item_Team" structureRef="Team"/>
   <dataStore id="ds_entra_id_konten" name="Entra ID: Konten"/>
   <dataStore id="ds_entra_id_gruppen" name="Entra ID: Gruppen"/>
-  <process id="proc_m365_team" name="Microsoft Teams: Team" isExecutable="true" atlas:personal="besitzer,person,besitzerKonto,personKonto" atlas:dataSubject="recipient">
-    <documentation>Lebenszyklus eines Microsoft-Teams-Teams: anlegen, archivieren, Mitglieder aufnehmen, Kanäle anlegen.
+  <process id="proc_m365_team" name="Microsoft Teams: Team" isExecutable="true" atlas:personal="besitzer,person,besitzerKonto,personKonto,sichtbarkeitBegruendung" atlas:dataSubject="recipient">
+    <documentation>Lebenszyklus eines Microsoft-Teams-Teams: anlegen, archivieren, Mitglieder aufnehmen, Kanäle anlegen, die Sichtbarkeit ändern (privat oder öffentlich).
 
 Governance steckt in drei Schritten:
 - Namensregel: Der Name kommt nicht frei aus dem Formular, sondern aus der Entscheidung M365Namensregel (Präfix TM, Bereichskürzel, normalisierte Bezeichnung). Reservierte und zu lange Namen werden mit Begründung abgelehnt.
@@ -28,7 +29,7 @@ Governance steckt in drei Schritten:
 
 Rückgabe und Aktionen finden das Team über seinen Alias (mailNickname), den dieselbe Namensregel aus denselben Antworten bildet. Wird die Namensregel für Teams geändert, gilt die Änderung nur für neue Teams; bestehende behalten ihr Präfix, und ihre Rückgabe findet sie nur, solange die Regel für ihr Präfix gleich bleibt. Exchange-Objekte dieses Beispiels sind davon unabhängig, weil sie über ihre Herkunftskennzeichnung gefunden werden.
 
-Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Personendaten der empfangenden Person deklariert; sie stehen nur in Worker-Ausdrücken, nie in einer Bedingung.</documentation>
+Personendaten: besitzer und person (UPNs), die gelesenen Konten und die Begründung einer Sichtbarkeitsänderung (sichtbarkeitBegruendung) sind als Personendaten der empfangenden Person deklariert; sie stehen nur in Worker-Ausdrücken, nie in einer Bedingung.</documentation>
     <extensionElements>
       <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
         <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
@@ -71,6 +72,15 @@ Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Pe
     <serviceTask id="st_kanal" name="Kanal anlegen"><documentation>create-channel: ein Standardkanal mit Name und Beschreibung aus dem Aktionsformular.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="create-channel" groupId="=treffer[1].id" attributes='{"displayName": "=kanalname", "description": "=kanalbeschreibung", "membershipType": "standard"}'/></extensionElements><incoming>f_st_suchen4__st_kanal</incoming><outgoing>f_st_kanal__sd_kanal</outgoing><dataOutputAssociation id="doa_st_kanal"><targetRef>dor_st_kanal</targetRef></dataOutputAssociation></serviceTask>
     <sendTask id="sd_kanal" name="Änderung als erledigt melden"><documentation>Eine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion «kanal» erledigt ist. Der Katalog verlangt beim Veröffentlichen, dass jede Änderung und jeder Service so beantwortet wird; das Recht selbst bleibt bestehen.</documentation><extensionElements><atlas:shopTask mode="outcome" action="kanal" outcome="completed"/></extensionElements><incoming>f_st_kanal__sd_kanal</incoming><outgoing>f_sd_kanal__e_kanal</outgoing></sendTask>
     <endEvent id="e_kanal" name="Kanal angelegt"><incoming>f_sd_kanal__e_kanal</incoming></endEvent>
+    <startEvent id="s_sicht" name="Sichtbarkeit angefragt"><documentation>Start der Aktion sichtbarkeit (Änderung, Nachricht m365.team.sichtbarkeit). Das Formular m365-sichtbarkeit liefert neueSichtbarkeit (Private oder Public) und sichtbarkeitBegruendung. Wie «Person aufnehmen» und «Kanal anlegen» ohne eigene Genehmigung: Die Aktion fragt die verantwortliche Person des Teams, und ein Besitzer kann die Sichtbarkeit in Teams auch selbst umstellen; die Genehmigung der Bestellung hat entschieden, wem das Team gehört, nicht wie sichtbar es ist. Die Begründung bleibt in den Variablen der Instanz.</documentation><outgoing>f_s_sicht__br_name5</outgoing><messageEventDefinition messageRef="m_m365_team_sichtbarkeit"/></startEvent>
+    <businessRuleTask id="br_name5" name="Namensregel anwenden"><documentation>Wendet die Namensregel M365Namensregel an (Governance). Die bestellende Person gibt nur das Bereichskürzel und eine Bezeichnung an; die Entscheidungstabelle bildet daraus Anzeigename und Alias mit dem Präfix des Objekttyps (team), weist reservierte Bezeichnungen (admin, postmaster, security …) und zu lange Namen ab und begründet jede Abweichung. Die Eingabe slug normalisiert die Bezeichnung im Input-Mapping (Kleinbuchstaben, Umlaute ausgeschrieben, alles andere zu Bindestrichen). bereich und bezeichnung benennen niemanden und sind deshalb nicht als Personendaten deklariert; nur so darf die Engine sie auswerten. Das Ergebnis steht danach in regel (erlaubt, grund, anzeigename, alias). Die Felder werden als regel.alias usw. gelesen: Output-Mappings wertet Atlas auf einer Business-Rule-Task nicht aus. Hier bildet sie den Alias des bestehenden Teams wieder.</documentation><extensionElements><zeebe:calledDecision decisionId="M365Namensregel" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=application.NAME_PREFIX" target="praefix"/><zeebe:input source='="team"' target="objekttyp"/><zeebe:input source="=bereich" target="bereich"/><zeebe:input source="=bezeichnung" target="bezeichnung"/><zeebe:input source='=replace(replace(replace(replace(replace(replace(replace(lower case(bezeichnung), "ä", "ae"), "ö", "oe"), "ü", "ue"), "[éèê]", "e"), "[àâ]", "a"), "[^a-z0-9]+", "-"), "^-+|-+$", "")' target="slug"/></zeebe:ioMapping></extensionElements><incoming>f_s_sicht__br_name5</incoming><outgoing>f_br_name5__st_suchen5</outgoing></businessRuleTask>
+    <serviceTask id="st_suchen5" name="Team suchen"><documentation>list-groups mit dem Alias, wie beim Archivieren; visibility zeigt, wie das Team heute steht.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="list-groups" filter="=&quot;mailNickname eq '&quot; + regel.alias + &quot;'&quot;" select="id,displayName,mailNickname,visibility" maxUsers="5" resultVariable="treffer"/></extensionElements><incoming>f_br_name5__st_suchen5</incoming><outgoing>f_st_suchen5__gw_sicht</outgoing></serviceTask>
+    <exclusiveGateway id="gw_sicht" name="Team gefunden?" default="f_gw_sicht__sd_sicht_abl"><documentation>Weiter nur mit genau einem Treffer und einer Sichtbarkeit, die Graph kennt (Private oder Public); der Default-Fluss meldet die Ablehnung (fail-closed). neueSichtbarkeit benennt niemanden und ist deshalb nicht als Personendatum deklariert; nur so darf das Gateway sie lesen. HiddenMembership lässt sich nach dem Anlegen nicht mehr setzen und wird deshalb nicht angeboten.</documentation><incoming>f_st_suchen5__gw_sicht</incoming><outgoing>f_gw_sicht__st_sicht</outgoing><outgoing>f_gw_sicht__sd_sicht_abl</outgoing></exclusiveGateway>
+    <serviceTask id="st_sicht" name="Sichtbarkeit setzen"><documentation>update-group: PATCH /groups/{id} mit visibility. Die Sichtbarkeit eines Teams ist die seiner Microsoft-365-Gruppe; Teams übernimmt sie. Ein PATCH mit der Sichtbarkeit, die das Team schon hat, ändert nichts, deshalb lässt sich die Aktion wiederholen.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="update-group" groupId="=treffer[1].id" attributes='{"visibility": "=neueSichtbarkeit"}'/></extensionElements><incoming>f_gw_sicht__st_sicht</incoming><outgoing>f_st_sicht__sd_sicht</outgoing><dataOutputAssociation id="doa_st_sicht"><targetRef>dor_st_sicht</targetRef></dataOutputAssociation></serviceTask>
+    <sendTask id="sd_sicht" name="Änderung als erledigt melden"><documentation>Eine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion «sichtbarkeit» erledigt ist.</documentation><extensionElements><atlas:shopTask mode="outcome" action="sichtbarkeit" outcome="completed"/></extensionElements><incoming>f_st_sicht__sd_sicht</incoming><outgoing>f_sd_sicht__e_sicht</outgoing></sendTask>
+    <endEvent id="e_sicht" name="Sichtbarkeit geändert"><incoming>f_sd_sicht__e_sicht</incoming></endEvent>
+    <sendTask id="sd_sicht_abl" name="Ablehnung melden"><documentation>Eine Shop-Aufgabe meldet die Aktion «sichtbarkeit» als rejected: Unter dem Alias steht kein Team (oder mehr als eines), oder die verlangte Sichtbarkeit ist weder Private noch Public.</documentation><extensionElements><atlas:shopTask mode="outcome" action="sichtbarkeit" outcome="rejected"/></extensionElements><incoming>f_gw_sicht__sd_sicht_abl</incoming><outgoing>f_sd_sicht_abl__e_sicht_abl</outgoing></sendTask>
+    <endEvent id="e_sicht_abl" name="Nicht geändert"><incoming>f_sd_sicht_abl__e_sicht_abl</incoming></endEvent>
     <sequenceFlow id="f_gw_name__st_ablehnen" sourceRef="gw_name" targetRef="st_ablehnen" name="nein"/>
     <sequenceFlow id="f_st_ablehnen__e_abgelehnt" sourceRef="st_ablehnen" targetRef="e_abgelehnt"/>
     <sequenceFlow id="f_s_neu__br_name" sourceRef="s_neu" targetRef="br_name"/>
@@ -106,6 +116,14 @@ Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Pe
     <sequenceFlow id="f_st_suchen4__st_kanal" sourceRef="st_suchen4" targetRef="st_kanal"/>
     <sequenceFlow id="f_st_kanal__sd_kanal" sourceRef="st_kanal" targetRef="sd_kanal"/>
     <sequenceFlow id="f_sd_kanal__e_kanal" sourceRef="sd_kanal" targetRef="e_kanal"/>
+    <sequenceFlow id="f_s_sicht__br_name5" sourceRef="s_sicht" targetRef="br_name5"/>
+    <sequenceFlow id="f_br_name5__st_suchen5" sourceRef="br_name5" targetRef="st_suchen5"/>
+    <sequenceFlow id="f_st_suchen5__gw_sicht" sourceRef="st_suchen5" targetRef="gw_sicht"/>
+    <sequenceFlow id="f_gw_sicht__st_sicht" sourceRef="gw_sicht" targetRef="st_sicht" name="ja"><conditionExpression>=count(treffer) = 1 and (neueSichtbarkeit = "Private" or neueSichtbarkeit = "Public")</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_sicht__sd_sicht_abl" sourceRef="gw_sicht" targetRef="sd_sicht_abl" name="nein"/>
+    <sequenceFlow id="f_st_sicht__sd_sicht" sourceRef="st_sicht" targetRef="sd_sicht"/>
+    <sequenceFlow id="f_sd_sicht__e_sicht" sourceRef="sd_sicht" targetRef="e_sicht"/>
+    <sequenceFlow id="f_sd_sicht_abl__e_sicht_abl" sourceRef="sd_sicht_abl" targetRef="e_sicht_abl"/>
     <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
     <dataObject id="do_katalogposition" name="Katalogposition" itemSubjectRef="item_Katalogposition"/>
     <dataObject id="do_m365_gruppe" name="M365-Gruppe" itemSubjectRef="item_M365Gruppe"/>
@@ -117,6 +135,7 @@ Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Pe
     <dataObjectReference id="dor_st_team" name="Team" dataObjectRef="do_team"><dataState name="Aktiv"/></dataObjectReference>
     <dataObjectReference id="dor_st_archiv" name="Team" dataObjectRef="do_team"><dataState name="Archiviert"/></dataObjectReference>
     <dataObjectReference id="dor_st_kanal" name="Team" dataObjectRef="do_team"><dataState name="Aktiv"/></dataObjectReference>
+    <dataObjectReference id="dor_st_sicht" name="M365-Gruppe" dataObjectRef="do_m365_gruppe"><dataState name="Aktiv"/></dataObjectReference>
     <dataStoreReference id="dsr_entra_id_konten" name="Entra ID: Konten" dataStoreRef="ds_entra_id_konten"/>
     <dataStoreReference id="dsr_entra_id_gruppen" name="Entra ID: Gruppen" dataStoreRef="ds_entra_id_gruppen"/>
   </process>
@@ -208,8 +227,27 @@ Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Pe
       <bpmndi:BPMNEdge id="doa_st_archiv_di" bpmnElement="doa_st_archiv"><omgdi:waypoint x="780" y="460"/><omgdi:waypoint x="780" y="436"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dor_st_kanal_di" bpmnElement="dor_st_kanal"><omgdc:Bounds x="612" y="946" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="915" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="doa_st_kanal_di" bpmnElement="doa_st_kanal"><omgdi:waypoint x="630" y="1020"/><omgdi:waypoint x="630" y="996"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="1270" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="1325" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="362" y="1270" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="1325" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_sicht_di" bpmnElement="s_sicht"><omgdc:Bounds x="162" y="1322" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="1362" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_name5_di" bpmnElement="br_name5"><omgdc:Bounds x="280" y="1300" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_suchen5_di" bpmnElement="st_suchen5"><omgdc:Bounds x="430" y="1300" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_sicht_di" bpmnElement="gw_sicht" isMarkerVisible="true"><omgdc:Bounds x="605" y="1315" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="1284" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_sicht_di" bpmnElement="st_sicht"><omgdc:Bounds x="730" y="1300" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_sicht_di" bpmnElement="sd_sicht"><omgdc:Bounds x="880" y="1300" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_sicht_di" bpmnElement="e_sicht"><omgdc:Bounds x="1062" y="1322" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="1362" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_sicht_abl_di" bpmnElement="sd_sicht_abl"><omgdc:Bounds x="730" y="1440" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_sicht_abl_di" bpmnElement="e_sicht_abl"><omgdc:Bounds x="912" y="1462" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="1502" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_sicht__br_name5_di" bpmnElement="f_s_sicht__br_name5"><omgdi:waypoint x="198" y="1340"/><omgdi:waypoint x="280" y="1340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_name5__st_suchen5_di" bpmnElement="f_br_name5__st_suchen5"><omgdi:waypoint x="380" y="1340"/><omgdi:waypoint x="430" y="1340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_suchen5__gw_sicht_di" bpmnElement="f_st_suchen5__gw_sicht"><omgdi:waypoint x="530" y="1340"/><omgdi:waypoint x="605" y="1340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sicht__st_sicht_di" bpmnElement="f_gw_sicht__st_sicht"><omgdi:waypoint x="655" y="1340"/><omgdi:waypoint x="730" y="1340"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="1318" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sicht__sd_sicht_abl_di" bpmnElement="f_gw_sicht__sd_sicht_abl"><omgdi:waypoint x="630" y="1365"/><omgdi:waypoint x="630" y="1480"/><omgdi:waypoint x="730" y="1480"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="1415" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_sicht__sd_sicht_di" bpmnElement="f_st_sicht__sd_sicht"><omgdi:waypoint x="830" y="1340"/><omgdi:waypoint x="880" y="1340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_sicht__e_sicht_di" bpmnElement="f_sd_sicht__e_sicht"><omgdi:waypoint x="980" y="1340"/><omgdi:waypoint x="1062" y="1340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_sicht_abl__e_sicht_abl_di" bpmnElement="f_sd_sicht_abl__e_sicht_abl"><omgdi:waypoint x="830" y="1480"/><omgdi:waypoint x="912" y="1480"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_sicht_di" bpmnElement="dor_st_sicht"><omgdc:Bounds x="762" y="1226" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="1195" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_sicht_di" bpmnElement="doa_st_sicht"><omgdi:waypoint x="780" y="1300"/><omgdi:waypoint x="780" y="1276"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="1600" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="1655" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="362" y="1600" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="1655" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

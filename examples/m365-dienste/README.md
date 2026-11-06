@@ -16,7 +16,7 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 27 Prozesse, 61 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 28 Prozesse, 63 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
 | `katalog.json` | Das Katalogdokument: vier Kataloge, achtzehn Produkte, vier Beziehungen |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -58,8 +58,8 @@ Gerät als Kopien `…-onprem`, deren Prozesse den Worker `ucc_exchange_onprem` 
 |---|---|---|---|---|
 | Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange, im Modus `ad-gruppe` AD | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Lizenz wechseln, Abwesenheitsnotiz setzen und beenden, Postfachkontingent erhöhen, Weiterleitung setzen und aufheben, Zusätzliche Mailadresse, Mailadresse entfernen, Kalenderstellvertretung erteilen und entziehen |
 | Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, Teams Phone | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
-| Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person der verantwortlichen Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
-| SharePoint: Teamwebsite (`m365-sharepoint-site`) | Entra, SharePoint | vorgesetzte Person der Besitzerin oder des Besitzers | `sharepoint-site.bpmn` (Lebenszyklus) | Site endgültig zurückgeben, Externe Person einladen, Site-Besitzer ändern, Speicherkontingent erhöhen, Site löschen, Gelöschte Site wiederherstellen |
+| Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person der verantwortlichen Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen, Sichtbarkeit ändern |
+| SharePoint: Teamwebsite (`m365-sharepoint-site`) | Entra, SharePoint | vorgesetzte Person der Besitzerin oder des Besitzers | `sharepoint-site.bpmn` (Lebenszyklus) | Site endgültig zurückgeben, Externe Person einladen, Site-Besitzer ändern, Speicherkontingent erhöhen, Sichtbarkeit ändern, Site löschen, Gelöschte Site wiederherstellen |
 | Viva Engage: Community (`m365-engage`) | Entra | vorgesetzte Person der Besitzerin oder des Besitzers | `engage-community.bpmn` (Lebenszyklus) | Community löschen, Person aufnehmen, Person entfernen |
 | Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person der verantwortlichen Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
 | Verteilerliste (`m365-verteiler`) | Exchange | keine | `verteiler.bpmn` (Lebenszyklus) | entfernen, Mitglied aufnehmen, Mitglied entfernen |
@@ -116,11 +116,13 @@ ihrem Bestand im Shop; «Betrieb»: eine Person mit der Rolle operator. Die drei
 | `m365-team` | Team archivieren (`deprovision`) | `m365.team.archivieren` | Rückgabe | Bestand, Betrieb | – |
 | `m365-team` | Person aufnehmen (`mitglied`) | `m365.team.mitglied` | Änderung | Bestand, Betrieb | `m365-team-mitglied` |
 | `m365-team` | Kanal anlegen (`kanal`) | `m365.team.kanal` | Änderung | Bestand, Betrieb | `m365-team-kanal` |
+| `m365-team` | Sichtbarkeit ändern (`sichtbarkeit`) | `m365.team.sichtbarkeit` | Änderung | Bestand, Betrieb | `m365-sichtbarkeit` |
 | `m365-sharepoint-site` | Bestellung (`provision`) | `m365.site.erstellen` | Bereitstellung | Shop | `m365-sharepoint-site-bestellung` |
 | `m365-sharepoint-site` | Site endgültig zurückgeben (`deprovision`) | `m365.site.rueckgabe` | Rückgabe | Bestand, Betrieb | – |
 | `m365-sharepoint-site` | Externe Person einladen (`gast`) | `m365.site.gast` | Änderung | Bestand, Betrieb | `m365-sharepoint-gast` |
 | `m365-sharepoint-site` | Site-Besitzer ändern (`besitzer`) | `m365.site.besitzer` | Änderung | Bestand, Betrieb | `m365-sharepoint-besitzer` |
 | `m365-sharepoint-site` | Speicherkontingent erhöhen (`kontingent`) | `m365.site.kontingent` | Änderung | Bestand, Betrieb | `m365-sharepoint-kontingent` |
+| `m365-sharepoint-site` | Sichtbarkeit ändern (`sichtbarkeit`) | `m365.site.sichtbarkeit` | Änderung | Bestand, Betrieb | `m365-sichtbarkeit` |
 | `m365-sharepoint-site` | Site löschen (`loeschen`) | `m365.site.loeschen` | Änderung | Bestand, Betrieb | – |
 | `m365-sharepoint-site` | Gelöschte Site wiederherstellen (`wiederherstellen`) | `m365.site.wiederherstellen` | Änderung | Bestand, Betrieb | – |
 | `m365-engage` | Bestellung (`provision`) | `m365.community.erstellen` | Bereitstellung | Shop | `m365-engage-bestellung` |
@@ -168,7 +170,7 @@ ihrem Bestand im Shop; «Betrieb»: eine Person mit der Rolle operator. Die drei
 
 ## Prozesse im Überblick
 
-Die 27 Prozesse des Pakets und was sie startet:
+Die 28 Prozesse des Pakets und was sie startet:
 
 | Prozess | Datei | Gestartet durch |
 |---|---|---|
@@ -176,6 +178,7 @@ Die 27 Prozesse des Pakets und was sie startet:
 | `proc_m365_telefonie` | `telefonie.bpmn` | Aktionen von `m365-telefonie` |
 | `proc_m365_team` | `team.bpmn` | Aktionen von `m365-team` |
 | `proc_m365_sharepoint_site` | `sharepoint-site.bpmn` | Aktionen von `m365-sharepoint-site` |
+| `proc_m365_sichtbarkeit_nachfuehren` (Sichtbarkeit nachführen) | `sichtbarkeit-nachfuehren.bpmn` | von Hand in der Console (siehe «Sichtbarkeit von Team und Site») |
 | `proc_m365_engage_community` | `engage-community.bpmn` | Aktionen von `m365-engage` |
 | `proc_m365_funktionspostfach` | `funktionspostfach.bpmn` | Aktionen von `m365-funktionspostfach` |
 | `proc_m365_verteiler` | `verteiler.bpmn` | Aktionen von `m365-verteiler` |
@@ -540,6 +543,7 @@ können im selben Augenblick «frei» lesen. Verbindlich prüft die Bereitstellu
 | Externe Person einladen (`gast`) | `m365-sharepoint-gast` | `get-site` für die Adresse, `invite-guest` (Einladung führt auf die Site, Microsoft verschickt sie), `add-group-member` mit dem eingeladenen Konto | `completed` |
 | Site-Besitzer ändern (`besitzer`) | `m365-sharepoint-besitzer` | neuen Besitzer eintragen, auf Wunsch danach den bisherigen austragen | `completed` |
 | Speicherkontingent erhöhen (`kontingent`) | `m365-sharepoint-kontingent` | `get-site` liest die Belegung, `M365SiteKontingent` entscheidet; bis 25 GB setzt `set-site-quota` das Kontingent selbst, darüber prüft und setzt `M365-SharePoint` (ebenso, wenn `set-site-quota` mit `SHAREPOINT_ADMIN_NOT_PERMITTED` oder `SHAREPOINT_QUOTA_REFUSED` endet), Inventar nachführen | `completed`, bei Ablehnung `rejected` |
+| Sichtbarkeit ändern (`sichtbarkeit`) | `m365-sichtbarkeit` | Gruppe suchen, `update-group` mit `visibility` (siehe «Sichtbarkeit von Team und Site») | `completed`, ohne Gruppe `rejected` |
 | Site löschen (`loeschen`) | – | `delete-group`, Inventar auf Removed; das Recht bleibt | `completed` |
 | Gelöschte Site wiederherstellen (`wiederherstellen`) | – | `list-deleted-groups`, `restore-group`, Inventar auf Active | `completed`, wenn nichts mehr im Papierkorb liegt `rejected` |
 
@@ -551,6 +555,38 @@ Rückgabe endet es, und eine Wiederherstellung ist nur noch Sache der Administra
 Eine Ablehnung einer Aktion (`rejected`, ADR-0429) trägt keinen Text; der Grund steht in der
 Instanz (`stufe.grund`, `pruefkommentar`). Die Gateways lesen keine Personendaten: Ob der
 bisherige Besitzer gehen soll, sagt das nicht personenbezogene Feld `bisherigenEntfernen`.
+
+## Sichtbarkeit von Team und Site
+
+Team und SharePoint-Teamwebsite haben je die Aktion «Sichtbarkeit ändern» (`sichtbarkeit`,
+Nachrichten `m365.team.sichtbarkeit` und `m365.site.sichtbarkeit`). Das Aktionsformular
+`m365-sichtbarkeit` fragt die neue Sichtbarkeit (Privat `Private` oder Öffentlich in der
+Organisation `Public`) und eine Begründung. Der Prozess findet die Gruppe wie die anderen
+Aktionen: das Team über den Alias, den `M365Namensregel` mit `NAME_PREFIX` wieder bildet, die
+Site über `NAME_PREFIX` und ihre URL. Mit genau einem Treffer setzt `update-group` (PATCH
+`/groups/{id}`) die `visibility`; Teams und SharePoint übernehmen die Sichtbarkeit der Gruppe.
+Ohne Treffer oder mit einem anderen Wert als `Private` und `Public` endet die Aktion `rejected`.
+`HiddenMembership` lässt sich nach dem Anlegen nicht mehr setzen und wird nicht angeboten.
+
+**Genehmigung:** keine eigene, wie bei den anderen Änderungen dieser Produkte (Person aufnehmen,
+Kanal anlegen, Gast, Besitzer). Die Aktion fragt die Person, die das Team oder die Site hält;
+ein Besitzer kann die Sichtbarkeit in Teams und SharePoint ohnehin selbst umstellen. Die
+Begründung bleibt in den Variablen der Instanz (als Personendatum deklariert).
+
+**Bestehende Positionen.** Eine Position friert die Aktionen ihres Produkts bei der Bestellung
+ein (`order.Line.Actions`, ADR-0429); eine neue Version des Katalogs erreicht nur Positionen,
+die danach bestellt werden. Ein Team oder eine Site, die vorher bestellt wurden, zeigt
+«Sichtbarkeit ändern» im Bestand deshalb nicht, und `POST /api/v1/orders/…/actions/sichtbarkeit`
+lehnt mit 409 ab. Das Umbinden eines Produkts (`POST /api/v1/catalog-products/{id}/rebind`,
+ADR-0427) hilft nicht: Es bewegt nur Positionen, die noch zwei getrennte Prozesse tragen, und Team
+und Site haben von Anfang an den Lebenszyklus-Prozess. Für diese Positionen gibt es
+`sichtbarkeit-nachfuehren.bpmn` («Microsoft 365: Sichtbarkeit nachführen»): in der Console von
+Hand starten, im Startformular `m365-sichtbarkeit-nachfuehren` den Alias (`mailNickname`) der
+Gruppe, die neue Sichtbarkeit und eine Begründung ohne Personendaten angeben. Fehlt dem Alias
+`NAME_PREFIX`, ergänzt der Prozess es; er ändert nur eine Gruppe, deren Beschreibung die Herkunft
+«Katalog-Position» trägt, und endet sonst ohne Änderung («Nicht geändert»). Den Alias zeigt Entra
+ID oder die Instanz, die das Team bereitgestellt hat (Variable `regel.alias`; bei einer Site
+`alias`). Die Position im Bestand bleibt, wie sie ist.
 
 ## Die Viva-Engage-Community
 
@@ -1424,6 +1460,9 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
   `raum-nachfuehren.bpmn`) sind aus der Dokumentation von Microsoft gebaut und noch nicht an
   einem Tenant gelaufen; geprüft sind sie gegen die Operationstabelle des Workers und mit den
   Tests unten.
+- **Sichtbarkeit ändern** (Team, Site) und `sichtbarkeit-nachfuehren.bpmn` sind noch nicht an
+  einem Tenant gelaufen; `update-group` mit `visibility` ist aus der Dokumentation von Microsoft
+  gebaut und gegen die Operationstabelle des Workers und mit den Tests unten geprüft.
 - **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
   zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
   (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).

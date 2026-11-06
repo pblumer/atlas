@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-SharePoint: Team Site. Lebenszyklus-Prozess (anlegen, Gast, Besitzer, Kontingent, löschen, wiederherstellen, zurückgeben).
+SharePoint: Team Site. Lebenszyklus-Prozess (anlegen, Gast, Besitzer, Kontingent, Sichtbarkeit, löschen, wiederherstellen, zurückgeben).
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
@@ -18,6 +18,7 @@ SharePoint: Team Site. Lebenszyklus-Prozess (anlegen, Gast, Besitzer, Kontingent
   <error id="err_sp_quota" name="Kontingent abgelehnt" errorCode="SHAREPOINT_QUOTA_REFUSED"/>
   <message id="m_m365_site_loeschen" name="m365.site.loeschen"/>
   <message id="m_m365_site_wiederherstellen" name="m365.site.wiederherstellen"/>
+  <message id="m_m365_site_sichtbarkeit" name="m365.site.sichtbarkeit"/>
   <itemDefinition id="item_Katalogposition" structureRef="Katalogposition"/>
   <itemDefinition id="item_M365Gruppe" structureRef="M365Gruppe"/>
   <itemDefinition id="item_SharePointSite" structureRef="SharePointSite"/>
@@ -27,8 +28,8 @@ SharePoint: Team Site. Lebenszyklus-Prozess (anlegen, Gast, Besitzer, Kontingent
   <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
   <dataStore id="ds_sharepoint_online_sites" name="SharePoint Online: Sites"/>
   <dataStore id="ds_sharepoint_online_site_inventar" name="SharePoint Online: Site-Inventar"/>
-  <process id="proc_m365_sharepoint_site" name="SharePoint: Team Site" isExecutable="true" atlas:personal="besitzer,stellvertretung,besitzerKonto,stellvertretungKonto,email,anzeigename,einladung,neuerBesitzer,bisherigerBesitzer,neuerBesitzerKonto,bisherigerBesitzerKonto,kontingentBegruendung" atlas:dataSubject="recipient">
-    <documentation>Lebenszyklus einer SharePoint-Teamwebsite mit Microsoft-365-Gruppe: anlegen, Gäste einladen, Besitzer ändern, Speicher erhöhen, löschen, wiederherstellen und endgültig zurückgeben.
+  <process id="proc_m365_sharepoint_site" name="SharePoint: Team Site" isExecutable="true" atlas:personal="besitzer,stellvertretung,besitzerKonto,stellvertretungKonto,email,anzeigename,einladung,neuerBesitzer,bisherigerBesitzer,neuerBesitzerKonto,bisherigerBesitzerKonto,kontingentBegruendung,sichtbarkeitBegruendung" atlas:dataSubject="recipient">
+    <documentation>Lebenszyklus einer SharePoint-Teamwebsite mit Microsoft-365-Gruppe: anlegen, Gäste einladen, Besitzer ändern, Speicher erhöhen, die Sichtbarkeit ändern (privat oder öffentlich), löschen, wiederherstellen und endgültig zurückgeben.
 
 Eine gruppenverbundene moderne Teamwebsite ist eine Microsoft-365-Gruppe (groupTypes Unified, ohne Team), deren Alias (mailNickname) die URL der Site ist: /sites/&lt;alias&gt;. Der Prozess legt deshalb die Gruppe an und wartet, bis Microsoft die Site dazu bereitgestellt hat.
 
@@ -39,7 +40,7 @@ Governance:
 - Inventar: Die Liste «Site-Inventar» auf der Site der Konstante SITE_INVENTAR führt jede Site mit Alias, Adresse, Gruppe, Sprache, Kontingent, Status und Katalog-Position, ohne Personendaten.
 - Speicher: Microsoft Graph hat keine Schnittstelle für das Speicherkontingent einer Site. Der SharePoint-Worker setzt es deshalb mit set-site-quota über die SharePoint-Verwaltung (Admin-Host des Tenants); das braucht ein Zertifikat und die SharePoint-Anwendungsberechtigung Sites.FullControl.All. Fehlt beides oder lehnt der Tenant ab (etwa bei automatischer Speicherverwaltung), setzt es die Gruppe M365-SharePoint im SharePoint Admin Center; die Aufgaben sagen es.
 
-Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anzeigename, neuerBesitzer, bisherigerBesitzer), die gelesenen Konten, die Einladung und die Begründung sind als Personendaten der empfangenden Person deklariert; sie stehen nur in Worker-Ausdrücken und Formularen, nie in einer Bedingung.</documentation>
+Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anzeigename, neuerBesitzer, bisherigerBesitzer), die gelesenen Konten, die Einladung und die Begründungen (kontingentBegruendung, sichtbarkeitBegruendung) sind als Personendaten der empfangenden Person deklariert; sie stehen nur in Worker-Ausdrücken und Formularen, nie in einer Bedingung.</documentation>
     <extensionElements>
       <atlas:constants>
         <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
@@ -151,6 +152,15 @@ Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anze
     <endEvent id="e_wieder" name="Site wiederhergestellt"><documentation>Gruppe und Site bestehen wieder; das Inventar sagt Active.</documentation><incoming>f_sd_wieder__e_wieder</incoming></endEvent>
     <sendTask id="sd_wieder_abl" name="Ablehnung melden"><documentation>Eine Shop-Aufgabe meldet die Aktion «wiederherstellen» als rejected: Die Site ist nicht mehr wiederherstellbar.</documentation><extensionElements><atlas:shopTask mode="outcome" action="wiederherstellen" outcome="rejected"/></extensionElements><incoming>f_gw_wieder__sd_wieder_abl</incoming><outgoing>f_sd_wieder_abl__e_wieder_abl</outgoing></sendTask>
     <endEvent id="e_wieder_abl" name="Nicht wiederherstellbar"><documentation>Im Papierkorb liegt keine Gruppe mit diesem Alias.</documentation><incoming>f_sd_wieder_abl__e_wieder_abl</incoming></endEvent>
+    <startEvent id="s_sicht" name="Sichtbarkeit angefragt"><documentation>Start der Aktion sichtbarkeit (Änderung, Nachricht m365.site.sichtbarkeit). Das Formular m365-sichtbarkeit liefert neueSichtbarkeit (Private oder Public) und sichtbarkeitBegruendung. Wie «Externe Person einladen» und «Site-Besitzer ändern» ohne eigene Genehmigung: Die Aktion fragt die verantwortliche Person der Site, und ein Besitzer kann die Datenschutzeinstellung der Site auch selbst umstellen; die Genehmigung der Bestellung hat entschieden, wem die Site gehört, nicht wie sichtbar sie ist. Die Begründung bleibt in den Variablen der Instanz.</documentation><outgoing>f_s_sicht__sc_alias8</outgoing><messageEventDefinition messageRef="m_m365_site_sichtbarkeit"/></startEvent>
+    <scriptTask id="sc_alias8" name="Alias bilden"><documentation>Bildet den Alias aus der bestellten URL so, wie ihn die Namensregel bei der Bereitstellung übernommen hat: kleingeschrieben und mit dem Präfix NAME_PREFIX davor. Für eine Site ist der Alias die URL selbst (/sites/&lt;alias&gt;) und der mailNickname der Gruppe; die Namensregel muss deshalb nicht noch einmal laufen. url ist nicht als Personendatum deklariert, nur so darf die Engine sie auswerten.</documentation><extensionElements><zeebe:script expression='=(if application.NAME_PREFIX = null then "" else application.NAME_PREFIX) + lower case(url)' resultVariable="alias"/></extensionElements><incoming>f_s_sicht__sc_alias8</incoming><outgoing>f_sc_alias8__st_suchen8</outgoing></scriptTask>
+    <serviceTask id="st_suchen8" name="Gruppe suchen"><documentation>list-groups mit dem Filter mailNickname eq '&lt;alias&gt;'; visibility zeigt, wie die Site heute steht.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="list-groups" filter="=&quot;mailNickname eq '&quot; + alias + &quot;'&quot;" select="id,displayName,mailNickname,visibility" maxUsers="5" resultVariable="treffer"/></extensionElements><incoming>f_sc_alias8__st_suchen8</incoming><outgoing>f_st_suchen8__gw_sicht</outgoing></serviceTask>
+    <exclusiveGateway id="gw_sicht" name="Gruppe gefunden?" default="f_gw_sicht__sd_sicht_abl"><documentation>Weiter nur mit genau einem Treffer und einer Sichtbarkeit, die Graph kennt (Private oder Public); der Default-Fluss meldet die Ablehnung (fail-closed), etwa für eine Site, die mit «Site löschen» im Papierkorb liegt. neueSichtbarkeit benennt niemanden und ist deshalb nicht als Personendatum deklariert; nur so darf das Gateway sie lesen.</documentation><incoming>f_st_suchen8__gw_sicht</incoming><outgoing>f_gw_sicht__st_sicht</outgoing><outgoing>f_gw_sicht__sd_sicht_abl</outgoing></exclusiveGateway>
+    <serviceTask id="st_sicht" name="Sichtbarkeit setzen"><documentation>update-group: PATCH /groups/{id} mit visibility. Die Datenschutzeinstellung einer gruppenverbundenen Teamwebsite ist die Sichtbarkeit ihrer Microsoft-365-Gruppe; SharePoint übernimmt sie. Ein PATCH mit der Sichtbarkeit, die die Gruppe schon hat, ändert nichts, deshalb lässt sich die Aktion wiederholen. Das Site-Inventar führt keine Sichtbarkeit und bleibt unverändert.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="update-group" groupId="=treffer[1].id" attributes='{"visibility": "=neueSichtbarkeit"}'/></extensionElements><incoming>f_gw_sicht__st_sicht</incoming><outgoing>f_st_sicht__sd_sicht</outgoing><dataOutputAssociation id="doa_st_sicht"><targetRef>dor_st_sicht</targetRef></dataOutputAssociation></serviceTask>
+    <sendTask id="sd_sicht" name="Änderung als erledigt melden"><documentation>Eine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion «sichtbarkeit» erledigt ist.</documentation><extensionElements><atlas:shopTask mode="outcome" action="sichtbarkeit" outcome="completed"/></extensionElements><incoming>f_st_sicht__sd_sicht</incoming><outgoing>f_sd_sicht__e_sicht</outgoing></sendTask>
+    <endEvent id="e_sicht" name="Sichtbarkeit geändert"><documentation>Die Gruppe und mit ihr die Site haben die neue Sichtbarkeit.</documentation><incoming>f_sd_sicht__e_sicht</incoming></endEvent>
+    <sendTask id="sd_sicht_abl" name="Ablehnung melden"><documentation>Eine Shop-Aufgabe meldet die Aktion «sichtbarkeit» als rejected: Unter dem Alias steht keine Gruppe (oder mehr als eine), oder die verlangte Sichtbarkeit ist weder Private noch Public.</documentation><extensionElements><atlas:shopTask mode="outcome" action="sichtbarkeit" outcome="rejected"/></extensionElements><incoming>f_gw_sicht__sd_sicht_abl</incoming><outgoing>f_sd_sicht_abl__e_sicht_abl</outgoing></sendTask>
+    <endEvent id="e_sicht_abl" name="Nicht geändert"><documentation>Die Sichtbarkeit bleibt, wie sie war.</documentation><incoming>f_sd_sicht_abl__e_sicht_abl</incoming></endEvent>
     <sequenceFlow id="f_s_neu__br_name" sourceRef="s_neu" targetRef="br_name"/>
     <sequenceFlow id="f_br_name__gw_name" sourceRef="br_name" targetRef="gw_name"/>
     <sequenceFlow id="f_gw_name__st_ablehnen" sourceRef="gw_name" targetRef="st_ablehnen" name="nein"/>
@@ -254,6 +264,14 @@ Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anze
     <sequenceFlow id="f_st_inv_status7__sd_wieder" sourceRef="st_inv_status7" targetRef="sd_wieder"/>
     <sequenceFlow id="f_sd_wieder__e_wieder" sourceRef="sd_wieder" targetRef="e_wieder"/>
     <sequenceFlow id="f_sd_wieder_abl__e_wieder_abl" sourceRef="sd_wieder_abl" targetRef="e_wieder_abl"/>
+    <sequenceFlow id="f_s_sicht__sc_alias8" sourceRef="s_sicht" targetRef="sc_alias8"/>
+    <sequenceFlow id="f_sc_alias8__st_suchen8" sourceRef="sc_alias8" targetRef="st_suchen8"/>
+    <sequenceFlow id="f_st_suchen8__gw_sicht" sourceRef="st_suchen8" targetRef="gw_sicht"/>
+    <sequenceFlow id="f_gw_sicht__st_sicht" sourceRef="gw_sicht" targetRef="st_sicht" name="ja"><conditionExpression>=count(treffer) = 1 and (neueSichtbarkeit = "Private" or neueSichtbarkeit = "Public")</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_sicht__sd_sicht_abl" sourceRef="gw_sicht" targetRef="sd_sicht_abl" name="nein"/>
+    <sequenceFlow id="f_st_sicht__sd_sicht" sourceRef="st_sicht" targetRef="sd_sicht"/>
+    <sequenceFlow id="f_sd_sicht__e_sicht" sourceRef="sd_sicht" targetRef="e_sicht"/>
+    <sequenceFlow id="f_sd_sicht_abl__e_sicht_abl" sourceRef="sd_sicht_abl" targetRef="e_sicht_abl"/>
     <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
     <dataObject id="do_katalogposition" name="Katalogposition" itemSubjectRef="item_Katalogposition"/>
     <dataObject id="do_m365_gruppe" name="M365-Gruppe" itemSubjectRef="item_M365Gruppe"/>
@@ -272,6 +290,7 @@ Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anze
     <dataObjectReference id="dor_st_loeschen6" name="M365-Gruppe" dataObjectRef="do_m365_gruppe"><dataState name="Geloescht"/></dataObjectReference>
     <dataObjectReference id="dor_st_inv_status6" name="Site-Inventar-Eintrag" dataObjectRef="do_site_inventar_eintrag"><dataState name="Removed"/></dataObjectReference>
     <dataObjectReference id="dor_st_restore" name="M365-Gruppe" dataObjectRef="do_m365_gruppe"><dataState name="Aktiv"/></dataObjectReference>
+    <dataObjectReference id="dor_st_sicht" name="M365-Gruppe" dataObjectRef="do_m365_gruppe"><dataState name="Aktiv"/></dataObjectReference>
     <dataObjectReference id="dor_st_inv_status7" name="Site-Inventar-Eintrag" dataObjectRef="do_site_inventar_eintrag"><dataState name="Active"/></dataObjectReference>
     <dataStoreReference id="dsr_entra_id_konten" name="Entra ID: Konten" dataStoreRef="ds_entra_id_konten"/>
     <dataStoreReference id="dsr_entra_id_gruppen" name="Entra ID: Gruppen" dataStoreRef="ds_entra_id_gruppen"/>
@@ -515,11 +534,30 @@ Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anze
       <bpmndi:BPMNEdge id="doa_st_restore_di" bpmnElement="doa_st_restore"><omgdi:waypoint x="780" y="2610"/><omgdi:waypoint x="780" y="2586"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dor_st_inv_status7_di" bpmnElement="dor_st_inv_status7"><omgdc:Bounds x="1062" y="2536" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="2505" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="doa_st_inv_status7_di" bpmnElement="doa_st_inv_status7"><omgdi:waypoint x="1080" y="2610"/><omgdi:waypoint x="1080" y="2586"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="2900" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="2955" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="362" y="2900" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="2955" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="562" y="2900" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="512" y="2955" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="dsr_sharepoint_online_sites_di" bpmnElement="dsr_sharepoint_online_sites"><omgdc:Bounds x="762" y="2900" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="712" y="2955" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="dsr_sharepoint_online_site_inventar_di" bpmnElement="dsr_sharepoint_online_site_inventar"><omgdc:Bounds x="962" y="2900" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="912" y="2955" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_sicht_di" bpmnElement="s_sicht"><omgdc:Bounds x="162" y="2992" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="3032" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_alias8_di" bpmnElement="sc_alias8"><omgdc:Bounds x="280" y="2970" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_suchen8_di" bpmnElement="st_suchen8"><omgdc:Bounds x="430" y="2970" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_sicht_di" bpmnElement="gw_sicht" isMarkerVisible="true"><omgdc:Bounds x="605" y="2985" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="2954" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_sicht_di" bpmnElement="st_sicht"><omgdc:Bounds x="730" y="2970" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_sicht_di" bpmnElement="sd_sicht"><omgdc:Bounds x="880" y="2970" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_sicht_di" bpmnElement="e_sicht"><omgdc:Bounds x="1062" y="2992" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="3032" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_sicht_abl_di" bpmnElement="sd_sicht_abl"><omgdc:Bounds x="730" y="3110" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_sicht_abl_di" bpmnElement="e_sicht_abl"><omgdc:Bounds x="912" y="3132" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="3172" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_sicht__sc_alias8_di" bpmnElement="f_s_sicht__sc_alias8"><omgdi:waypoint x="198" y="3010"/><omgdi:waypoint x="280" y="3010"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_alias8__st_suchen8_di" bpmnElement="f_sc_alias8__st_suchen8"><omgdi:waypoint x="380" y="3010"/><omgdi:waypoint x="430" y="3010"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_suchen8__gw_sicht_di" bpmnElement="f_st_suchen8__gw_sicht"><omgdi:waypoint x="530" y="3010"/><omgdi:waypoint x="605" y="3010"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sicht__st_sicht_di" bpmnElement="f_gw_sicht__st_sicht"><omgdi:waypoint x="655" y="3010"/><omgdi:waypoint x="730" y="3010"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="2988" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sicht__sd_sicht_abl_di" bpmnElement="f_gw_sicht__sd_sicht_abl"><omgdi:waypoint x="630" y="3035"/><omgdi:waypoint x="630" y="3150"/><omgdi:waypoint x="730" y="3150"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="3085" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_sicht__sd_sicht_di" bpmnElement="f_st_sicht__sd_sicht"><omgdi:waypoint x="830" y="3010"/><omgdi:waypoint x="880" y="3010"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_sicht__e_sicht_di" bpmnElement="f_sd_sicht__e_sicht"><omgdi:waypoint x="980" y="3010"/><omgdi:waypoint x="1062" y="3010"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_sicht_abl__e_sicht_abl_di" bpmnElement="f_sd_sicht_abl__e_sicht_abl"><omgdi:waypoint x="830" y="3150"/><omgdi:waypoint x="912" y="3150"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_sicht_di" bpmnElement="dor_st_sicht"><omgdc:Bounds x="762" y="2896" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="2865" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_sicht_di" bpmnElement="doa_st_sicht"><omgdi:waypoint x="780" y="2970"/><omgdi:waypoint x="780" y="2946"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="3300" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="3355" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="362" y="3300" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="3355" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="562" y="3300" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="512" y="3355" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsr_sharepoint_online_sites_di" bpmnElement="dsr_sharepoint_online_sites"><omgdc:Bounds x="762" y="3300" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="712" y="3355" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsr_sharepoint_online_site_inventar_di" bpmnElement="dsr_sharepoint_online_site_inventar"><omgdc:Bounds x="962" y="3300" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="912" y="3355" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

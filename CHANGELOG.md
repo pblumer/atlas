@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
+  products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
+  (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form
+  `m365-sichtbarkeit`: the new visibility and a reason), asked for by the holder or an operator
+  without an approval of its own, like the products' other changes. The lifecycle process finds the
+  group under its alias with `NAME_PREFIX`, sets `visibility` to `Private` or `Public` through the
+  Entra Worker's `update-group` and answers `completed`, or `rejected` when no single group is
+  found. A position freezes its product's actions when it is ordered (ADR-0429), and rebinding
+  (ADR-0427) does not move lifecycle positions, so a team or site ordered earlier does not offer
+  the action; for those the new operator process `sichtbarkeit-nachfuehren.bpmn` («Microsoft 365:
+  Sichtbarkeit nachführen», started from the Console with the alias and the visibility) changes a
+  group whose description names its catalogue position. m365-dienste relocked with Go 1.26.6.
 - **The atlas hub dialog shows the way to the registry, station by station.** Instead of
   waiting on "Verifying trusted registry…", the dialog draws the real load as a route from this
   server to the hub — name resolution, TCP connection on 443, TLS handshake, index, signature —
