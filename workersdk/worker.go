@@ -35,15 +35,19 @@ import (
 
 // Job is one leased job as the engine hands it over.
 type Job struct {
-	JobKey             uint64         `json:"jobKey"`
-	Type               string         `json:"type"`
-	ProcessInstanceKey uint64         `json:"processInstanceKey"`
-	ElementInstanceKey uint64         `json:"elementInstanceKey"`
-	ProcessDefKey      uint64         `json:"processDefKey"`
-	ElementID          string         `json:"elementId"`
-	Retries            int32          `json:"retries"`
-	LeaseToken         uint64         `json:"leaseToken"`
-	Variables          map[string]any `json:"variables"`
+	JobKey             uint64 `json:"jobKey"`
+	Type               string `json:"type"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey"`
+	ElementID          string `json:"elementId"`
+	Retries            int32  `json:"retries"`
+	LeaseToken         uint64 `json:"leaseToken"`
+	// IdempotencyKey is the same for every delivery of this task execution and
+	// unique to it: hand it to a target that filters duplicates, or check by it before
+	// acting, so a job delivered twice does its effect once.
+	IdempotencyKey string         `json:"idempotencyKey"`
+	Variables      map[string]any `json:"variables"`
 	// Worker is a task the engine resolved into plain values, present
 	// only for a kind the server no longer serves itself (ADR-0168). Nil for a plain
 	// job-worker task, whose work is the customer's own command.

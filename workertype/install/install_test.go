@@ -25,7 +25,7 @@ func manifestFor(version, platform, digest, mediaType string) []byte {
 	return []byte(fmt.Sprintf(`{"apiVersion":"atlas.io/v1alpha1","kind":"WorkerType",
 "metadata":{"id":"com.example.echo","version":%q,"name":"Echo"},
 "spec":{"atlasCompatibility":">=0.1.0","workerProtocol":"v1","runtime":{"mode":"external"},
-"jobTypes":["com.example.echo"],"operations":[{"id":"echo","jobType":"com.example.echo"}],
+"jobTypes":["com.example.echo"],"operations":[{"id":"echo","jobType":"com.example.echo","idempotency":"natural","effect":"reversible"}],
 "configurationSchema":"config.schema.json","modelerTemplate":"template.json",
 "artifacts":[{"platform":%q,"mediaType":%q,"digest":%q}]}}`, version, platform, mediaType, digest))
 }
