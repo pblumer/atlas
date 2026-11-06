@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Instances overview can group its processes by application.** A switch above the list
+  offers "Liste" and "Nach Applikation". The list stays the default and unchanged; grouped, each
+  application folds away under a heading that sums its processes' running, stuck and finished
+  instances over every version and links to the application, and a process filed under no
+  application — or under one this person cannot read — sits in the trailing "Nicht zugeordnet"
+  group, as in the Modeler's deployed list. Every group keeps the list's sorting, filter row and
+  row actions, and the browser remembers the arrangement and each folded group.
 - **The M365 example offers an additional calendar.** `examples/m365-dienste` has a new
   product «Zusätzlicher Kalender» (`m365-kalender`, in `cat-m365-mitarbeitende` and
   `cat-m365-ucc`): a shared mailbox kept for its calendar, named by `M365Namensregel` with the

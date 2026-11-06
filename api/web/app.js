@@ -6910,6 +6910,48 @@ function summarizeFromServer(rows) {
   return byProc;
 }
 
+// procTable is the Instances overview's table of process rows. The list draws one, and
+// grouping by application draws one per application (ADR-0034), so both arrangements
+// share the columns, the row markup and the shared sort and filter enhancer.
+function procTable(dtKey, body, tbodyId) {
+  return `<div class="card" style="padding:0">
+      <table data-dt-key="${esc(dtKey)}">
+        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Incidents</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
+        <tbody${tbodyId ? ` id="${esc(tbodyId)}"` : ""}>${body}</tbody>
+      </table>
+    </div>`;
+}
+
+// The Instances overview's arrangement, remembered per browser: "process" is the one
+// list it always had and stays the default; "application" groups the same rows under
+// the application each process is filed in.
+const OPS_GROUP_KEY = "atlas.ops.groupBy";
+function opsGroupMode() {
+  try { return localStorage.getItem(OPS_GROUP_KEY) === "application" ? "application" : "process"; } catch { return "process"; }
+}
+
+// groupByApplication buckets the overview's process groups by the application their
+// latest version is filed in — every version moves together (PATCH /processes/{key}),
+// so the latest speaks for them all. The buckets are ordered by name; a process filed
+// nowhere, or under an application whose name the server withholds (one deleted, or
+// one this person cannot read), goes to the trailing not-assigned bucket, as the
+// Modeler's deployed list files it.
+function groupByApplication(groups) {
+  const byApp = new Map();
+  const rest = [];
+  for (const g of groups) {
+    const id = g.latest.projectId;
+    const name = g.latest.applicationName;
+    if (!id || !name) { rest.push(g); continue; }
+    if (!byApp.has(id)) byApp.set(id, { id, name, groups: [] });
+    byApp.get(id).groups.push(g);
+  }
+  const buckets = [...byApp.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id));
+  if (rest.length) buckets.push({ id: "", name: tr("application.notAssigned"), groups: rest });
+  return buckets;
+}
+
 async function viewInstances() {
   view.innerHTML = `
     <div class="between">
@@ -6930,6 +6972,10 @@ async function viewInstances() {
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
         <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
       </form>
+      <div class="seg" id="inst-group" role="group" aria-label="${esc(tr("ops.group.label"))}">
+        <button type="button" data-group="process" title="${esc(tr("ops.group.processTitle"))}">${esc(tr("ops.group.process"))}</button>
+        <button type="button" data-group="application" title="${esc(tr("ops.group.applicationTitle"))}">${esc(tr("ops.group.application"))}</button>
+      </div>
     </div>
     <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
       <span class="ops-search">
@@ -6942,15 +6988,11 @@ async function viewInstances() {
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact), else the term is matched against variable names and values. A term is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not <code>MT-10001</code>. Widen it yourself with <code>*</code> for any run of characters and <code>?</code> for exactly one — <code>*MT-1*</code> for anything containing <code>MT-1</code> — and write <code>\\*</code> or <code>\\?</code> to search for those characters themselves. A variable the model declares <code>atlas:searchable</code> is found by index when the search is narrowed to one version.</p>
     <div id="var-panel" hidden></div>
     <div id="ops-inc-note"></div>
-    <div class="card" id="proc-card" style="padding:0">
-      <table data-dt-key="instances">
-        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Incidents</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div>`;
-  const tbody = document.getElementById("rows");
+    <div id="proc-card">${procTable("instances", '<tr><td colspan="7" class="empty">Loading…</td></tr>', "rows")}</div>`;
+  const procCard = document.getElementById("proc-card");
 
   let allGroups = [];
+  let loaded = false;
   let summary = new Map();
   let runningByDef = new Map();
   // Unresolved incidents per definition, for the per-process rows. Keys are
@@ -7024,93 +7066,183 @@ async function viewInstances() {
     };
   };
 
-  // renderRows draws the process rows. Narrowing them is the table's own business:
-  // the Process column's filter box searches name *and* process id (the row carries
-  // both in its data-filter), which is what the box above this list used to do — so
-  // this only builds the rows and their sort keys, and the shared enhancer sorts and
-  // filters them.
+  // rowHtml draws one process row — the same in the list and in an application's group.
+  const rowHtml = (g) => {
+    const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
+    const label = g.latest.name || g.processId;
+    const sub = g.latest.name
+      ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+    const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
+    // A deactivated definition stays deployed and keeps its running instances, but does
+    // not auto-start new ones from its timer/message/signal start events (ADR-0119).
+    // Flag it here too; the Activate/Deactivate toggle lives in the Modeler's Deployed list.
+    const inactiveBadge = g.latest.active === false
+      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      : "";
+    // Compact and non-wrapping: the latest version reads at a glance, the count of
+    // older ones is a small badge (the full phrasing lives in the tooltip), so the
+    // cell can't break mid-phrase in a narrow column.
+    const versions = (g.versions.length === 1
+      ? `v${g.latest.version}`
+      : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
+    const running = s.running
+      ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
+      : '<span class="muted">0</span>';
+    const collab = g.latest.collaborationKey
+      ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
+      : "";
+    // Row actions: one primary Open plus an overflow menu, so every row is the same
+    // height and the destructive bulk-terminate doesn't shout from each row (it is
+    // one click deeper, the same ⋯ pattern the Modeler's rows use).
+    const openHref = `#/operations/p/${g.latest.key}`;
+    const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+    // Reading what changed between two versions needs no role beyond seeing them
+    // (ADR-0530).
+    if (g.versions.length > 1) {
+      menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
+    }
+    if (s.running) {
+      // Migrating sits above terminating deliberately: both drain a version, but one
+      // keeps the work and the other discards it, and the one that keeps it should be
+      // the one an operator reaches first (ADR-0162).
+      if (g.versions.length > 1) {
+        menuItems.push({ sep: true }, { label: "Migrate running instances…", icon: "⇄", act: "migrate", data: { proc: g.processId } });
+      }
+      menuItems.push(
+        { sep: true },
+        { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
+      );
+    }
+    // Deleting finished instances for good is an administrator's, and offered only
+    // where there are some (ADR-0486). The
+    // dialog reads its own counts: the Finished column counts every instance that
+    // ever finished, including the ones already deleted.
+    if (s.finished && mayUse("admin")) {
+      menuItems.push(
+        { sep: true },
+        { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
+      );
+    }
+    // A running count says nothing about a token being *stuck*: an instance parked
+    // behind an incident is counted as running like any other (ADR-0151).
+    const inc = incidentCell(g);
+    return `<tr>
+      <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
+      <td data-sort="${g.versions.length}">${versions}</td>
+      <td data-sort="${s.running || 0}">${running}</td>
+      <td data-sort="${inc.total}">${inc.html}</td>
+      <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
+      <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
+      <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
+    </tr>`;
+  };
+
+  // groupHead is one application's heading in the grouped arrangement: its name, a
+  // link to its page, and what its processes hold summed over every version, so a
+  // folded group still says whether anything in it runs or is stuck.
+  const groupHead = (b, sec) => {
+    let running = 0, finished = 0, incidents = 0;
+    for (const g of b.groups) {
+      const s = summary.get(g.processId);
+      if (s) { running += s.running; finished += s.finished; }
+      incidents += incidentCell(g).total;
+    }
+    const parts = [esc(trPlural("ops.group.processes", b.groups.length))];
+    if (running) parts.push(`<span class="pill ok"><span class="dot"></span>${esc(trPlural("ops.versions.running", running))}</span>`);
+    if (incidents) parts.push(`<span class="pill err">&#9888; ${esc(trPlural("ops.versions.incidents", incidents))}</span>`);
+    if (finished) parts.push(esc(trPlural("ops.versions.finished", finished)));
+    const open = b.id
+      ? `<a class="small" href="#/modeler/p/${encodeURIComponent(b.id)}" title="${esc(tr("ops.group.openAppTitle"))}">${esc(tr("ops.group.openApp"))}</a>`
+      : "";
+    return `<div class="sec-head">
+        <h2><button class="section-toggle" aria-expanded="${sectionState(sec)}" data-section="${esc(sec)}"
+          title="${esc(tr("section.toggle"))}"><span class="mi-icon">${b.id ? "📦" : "🗂"}</span>${esc(b.name)}</button></h2>
+        <span class="muted small">${parts.join(" · ")}</span>${open}</div>`;
+  };
+
+  // renderList draws the one list of processes. Its table is built once and only its
+  // body is rewritten on a refresh, so the enhancer's sort and the text in its filter
+  // row stay as the operator left them.
+  const renderList = (empty) => {
+    let tbody = document.getElementById("rows");
+    if (!tbody) {
+      procCard.innerHTML = procTable("instances", "", "rows");
+      tbody = document.getElementById("rows");
+      enhanceViewTables();
+    }
+    tbody.innerHTML = empty || allGroups.map(rowHtml).join("");
+  };
+
+  // renderGrouped draws one folding section per application. While the same
+  // applications are shown, a refresh rewrites each heading and each table's body in
+  // place — for the reason renderList gives; a different set of applications redraws
+  // them all.
+  const renderGrouped = () => {
+    const buckets = groupByApplication(allGroups);
+    const secOf = (b) => "ops-app-" + (b.id || "unassigned");
+    const ids = buckets.map(secOf).join("\n");
+    const root = procCard.querySelector(".ops-app-groups");
+    if (root && root.dataset.ids === ids) {
+      root.querySelectorAll(":scope > .ops-app-group").forEach((el, i) => {
+        const b = buckets[i];
+        el.querySelector(":scope > .sec-head").outerHTML = groupHead(b, secOf(b));
+        el.querySelector("tbody").innerHTML = b.groups.map(rowHtml).join("");
+      });
+    } else {
+      procCard.innerHTML = `<div class="ops-app-groups">${buckets.map((b) => {
+        const sec = secOf(b);
+        return `<div class="ops-app-group">${groupHead(b, sec)}${sectionBody(sec)}${procTable("instances-by-app", b.groups.map(rowHtml).join(""))}</div></div>`;
+      }).join("")}</div>`;
+      procCard.querySelector(".ops-app-groups").dataset.ids = ids;
+      enhanceViewTables();
+    }
+    wireSections(procCard);
+  };
+
+  // renderRows draws the process rows in the arrangement the operator chose. Narrowing
+  // them is the table's own business: the Process column's filter box searches name
+  // *and* process id (the row carries both in its data-filter), which is what the box
+  // above this list used to do — so this only builds the rows and their sort keys, and
+  // the shared enhancer sorts and filters them.
   function renderRows() {
     if (!allGroups.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">
+      if (procCard.querySelector(".ops-app-groups")) procCard.innerHTML = "";
+      renderList(`<tr><td colspan="7" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
-        <a href="#/modeler">Modeler</a>.</td></tr>`;
-      return;
+        <a href="#/modeler">Modeler</a>.</td></tr>`);
+    } else if (groupMode === "application") {
+      if (document.getElementById("rows")) procCard.innerHTML = "";
+      renderGrouped();
+    } else {
+      if (procCard.querySelector(".ops-app-groups")) procCard.innerHTML = "";
+      renderList();
     }
-    tbody.innerHTML = allGroups.map((g) => {
-      const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
-      const label = g.latest.name || g.processId;
-      const sub = g.latest.name
-        ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-      const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
-      // A deactivated definition stays deployed and keeps its running instances, but does
-      // not auto-start new ones from its timer/message/signal start events (ADR-0119).
-      // Flag it here too; the Activate/Deactivate toggle lives in the Modeler's Deployed list.
-      const inactiveBadge = g.latest.active === false
-        ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
-        : "";
-      // Compact and non-wrapping: the latest version reads at a glance, the count of
-      // older ones is a small badge (the full phrasing lives in the tooltip), so the
-      // cell can't break mid-phrase in a narrow column.
-      const versions = (g.versions.length === 1
-        ? `v${g.latest.version}`
-        : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
-      const running = s.running
-        ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
-        : '<span class="muted">0</span>';
-      const collab = g.latest.collaborationKey
-        ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
-        : "";
-      // Row actions: one primary Open plus an overflow menu, so every row is the same
-      // height and the destructive bulk-terminate doesn't shout from each row (it is
-      // one click deeper, the same ⋯ pattern the Modeler's rows use).
-      const openHref = `#/operations/p/${g.latest.key}`;
-      const menuItems = [{ label: "Open", icon: "→", href: openHref }];
-      // Reading what changed between two versions needs no role beyond seeing them
-      // (ADR-0530).
-      if (g.versions.length > 1) {
-        menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
-      }
-      if (s.running) {
-        // Migrating sits above terminating deliberately: both drain a version, but one
-        // keeps the work and the other discards it, and the one that keeps it should be
-        // the one an operator reaches first (ADR-0162).
-        if (g.versions.length > 1) {
-          menuItems.push({ sep: true }, { label: "Migrate running instances…", icon: "⇄", act: "migrate", data: { proc: g.processId } });
-        }
-        menuItems.push(
-          { sep: true },
-          { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
-        );
-      }
-      // Deleting finished instances for good is an administrator's, and offered only
-      // where there are some (ADR-0486). The
-      // dialog reads its own counts: the Finished column counts every instance that
-      // ever finished, including the ones already deleted.
-      if (s.finished && mayUse("admin")) {
-        menuItems.push(
-          { sep: true },
-          { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
-        );
-      }
-      // A running count says nothing about a token being *stuck*: an instance parked
-      // behind an incident is counted as running like any other (ADR-0151).
-      const inc = incidentCell(g);
-      return `<tr>
-        <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
-        <td data-sort="${g.versions.length}">${versions}</td>
-        <td data-sort="${s.running || 0}">${running}</td>
-        <td data-sort="${inc.total}">${inc.html}</td>
-        <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
-      </tr>`;
-    }).join("");
     // Bound per render, because onMenuAction binds the buttons that exist *now* and the
     // assignment above just replaced every one of them. Bound once at mount, it found
     // only the "Loading…" row, and every row's migrate and terminate closed the menu
     // and did nothing else.
-    onMenuAction(tbody, onRowAction);
+    onMenuAction(procCard, onRowAction);
   }
+
+  let groupMode = opsGroupMode();
+  const groupSeg = document.getElementById("inst-group");
+  const reflectGroupMode = () => {
+    for (const b of groupSeg.querySelectorAll("button[data-group]")) {
+      const on = b.dataset.group === groupMode;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+  };
+  reflectGroupMode();
+  groupSeg.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-group]");
+    if (!b || b.dataset.group === groupMode) return;
+    groupMode = b.dataset.group;
+    try { localStorage.setItem(OPS_GROUP_KEY, groupMode); } catch { /* ignore */ }
+    reflectGroupMode();
+    // Before anything is loaded there is nothing to arrange: the load draws it.
+    if (loaded) renderRows();
+  });
 
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
@@ -7188,9 +7320,11 @@ async function viewInstances() {
       allGroups = groupByProcess(procs);
       summary = summarizeFromServer(rows);
       runningByDef = runningByDefinition(rows);
+      loaded = true;
       renderRows();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+      if (procCard.querySelector(".ops-app-groups")) procCard.innerHTML = "";
+      renderList(`<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`);
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -7206,7 +7340,6 @@ async function viewInstances() {
   // match, then render a per-instance results table (each matched variable
   // highlighted) in place of the per-process list. Clearing restores the list.
   const varPanel = document.getElementById("var-panel");
-  const procCard = document.getElementById("proc-card");
   const varClear = document.getElementById("var-clear");
   const varInput = document.getElementById("var-q");
   // needleOf mirrors the server's parse: an "=" makes it structured (the value
