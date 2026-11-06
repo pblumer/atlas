@@ -78,7 +78,7 @@ type Operation struct {
 	JobType      string            `json:"jobType"`
 	Capabilities []CapabilityClaim `json:"capabilities,omitempty"`
 	// Idempotency and Effect say what a second delivery of one of its jobs does
-	// (ADR-draft-operations-declare-idempotency-and-effect): both are required, so the
+	// (ADR-0538): both are required, so the
 	// property is never assumed silently.
 	Idempotency string `json:"idempotency"`
 	Effect      string `json:"effect"`
@@ -106,7 +106,7 @@ const (
 
 // DuplicateRisk grades what a second delivery of op can do: "" for none, "notice" for
 // a tolerable repeat, "warning" for an irreversible one, as
-// ADR-draft-operations-declare-idempotency-and-effect §3 grades it.
+// ADR-0538 §3 grades it.
 func (op Operation) DuplicateRisk() string {
 	switch {
 	case op.Idempotency != IdempotencyNone:

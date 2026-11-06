@@ -6633,7 +6633,7 @@ type pulledJob struct {
 	// redelivery after a lease ran out, the retry an incident's resolve starts — and
 	// different for every execution and every installation: atlas:<node id>:<job key>.
 	// A worker hands it to a target that filters duplicates, or checks by it before
-	// acting (ADR-draft-operations-declare-idempotency-and-effect §2).
+	// acting (ADR-0538 §2).
 	IdempotencyKey string         `json:"idempotencyKey"`
 	Variables      map[string]any `json:"variables"`
 	// Worker is a task resolved into plain values, present only for a

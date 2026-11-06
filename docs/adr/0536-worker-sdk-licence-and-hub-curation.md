@@ -124,7 +124,7 @@ policy can act on them:
 | Publisher signature (ADR-0535 §6) | required | required |
 | Build provenance | required | shown if present |
 | Automated checks | manifest validation, malware scan, SBOM, declared network targets and prerequisites match observed behaviour in a sandbox run | the same automated checks |
-| Duplicate-delivery test | required for every operation declared `natural`, `key` or `check`: against a mock of its target the same job is delivered twice, and once more after a simulated crash between side effect and report, and the effect happens once ([ADR-draft-operations-declare-idempotency-and-effect](draft-operations-declare-idempotency-and-effect.md) §5); operations declared `none` are exempt and listed as such | shown if run |
+| Duplicate-delivery test | required for every operation declared `natural`, `key` or `check`: against a mock of its target the same job is delivered twice, and once more after a simulated crash between side effect and report, and the effect happens once ([ADR-0538](0538-operations-declare-idempotency-and-effect.md) §5); operations declared `none` are exempt and listed as such | shown if run |
 | Manual review | yes: source review for open source; for closed source a review under NDA, or the vendor's attestation plus the behavioural test, recorded as `reviewMode` | no |
 | Security contact and disclosure policy | required | required |
 | Commitment to act on a revocation request | within a stated time | best effort |

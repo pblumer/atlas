@@ -78,7 +78,7 @@ before it is reported is offered again, so a handler with side effects must be i
 **Declaring idempotency.** A Worker Type's manifest declares, for every operation, its
 `idempotency` and its `effect`; both are required. atlas uses them to decide where to warn
 about a repeated effect
-([ADR-draft-operations-declare-idempotency-and-effect](../../../adr/draft-operations-declare-idempotency-and-effect.md)).
+([ADR-0538](../../../adr/0538-operations-declare-idempotency-and-effect.md)).
 
 | `idempotency` | Meaning |
 |---|---|

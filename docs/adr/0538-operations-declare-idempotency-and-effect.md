@@ -1,4 +1,4 @@
-# ADR-DRAFT: Every operation declares its idempotency and effect, jobs carry an idempotency key, and atlas warns where a duplicate can do harm
+# ADR-0538: Every operation declares its idempotency and effect, jobs carry an idempotency key, and atlas warns where a duplicate can do harm
 
 - **Status:** Accepted
 - **Implementation:** Partial
@@ -47,7 +47,7 @@ be tested, and warn loudly where a duplicate can do harm.
 Chosen: **option 2**. Option 3 trades every duplicate for a lost action and a manual
 check, which is wrong for the many operations that are idempotent; it survives only as
 an opt-in mode for the operations that need it, in its own record
-([ADR-draft-at-most-once-delivery-for-irreversible-operations](draft-at-most-once-delivery-for-irreversible-operations.md)).
+([ADR-0537](0537-at-most-once-delivery-for-irreversible-operations.md)).
 
 ### 1. Every operation declares two properties
 
@@ -170,4 +170,4 @@ in ADR-0536).
 - [ADR-0536](0536-worker-sdk-licence-and-hub-curation.md) — the `verified` tier
 - [ADR-0026](0026-problems-panel-and-versioned-validation.md) — the problems panel
 - [ADR-0061](0061-incident-model.md) — incidents
-- [ADR-draft-at-most-once-delivery-for-irreversible-operations](draft-at-most-once-delivery-for-irreversible-operations.md)
+- [ADR-0537](0537-at-most-once-delivery-for-irreversible-operations.md)

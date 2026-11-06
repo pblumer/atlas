@@ -33,7 +33,7 @@ func leaseIdem(t *testing.T, srv *Server, jobType string) (uint64, uint64, strin
 // Every delivery of one task execution carries the same idempotency key — after a
 // failure with a retry left, and after an operator resolves the incident the last
 // failure raised — and the key names this installation and the job
-// (ADR-draft-operations-declare-idempotency-and-effect §2).
+// (ADR-0538 §2).
 func TestTheIdempotencyKeyIsStableAcrossEveryDeliveryOfOneExecution(t *testing.T) {
 	srv, _ := jobPullSrvClockedWith(t, errorBoundaryBPMN("orders", "charge-card", "CARD_DECLINED"), `{}`)
 	jobKey, lease, first := leaseIdem(t, srv, "charge-card")

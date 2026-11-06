@@ -1,4 +1,4 @@
-# ADR-DRAFT: At most once for irreversible operations — a lease that runs out raises «outcome unknown» instead of redelivering
+# ADR-0537: At most once for irreversible operations — a lease that runs out raises «outcome unknown» instead of redelivering
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -13,7 +13,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-operations-declare-idempotency-and-effect](draft-operations-declare-idempotency-and-effect.md)
+[ADR-0538](0538-operations-declare-idempotency-and-effect.md)
 makes every operation declare its idempotency and effect, and names two things atlas can
 do when the lease of a job runs out on an operation declared `none`: warn and redeliver,
 or hold. Holding changes what the engine does with a job, so it is decided here.
@@ -116,7 +116,7 @@ duplicate into a stalled process nobody sees, which is not better.
 
 ## Links
 
-- [ADR-draft-operations-declare-idempotency-and-effect](draft-operations-declare-idempotency-and-effect.md)
+- [ADR-0538](0538-operations-declare-idempotency-and-effect.md)
 - [ADR-0007](0007-job-worker-protocol.md), [ADR-0061](0061-incident-model.md),
   [ADR-0435](0435-one-catalogue-of-the-events-atlas-emits.md)
 - [Engine invariants](../architecture/invariants.md)

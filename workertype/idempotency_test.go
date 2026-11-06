@@ -6,7 +6,7 @@ import (
 )
 
 // Every operation declares what a second delivery of one of its jobs does, and the
-// declaration grades the warning (ADR-draft-operations-declare-idempotency-and-effect).
+// declaration grades the warning (ADR-0538).
 func TestEveryOperationDeclaresItsIdempotencyAndEffect(t *testing.T) {
 	for _, tc := range []struct {
 		name, idempotency, effect, want string
