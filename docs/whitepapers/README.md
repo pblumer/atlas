@@ -14,6 +14,14 @@ implementation status.
   **23 October 2026**. Related:
   [IAE delivery programme](../planning/identity-aware-execution-program.md) and
   [ADR-0475](../adr/0475-identity-aware-worker-execution.md).
+- **Worker Architecture and Lifecycle** —
+  [PDF](atlas-worker-whitepaper.pdf),
+  [HTML](atlas-worker-whitepaper.html) and
+  [Markdown source](atlas-worker-whitepaper.md).
+  German technical whitepaper (draft 0.1) about external Worker Types,
+  job delivery, credential handling, isolation, the atlas hub trust model,
+  and the migration's documented limitations. Implementation status is
+  based on the supplied facts and is not independently audited.
 - **Horizontal Scaling** —
   [PDF](atlas-technisches-whitepaper-horizontale-skalierung.pdf) and
   [editable Word document](atlas-technisches-whitepaper-horizontale-skalierung.docx).
