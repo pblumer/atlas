@@ -60,6 +60,10 @@ jobs:
           HTML(string=flatten(html),base_url=str(root.resolve())).write_pdf(str(root/'atlas-applikationen-dark.pdf'))
           HTML(string=flatten(html.replace('<html lang="de-CH">','<html lang="de-CH" class="print-light">'),True),base_url=str(root.resolve())).write_pdf(str(root/'atlas-applikationen-print.pdf'))
           PY
+      - name: Install Poppler validation tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
       - name: Validate PDF fonts and rendering
         run: |
           set -eu
