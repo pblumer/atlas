@@ -42,7 +42,10 @@ Prompts that commission a whitepaper from a coding agent live in
 [`prompts/`](prompts/). They are briefs, not whitepapers:
 [`prompts/atlas-applikationen-whitepaper.md`](prompts/atlas-applikationen-whitepaper.md)
 commissions the process applications whitepaper in the `pblumer/atlas-cloud`
-design.
+design;
+[`prompts/atlas-worker-whitepaper.md`](prompts/atlas-worker-whitepaper.md)
+is the self-contained brief (facts A–O, for a model without repository access)
+the worker architecture whitepaper was written from.
 
 Keep all future whitepapers here, under `docs/whitepapers/`. The former
 singular `docs/whitepaper/` directory has been consolidated into this
