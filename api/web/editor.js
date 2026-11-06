@@ -3,7 +3,7 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
-import { groupReplayHistory } from "./replay-history.js";
+import { groupReplayHistory, foldLegendTokens } from "./replay-history.js";
 import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
@@ -16863,11 +16863,27 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     }
     const legend = root.querySelector("#token-legend");
     const raceTitle = "An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so the replay draws it once — here, on the gateway — and outlines the armed branches dashed.";
-    legend.innerHTML = tokens.length ? tokens.map((token) =>
+    // A multi-instance activity is named once with its token count, not once per
+    // iteration: the diagram's dots already fold into "+n", and the history row of its
+    // body counts and opens the iterations (foldLegendTokens).
+    const miMode = (elId) => {
+      const el = registry.get(elId);
+      const mode = el && el.businessObject ? loopMode(el.businessObject) : "none";
+      return mode === "parallel" || mode === "sequential" ? mode : "";
+    };
+    const chip = (token) =>
       `<span class="token-chip"${token.race ? ` title="${esc(raceTitle)}"` : ""}>` +
       `<i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
       `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)"
-        : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`).join("")
+        : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`;
+    const miChip = ({ elementId, tokens: held }) => {
+      const mode = miMode(elementId);
+      return `<span class="token-chip mi" title="${esc(tr("ops.token.mi.title"))}">` +
+        `<i style="--token-color:${tokenColor(held[0].tokenId)}">${mode === "sequential" ? "&#8801;" : "&#8741;"}</i>` +
+        `${esc(trPlural("ops.token.mi", held.length, { element: stepLabel(held[0]) }))}</span>`;
+    };
+    legend.innerHTML = tokens.length
+      ? foldLegendTokens(tokens, (elId) => !!miMode(elId)).map((e) => (e.token ? chip(e.token) : miChip(e))).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
     applySelection();
   }
