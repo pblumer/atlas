@@ -32,6 +32,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"fmt"
+	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/workertype/install"
 	"io/fs"
 	"log/slog"
@@ -315,6 +316,9 @@ type Server struct {
 	installedURL             string
 	allowUnsignedWorkerTypes bool
 	installedTypes           *install.Store
+	// installedWorkers are the configured Workers of installed Worker Types, run-loop
+	// owned like the other design-time stores (ADR-0535 §4).
+	installedWorkers *sidecar.Store[installedWorker]
 	// offloadedKinds are the managed Worker Types this server does not serve
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
 	offloadedKinds []string

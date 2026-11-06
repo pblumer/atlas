@@ -468,6 +468,25 @@ credentials beyond the server token (step 4), process confinement for installed
 artifacts (Landlock/seccomp on Linux, a job object on Windows), and the Console view
 of installed releases; the API carries them.
 
+**2026-11-05 — step 4, first slice: configuration as data.** A manifest carries its
+configuration contract inline (`spec.configuration`, a JSON Schema object whose
+`writeOnly` top-level properties are secrets; `workertype.ConfigurationSchema`). An
+administrator configures Workers of an installed type with
+`PUT|GET|DELETE /api/v1/worker-types/installed/{id}/workers/{name}`: settings are checked
+against every installed release's schema, a secret is refused inline and given only as the
+name of a vault entry that must exist, and the API never shows a secret's value. The
+configured Workers are a run-loop-owned sidecar store. At every spawn the supervisor hands
+the instance `ATLAS_WORKER_CONFIG` — each Worker's configuration with secrets resolved from
+the vault and validated against that release's schema; one that fails is left out and
+logged — and a change restarts the type's instances (`refresh` on a changed environment).
+`workersdk.LaunchConfig` reads it, and `LaunchOptions` reports the Workers' names so the
+Workers view shows them. No line of the server code involved knows a particular Worker
+Type. **Not yet in step 4:** `validate-config`, `check-connection` and `diagnostics` as
+worker queries; binding a BPMN task to one configured Worker of a model-authored job type
+(a job naming no Worker is served by any instance, as before); the per-job credential
+broker for installed types; and migrating the built-in Worker Types onto this path, which
+starts with the types whose server half is smallest.
+
 ## Links
 
 - refines [ADR-0203](0203-worker-execution-model.md): ends compiled-in embedded Worker

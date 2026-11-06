@@ -33,6 +33,9 @@ var classified = map[string]string{
 		"package format's rule, not an installation's memory budget (ADR-0535)",
 	"api/workertypeinstall.go:install.MaxManifestBytes + 1": "the manifest bound workertype/install names " +
 		"(MaxManifestBytes), read here one byte over so an oversized manifest is refused, not truncated",
+	"api/workertypeworkers.go:workertype.MaxConfigurationSchemaBytes": "a configured Worker's settings are held " +
+		"to the size its Worker Type's schema may have: the package format's named rule, not an installation's " +
+		"memory budget (ADR-0535 §4)",
 	"workertype/install/install.go:MaxArtifactBytes + 1": "the named size bound of one installed Worker Type " +
 		"executable; it streams to disk while hashed, so it bounds the data directory, not memory (ADR-0535)",
 	"mcp/http.go:maxLine": "JSON-RPC framing, shared with the stdio transport where there is no HTTP body at " +

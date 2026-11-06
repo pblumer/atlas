@@ -56,8 +56,12 @@ type Spec struct {
 	JobTypes            []string    `json:"jobTypes"`
 	Operations          []Operation `json:"operations"`
 	ConfigurationSchema string      `json:"configurationSchema"`
-	ModelerTemplate     string      `json:"modelerTemplate"`
-	Artifact            *Artifact   `json:"artifact,omitempty"`
+	// Configuration is the configuration contract inline, as a JSON Schema object
+	// whose writeOnly top-level properties are secrets (ADR-0535 §4). An installed
+	// artifact carries no other file, so this is where its schema travels.
+	Configuration   json.RawMessage `json:"configuration,omitempty"`
+	ModelerTemplate string          `json:"modelerTemplate"`
+	Artifact        *Artifact       `json:"artifact,omitempty"`
 	// Artifacts are the runtime's executables, one per platform (ADR-0535 §1). A
 	// manifest names either Artifact (one platform) or Artifacts, not both.
 	Artifacts []Artifact `json:"artifacts,omitempty"`
@@ -174,6 +178,11 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("spec.operations operation %q references undeclared job type %q", op.ID, op.JobType)
 		}
 		if err := validateCapabilityClaims(op.ID, op.Capabilities); err != nil {
+			return err
+		}
+	}
+	if len(bytes.TrimSpace(m.Spec.Configuration)) > 0 {
+		if _, err := CompileConfiguration(m.Spec.Configuration); err != nil {
 			return err
 		}
 	}

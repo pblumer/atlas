@@ -52,7 +52,7 @@ func (s *Server) openInstalledWorkerTypes() error {
 		return err
 	}
 	s.installedTypes = st
-	return nil
+	return s.openInstalledWorkers()
 }
 
 // superviseInstalled registers every installed release with the supervisor, creating
@@ -98,6 +98,7 @@ func (s *Server) superviseRelease(inst install.Installed) {
 			workersdk.EnvTypeVersion + "=" + inst.Version,
 			workersdk.EnvTypeDigest + "=" + inst.Digest,
 		}
+		out = append(out, s.installedWorkerConfigEnv(inst)...)
 		return append(out, s.workerTokenEnv()...)
 	}
 	s.supervisor.addLive(spec, nil, env)
