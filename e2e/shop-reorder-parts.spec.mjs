@@ -130,13 +130,15 @@ test("my services offers what a held bundle is missing, and the basket takes it"
   // The iPhone lacks its hardware and its case, so it opens what it lacks.
   await page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first().locator("button.label").click();
   const col = page.locator(".cascade > .col:nth-child(4)");
-  // Only what it lacks, in the entry's details: "My services" lists no service
-  // it holds as an offer.
+  // The entry's parts say where each stands, and only what it lacks is offered:
+  // "My services" offers no part it holds.
   await expect(col.locator(".colhead")).toHaveText(["Details"]);
-  await expect(col.locator(".svc-lacking .svc-offer")).toHaveText(["Apple iPhone hardware", "Smartphone case"]);
+  await expect(col.locator(".svc-part.offerable .svc-part-name")).toHaveText(["Apple iPhone hardware", "Smartphone case"]);
+  await expect(col.locator('.svc-part[data-part="iphone-hw"] .svc-part-state')).toHaveText("Not held");
+  await expect(col.locator('.svc-part[data-part="huelle"] .svc-part-state')).toHaveText("Not chosen");
   // Both are offers: the hardware because it was given back, the case because it
   // was never taken.
-  const offer = (name) => col.locator(".svc-offer", { hasText: name }).locator("button.sq").first();
+  const offer = (name) => col.locator(".svc-part.offerable", { hasText: name }).locator("button.sq").first();
   await offer("Apple iPhone hardware").click();
   await offer("Smartphone case").click();
   await expect(offer("Smartphone case")).toHaveAttribute("aria-pressed", "true");
@@ -154,7 +156,7 @@ test("a bundle held whole offers nothing extra in my services", async ({ page })
   await page.locator(".cascade .cell", { hasText: "Internal user account" }).locator("button.label").click();
   await expect(page.locator(".cascade > .col")).toHaveCount(4);
   await expect(page.locator(".svc-detail")).toBeVisible();
-  await expect(page.locator(".svc-detail .svc-lacking")).toHaveCount(0);
+  await expect(page.locator(".svc-detail .svc-part.offerable")).toHaveCount(0);
 });
 
 // Ordered again and not yet provisioned is not held, but it is coming: offering it a
@@ -169,5 +171,5 @@ test("a part already ordered again is not offered a second time", async ({ page 
   await expect(hw).toBeDisabled();
   // "My services" opens on the product the catalogue stands at.
   await page.getByRole("button", { name: "My services", exact: true }).click();
-  await expect(page.locator(".cascade > .col:nth-child(4) .svc-lacking .svc-offer")).toHaveText(["Smartphone case"]);
+  await expect(page.locator(".cascade > .col:nth-child(4) .svc-part.offerable .svc-part-name")).toHaveText(["Smartphone case"]);
 });

@@ -44,11 +44,23 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **An opened entry of "My services" is laid out in sections.** It starts with the product's name,
+  its pie and how it stands. Then come its parts, each with where it stands now (held, on its way,
+  no longer held, not held, not chosen) and the basket control for what can be added; its possible
+  events; and its orders. The newest order and any still moving are shown; settled older ones
+  wait behind "Show earlier orders".
 - **The Worker SDK depends on nothing of atlas.** The form-lookup wire shape moved from
   `connector/lookup` to `workersdk/lookup`, and the protocol client's own warnings go to a
   logger the Worker Type chooses (`workersdk.Options.Logger`, the default logger when unset)
   with the same `event=worker.poll_failed` as before. A Worker Type built outside this
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
+
+### Fixed
+- **"My services" no longer says "being set up" about parts nobody is providing.** An entry whose
+  missing parts were given back, withdrawn or never delivered, with nothing on its way, read
+  "being set up: 4 of 7 ready". It now reads "incomplete: 4 of 7 held", and the status filter has
+  "incomplete" of its own. Its pie stays the share held. A position the order found "already held"
+  says so as it stands now when the part has been given back since.
 
 ## [0.24.0] — 2026-11-05
 

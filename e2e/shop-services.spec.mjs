@@ -107,7 +107,7 @@ test("my services are a cascade, read like the catalogue", async ({ page }) => {
   await page.getByRole("button", { name: "Apple iPhone", exact: true }).click();
   await expect(page.locator(".cascade > .col:nth-child(4) .colhead")).toHaveText("Details");
   await expect(page.locator(".cascade .cell", { hasText: "Smartphone case" })).toHaveCount(0);
-  await expect(page.locator(".svc-detail .svc-lacking")).toHaveCount(0);
+  await expect(page.locator(".svc-detail .svc-part.offerable")).toHaveCount(0);
   expect(await page.evaluate(() => window.__unmatched)).toEqual([]);
 });
 
