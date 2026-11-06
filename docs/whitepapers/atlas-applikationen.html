@@ -1,0 +1,662 @@
+<!DOCTYPE html><html lang="de-CH"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>atlas-Applikationen · Technisches Whitepaper</title><meta name="description" content="Technisches Whitepaper über atlas-Prozessapplikationen, Entwicklung, Release, Promotion und atlas hub"><style>
+:root{color-scheme:dark;--ink:#090f1c;--panel:#101c2e;--panel2:#17263b;--line:#2d4058;--muted:#9bb0cc;--white:#f4f7ff;--blue:#b8d7ff;--mint:#b8e5cd;--shadow:0 25px 60px #0006;font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at top,#1d3357 0%,#14233d 42%,#111d33 100%);color:var(--white);overflow-wrap:anywhere}
+a{color:var(--blue);text-decoration:underline;text-underline-offset:2px}a:hover{color:var(--mint)}
+.frame{width:min(1030px,calc(100% - 48px));margin-inline:auto}.stars{position:absolute;pointer-events:none;inset:0 0 auto;height:870px;background-image:radial-gradient(circle at 15% 22%,#fff6 0 1px,transparent 1px),radial-gradient(circle at 82% 18%,#fff5 0 1px,transparent 1px),radial-gradient(circle at 33% 66%,#c8dbff50 0 1px,transparent 1px),radial-gradient(circle at 72% 74%,#eef5ff4b 0 1px,transparent 1px),radial-gradient(circle at 56% 37%,#a9c8f94f 0 1px,transparent 1px)}
+.cover{min-height:830px;position:relative;display:flex;flex-direction:column;justify-content:space-between;padding-top:140px;overflow:hidden;isolation:isolate}.cover:before{content:"";position:absolute;z-index:-1;inset:0;background:radial-gradient(circle at 72% 22%,#44689150,transparent 42%),radial-gradient(circle at 14% 73%,#28507750,transparent 53%)}
+.brand-mark{display:flex;gap:14px;align-items:center;font-weight:800;letter-spacing:-.055em;font-size:35px}.brand-mark svg{width:56px;height:56px;display:block;color:var(--white)}.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--mint);font-weight:700;margin-top:50px}.cover h1{font-size:clamp(3.6rem,8vw,6.65rem);letter-spacing:-.085em;line-height:.98;margin:20px 0 28px;font-weight:800;max-width:940px}.cover h1 span{color:var(--blue)}.cover .subtitle{font-size:1.4rem;max-width:790px;line-height:1.55;color:var(--muted)}.meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:25px;border-top:1px solid var(--line);padding:22px 0 42px}.meta div{font-size:14px;color:var(--white)}.meta strong{display:block;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-size:11px;margin-bottom:8px}.lead{border-left:4px solid var(--mint);margin:48px auto 10px;padding:12px 22px;color:var(--muted);background:var(--panel);max-width:1030px}.document{padding:38px 0 90px}
+.document h2{font-size:clamp(1.8rem,3.3vw,2.8rem);line-height:1.16;letter-spacing:-.04em;border-top:1px solid var(--line);padding-top:30px;margin:72px 0 23px;break-after:avoid;font-weight:800}.document h3{font-size:1.27rem;line-height:1.26;letter-spacing:-.025em;margin:34px 0 15px;break-after:avoid}.document p{line-height:1.74;color:var(--muted);margin:0 0 18px}.document strong{color:var(--white)}.document blockquote{margin:26px 0 38px;padding:20px 24px;border-left:3px solid var(--mint);background:var(--panel2);color:var(--white);border-radius:0 8px 8px 0}.document blockquote p{color:var(--white);margin:0}.document code{font-size:.91em;color:var(--blue);background:var(--panel);padding:2px 5px;border:1px solid var(--line);border-radius:4px}.document table{border-collapse:collapse;width:100%;margin:21px 0 30px;font-size:13px;line-height:1.4;break-inside:auto;table-layout:auto}.document th,.document td{border:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}.document th{background:var(--panel2);color:var(--white);font-weight:750}.document tbody tr:nth-child(odd){background:var(--panel)}.document tbody tr:nth-child(even){background:var(--panel2)}.document td{color:var(--muted)}.document li{margin-bottom:6px;color:var(--muted)}.document li strong{color:var(--white)}.document hr{border:0;border-top:1px solid var(--line);margin:30px 0}
+.diagram{border:1px solid var(--line);padding:16px 16px 10px;background:var(--ink);border-radius:16px;margin:30px 0 27px;break-inside:avoid}.diagram-label{font-size:12px!important;line-height:1.3!important;margin:0 0 10px!important;color:var(--muted)!important;font-weight:700}.diagram svg{display:block;width:100%;height:auto;max-height:360px}.diagram .node{fill:var(--panel);stroke:var(--line);stroke-width:2}.diagram .node.strong{fill:var(--panel2);stroke:var(--blue)}.diagram .node.mint{fill:var(--panel2);stroke:var(--mint)}.diagram .node.light{fill:var(--panel2)}.diagram .arrow{stroke:var(--blue);stroke-width:2.3;fill:none;stroke-linecap:round}.diagram .arrowhead{fill:var(--blue)}.diagram .node-title{font:bold 17px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--white)}.diagram .node-sub{font:12.5px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--muted)}.diagram .lane{font:bold 13px system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:1.2px;fill:var(--mint)}.diagram .annotation{font:13px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--muted)}
+.footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px;padding:25px 0 40px}
+@media screen and (max-width:700px){.frame{width:calc(100% - 32px)}.cover{min-height:640px;padding-top:65px}.cover h1{font-size:3.4rem}.subtitle{font-size:1.1rem!important}.meta{grid-template-columns:1fr;gap:9px;padding-bottom:25px}.document h2{font-size:1.85rem;margin-top:48px}.document table{font-size:11px}.document td,.document th{padding:6px 5px}.diagram{padding:6px}.diagram .node-sub{font-size:12px}}
+@page{size:A4;margin:17mm 16mm 17mm;background:var(--panel);@bottom-left{content:"atlas  /  APPLIKATIONEN";font:8pt system-ui,sans-serif;color:var(--muted)}@bottom-right{content:counter(page);font:9pt system-ui,sans-serif;color:var(--muted)}}
+@page:first{margin:0;background:var(--ink);@bottom-left{content:""}@bottom-right{content:""}}
+@media print{html,body{background:var(--panel)!important;print-color-adjust:exact}.stars{display:none}.frame{width:auto}.cover{height:297mm;min-height:0;padding:39mm 20mm 18mm;break-after:page}.cover h1{font-size:56pt;margin:14mm 0 6mm}.cover .subtitle{font-size:15.2pt;line-height:1.35}.cover .eyebrow{margin-top:25mm}.meta{padding:7mm 0 0;gap:7mm}.meta div{font-size:9pt}.meta strong{font-size:7pt}.lead{display:none}.document{padding:0}.document h2{font-size:18.5pt;margin:8.3mm 0 4mm;padding-top:4mm;border-color:var(--line);break-after:avoid}.document h3{font-size:11.5pt;margin:5.5mm 0 3mm;break-after:avoid}.document p{font-size:9.3pt;line-height:1.5;margin:0 0 3.0mm;color:var(--muted);orphans:3;widows:3}.document li{font-size:9pt;margin-bottom:1.6mm;orphans:3;widows:3}.document table{font-size:7.3pt;margin:3mm 0 5mm;line-height:1.27}.document td,.document th{padding:1.2mm 1.7mm}.document tr{break-inside:avoid}.document blockquote{padding:3mm 4mm;margin:4mm 0 6mm}.document code{font-size:7.5pt}.diagram{padding:2mm;border-radius:4px;margin:4mm 0 5mm;break-inside:avoid}.diagram svg{max-height:70mm}.diagram-label{font-size:8pt!important;margin:0 0 2mm!important}.document h2#inhaltsverzeichnis{break-before:page}.document h2#1-management-summary{break-before:page}.footer{display:none}}
+html.print-light{color-scheme:light;--ink:#f1f5fa;--panel:#ffffff;--panel2:#ecf3fa;--line:#c5d3e2;--muted:#233247;--white:#0d1b2c;--blue:#234d83;--mint:#245c4c;--shadow:0 12px 26px #22334422}
+html.print-light .cover{background:radial-gradient(circle at top,#e5eff9 0%,#f7fbff 70%)}
+html.print-light .cover:before{background:radial-gradient(circle at 70% 30%,#c9dcec,transparent 46%)}
+html.print-light .document blockquote{background:var(--panel2)}
+</style></head><body><div class="stars" aria-hidden="true"></div><section class="cover frame" id="deckblatt"><div><div class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-label="atlas-Glyph" role="img"><path fill="currentColor" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path fill="currentColor" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path fill="currentColor" d="M133 93H162V211H133Z"/><path fill="currentColor" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg><span>atlas</span></div><div class="eyebrow">TECHNISCHES WHITEPAPER · AUSGABE 1.0</div><h1>Applikationen<span>.</span><br>Von der Idee<br>in den Betrieb.</h1><p class="subtitle">Architektur, Entwicklung, Releases und Verteilung von Prozessapplikationen – zwischen implementiertem Stand und bewusst offenem Zielbild.</p></div><div class="meta"><div><strong>Faktenbasis</strong>6. November 2026</div><div><strong>Einordnung</strong>Architektur und Implementierungsstatus</div><div><strong>Format</strong>Fachpublikation · Deutsch (Schweiz)</div></div></section><main class="frame document">
+
+
+<blockquote>
+<p><strong>Leseschlüssel.</strong> <strong>Umgesetzt</strong> bedeutet: durch ADR-Index und konkrete Implementierung oder Tests belegt. <strong>Teilweise umgesetzt</strong> bedeutet: Teile des beschlossenen Ansatzes sind vorhanden, der Gesamtumfang nicht. <strong>Geplant/offen</strong> bezeichnet nicht implementierte, noch unentschiedene oder ausdrücklich vorgeschlagene Teile. <strong>Einschätzung</strong> kennzeichnet eine fachliche Bewertung bzw. Empfehlung und keine Produkteigenschaft. Ein Whitepaper ist keine unabhängige Sicherheitszertifizierung und kein Abnahmenachweis.</p>
+</blockquote>
+<h2 id="inhaltsverzeichnis">Inhaltsverzeichnis</h2>
+<ol type="1">
+<li>Management Summary</li>
+<li>Ausgangslage und Problem</li>
+<li>Begriffe und Abgrenzung</li>
+<li>Architekturüberblick</li>
+<li>Bestandteile einer Applikation</li>
+<li>Lebenszyklus</li>
+<li>Entwicklung einer Applikation</li>
+<li>Versionierung und Migration</li>
+<li>Konfiguration und Konstanten</li>
+<li>Verteilung</li>
+<li>Sicherheit und Berechtigungen</li>
+<li>Betrieb</li>
+<li>Durchgehendes Fallbeispiel</li>
+<li>Offene Punkte, Grenzen und Ausblick</li>
+<li>Glossar und ADR-Verzeichnis</li>
+</ol>
+<h2 id="management-summary">1. Management Summary</h2>
+<p>Eine <strong>atlas-Applikation</strong> fasst zusammengehörige BPMN-Prozesse und weitere Entwurfsartefakte in einer benannten, versionierbaren und transportierbaren Einheit zusammen. Sie ist mehr als ein Verzeichnis: Der fachliche und technische Stand wird beim Publizieren als <strong>Applikations-Release</strong> dokumentiert. Eine einzelne Prozessdefinition behält daneben ihre eigenständige Versionsgeschichte. Diese Trennung ist notwendig, um ein fachliches Angebot als Ganzes auszuliefern und dennoch einzelne laufende Prozessinstanzen mit ihren gebundenen Definitionen zu betreiben. <a href="../adr/0034-projects-and-artifacts.md">ADR-0034</a>, <a href="../adr/0128-process-applications.md">ADR-0128</a>.</p>
+<p><strong>Umgesetzt:</strong> Der Applikationscontainer, lokale Publikation und Release-Historie, Deployment-Ziele mit Promotion, Quellbaum-Export und -Import, Paketimport mit Vorschau und Konfliktentscheidungen sowie Konstanten je Installation sind vorhanden. Die Applikationspakete können auch Produktkataloge und weitere Architekturinformationen enthalten. Die Umsetzung wird durch API-Handler und Tests gestützt, unter anderem <code>api/promote.go</code>, <code>api/apppackage.go</code>, <code>api/constantsimport.go</code> und <a href="../adr/0528-application-bundle-architecture.md">ADR-0528</a>.</p>
+<p><strong>Teilweise umgesetzt:</strong> ADR-0128 ist insgesamt <strong>Partial</strong>, weil die direkte Git-Anbindung fehlt. atlas hub bietet den signierten Registry-Vertrag, eine fest konfigurierte Quelle, geschützten Download und einen überprüfbaren Importpfad, aber noch keinen vollständigen Lifecycle für mehrere Quellen, durchgängige Installations-Provenienz und verwaltete Updates. Die Architektur-Snapshots von Releases sind implementiert, während zusätzliche Darstellungsschichten und Confluence-Publikation nicht vollständig sind. <a href="../adr/0128-process-applications.md">ADR-0128</a>, <a href="../adr/0134-git-backed-applications.md">ADR-0134</a>, <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>, <a href="../adr/0471-release-architecture-sketch.md">ADR-0471</a>.</p>
+<p><strong>Geplant/offen:</strong> Ein allgemein verbindlicher Referenzweg von Entwicklung über Test und Integration zur Produktion ist noch kein verabschiedeter Gesamtstandard. Die in diesem Whitepaper beschriebene Freigabekette ist ein <strong>Zielbild</strong>, keine bereits durch die Plattform durchgesetzte Vier-Stufen-Pipeline. Der <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang Prozessentwicklung</a> nennt Umgebungsgrenzen, Freigaben und Schreibschutz in Produktion ausdrücklich als offene Entscheidungen.</p>
+<p><strong>Einschätzung:</strong> Für einen gegenwärtig belegbaren Produktionsprozess ist die manuell kontrollierte, protokollierte Promotion eines eingefrorenen Applikations-Releases der konservativere Startpunkt, sofern die Netz- und Berechtigungsgrenzen passen. atlas hub ist für unabhängige, signierte Pull-Verteilung eine starke Alternative; die heutige Ein-Registry- und Netzrestriktion verhindert jedoch bestimmte interne Topologien. Beide Verfahren verlangen ergänzende organisatorische Freigaben, Umgebungsinventare und Betriebsprüfungen. Das gilt besonders dann, wenn produktive Zielsysteme oder Personendaten betroffen sind.</p>
+<h2 id="ausgangslage-und-problem">2. Ausgangslage und Problem</h2>
+<p>Ein BPMN-Diagramm beschreibt einen Ablauf. Es beschreibt aber noch nicht die vollständige fachliche Anwendung: Ein Benutzer benötigt Formulare und Startmöglichkeiten; Entscheidungen benötigen DMN-Modelle; Service Tasks benötigen konfigurierte Worker; Umgebungen benötigen unterschiedliche Identitäten, Ziele und Konstanten. Auch Produktkataloge, Informationsmodelle und die Zuordnung zu Geschäftsfähigkeiten können zusammengehören. Eine lose Sammlung von Dateien kann diese Beziehungen nicht verlässlich für eine Freigabe, Installation oder Weiterentwicklung transportieren. <a href="../adr/0034-projects-and-artifacts.md">ADR-0034</a>, <a href="../adr/0467-application-package-export.md">ADR-0467</a>, <a href="../adr/0528-application-bundle-architecture.md">ADR-0528</a>.</p>
+<p>Die ursprüngliche Entwurfsoberfläche kannte ungruppierte BPMN-Entwürfe und separat versionierte Deployments. ADR-0034 führte Projekte als Design-Time-Container ein. ADR-0128 hob diese Container zur <strong>Prozessapplikation</strong> an: mit dem fachlich sichtbaren Publikationsvorgang, einem Release-Manifest und einer Geschichte, die nachvollziehbar macht, welche Prozesse zusammen freigegeben wurden. Der ältere interne Speichername <code>projectId</code> darf weiterexistieren; die Oberfläche und öffentlichen Applikationsschnittstellen müssen deshalb nicht unmittelbar dem historischen Speichernamen folgen.</p>
+<p>Drei Fragen sind zu trennen: <strong>Was bearbeiten wir?</strong> Die Entwürfe und Modelle. <strong>Was haben wir veröffentlicht?</strong> Das eingefrorene Release mit seinen Versionen. <strong>Wo wird es betrieben?</strong> Die konkrete atlas-Installation mit ihren eigenen Identitäten, Worker-Konfigurationen und laufenden Instanzen. Bei einem Umgebungswechsel ändert sich nicht automatisch alles zugleich. Genau darin liegt die Notwendigkeit des Applikationskonzepts.</p>
+<h2 id="begriffe-und-abgrenzung">3. Begriffe und Abgrenzung</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Begriff</th>
+<th>Bedeutung und Grenze</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Projekt</td>
+<td>Historischer Name des Design-Time-Containers aus ADR-0034; in der heutigen Fachoberfläche als Applikation geführt.</td>
+</tr>
+<tr class="even">
+<td>Applikation</td>
+<td>Benannte Einheit zusammengehöriger Entwurfsartefakte, lokaler Releases und gegebenenfalls Katalogbeziehungen; <strong>keine</strong> Prozessinstanz.</td>
+</tr>
+<tr class="odd">
+<td>Artefakt</td>
+<td>BPMN-Entwurf, Entscheidungsreferenz, DMN-Modell, Formular, Informationsmodell oder weiteres zugeordnetes Entwurfsobjekt.</td>
+</tr>
+<tr class="even">
+<td>Prozessdefinition</td>
+<td>Validiertes, kompiliertes und versioniertes ausführbares BPMN-Modell.</td>
+</tr>
+<tr class="odd">
+<td>Prozessinstanz</td>
+<td>Konkrete laufende bzw. abgeschlossene Ausführung einer Prozessdefinition mit eigenem Zustand und Ereignissen.</td>
+</tr>
+<tr class="even">
+<td>Applikations-Release</td>
+<td>Lokal versioniertes Manifest der zusammen publizierten Artefakte und deren konkreten Prozessversionen.</td>
+</tr>
+<tr class="odd">
+<td>Deployment</td>
+<td>Registrierung ausführbarer Definitionen auf einer atlas-Installation; getrennt vom blossen Speichern eines Entwurfs.</td>
+</tr>
+<tr class="even">
+<td>Deployment-Ziel</td>
+<td>Konfigurierter anderer atlas-Server, an den ein vorhandenes Release übertragen werden kann.</td>
+</tr>
+<tr class="odd">
+<td>Promotion</td>
+<td>Push eines vorhandenen, eingefrorenen Releases zu einem solchen Ziel.</td>
+</tr>
+<tr class="even">
+<td>Paket</td>
+<td>Export- und Importformat mit Quellbaum, gegebenenfalls Konstanten, Katalogen und installationsspezifischen Fragen.</td>
+</tr>
+<tr class="odd">
+<td>Blueprint</td>
+<td>Über atlas hub vertriebenes, signiertes und adressiertes Release eines Applikationspakets; nicht die lokal editierbare Applikation selbst.</td>
+</tr>
+<tr class="even">
+<td>Worker</td>
+<td>Konfigurierte Zielsystem-Anbindung eines Worker Type mit Identität und Einstellungen; eine Worker Instance holt die Jobs ab.</td>
+</tr>
+</tbody>
+</table>
+<p>Die Begriffe folgen dem <a href="../architecture/glossary.md">Architekturglossar</a>, <a href="../adr/0128-process-applications.md">ADR-0128</a>, <a href="../adr/0203-worker-execution-model.md">ADR-0203</a> und <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>. Ein Produkt im Shop ist ebenfalls nicht mit einer Applikation gleichzusetzen: Ein Produkt kann einen Prozess starten oder Aktionen darüber anbieten; die Auslieferung seiner Katalogdefinition ist eine eigene, aber paketierbare Angelegenheit.</p>
+<h2 id="architekturüberblick">4. Architekturüberblick</h2>
+<div class="diagram" data-diagram="architecture">
+<p class="diagram-label">
+Abbildung 1 · Einordnung von Applikationen oberhalb der Laufzeit-Engine
+</p>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 347" role="img" aria-label="Architektur- und Prozessdiagramm">
+<text class="lane" x="530" y="22" text-anchor="middle">ZUGRIFFSSCHICHT · GESTALTEN UND STEUERN</text><rect class="node" x="33" y="38" width="228" height="52" rx="12"/><text class="node-title" x="147.0" y="63" text-anchor="middle" style="font-size:15px">Console / Modeler</text><rect class="node" x="290" y="38" width="228" height="52" rx="12"/><text class="node-title" x="404.0" y="63" text-anchor="middle" style="font-size:15px">CLI / Automatisierung</text><rect class="node" x="547" y="38" width="228" height="52" rx="12"/><text class="node-title" x="661.0" y="63" text-anchor="middle" style="font-size:15px">MCP / externer Agent</text><rect class="node" x="804" y="38" width="228" height="52" rx="12"/><text class="node-title" x="918.0" y="63" text-anchor="middle" style="font-size:15px">HTTP-API</text><path class="arrow" d="M530 97 L530 124"/><path class="arrowhead" d="M530.0 124.0 L525.8 115.0 L534.2 115.0 Z"/><rect class="node strong" x="57" y="128" width="946" height="100" rx="12"/><text class="node-title" x="530.0" y="153" text-anchor="middle" style="font-size:20px">APPLIKATION / DESIGN TIME</text><text class="node-sub" x="530.0" y="176" text-anchor="middle">Entwürfe · BPMN · DMN · Formulare · Konstanten · Release-Manifest</text><text class="node-sub" x="530.0" y="195" text-anchor="middle">Sidecar-Daten und importierte Artefakte, ausserhalb des Event-Logs</text><path class="arrow" d="M319 235 L319 260"/><path class="arrowhead" d="M319.0 260.0 L314.8 251.0 L323.2 251.0 Z"/><path class="arrow" d="M753 235 L753 260"/><path class="arrowhead" d="M753.0 260.0 L748.8 251.0 L757.2 251.0 Z"/><rect class="node mint" x="74" y="266" width="490" height="60" rx="12"/><text class="node-title" x="319.0" y="291" text-anchor="middle" style="font-size:17px">ENGINE / RUNTIME</text><text class="node-sub" x="319.0" y="314" text-anchor="middle">Kompilierte Definitionen · Commands → WAL / fsync → State</text><rect class="node light" x="607" y="266" width="379" height="60" rx="12"/><text class="node-title" x="796.5" y="291" text-anchor="middle" style="font-size:17px">WORKER / ZIELSYSTEME</text><text class="node-sub" x="796.5" y="314" text-anchor="middle">Jobs nach Persistenz · externe APIs</text>
+</svg>
+</div>
+<p><strong>Umgesetzt:</strong> Die Applikation lebt als <strong>Design-Time-Schicht</strong> hinter HTTP-API, Console, CLI und MCP. Entwürfe, Releases, Bindungen und Importhistorie werden als eigenständige, dauerhaft gespeicherte Verwaltungsdaten geführt. Sie erscheinen <strong>nicht</strong> als Applikationsobjekte im Event-Log und werden <strong>nicht</strong> durch <code>applyToState</code> materialisiert. Das ist eine Architekturgrenze, kein blosses Darstellungsdetail. <a href="../adr/0034-projects-and-artifacts.md">ADR-0034</a>, <a href="../adr/0128-process-applications.md">ADR-0128</a>, <a href="../adr/0019-durable-deployments.md">ADR-0019</a>, <a href="../architecture/invariants.md">Invarianten</a>.</p>
+<p>Beim Deployment wird das BPMN-Modell geprüft und in den unveränderlichen, integer-indexierten Ausführungsgraphen übersetzt. Eine Prozessinstanz arbeitet anschliessend mit dieser kompilierten Definition. Commands erzeugen Events; nach WAL-Schreibvorgang und <code>fsync</code> wird Zustand materialisiert und erst danach dürfen sichtbare Nebenwirkungen stattfinden. Der Prozessor wird je Partition von genau einem Writer betrieben. Das Applikationskonzept ändert diese Laufzeitmechanik nicht. <a href="../ARCHITECTURE.md">Architektur</a>, <a href="../architecture/invariants.md">Invarianten</a>.</p>
+<p>Ein Worker führt externe Arbeit <strong>ausserhalb des synchronen Engine-Hot-Paths</strong> aus. Die Applikation kann Worker-Namen und benötigte Operationen deklarieren, sie liefert aber nicht automatisch die Zielsystem-Credentials, Worker-Prozesse oder Netzwerkfreigaben mit. Die Konfiguration einer Worker Instance ist vom Workflow-Modell und vom Worker Type zu unterscheiden. Weiterführend: <a href="atlas-worker-whitepaper.md">Worker-Whitepaper</a>, <a href="../adr/0208-worker-type-packages.md">ADR-0208</a>.</p>
+<p><strong>Einschätzung:</strong> Die klare Grenze zwischen Applikationsverwaltung und Event-Sourcing ist betrieblich wertvoll: Sie vereinfacht das Verpacken und Freigeben von Modellen, ohne den Replay-Vertrag der Engine durch nachträgliche Verwaltungsmetadaten aufzuweichen. Sie ersetzt jedoch kein gesondertes Recovery-Konzept für die Design-Time-Seitendaten.</p>
+<h2 id="bestandteile-einer-applikation">5. Bestandteile einer Applikation</h2>
+<h3 id="bpmn-prozesse-und-dmn-entscheidungen">BPMN-Prozesse und DMN-Entscheidungen</h3>
+<p><strong>Umgesetzt:</strong> BPMN kann als bearbeitbarer Entwurf gespeichert werden (ADR-0021). Das Publizieren einer Applikation validiert die zugeordneten Artefakte und legt ihre deployten Versionen in einem Release fest (ADR-0128). DMN hat eigene Entwürfe und dauerhaft versionierte Deployments: Speichern ist nicht gleich Veröffentlichen; eine DMN-Referenz bindet beim Prozessdeployment an eine geeignete Modellversion. Die Entscheide <a href="../adr/0319-durable-versioned-decision-deployments.md">ADR-0319</a>, <a href="../adr/0321-decision-drafts.md">ADR-0321</a>, <a href="../adr/0322-deploying-one-decision.md">ADR-0322</a>, <a href="../adr/0327-a-deployed-decision-satisfies-a-latest-bound-task.md">ADR-0327</a> und <a href="../adr/0329-a-decision-deployment-is-not-deletable.md">ADR-0329</a> erläutern die Grenzen der jeweiligen Versionen.</p>
+<h3 id="formulare-und-fachlicher-einstieg">Formulare und fachlicher Einstieg</h3>
+<p>Formulare beschreiben Eingaben und Aufgabenoberflächen und gehören zur fachlichen Anwendbarkeit eines Prozesses. Die Startansicht gruppiert veröffentlichte Einstiegsmöglichkeiten nach Applikation und hält persönliche Favoriten vor. <strong>Umgesetzt</strong> nach <a href="../adr/0466-start-view-groups-and-favourites.md">ADR-0466</a>. Eine formal versionierte, veröffentlichte Prozessschnittstelle als eigenständiger Vertrag ist dagegen <strong>geplant/offen</strong>: <a href="../adr/0373-published-process-interface.md">ADR-0373</a> steht auf <code>Not started</code>.</p>
+<h3 id="konstanten-und-werte-je-installation">Konstanten und Werte je Installation</h3>
+<p>Das Prozessmodell deklariert Konstanten, die beim Start einer Instanz gesetzt und danach vor gewöhnlichen Variablenänderungen geschützt werden. Lokale Werte können aus der Applikation oder der Installation stammen. Die Bindung erfolgt über explizite Namensräume wie <code>application.TENANT_ID</code> und <code>server.TENANT_ID</code>; vordefinierte Fakten wie <code>server.environment</code> können ebenso gelesen werden. <strong>Umgesetzt</strong> nach <a href="../adr/0453-application-values-per-installation.md">ADR-0453</a>, <a href="../adr/0454-process-constants.md">ADR-0454</a> und <a href="../adr/0456-constant-namespaces.md">ADR-0456</a>.</p>
+<h3 id="architektur-informationsmodelle-und-fähigkeiten">Architektur, Informationsmodelle und Fähigkeiten</h3>
+<p><strong>Umgesetzt mit Abgrenzung:</strong> Ein Release kann einen Architektur-Snapshot enthalten. Das Paketformat 4 enthält gemäss <a href="../adr/0528-application-bundle-architecture.md">ADR-0528</a> zusätzlich Informationsmodelle und applikationsgebundene Realisierungen von Geschäftsfähigkeiten. Fähigkeiten und Wertströme bleiben dabei übergreifende Registereinträge der <strong>Zielinstallation</strong>; mitgelieferte Einträge sind Vorschläge und müssen bei Konflikten übernommen, zugeordnet oder ausgelassen werden. Das verhindert eine heimliche Überschreibung der lokalen Geschäftsfähigkeitslandkarte. Die vollständige mehrschichtige Darstellung und Veröffentlichung auf externen Plattformen bleibt gemäss <a href="../adr/0471-release-architecture-sketch.md">ADR-0471</a> und <a href="../adr/0495-layered-release-architecture.md">ADR-0495</a> <strong>teilweise umgesetzt</strong>.</p>
+<h3 id="worker-abhängigkeiten-und-externe-systeme">Worker-Abhängigkeiten und externe Systeme</h3>
+<p>BPMN-Service-Tasks brauchen zur Ausführung passende Worker und Zielberechtigungen. Ein Paket kann auf diese Abhängigkeiten hinweisen, darf aber nicht als umfassende, lauffähige Kopie der externen Infrastruktur verstanden werden. <strong>Einschätzung:</strong> Ein Release ist vollständig im Sinn seiner modellierten und mitgeführten Artefakte, nicht vollständig im Sinn aller operativen Abhängigkeiten. Bei Produktivfreigaben gehören Worker-Kompatibilität, Credential-Gültigkeit, Firewall-Regeln und Zielsystemrechte auf eine separate Checkliste. Siehe <a href="atlas-worker-whitepaper.md">Worker-Whitepaper</a>.</p>
+<h2 id="lebenszyklus">6. Lebenszyklus</h2>
+<div class="diagram" data-diagram="lifecycle">
+<p class="diagram-label">
+Abbildung 2 · Lebenszyklus und bewusst getrennte Übergänge
+</p>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 337" role="img" aria-label="Architektur- und Prozessdiagramm">
+<text class="lane" x="530" y="21" text-anchor="middle">SEQUENZ DER ENTWICKLUNG – NICHT EIN EINZIGER ENGINE-ZUSTAND</text><rect class="node" x="26" y="43" width="314" height="83" rx="12"/><text class="node-title" x="183.0" y="68" text-anchor="middle" style="font-size:17px">1 · Entwurf</text><text class="node-sub" x="183.0" y="91" text-anchor="middle">BPMN, DMN, Formulare</text><text class="node-sub" x="183.0" y="110" text-anchor="middle">bearbeitbar und nicht deployed</text><rect class="node" x="373" y="43" width="314" height="83" rx="12"/><text class="node-title" x="530.0" y="68" text-anchor="middle" style="font-size:17px">2 · Validierung</text><text class="node-sub" x="530.0" y="91" text-anchor="middle">Problems-Panel, Modellprüfung</text><text class="node-sub" x="530.0" y="110" text-anchor="middle">fachlicher Review</text><rect class="node strong" x="720" y="43" width="314" height="83" rx="12"/><text class="node-title" x="877.0" y="68" text-anchor="middle" style="font-size:17px">3 · Release</text><text class="node-sub" x="877.0" y="91" text-anchor="middle">lokale Publikation</text><text class="node-sub" x="877.0" y="110" text-anchor="middle">versioniertes Manifest</text><path class="arrow" d="M343 86 L368 86"/><path class="arrowhead" d="M368.0 86.0 L359.0 90.2 L359.0 81.8 Z"/><path class="arrow" d="M690 86 L715 86"/><path class="arrowhead" d="M715.0 86.0 L706.0 90.2 L706.0 81.8 Z"/><path class="arrow" d="M876 131 L876 185"/><path class="arrowhead" d="M876.0 185.0 L871.8 176.0 L880.2 176.0 Z"/><rect class="node light" x="720" y="193" width="314" height="92" rx="12"/><text class="node-title" x="877.0" y="218" text-anchor="middle" style="font-size:17px">4 · Verteilung</text><text class="node-sub" x="877.0" y="241" text-anchor="middle">Promotion oder Hub-Import</text><text class="node-sub" x="877.0" y="260" text-anchor="middle">separate Zielentscheidung</text><rect class="node mint" x="373" y="193" width="314" height="92" rx="12"/><text class="node-title" x="530.0" y="218" text-anchor="middle" style="font-size:17px">5 · Betrieb</text><text class="node-sub" x="530.0" y="241" text-anchor="middle">Prozessinstanzen, Jobs</text><text class="node-sub" x="530.0" y="260" text-anchor="middle">Incidents und Monitoring</text><rect class="node" x="26" y="193" width="314" height="92" rx="12"/><text class="node-title" x="183.0" y="218" text-anchor="middle" style="font-size:17px">6 · Stilllegung</text><text class="node-sub" x="183.0" y="241" text-anchor="middle">Vorschau, Rechteprüfung</text><text class="node-sub" x="183.0" y="260" text-anchor="middle">gegebenenfalls Purge</text><path class="arrow" d="M715 239 L693 239"/><path class="arrowhead" d="M693.0 239.0 L702.0 234.8 L702.0 243.2 Z"/><path class="arrow" d="M368 239 L345 239"/><path class="arrowhead" d="M345.0 239.0 L354.0 234.8 L354.0 243.2 Z"/><text class="annotation" x="530" y="322" text-anchor="middle">Ein neues Release verändert vorhandene Instanzen nicht automatisch.</text>
+</svg>
+</div>
+<p><strong>Entwurf:</strong> Fachliche Modelle werden als nicht ausführungswirksame Entwürfe gespeichert. Unvollständige Modelle müssen noch nicht deploybar sein. <strong>Validierung:</strong> Vor dem Deployment werden Syntax, Modellsemantik und Bindungen geprüft. <strong>Publikation:</strong> Der lokale Publish-Vorgang erstellt die lauffähigen Versionen und das Applikations-Release. <strong>Verteilung:</strong> Promotion oder Paketimport übertragen ausgewählte Inhalte in andere Installationen. <strong>Betrieb:</strong> Die jeweilige Installation startet Instanzen, führt Jobs aus und meldet Incidents. <strong>Stilllegung:</strong> Unbenutzte Artefakte oder eine ganze Applikation werden gezielt gelöscht bzw. bereinigt.</p>
+<p>Das sind keine Zustände einer einzigen langlebigen Engine-Instanz; es sind Arbeitsschritte und Verwaltungszustände. Insbesondere bleibt ein schon gespeicherter Entwurf editierbar, während ein älteres Release weiterläuft. Ein neues Release ersetzt weder automatisch die Instanzhistorie noch beendet es sämtliche älteren Prozessinstanzen. <a href="../adr/0019-durable-deployments.md">ADR-0019</a>, <a href="../adr/0128-process-applications.md">ADR-0128</a>.</p>
+<p><strong>Umgesetzt:</strong> Der normale Applikations-Löschvorgang entfernt die Zuordnung und Verwaltungsdaten, nicht zwangsläufig die zugeordneten Artefakte. Ein ausdrücklich gewähltes <code>?purge=true</code> bietet eine Vorschau und einen weitergehenden Löschpfad. Er kann laufende Instanzen abbrechen und unterliegt zusätzlichen Eigentümer-, Schutz- und Konsistenzregeln. Der Vorgang ist somit potenziell destruktiv und niemals eine harmlose Aufräumaktion. <a href="../adr/0468-deleting-an-application-with-its-contents.md">ADR-0468</a>, <code>api/apppurge.go</code>.</p>
+<p><strong>Einschätzung:</strong> Ein fachlicher Stilllegungsprozess sollte zuerst den Start neuer Instanzen und externe Aufrufe kontrollieren, dann aktive Fälle und Aufbewahrungspflichten klären und erst danach eine Löschung autorisieren. Eine Applikationsbereinigung ersetzt keine rechtliche Prüfung von Ereignisprotokollen und Geschäftsdaten.</p>
+<h2 id="entwicklung-einer-applikation">7. Entwicklung einer Applikation</h2>
+<p>Dieses Kapitel trennt <strong>drei Phasen</strong>: fachlicher Entwurf, technische Integration sowie kontrollierte Auslieferung. Die unten beschriebenen Freigaben sind Arbeitsvorschläge, wo sie noch nicht durch eine Plattformfunktion technisch erzwungen werden. <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang Prozessentwicklung</a>.</p>
+<div class="diagram" data-diagram="development">
+<p class="diagram-label">
+Abbildung 3 · Rollen, Umgebungen und Übergaben vom Entwurf bis zur Produktion
+</p>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 309" role="img" aria-label="Architektur- und Prozessdiagramm">
+<text class="lane" x="530" y="21" text-anchor="middle">VERANTWORTUNG / UMGEBUNG / FREIGABEPUNKT</text><rect class="node" x="22" y="43" width="316" height="209" rx="12"/><text class="node-title" x="180.0" y="68" text-anchor="middle" style="font-size:18px">PHASE 1 · ENTWURF</text><text class="node-sub" x="180.0" y="91" text-anchor="middle">Fachbereich + Prozessentwicklung</text><text class="node-sub" x="180.0" y="110" text-anchor="middle">Material, Skizzen, Regeln</text><text class="node-sub" x="180.0" y="129" text-anchor="middle">externer Agent optional</text><text class="node-sub" x="180.0" y="148" text-anchor="middle">↓</text><text class="node-sub" x="180.0" y="167" text-anchor="middle">Entwürfe, Review, Simulation</text><text class="node-sub" x="180.0" y="186" text-anchor="middle">FREIGABE: fachlich geprüft</text><rect class="node strong" x="372" y="43" width="316" height="209" rx="12"/><text class="node-title" x="530.0" y="68" text-anchor="middle" style="font-size:18px">PHASE 2 · INTEGRATION</text><text class="node-sub" x="530.0" y="91" text-anchor="middle">Prozessentwicklung + Betrieb</text><text class="node-sub" x="530.0" y="110" text-anchor="middle">temporäre Entwicklungsumgebung</text><text class="node-sub" x="530.0" y="129" text-anchor="middle">Worker, Identitäten, Tests</text><text class="node-sub" x="530.0" y="148" text-anchor="middle">↓</text><text class="node-sub" x="530.0" y="167" text-anchor="middle">lokales Applikations-Release</text><text class="node-sub" x="530.0" y="186" text-anchor="middle">FREIGABE: technisch geprüft</text><rect class="node mint" x="722" y="43" width="316" height="209" rx="12"/><text class="node-title" x="880.0" y="68" text-anchor="middle" style="font-size:18px">PHASE 3 · AUSLIEFERUNG</text><text class="node-sub" x="880.0" y="91" text-anchor="middle">Betrieb + Fachfreigabe</text><text class="node-sub" x="880.0" y="110" text-anchor="middle">TEST → INT → PROD</text><text class="node-sub" x="880.0" y="129" text-anchor="middle">Promotion oder signierter Import</text><text class="node-sub" x="880.0" y="148" text-anchor="middle">↓</text><text class="node-sub" x="880.0" y="167" text-anchor="middle">Zielkonfiguration, Publikation</text><text class="node-sub" x="880.0" y="186" text-anchor="middle">FREIGABE: je Stufe</text><path class="arrow" d="M341 142 L367 142"/><path class="arrowhead" d="M367.0 142.0 L358.0 146.2 L358.0 137.8 Z"/><path class="arrow" d="M691 142 L717 142"/><path class="arrowhead" d="M717.0 142.0 L708.0 146.2 L708.0 137.8 Z"/><text class="annotation" x="530" y="293" text-anchor="middle">Der durchgängige Freigabeprozess ist Zielbild, kein systemweit erzwingender Workflow.</text>
+</svg>
+</div>
+<h3 id="phase-1-fachlicher-entwurf-optional-ki-gestützt">Phase 1 – Fachlicher Entwurf, optional KI-gestützt</h3>
+<p><strong>Rollen:</strong> Der Fachbereich trägt Prozessziel, fachliche Regeln und Abnahme. Die Prozessentwicklung strukturiert BPMN, DMN, Formulare und Informationsmodell. Der Betrieb unterstützt früh bei Identitäten, Umgebungen und Worker-Anforderungen. <strong>Eingaben:</strong> Prozessbeschreibungen, vorhandene Diagramme, Bilder, Papier-Skizzen, Formulare, Tabellen und bekannte Regeln. <strong>Ergebnis:</strong> nachvollziehbar gespeicherte <strong>Entwürfe</strong>, noch kein produktives Deployment. <strong>Freigabepunkt:</strong> fachliche Durchsicht des vorgesehenen Sollprozesses einschliesslich Rollen, Ausnahmen und Entscheidungen.</p>
+<p><strong>Umgesetzt:</strong> Externe MCP-fähige KI-Agenten können über die HTTP-orientierte MCP-Schicht Entwürfe lesen und schreiben. MCP arbeitet unter der Identität und mit den Rechten des authentisierten Aufrufers; je nach Client wird der Zugang über lokale Credentials oder OAuth ermöglicht. Das Speichern eines BPMN-Entwurfs ist ausdrücklich von einem Deployment getrennt. Gemeinsames Modellieren in Live-Sitzungen, DMN-Entwürfe, generierte Formularentwürfe und ein FEEL-Assistent besitzen eigene implementierte Bausteine. <a href="../adr/0016-mcp-server-over-http-api.md">ADR-0016</a>, <a href="../adr/0196-authenticated-mcp-transport.md">ADR-0196</a>, <a href="../adr/0200-mcp-oauth-resource-server.md">ADR-0200</a>, <a href="../adr/0140-live-collaborative-modeling-sessions.md">ADR-0140</a>, <a href="../adr/0260-ai-form-generation.md">ADR-0260</a>, <a href="../adr/0445-feel-assistant.md">ADR-0445</a>.</p>
+<p><strong>Teilweise umgesetzt:</strong> Ein durchgängiger eingebauter, generativer Modeler-Copilot ist <strong>nicht</strong> als vollständig gelandete Funktion zu beschreiben: <a href="../adr/0032-modeler-ai-copilot.md">ADR-0032</a> steht auf <code>Proposed / Partial</code>. Die KI-Interpretation unstrukturierter Eingaben – etwa eines Fotos einer handgezeichneten Ablaufskizze – ist nach diesen Quellen eine Leistung des <strong>externen KI-Agenten</strong>, nicht eine zugesicherte automatische Funktion des atlas-Prozessors. Der externe Agent erzeugt oder ändert die editierbaren Modelle über dafür vorgesehene Schnittstellen. Aus diesem Grund gilt jede Generierung zunächst als Vorschlag.</p>
+<p><strong>Qualitätssicherung:</strong> Entwürfe werden im Modeler visuell geprüft; das Problems-Panel und die Deploy-Prüfung legen Modellierungsprobleme offen. Simulation beziehungsweise Play-Modus erlaubt, Pfade und Bedingungen vor echtem Betrieb zu untersuchen. Für DMN und FEEL ist die Prüfung gegen konkrete Eingaben erforderlich. Der Fachbereich muss Fälle, Ausnahmen, Zuständigkeiten und die Textwirkung in Formularen nachvollziehen. <strong>Einschätzung:</strong> Ein Agent kann Vorschläge beschleunigen, nicht die fachliche Verantwortung oder die spätere technische Abnahme übernehmen. <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang</a>, <a href="../adr/0032-modeler-ai-copilot.md">ADR-0032</a>.</p>
+<p><strong>Risiken:</strong> Ein KI-Modell kann Schritte erfinden, Geschäftsregeln falsch interpretieren oder nicht vorhandene Mitarbeiterrollen zuordnen. Falls Ausgangstexte, Bilder oder Prozessbeispiele an einen externen KI-Anbieter gesendet werden, können vertrauliche Informationen die Organisationsgrenze verlassen. Authentisiertes MCP und die serverseitige Validierung begrenzen Zugriffs- und Formatfehler, verhindern aber keine inhaltliche Halluzination und ersetzen keine Datenklassifikation oder Genehmigung für einen Modellanbieter. <strong>Einschätzung:</strong> Für schutzbedürftige Unterlagen ist vor dem Upload ein genehmigtes Betriebs- und Datenverarbeitungsmodell erforderlich.</p>
+<h3 id="phase-2-integration-in-der-entwicklungsumgebung">Phase 2 – Integration in der Entwicklungsumgebung</h3>
+<p><strong>Rollen:</strong> Die Prozessentwicklung richtet Modelle, Worker-Bindungen und Testdaten ein. Der Betrieb stellt die temporäre Zielumgebung bereit und verwaltet Secrets, Netz, Identitäten sowie Zielsystemrechte. Der Fachbereich verantwortet fachliche Integrationstests. <strong>Eingaben:</strong> freigegebene Entwürfe, Zielsystem-Schnittstellen und Testkonten. <strong>Ergebnis:</strong> integrierte, lokal publizierte Applikation mit überprüften Abläufen und reproduzierbaren Abhängigkeiten. <strong>Freigabepunkt:</strong> dokumentierter Integrationsnachweis und Entscheidung, welches Release ausgeliefert wird.</p>
+<p>Als konkret belegte Referenz dient <a href="../../deploy/opentofu/m365-devenv/README.md"><code>deploy/opentofu/m365-devenv/README.md</code></a>. OpenTofu erstellt darin eine temporäre Entwicklungsumgebung mit atlas-Server, Microsoft-365-Testumgebung beziehungsweise Testtenant, Identitäten und ausgewählten Workern. Skripte konfigurieren Secrets im Vault, registrieren konfigurierte Worker und spielen Beispielapplikationen ein. <code>tofu init</code>, <code>tofu apply</code> und <code>tofu destroy</code> bilden die wiederholbaren Infrastrukturphasen. Die Einspielskripte unter <a href="../../deploy/opentofu/m365-devenv/scripts/"><code>deploy/opentofu/m365-devenv/scripts/</code></a> sind Teil des Referenzvorgehens.</p>
+<p><strong>Umgesetzt mit Grenzen:</strong> Die Beschreibung enthält einen dokumentierten Durchlauf vom <strong>2. November 2026</strong> in einem realen, geteilten Tenant, einschliesslich nachgeführter Korrekturen. Sie nennt gleichzeitig einen noch offenen zweiten vollständigen Neuaufbau, manuell notwendige Schritte sowie Funktionen, die nicht für einen geteilten Tenant geeignet sind. Eine vorhandene Integration wird dadurch nicht automatisch allgemein produktionsreif. Für Exchange, Teams Phone und SharePoint sind die Berechtigungsprofile nicht gleich: Einige Microsoft-API-Rechte gelten tenantweit, andere können enger beschränkt werden. Ohne geeignete Konfiguration sind sie zu weit für einen produktiv genutzten Tenant.</p>
+<p>Die Entwicklungsumgebung ist <strong>kein Produktions-Betriebsmuster</strong>. Ihre eigenen Sicherheitsnotizen nennen unter anderem Secrets in OpenTofu-State, temporär verteilte Anmeldedaten und nach Konfiguration öffentlich erreichbare HTTPS-Endpunkte. Credentials sind kurzlebig; ihre genaue Laufzeit hängt von den Einstellungen ab. Ein geteiltes M365-Tenant-Setup reduziert mehrere Rechte, beseitigt aber nicht alle tenantweiten Rechte. <strong>Einschätzung:</strong> Das architektonische Muster – kurzlebige Umgebung, reproducible setup, minimal berechtigte Worker, realistische Integrationsfälle, vollständiger Rückbau – ist übertragbar. Die konkrete OpenTofu-Lösung belegt jedoch nicht automatisch Integrationen zu anderen Herstellern.</p>
+<p><strong>Praktische Prüfschritte:</strong> Vor dem ersten Publish muss klar sein, welche Service Tasks einen konfigurierten Worker brauchen, welche Konstanten die Applikation aus ihrer Installation liest, welche Nachrichten und Timer sie starten, welche DMN-Modelle sie bindet und wie Fehler als Incidents sichtbar werden. Danach müssen positive Fälle, Ablehnungen, Wiederholungen und Wiederanläufe getestet werden. Beim Wechsel von DEV nach TEST darf kein Entwicklungssecret mitwandern.</p>
+<h3 id="phase-3-auslieferung-nach-test-integration-und-produktion">Phase 3 – Auslieferung nach Test, Integration und Produktion</h3>
+<p><strong>Rollen:</strong> Die Prozessentwicklung liefert einen benannten, unveränderlichen Release-Kandidaten. Der Fachbereich bestätigt die fachliche Abnahme. Der Betrieb oder eine berechtigte Release-Verantwortung entscheidet über Einspielung, Konfiguration und Freigabe pro Zielinstallation. <strong>Eingaben:</strong> freigegebenes Release/Paket, Prüfnachweise, kompatible Worker und konkrete Zielumgebungen. <strong>Ergebnis:</strong> eine nachvollziehbare Zuordnung, welches Release in welcher Stufe publiziert wurde. <strong>Freigabepunkt:</strong> separat dokumentierte Entscheidung vor jedem Wechsel in die nächste Stufe.</p>
+<p><strong>Heute belegbarer Weg A – Promotion:</strong> Nach der lokalen Publikation wird ein vorhandenes Applikations-Release per Deployment-Ziel an einen anderen atlas-Server gesendet. Die Zielinstallation erhält die im Release eingefrorenen Modelle; der Zielserver verwendet einen dauerhaften, eng begrenzten Deploy-Token für die Publikationsoperation. Die Promotion meldet Erfolge und Fehler <strong>je Ziel</strong>; eine Promotion auf mehrere Ziele ist nicht als global atomare Aktion zugesichert. Die Release-Version reist mit und wird nicht auf dem Ziel neu nummeriert. <strong>Umgesetzt</strong> nach <a href="../adr/0129-remote-deployment-targets.md">ADR-0129</a> und den Tests in <code>api/promote_test.go</code>.</p>
+<p><strong>Heute belegbarer Weg B – atlas hub:</strong> Auf der Herausgeberseite erzeugt die CLI mit <code>atlas hub keygen</code>, <code>atlas hub lock</code> und <code>atlas hub build</code> eine signierte Registry. Die Installation vertraut einer administrativ gepinnten öffentlichen Ed25519-Schlüsselmenge, lädt die überprüften Bytes und führt einen <strong>Importplan</strong> mit <code>dryRun</code>, Konfliktentscheidungen und gegebenenfalls nachfolgender Publikation aus. Der Import ist <strong>nicht</strong> dasselbe wie ein automatisches Deployment. Es existieren Console-, HTTP-, CLI- und MCP-Bezüge, jedoch nicht in jeder Kombination identische Automationsgrade. <strong>Teilweise umgesetzt</strong> im Gesamtsinn von <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>; Details: <a href="atlas-hub-signierte-verteilung.md">Hub-Whitepaper</a>.</p>
+<p><strong>Zielbild – noch nicht durchgehend implementiert:</strong> Ein Release wird signiert im atlas hub veröffentlicht, von TEST, INT und PROD jeweils über eigene kontrollierte Pull-Entscheidungen importiert und dort <strong>separat</strong> publiziert. Der Release-Digest bleibt gleich; jede Stufe protokolliert Genehmigung, Zielkonfiguration, Testergebnis und tatsächlich publizierte Prozessversionen. Eine weitere Freigabe folgt erst auf einen geprüften Stand. Diese durchgängige Kette ist eine <strong>Einschätzung</strong>, keine vorhandene automatische GitOps-/Release-Management-Pipeline.</p>
+<p><strong>Kritische Grenzen des Zielbildes:</strong> Nach dem dokumentierten Hub-Vertrag besitzt ein atlas-Server gegenwärtig <strong>eine</strong> fest konfigurierte Registry. Abrufe sind auf HTTPS, öffentlich auflösbare Hosts und Port 443 begrenzt; private Adressbereiche werden verweigert. Eine nur in internen Netzsegmenten erreichbare Registry lässt sich deshalb nicht ohne Architekturänderung als Standardquelle angeben. Öffentliche DNS-Hosts und ein zulässiger TLS-Endpunkt sind nicht automatisch die richtige Lösung für vertrauliche interne Artefakte. Dauerhafte Installations-Provenienz, Mehrquellenverwaltung und verwaltete Updates sind offen. Mehrere voneinander getrennte Ziele müssen daher ihren effektiven Stand zusätzlich mit externer Inventarisierung und Freigaben nachweisen. <a href="atlas-hub-signierte-verteilung.md">Hub-Whitepaper</a>, <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>, <a href="../adr/0506-marketplace-catalogue-bundles-and-updates.md">ADR-0506</a>.</p>
+<p>Der <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang Prozessentwicklung</a> nennt die Trennung der Umgebungen, Freigaben vor Promotion, Schreibschutz in Produktion, Verhältnis zu Git und Worker-Konfiguration je Stufe ausdrücklich als <strong>offene Architekturentscheidung</strong>. Dieses Whitepaper entscheidet sie nicht vorweg. <strong>Einschätzung:</strong> Bis zur verbindlichen Regelung sollte jede Organisation eine verantwortliche Freigabeinstanz, ein extern gesichertes Release-Inventar und eine dokumentierte Rückfallstrategie benennen.</p>
+<h2 id="versionierung-und-migration">8. Versionierung und Migration</h2>
+<p>Die Versionierung arbeitet auf mehreren Ebenen. Erstens besitzt die BPMN-Prozessdefinition ihre Version je Prozesskennung. Zweitens weist ein Applikations-Release eine eigene, fortlaufende Versionsnummer für den gemeinsam publizierten Artefaktstand aus. Drittens bezeichnet ein Blueprint-Release im atlas hub ein vom Herausgeber signiertes Distributionsobjekt mit eigenen Versions- und Digest-Identitäten. Diese Nummern sind nicht austauschbar. <a href="../adr/0019-durable-deployments.md">ADR-0019</a>, <a href="../adr/0128-process-applications.md">ADR-0128</a>, <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>.</p>
+<p><strong>Umgesetzt:</strong> ADR-0128 beschreibt Applikations-Releases als lokale Manifest-Einträge mit Release-Version, Mitgliedsartefakten und zugehörigen Prozessversionen, Zeit und verantwortlicher Person. Ein Release entsteht beim Publizieren. Das Vorhandensein einer neueren Applikationsversion bedeutet nicht, dass eine bereits laufende Instanz auf eine neue Prozessdefinition umgeschaltet wird. Die Engine benötigt die Zuordnung einer konkreten Prozessinstanz zu ihrer Definition, damit Event-Replay und die Ausführung deterministisch bleiben.</p>
+<p><strong>Umgesetzt:</strong> Bei der Promotion über ADR-0129 wird die vom Ausgangsserver vergebene Release-Version mitgeschickt. Der Zielserver verweigert eine gleich nummerierte, aber inhaltlich andere Version, anstatt stillschweigend umzunummerieren. Ein Ziel, auf dem gleichzeitig lokal veröffentlicht wird, braucht deshalb organisatorische Regeln gegen konkurrierende Release-Quellen. Die technische Promotion ist kein Merge-Verfahren für zwei unabhängige Autorenstände.</p>
+<p><strong>Umgesetzt:</strong> Der Paketimport kann wiederholt werden, ohne unveränderte Artefakte neu zu schreiben. Seit ADR-0467 merkt sich die Zielinstallation für importierte Artefakte eine <strong>Baseline</strong>. Dadurch unterscheidet der Plan, ob nur die neue Quelle fortgeschritten ist (<code>behind</code>), nur lokal editiert wurde (<code>ahead</code>) oder beide Seiten Änderungen enthalten (<code>changed</code>). Diese Dreierbeziehung schützt lokale Änderungen besser als ein pauschales Überschreiben. Ein Importstatus beschreibt allerdings Artefaktunterschiede; er beweist noch keine erfolgreiche fachliche Migration des Prozesszustands.</p>
+<p><strong>Geplant/offen:</strong> Ein allgemeiner Applikations-Migrationsvertrag für laufende Prozessinstanzen folgt aus den genannten Paket- und Hub-Funktionen <strong>nicht</strong>. Ein Hub-Update migriert laut <a href="atlas-hub-signierte-verteilung.md">Hub-Whitepaper</a> keine laufenden Instanzen. Die in <a href="../adr/0453-application-values-per-installation.md">ADR-0453</a> beschriebenen gebundenen Konstanten einer Instanz werden auch bei einer Prozessmigration nicht neu vom Server gelesen. Betriebsverantwortliche müssen deshalb selbst unterscheiden zwischen: neue Starts auf neuer Definition, Fertigstellen alter Instanzen und explizit geregelter Migration.</p>
+<p><strong>Einschätzung:</strong> Für lang laufende Vorgänge sollte eine Freigabeakte die Kompatibilität geänderter Formulare, Nachrichten, DMN-Ergebnisse, Worker-Aufrufe und Datenstrukturen dokumentieren. Eine technische Erfolgsantwort des Importers ist nicht gleichzusetzen mit fachlicher Rückwärtskompatibilität. Besonders bei wiederholten Service Tasks und bereits vergebenen User Tasks sind unerwartete Seitenwirkungen getrennt zu bewerten.</p>
+<h2 id="konfiguration-und-konstanten">9. Konfiguration und Konstanten</h2>
+<p>Eine Applikation soll zwischen Entwicklung, Test, Integration und Produktion transportierbar sein, ohne für jede Stufe fachlich neue BPMN-Dateien zu benötigen. Sie darf dabei nicht die Sicherheitsidentität und die Zielsysteme einer Testinstallation als produktive Wahrheit mitliefern. Die Trennung von <strong>deklarierter Abhängigkeit</strong> und <strong>lokal gebundenem Wert</strong> löst einen Teil dieses Problems. <a href="../adr/0453-application-values-per-installation.md">ADR-0453</a>, <a href="../adr/0456-constant-namespaces.md">ADR-0456</a>.</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Konfiguration</th>
+<th>Entwicklungsumgebung</th>
+<th>Test/Integration</th>
+<th>Produktion</th>
+<th>Im Paket?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>BPMN-/DMN-Modell, Formulare</td>
+<td>Entwurf und Probeläufe</td>
+<td>freigegebene Release-Version</td>
+<td>freigegebene Release-Version</td>
+<td>Ja, soweit zugeordnet</td>
+</tr>
+<tr class="even">
+<td><code>application.TENANT_ID</code></td>
+<td>Testtenant</td>
+<td>Stufentenant</td>
+<td>Produktivtenant</td>
+<td>Als Abhängigkeit; Wert nur kontrolliert als Vorschlag</td>
+</tr>
+<tr class="odd">
+<td><code>server.environment</code></td>
+<td>z. B. DEV</td>
+<td>TEST / INT</td>
+<td>PROD</td>
+<td>Nein: Fakt der Zielinstallation</td>
+</tr>
+<tr class="even">
+<td>Worker-Name und benötigte Operation</td>
+<td>Test-Worker</td>
+<td>stufenspezifische Worker</td>
+<td>Produktiv-Worker</td>
+<td>Referenz, nicht laufende Worker-Identität</td>
+</tr>
+<tr class="odd">
+<td>Zugangsdaten, Zertifikate, API-Secrets</td>
+<td>kurzlebige Testwerte</td>
+<td>eigene verwaltete Secrets</td>
+<td>eigene Secrets mit Least Privilege</td>
+<td>Nicht als frei übertragbare Laufzeit-Credentials</td>
+</tr>
+<tr class="even">
+<td>Identitätszuordnungen und Freigebende</td>
+<td>Testgruppen</td>
+<td>stufengerechte Zuordnung</td>
+<td>produktive Gruppen</td>
+<td>Fragen und Zuordnungsentscheidungen</td>
+</tr>
+<tr class="odd">
+<td>Katalog und Produktdefinitionen</td>
+<td>Testangebote</td>
+<td>Abnahmeangebote</td>
+<td>freigegebene Angebote</td>
+<td>Optional gemeinsam mit der Applikation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Umgesetzt:</strong> <code>application.X</code> und <code>server.X</code> sind deklarierte, unterscheidbare Namensräume. Zur Instanzstartzeit werden die gebundenen Werte in den Instanzzustand aufgenommen und dürfen nicht einfach durch spätere Variablenupdates umgeschrieben werden. Die Architektur schützt dadurch den deterministischen Replay-Zustand: Die Quelle darf sich nach dem Start ändern, aber die Instanz behält den für sie erfassten Wert. Vordefinierte Fakten der Installation (<code>server.id</code>, <code>server.name</code>, <code>server.environment</code>) und der Applikation (<code>application.id</code>, <code>.key</code>, <code>.name</code>) können im Modell deklariert werden. <a href="../adr/0454-process-constants.md">ADR-0454</a>, <a href="../adr/0456-constant-namespaces.md">ADR-0456</a>.</p>
+<p>Nicht jeder fehlende Wert wird auf jedem Startpfad gleich behandelt. Der dokumentierte Vertrag unterscheidet einen manuell zurückweisbaren Start von Timer-, Nachrichten- oder Signalstarts, bei denen ein Trigger nicht einfach verloren gehen darf. Warnungen im Deploy- oder Konfigurationskontext sind deshalb ein wichtiges, aber nicht vollständiges Schutzinstrument. Ein Zertifikat, das sich während einer laufenden Instanz drehen kann, gehört nach ADR-0453 zur Auflösung beim Worker-Aufruf, nicht in eine unveränderlich beim Prozessstart eingefrorene Konstante.</p>
+<p><strong>Umgesetzt:</strong> Paketkonstanten werden in <code>konstanten.json</code> als Vorschläge transportiert. Ein lokal anderer Wert wird nicht unbesehen überschrieben. Der Import verwendet Konfliktentscheidungen; das Setzen von Konstanten braucht administrative Berechtigung. Ist die Berechtigung nicht vorhanden, benennt der Import die noch offene Einrichtung, statt diese stillschweigend als erledigt zu melden. <code>api/constantsimport.go</code> und <code>api/constantsimport_test.go</code> prüfen diesen Pfad. <a href="../adr/0467-application-package-export.md">ADR-0467</a>.</p>
+<p><strong>Einschätzung:</strong> Ein Umgebungsinventar sollte pro Release mindestens benötigte Namespace-Namen, Worker, Secret-Referenzen, Zielsysteme, verantwortliche Teams und technische Verifikationsfälle führen. Diese zusätzlichen Angaben sind Betriebsartefakte; sie dürfen nicht als automatisch durch alle heutigen atlas-Paketformate abgegolten gelten.</p>
+<h2 id="verteilung">10. Verteilung</h2>
+<div class="diagram" data-diagram="distribution">
+<p class="diagram-label">
+Abbildung 4 · Zwei getrennte Verteilungswege mit unterschiedlichen Vertrauensrichtungen
+</p>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 342" role="img" aria-label="Architektur- und Prozessdiagramm">
+<text class="lane" x="530" y="22" text-anchor="middle">WEG A · SIGNIERTER PULL · ADR-0499 / PARTIAL</text><rect class="node" x="24" y="42" width="280" height="95" rx="12"/><text class="node-title" x="164.0" y="67" text-anchor="middle" style="font-size:17px">Herausgeber</text><text class="node-sub" x="164.0" y="90" text-anchor="middle">Release + Digest</text><text class="node-sub" x="164.0" y="109" text-anchor="middle">atlas hub build</text><rect class="node strong" x="391" y="42" width="280" height="95" rx="12"/><text class="node-title" x="531.0" y="67" text-anchor="middle" style="font-size:17px">Gepinnte Registry</text><text class="node-sub" x="531.0" y="90" text-anchor="middle">Index · Signatur</text><text class="node-sub" x="531.0" y="109" text-anchor="middle">Paketarchiv</text><rect class="node mint" x="758" y="42" width="280" height="95" rx="12"/><text class="node-title" x="898.0" y="67" text-anchor="middle" style="font-size:17px">Zielinstallation</text><text class="node-sub" x="898.0" y="90" text-anchor="middle">Prüfen → Importplan</text><text class="node-sub" x="898.0" y="109" text-anchor="middle">Freigeben → Publish</text><path class="arrow" d="M308 89 L385 89"/><path class="arrowhead" d="M385.0 89.0 L376.0 93.2 L376.0 84.8 Z"/><path class="arrow" d="M675 89 L752 89"/><path class="arrowhead" d="M752.0 89.0 L743.0 93.2 L743.0 84.8 Z"/><text class="lane" x="530" y="172" text-anchor="middle">WEG B · DIREKTER PUSH · ADR-0129 / LANDED</text><rect class="node" x="92" y="193" width="330" height="96" rx="12"/><text class="node-title" x="257.0" y="218" text-anchor="middle" style="font-size:17px">Quellinstallation</text><text class="node-sub" x="257.0" y="241" text-anchor="middle">eingefrorenes Applikations-Release</text><text class="node-sub" x="257.0" y="260" text-anchor="middle">Deploy-Token im Vault</text><rect class="node mint" x="639" y="193" width="330" height="96" rx="12"/><text class="node-title" x="804.0" y="218" text-anchor="middle" style="font-size:17px">Deployment-Ziel</text><text class="node-sub" x="804.0" y="241" text-anchor="middle">Remote-Import und Publish</text><text class="node-sub" x="804.0" y="260" text-anchor="middle">Ergebnis je Ziel</text><path class="arrow" d="M426 242 L633 242"/><path class="arrowhead" d="M633.0 242.0 L624.0 246.2 L624.0 237.8 Z"/><text class="annotation" x="530" y="327" text-anchor="middle">Hub-Paketimport und direkte Promotion sind alternative, nicht identische Vertrauenswege.</text>
+</svg>
+</div>
+<h3 id="paketexport-und-paketimport">Paketexport und Paketimport</h3>
+<p><strong>Umgesetzt:</strong> <code>atlas export --application KEY [--catalog ID]... DIR</code> erzeugt ein Paketverzeichnis. Dazu gehören je nach Inhalt <code>atlas.json</code> und <code>processes/</code>, <code>forms/</code>, <code>decisions/</code>, ausserdem <code>konstanten.json</code>, <code>katalog.json</code>, <code>fragen.json</code> und <code>antworten.json</code>. Der Quellbaum bildet bearbeitbare Artefakte ab, während die separat mitgeführten Konstanten als installationsbezogene Vorschläge behandelt werden. Die Fragen abstrahieren Zielgruppen und Genehmigende, deren lokale IDs auf einer anderen Installation nicht dieselbe Bedeutung haben. <a href="../adr/0467-application-package-export.md">ADR-0467</a>.</p>
+<p><strong>Umgesetzt:</strong> <code>atlas import DIR</code> kann den Importplan anzeigen und in interaktiven oder nichtinteraktiven Situationen gezielte Entscheidungen treffen. <code>--dry-run</code> schreibt nichts. Ein ungeklärter Unterschied führt zu <code>409</code>, nicht zu einem versteckten Overwrite. <code>overwrite</code>, <code>keep</code> und bei Artefakten anderer Applikationen das explizite <code>adopt</code> sind getrennte Entscheidungen. Die jüngste ADR-0467-Erweiterung schützt zudem gemeinsam genutzte DMN-Modelle: Sind Entscheidungen ausserhalb der Applikation betroffen, reicht ein globales <code>overwrite=*</code> nicht. Es braucht die <strong>namentliche</strong> Entscheidung und Bearbeitungsrechte auf betroffenen Applikationen. Die Tests der Paket- und Import-Endpunkte sind dafür relevante Umsetzungsevidenz.</p>
+<p><strong>Umgesetzt:</strong> Mit <a href="../adr/0528-application-bundle-architecture.md">ADR-0528</a> wurde das Quellbaumformat um Informationsmodelle und Architekturangaben erweitert. Nicht vorhandene Fähigkeiten im serverweiten Register werden beim Import als Lücke behandelt. Die importing verantwortliche Person kann einen Vorschlag ausdrücklich übernehmen, einem existierenden Schlüssel zuordnen oder auslassen. Eine ältere Paketbeschreibung darf solche neuen Felder nicht unbemerkt ignorieren. Dies ist eine wichtige Differenz zwischen dem aktuellen Code- und ADR-Stand und älteren Beschreibungen der Quellbaumstruktur.</p>
+<h3 id="atlas-hub-pull-und-signierte-releases">atlas hub – Pull und signierte Releases</h3>
+<p><strong>Umgesetzt:</strong> Die signierte Blueprint Registry v1 verwendet einen Registry-Index, Ed25519-Signaturen, SHA-256-Prüfsummen der Archive und eine vom Betreiber konfigurierte Vertrauensbasis. Die CLI-Werkzeuge <code>atlas hub keygen</code>, <code>lock</code> und <code>build</code> unterstützen die Herausgeberseite. Die Zielinstallation wählt in der Console einen Eintrag, fordert eine Vorschau an und prüft die Signatur, die erwarteten Hashes sowie Archivstruktur und Grenzen. Der Paketbezug kann an einen Digest gebunden werden, sodass ein zwischen Auswahl und Bezug geänderter Stand nicht unbemerkt installiert wird. <a href="atlas-hub-signierte-verteilung.md">Hub-Whitepaper</a>, <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>.</p>
+<p><strong>Teilweise umgesetzt:</strong> Der signierte Transport bildet noch <strong>keine</strong> vollständige System-of-Record-Sicht, welche Quelle, Signaturidentität, Blueprint-Version, lokal publizierte Applikationsversion und Prozessversionen jeder Umgebung dauerhaft verbindet. Mehrere Registries, vollständige Versionshistorie, automatische Updates und installationsübergreifende Release-Governance sind nicht als fertig anzunehmen. <a href="../adr/0499-blueprint-registry-and-distribution.md">ADR-0499</a>, <a href="../adr/0506-marketplace-catalogue-bundles-and-updates.md">ADR-0506</a>.</p>
+<h3 id="direktes-promotion-ziel-push-und-deploy-token">Direktes Promotion-Ziel – Push und Deploy-Token</h3>
+<p><strong>Umgesetzt:</strong> ADR-0129 sieht einen ausgehenden, zielgerichteten Push des bereits publizierten Releases vor. Die Zielinstallation stellt einen eingeschränkten Deploy-Token bereit, den der sendende Server in seinem Vault referenziert. Die Zieldefinition trennt bei Bedarf Publikations-Credential und ein optionales Leserecht für Zielstatus und Landschaftsinformation. Der sendende Server berichtet pro Ziel über den Ausgang. Ein Fehler auf einem Ziel verhindert nicht zwingend die erfolgreiche Promotion auf andere Ziele; es gibt keinen verteilten Alles-oder-nichts-Commit.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Kriterium</th>
+<th>atlas hub (Pull)</th>
+<th>Deployment-Ziel (Push)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Auslöser</td>
+<td>Zielinstallation wählt signiertes Paket</td>
+<td>Ausgangsinstallation sendet eingefrorenes Release</td>
+</tr>
+<tr class="even">
+<td>Vertrauen</td>
+<td>Gepinnter Herausgeberschlüssel und Digest; Ziel prüft Bytes</td>
+<td>Ziel vergibt eng begrenzten Deploy-Token an Sender</td>
+</tr>
+<tr class="odd">
+<td>Netzrichtung</td>
+<td>Ziel muss Registry erreichen können</td>
+<td>Sender muss Zielserver erreichen können</td>
+</tr>
+<tr class="even">
+<td>Import-/Freigabeschritt</td>
+<td>Vorschau, Konfliktentscheidung, separate Publikation</td>
+<td>Remote-Import/Deployment des Releases als Promotion</td>
+</tr>
+<tr class="odd">
+<td>Geeignet, wenn …</td>
+<td>unabhängige Empfänger Pull selbst kontrollieren sollen</td>
+<td>Server gekoppelt sind und ein freigegebener Sender Releases verteilt</td>
+</tr>
+<tr class="even">
+<td>Grenze</td>
+<td>eine Quelle, öffentliches DNS/HTTPS:443, offene Provenienz/Update-Funktionen</td>
+<td>Sender benötigt erreichbaren Zielserver; Zielberechtigungen und Mehrziel-Fehler separat führen</td>
+</tr>
+<tr class="odd">
+<td>ADR-Umsetzung</td>
+<td>ADR-0499: <strong>Partial</strong></td>
+<td>ADR-0129: <strong>Landed</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Einschätzung:</strong> Der Hub-Weg begrenzt die Annahme unbekannter Publisher durch Signaturprüfung und einen bewusst festen Importvertrag. Der Promotion-Weg ist überzeugend, wenn ein zentraler Release-Prozess die Hoheit über Zieldeployments besitzen soll und die Quellinstallation verlässlich erreichbar ist. Bei strikt isolierten Netzzonen darf die Wahl nicht allein nach Bedienkomfort fallen: Ein Pull-Client, der nur öffentlich adressierte Registries akzeptiert, passt nicht ohne Änderung zu rein privaten Netzen; ein Push-Server scheitert, wenn das Ziel keinerlei eingehenden Zugang erlaubt. Das ist eine Architekturentscheidung mit Netz- und Sicherheitsverantwortung.</p>
+<h2 id="sicherheit-und-berechtigungen">11. Sicherheit und Berechtigungen</h2>
+<p>Applikationsbearbeitung, Publikation, Import, Betrieb und das Löschen sind unterschiedliche Handlungen. Sie müssen mit den jeweiligen Rechten der identifizierten Person oder des Dienstes erfolgen. <strong>Umgesetzt:</strong> Authentisiertes MCP repräsentiert den Aufrufer und benutzt die öffentlichen HTTP-Schnittstellen, statt direkte Manipulationen am Engine-Zustand vorzunehmen. Ein MCP-fähiger KI-Agent erhält damit keine implizite Sonderrolle. Ein Benutzer ohne Bearbeitungsrecht auf eine Applikation darf auch über einen Agenten nicht deren Inhalte überschreiben. <a href="../adr/0196-authenticated-mcp-transport.md">ADR-0196</a>, <a href="../adr/0200-mcp-oauth-resource-server.md">ADR-0200</a>.</p>
+<p><strong>Umgesetzt:</strong> Beim Paketimport sind Fremdeigentum und geteilte Entscheidungsmodelle besonders geschützt. Ein <code>adopt</code> verlangt Bearbeitungsrecht auf der Quellapplikation. Das namentliche Überschreiben eines DMN-Modells mit externen Referenzen verlangt Bearbeitungsrechte auf den relevanten Anwendungen. Eine als geschützt gekennzeichnete Applikation gibt solche Artefakte nicht frei. Der Importer meldet nicht jeder unberechtigten Person fremde Applikationsdetails. <a href="../adr/0467-application-package-export.md">ADR-0467</a>.</p>
+<p><strong>Umgesetzt:</strong> Beim direkten Promotion-Weg ist das Deploy-Token kein Administratorpasswort. Das schützt gegen unnötige Delegation von Vollzugriff. Für lesende Peer-Operationen kann ein anderes Credential nötig sein. Im Hub-System sind die veröffentlichten Bytes nur bei intakter Schlüsselverwaltung, korrekter Betreiberkonfiguration und wirksamen URL-/Archivprüfungen vertrauenswürdig. Signaturen schützen Integrität und Schlüsselbindung, nicht die fachliche Richtigkeit oder die Bösartigkeit zulässiger Modellinhalte. <a href="../adr/0129-remote-deployment-targets.md">ADR-0129</a>, <a href="atlas-hub-signierte-verteilung.md">Hub-Whitepaper</a>.</p>
+<p><strong>Einschätzung – Bedrohungen und Gegenmassnahmen:</strong> Vor allem fünf Grenzen sind organisatorisch zu prüfen. Erstens können Artefakte aus nicht genehmigten KI-Datenquellen vertrauliche Informationen enthalten. Zweitens kann ein Prozess legitime Worker mit zu weitreichenden Credentials missbrauchen. Drittens kann ein korrekt signiertes Paket unerwünschte Geschäftslogik mitbringen. Viertens können Fehlkonfigurationen in einer Produktivstufe auf echte Empfänger, Berechtigungen oder Daten zielen. Fünftens kann eine destruktive Purge-Aktion historische Arbeitsgegenstände beseitigen. Erforderlich sind ein genehmigter KI-Kanal, Quell- und Code-Review, Least-Privilege-Worker, isolierte Testsysteme sowie getrennte Berechtigungen für Publikation und Betrieb. Nicht jede dieser Kontrollen wird von atlas selbst technisch erzwungen.</p>
+<p><strong>Geplant/offen:</strong> Für ein produktweites, auditierbares Freigabeverfahren über TEST, INT und PROD existiert nach dem <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang</a> noch keine vollständig beschlossene Referenzarchitektur. Ebenso ist die implementierte Hub-Signaturprüfung keine Zertifizierung der Herkunftsorganisation, kein Software-Supply-Chain-Audit und keine Aussage über Konformität mit einer behördlichen Sicherheitsnorm.</p>
+<h2 id="betrieb">12. Betrieb</h2>
+<p>Die Console bündelt Entwurf, Applikationsansicht, Releases, Konfiguration und Diagnose. Die HTTP-API ist die Grundlage für CLI- und MCP-Aktionen; ein Automationsskript soll dieselben öffentlich kontrollierten Operationen verwenden, nicht interne Stores direkt verändern. Der Betrieb benötigt zusätzlich Sicht auf Prozessdefinitionen, laufende Instanzen, User Tasks, Worker-Jobs und Incidents. <a href="../ARCHITECTURE.md">Architektur</a>, <a href="../adr/0016-mcp-server-over-http-api.md">ADR-0016</a>.</p>
+<p><strong>Umgesetzt:</strong> Die Startansicht gruppiert Prozesse nach Applikation. Releases erhalten Architekturinformationen; die Oberfläche kann gespeicherte Perspektiven zur Release-Struktur anzeigen. Promotion-Handler bieten Zielstatus und Fehlerrückmeldungen. Beim Löschen stehen Vorschau und expliziter Bereinigungsmodus zur Verfügung. Die Engine selbst persistiert Zustandsänderungen vor Rückmeldungen und externen Nebenwirkungen, wie es die <a href="../architecture/invariants.md">Invarianten</a> verlangen. <a href="../adr/0466-start-view-groups-and-favourites.md">ADR-0466</a>, <a href="../adr/0471-release-architecture-sketch.md">ADR-0471</a>, <a href="../adr/0468-deleting-an-application-with-its-contents.md">ADR-0468</a>.</p>
+<p><strong>Teilweise umgesetzt:</strong> Ein Architektur-Snapshot ist eine Aufnahme beim Release und keine permanent aktualisierte Topologie oder vollständige Risikoanalyse. Einige Darstellungs- und Exportfunktionen sind nach ADR-0471 und ADR-0495 weiterhin offen. Ein ausgelesener Zielstatus kann zudem nur belegen, was das jeweilige Ziel zum Anfragezeitpunkt zurückmeldet; er ersetzt keinen abgestimmten, langfristigen Release- und Abnahme-Nachweis.</p>
+<p><strong>Einschätzung – minimaler Betriebsdatensatz:</strong> Sinnvoll sind Applikationsschlüssel, lokale Release-Version, Blueprint-Digest (falls Hub), importierte Artefaktbaselines, Prozessversionszuordnung, Zielinstallation, tatsächliches Publikationsdatum, fachliche Freigabe, technische Freigabe, Worker-Konfiguration, Abhängigkeiten, offener Incident-Bestand und Rückfallbeschreibung. Der Datensatz kann vorläufig in einem externen Betriebsjournal geführt werden. Er ist ausdrücklich <strong>kein</strong> als vollständig implementiertes Produktfeature behauptetes Dashboard.</p>
+<p>Bei Störungen ist zwischen Fehlern der <strong>Verteilung</strong> (Registry-Ausfall, Digest-Wechsel, Token verweigert, Ziel unerreichbar), Fehlern der <strong>Einrichtung</strong> (fehlender Worker, fehlende Konstante, nicht vorhandene Zielgruppen) und Fehlern <strong>in der Laufzeit</strong> (Jobs, Incidents, externe APIs) zu unterscheiden. Ein fehlgeschlagener Import ist nicht dieselbe Klasse von Problem wie ein Incident einer bereits laufenden Instanz. Wiederholungen und Fehlerbehandlung folgen daher unterschiedlichen Zuständigkeiten.</p>
+<h2 id="durchgehendes-fallbeispiel">13. Durchgehendes Fallbeispiel</h2>
+<p>Das öffentlich dokumentierte Beispiel <a href="../../examples/m365-dienste/README.md"><code>examples/m365-dienste</code></a> demonstriert eine Applikation für Microsoft-365-Dienstleistungen. Es verbindet Prozessabläufe, Formulare, Entscheidungsmodelle und Katalogangebote mit Workern für externe Zielsysteme. Die separat dokumentierte <a href="../../deploy/opentofu/m365-devenv/README.md"><code>m365-devenv</code></a> macht diese Beispielwelt mit einer wiederholt aufbaubaren Entwicklungsumgebung konkret. Die Beispiele sind <strong>Anwendungs- und Testmaterial</strong>, keine Freigabe für den ungeprüften Einsatz in einer beliebigen produktiven M365-Organisation.</p>
+<p><strong>Schritt 1 – Fachlicher Entwurf:</strong> Der Fachbereich beschreibt etwa die Anforderung «Microsoft-365-Lizenz zuweisen», die nötigen Eingaben, Zuständigkeiten und Fälle der Ablehnung. Die Prozessentwicklung modelliert einen BPMN-Ablauf, ein Bestellformular, gegebenenfalls eine DMN-Entscheidung und die benötigte Worker-Operation. Die M365-Beispiele enthalten bereits verschiedene Aktionen zu Lizenzen, Postfächern, Teams und anderen Diensten. <strong>Einschätzung:</strong> Wo ein externer Agent bei der Erstmodellierung hilft, sind seine Entwürfe separat zu prüfen, insbesondere Berechtigungsannahmen und sensible Personendaten.</p>
+<p><strong>Schritt 2 – Entwicklungsinstallation:</strong> OpenTofu baut die vorgesehene Umgebung auf; ein Einspielskript aus <code>deploy/opentofu/m365-devenv/scripts/</code> bereitet das Beispiel auf ihre Tenant-Werte vor und installiert es. Ein Bootstrap-Skript hinterlegt Worker-Credentials im Vault und registriert die Worker. Die Konfiguration verwendet Test-Identitäten, stufenspezifische Konstanten und die zulässigen API-Rechte. <strong>Umgesetzt:</strong> Der dokumentierte Durchlauf mit echtem Tenant belegt wichtige Teile dieses Szenarios. <strong>Nicht belegt:</strong> dass alle M365-Berechtigungen in jedem geteilten Tenant hinreichend eng begrenzbar sind.</p>
+<p><strong>Schritt 3 – Integrationstest und lokales Release:</strong> Über Startansichten, Katalog oder API wird der Prozess ausgelöst. Die Person prüft Eingabefelder, Zuständigkeiten, DMN-Ergebnisse und Rückmeldungen des Zielsystems. Fehlkonfigurationen können zu zurückgewiesenen Starts oder Incidents führen. Nach Tests wird die gesamte Applikation publiziert. Ihr Release hält fest, welche Prozessversionen gemeinsam freigegeben wurden. Die Laufzeitdaten der Instanzen bleiben davon getrennt.</p>
+<p><strong>Schritt 4 – Transport:</strong> Das Paket kann auf dem Ausgangssystem mit dem Exportpfad vorbereitet und auf dem Ziel über den Importplan eingespielt werden. Konkrete Tenant-IDs und Gruppen werden auf dem Ziel zugeordnet, nicht ungeprüft übernommen. Für einen verbundenen Zielserver ist alternativ die direkte Promotion des eingefrorenen Releases möglich. Für unabhängige Empfänger ist ein signiertes atlas-hub-Release denkbar, sofern die heute gültigen Registry- und Netzvorgaben eingehalten werden.</p>
+<p><strong>Schritt 5 – Freigaben je Stufe:</strong> In TEST und INT werden eigene Worker, Berechtigungen und Konstanten eingerichtet. Die Verantwortlichen dokumentieren Ergebnisse und bestätigen das fortgeschriebene Release. Für PROD wird der Entscheid zur Publikation separat getroffen. <strong>Geplant/offen:</strong> Diese gesamte Freigabekette wird nicht als systemseitig durchgesetzter Standard behauptet. Nachweise über den produktiven M365-Tenant, Administrationsgrenzen und minimale Worker-Rechte sind ausserhalb des Paketimports zu erbringen.</p>
+<p><strong>Schritt 6 – Betrieb und Änderung:</strong> Neue Anforderungen führen zu einem neuen Entwurf und anschliessend zu einem weiteren Release. Der Importplan erkennt örtliche Abweichungen. Laufende alte Instanzen werden nicht durch den blossen Hub-Import migriert. Worker-Rechte und Zertifikate können sich unabhängig von den modellierten Konstanten ändern. Bei einer Stilllegung ist eine Vorschau des Bereinigungsumfangs erforderlich, bevor über das Abbrechen laufender Instanzen entschieden wird.</p>
+<p>Als kleineres Alternativbeispiel dokumentiert <a href="../../examples/lizenzmanagement/README.md"><code>examples/lizenzmanagement</code></a> die Verwaltung von Lizenzverträgen und Abonnements mit langen laufenden Instanzen. Das unterstreicht, warum eine neue Applikationsversion nicht gleichbedeutend mit einer sofortigen Umstellung aller Geschäftsobjekte ist.</p>
+<h2 id="offene-punkte-grenzen-und-ausblick">14. Offene Punkte, Grenzen und Ausblick</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Gegenstand</th>
+<th>Quellenlage</th>
+<th>Einordnung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Git-Repository als bidirektionale Applikationsquelle</td>
+<td>Source-Tree-Export/Import vorhanden; echte Bindung, Sync, Commit und Push fehlen. ADR-0134, Code <code>api/appsource.go</code>.</td>
+<td><strong>Teilweise umgesetzt</strong></td>
+</tr>
+<tr class="even">
+<td>Vollständiger Modeler-Copilot</td>
+<td>Externe MCP-Agenten und spezialisierte Assistenten vorhanden, Gesamt-ADR-0032 <code>Proposed / Partial</code>.</td>
+<td><strong>Teilweise umgesetzt</strong></td>
+</tr>
+<tr class="odd">
+<td>Formale Prozessschnittstelle</td>
+<td>ADR-0373 <code>Accepted / Not started</code>.</td>
+<td><strong>Geplant/offen</strong></td>
+</tr>
+<tr class="even">
+<td>Hub-Provenienz und Mehrquellenfähigkeit</td>
+<td>ADR-0499 <code>Partial</code>, Ein-Registry- und Netzschutz im Hub-Whitepaper; kein vollständiger Stand-Nachweis über alle Stufen.</td>
+<td><strong>Teilweise umgesetzt</strong></td>
+</tr>
+<tr class="odd">
+<td>Verwaltete Updates und Katalog-only-Offers</td>
+<td>ADR-0506 <code>Proposed / Not started</code>; keine stillschweigende automatische Publikation.</td>
+<td><strong>Geplant/offen</strong></td>
+</tr>
+<tr class="even">
+<td>Vollständige Architektursichten und Confluence-Publikation</td>
+<td>ADR-0471 und ADR-0495 beide <code>Partial</code>; Snapshot-Funktionen vorhanden.</td>
+<td><strong>Teilweise umgesetzt</strong></td>
+</tr>
+<tr class="odd">
+<td>Architekturinhalt im Paket</td>
+<td>ADR-0528 <code>Landed</code> mit Quellbaumformat 4 und bewussten Importentscheidungen für Fähigkeiten.</td>
+<td><strong>Umgesetzt</strong></td>
+</tr>
+<tr class="even">
+<td>M365-Testumgebung</td>
+<td>Ein realer Durchlauf dokumentiert; zweiter vollständiger Aufbau und einzelne Integrationspunkte offen.</td>
+<td><strong>Umgesetzt mit begrenzter Evidenz</strong></td>
+</tr>
+<tr class="odd">
+<td>Verbindliche DEV→TEST→INT→PROD-Governance</td>
+<td>Als offene Entscheidung im Lehrgang dokumentiert.</td>
+<td><strong>Geplant/offen</strong></td>
+</tr>
+<tr class="even">
+<td>Gemeinsame Capability Map über Servergrenzen</td>
+<td>ADR-0528 nennt eine offene Frage zwischen servereigenen Karten und zentral geteilter Landkarte.</td>
+<td><strong>Geplant/offen</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Ein <strong>Widerspruch in der Dokumentation</strong> ist ausdrücklich festzuhalten: Der Abschnitt «Was nicht bekannt ist» im <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang</a> beschreibt ADR-0134 noch als «Landed», obwohl der aktuelle <a href="../adr/README.md">ADR-Index</a> und der ADR selbst <code>Partial</code> festhalten. Für dieses Whitepaper gilt der verifizierte <code>Partial</code>-Status; die ältere Lehrgangsformulierung ist zu berichtigen, ohne das nicht implementierte Git-Binding als fertig zu behandeln.</p>
+<p>Die Quellen für die Hub-Verteilung, insbesondere ein älterer «As built»-Abschnitt von ADR-0499 und das aktuelle Hub-Whitepaper, enthalten zeitlich unterschiedliche Momentaufnahmen. Der ADR-Index bleibt <code>Partial</code>, unabhängig davon, dass spätere Einzel-PRs einen früher noch offenen Teil nachgerüstet haben. Für einen tatsächlichen Betrieb ist jeweils zu prüfen, welche Version des Binärpakets installiert ist und ob die zugehörigen Funktionen konkret verfügbar sind. <strong>Einschätzung:</strong> Ein automatischer Release-Standbericht sollte deshalb nie nur einen ADR-Status abfragen, sondern Repository-Commit, Binärversion, anwendbare Migrationen, Zielkonfiguration und getesteten Importpfad verbinden.</p>
+<p><strong>Offen zu klären:</strong> Welche Instanz hält den verbindlichen Freigabeentscheid? Wie wird die Produktionsschreibsperre technisch und organisatorisch geregelt? Welche Menge an Worker- und Credential-Metadaten ist Teil eines releasefähigen Inventars? Wie wird bei isolierten Netzen eine private, signierte Registry angebunden, ohne die bestehenden SSRF-Schutzvorgaben zu schwächen? Wie werden Genehmigungen und Digest/Version über die vier Stufen revisionsfest verbunden? Welche Instanz ist für die organisationsweite Capability Map massgeblich? Diese Fragen sind vor einer verbindlichen Produktivstandardisierung in separaten Architektur- und Betriebsvorgaben zu beantworten.</p>
+<h2 id="glossar-und-adr-verzeichnis">15. Glossar und ADR-Verzeichnis</h2>
+<h3 id="leseschlüssel-und-quellen">15.1 Leseschlüssel und Quellen</h3>
+<p><strong>Umgesetzt</strong> – konkret belegter Implementierungsteil; <strong>Teilweise umgesetzt</strong> – nur ein Teil des beschlossenen Umfangs ist vorhanden; <strong>Geplant/offen</strong> – weder als fertige Funktion noch als verbindlich beschlossener Prozess nachgewiesen; <strong>Einschätzung</strong> – redaktionelle Bewertung. Für Begriffe siehe zusätzlich <a href="../architecture/glossary.md">Architekturglossar</a>. Zum Implementierungsstatus gilt der <a href="../adr/README.md">ADR-Index</a>, ergänzt um die jeweiligen «As built»-Abschnitte und den <a href="../audits/adr-status-reconciliation-2026-10-11.md">Statusabgleich vom 11. Oktober 2026</a>.</p>
+<h3 id="referenzierte-architekturentscheide">15.2 Referenzierte Architekturentscheide</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>ADR</th>
+<th>Thema</th>
+<th>Status</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="../adr/0016-mcp-server-over-http-api.md">0016</a></td>
+<td>MCP über HTTP-API</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0019-durable-deployments.md">0019</a></td>
+<td>Dauerhafte Deployments</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0021-diagram-drafts.md">0021</a></td>
+<td>BPMN-Entwürfe</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0032-modeler-ai-copilot.md">0032</a></td>
+<td>Modeler-Copilot</td>
+<td>Proposed</td>
+<td>Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0034-projects-and-artifacts.md">0034</a></td>
+<td>Projekte und Artefakte</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0128-process-applications.md">0128</a></td>
+<td>Prozessapplikationen</td>
+<td>Accepted</td>
+<td>Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0129-remote-deployment-targets.md">0129</a></td>
+<td>Entfernte Deployment-Ziele</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0134-git-backed-applications.md">0134</a></td>
+<td>Git-gestützte Applikationen</td>
+<td>Accepted</td>
+<td>Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0140-live-collaborative-modeling-sessions.md">0140</a></td>
+<td>Gemeinsames Modellieren</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0196-authenticated-mcp-transport.md">0196</a></td>
+<td>Authentisiertes MCP</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0200-mcp-oauth-resource-server.md">0200</a></td>
+<td>MCP-OAuth-Resource-Server</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0208-worker-type-packages.md">0208</a></td>
+<td>Worker-Type-Pakete</td>
+<td>Accepted</td>
+<td>Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0260-ai-form-generation.md">0260</a></td>
+<td>KI-Formularestellung</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0319-durable-versioned-decision-deployments.md">0319</a></td>
+<td>Versionierte DMN-Deployments</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0321-decision-drafts.md">0321</a></td>
+<td>DMN-Entwürfe</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0322-deploying-one-decision.md">0322</a></td>
+<td>Einzelnes DMN-Deployment</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0327-a-deployed-decision-satisfies-a-latest-bound-task.md">0327</a></td>
+<td>Neueste DMN-Bindung</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0329-a-decision-deployment-is-not-deletable.md">0329</a></td>
+<td>Löschschutz DMN-Deployment</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0373-published-process-interface.md">0373</a></td>
+<td>Publizierte Prozessschnittstelle</td>
+<td>Accepted</td>
+<td>Not started</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0437-a-package-is-imported-from-the-command-line.md">0437</a></td>
+<td>Import via CLI</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0445-feel-assistant.md">0445</a></td>
+<td>FEEL-Assistent</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0453-application-values-per-installation.md">0453</a></td>
+<td>Applikationswerte je Installation</td>
+<td>Accepted (amended)</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0454-process-constants.md">0454</a></td>
+<td>Prozesskonstanten</td>
+<td>Accepted (amended)</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0456-constant-namespaces.md">0456</a></td>
+<td>Konstanten-Namensräume</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0466-start-view-groups-and-favourites.md">0466</a></td>
+<td>Startansicht nach Applikation</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0467-application-package-export.md">0467</a></td>
+<td>Applikationspaket / Konflikte</td>
+<td>Accepted (amended)</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0468-deleting-an-application-with-its-contents.md">0468</a></td>
+<td>Bereinigendes Löschen</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0471-release-architecture-sketch.md">0471</a></td>
+<td>Release-Architektur-Snapshot</td>
+<td>Accepted (amended)</td>
+<td>Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0495-layered-release-architecture.md">0495</a></td>
+<td>Architektur-Schichten</td>
+<td>Accepted (amended)</td>
+<td>Partial</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0499-blueprint-registry-and-distribution.md">0499</a></td>
+<td>atlas hub Registry</td>
+<td>Accepted</td>
+<td>Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0506-marketplace-catalogue-bundles-and-updates.md">0506</a></td>
+<td>Katalog-Bundles und Updates</td>
+<td>Proposed</td>
+<td>Not started</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0520-process-places-an-order.md">0520</a></td>
+<td>Bestellung im Namen der Applikation</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0528-application-bundle-architecture.md">0528</a></td>
+<td>Architekturinhalt im Paket</td>
+<td>Accepted</td>
+<td>Landed</td>
+</tr>
+</tbody>
+</table>
+<h3 id="weiterführende-unterlagen">15.3 Weiterführende Unterlagen</h3>
+<p><a href="../ARCHITECTURE.md">Architekturübersicht</a>, <a href="../architecture/invariants.md">Architekturinvarianten</a>, <a href="../planning/0128-process-applications-plan.md">Prozessapplikationsplan</a>, <a href="../../deploy/opentofu/m365-devenv/README.md">M365-Entwicklungsumgebung</a>, <a href="../../examples/m365-dienste/README.md">M365-Beispielapplikation</a>, <a href="../../examples/lizenzmanagement/README.md">Lizenzmanagement-Beispiel</a>, <a href="../training/lehrgang-prozessentwicklung.md">Lehrgang Prozessentwicklung</a>, <a href="atlas-hub-signierte-verteilung.md">Hub-Whitepaper</a>, <a href="atlas-worker-whitepaper.md">Worker-Whitepaper</a>, <a href="../brand/README.md">Brand-Regeln</a>.</p>
+<p><em>Faktenbasis: Repository-Hauptzweig, Stand 6. November 2026. Dieses Whitepaper erklärt Status und Architektur, ist aber weder ein selbständiger Security-Audit noch ein Abnahmenachweis für produktive Nutzung.</em></p>
+<h3 id="prüfprotokoll-für-eine-konkrete-einführung-einschätzung">15.4 Prüfprotokoll für eine konkrete Einführung (Einschätzung)</h3>
+<p>Die folgenden Prüffragen bilden eine <strong>redaktionelle Empfehlung</strong> für einen Implementierungs- und Freigabenachweis. Sie sind kein bereits eingebauter Freigabe-Assistent. Die Fragen müssen für jede Organisation mit ihren internen Sicherheits-, Datenschutz- und Betriebsregeln abgeglichen werden.</p>
+<ol type="1">
+<li><strong>Entwurfsherkunft.</strong> Welche Person hat BPMN, DMN, Formulare und importierte Quellen fachlich freigegeben? Wurde bei KI-Unterstützung festgehalten, welcher Anbieter Inhalte verarbeitet hat, welche Schutzklasse die Unterlagen besitzen und ob Änderungen am Entwurf tatsächlich geprüft wurden?</li>
+<li><strong>Release-Identität.</strong> Welche Applikationskennung, welche lokale Release-Version, welche enthaltenen Prozess- und DMN-Versionen sowie gegebenenfalls welcher Hub-Digest bilden den freizugebenden Stand? Ist ein Vergleich mit einem früheren Release möglich, ohne einen alten Entwurf zu überschreiben?</li>
+<li><strong>Umgebungsabhängigkeiten.</strong> Welche <code>application.*</code>- und <code>server.*</code>-Konstanten liest das Modell? Welche Werte sind auf TEST, INT und PROD bewusst unterschiedlich? Ist ein fehlender Wert ein technischer Fehler oder darf die definierte Fallback-Semantik verwendet werden?</li>
+<li><strong>Worker und Identitäten.</strong> Sind die erforderlichen Worker Types und konfigurierten Worker vorhanden, ihre Operationen kompatibel und die verwendeten Credentials gültig? Ist der effektive API-Berechtigungsumfang pro Zielsystem dokumentiert, insbesondere bei tenantweiten Microsoft-Graph-Berechtigungen?</li>
+<li><strong>Integrationsnachweis.</strong> Wurden fachliche Positiv- und Negativfälle, Benachrichtigungen, Fristen, DMN-Entscheidungen, Wiederholungen, Incident-Bearbeitung und mindestens ein geplanter Wiederanlauf durchgespielt? Ist klar, welche Prüfungen ohne echte Zielsysteme lediglich simuliert wurden?</li>
+<li><strong>Transport- und Vertrauensweg.</strong> Erfolgt die Auslieferung über einen geprüften, begrenzt berechtigten Push oder über den signierten Pull? Bei atlas hub: Stimmen vertrauenswürdiger Schlüssel, Digest und Registry-Quelle? Bei Promotion: Ist der richtige Zielserver adressiert, und ist der Deploy-Token tatsächlich nur für den beabsichtigten Zweck gültig?</li>
+<li><strong>Importkonflikte.</strong> Welche vorhandenen Artefakte bleiben unverändert, welche werden überschrieben und welche müssen aus anderen Applikationen explizit übernommen werden? Betreffen DMN-Modelländerungen Entscheidungen ausserhalb der Applikation? Wer besitzt die dazu erforderlichen Rechte und die fachliche Verantwortung?</li>
+<li><strong>Betriebsübergabe.</strong> Ist die publizierte Version in einem nachvollziehbaren Inventar verzeichnet, sind Monitoring und Incident-Zuständigkeiten geregelt, und ist das Verhalten alter Instanzen nach dem Release verstanden? Ist das Verfahren für Rücknahme, Deaktivierung und gegebenenfalls destruktive Löschung dokumentiert?</li>
+</ol>
+<p>Als Abschlussregel wird empfohlen: Ein technisch erfolgreicher Import erzeugt <strong>noch keine fachliche Produktionsfreigabe</strong>. Diese folgt aus der Verbindung eines identifizierten Release-Stands, freigegebener Zielkonfiguration, überprüfter Schnittstellen und einem verantwortlichen Entscheid. Welche Teile davon atlas künftig selbst als durchgängigen Workflow anbietet, bleibt einem gesonderten Architekturentscheid vorbehalten.</p>
+</main><footer class="frame footer">atlas · Technisches Whitepaper · Faktenbasis 6. November 2026 · Nicht als unabhängiger Abnahmenachweis verwenden.</footer></body></html>
