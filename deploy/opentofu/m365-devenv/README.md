@@ -300,7 +300,7 @@ Was es tut:
    gesetzt hat (etwa `LIZENZ_MODUS`), sind danach weg.
 5. **Exchange-Server-Variante**, wenn `exch01` gebaut ist: eine zweite Applikation
    `beispiel-m365-dienste-onprem` mit Kopien der Prozesse und Formulare von Funktionspostfach,
-   Verteiler, Postfachzugriff, Sitzungszimmer und Gerät (Prozess-IDs `…_onprem`, Formulare
+   Verteiler, Postfachzugriff, Zusätzlicher Kalender, Sitzungszimmer und Gerät (Prozess-IDs `…_onprem`, Formulare
    `…-onprem`, Nachrichten `m365onprem.*`, Worker `ucc_exchange_onprem`, auch der aufgerufene
    Prozess `proc_m365_raumliste`) und der Katalog «Exchange Server (OnPrem)»
    (`cat-m365-onprem`, Rang 400, Zielgruppe `M365-Mitarbeitende`) mit den Produkten

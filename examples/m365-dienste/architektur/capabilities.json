@@ -49,6 +49,11 @@
     {
       "capability": "m365-messaging",
       "kind": "process",
+      "processId": "proc_m365_kalender"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
       "processId": "proc_m365_verteiler"
     },
     {

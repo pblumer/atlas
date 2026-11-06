@@ -25,6 +25,18 @@ _Changed_ / _Removed_ for each version.
   the action; for those the new operator process `sichtbarkeit-nachfuehren.bpmn` («Microsoft 365:
   Sichtbarkeit nachführen», started from the Console with the alias and the visibility) changes a
   group whose description names its catalogue position. m365-dienste relocked with Go 1.26.6.
+- **The M365 example offers an additional calendar.** `examples/m365-dienste` has a new
+  product «Zusätzlicher Kalender» (`m365-kalender`, in `cat-m365-mitarbeitende` and
+  `cat-m365-ucc`): a shared mailbox kept for its calendar, named by `M365Namensregel` with the
+  new object type `kalender` (`KAL-<Name>`, `kal-<name>`, `NAME_PREFIX` in front), visible in the
+  address book so Outlook finds it under «Add calendar › From directory», and tagged like every
+  catalogue object. Reading and editing go through two hidden mail-enabled security groups that
+  hold `Reviewer` and `Editor` on the calendar folder, whose name is read per mailbox language;
+  the order form's lists of people become their members inside the Exchange worker, because the
+  engine may not loop over personal data. The owner gets `Editor` directly. Actions: grant and
+  revoke a permission (person and level), and return the calendar, which removes mailbox and
+  groups. The approval is the owner's manager, as for the shared mailbox, and the Exchange
+  Server variant of the test environment (`install-m365-dienste.py`) copies the product.
 - **The atlas hub dialog shows the way to the registry, station by station.** Instead of
   waiting on "Verifying trusted registry…", the dialog draws the real load as a route from this
   server to the hub — name resolution, TCP connection on 443, TLS handshake, index, signature —
