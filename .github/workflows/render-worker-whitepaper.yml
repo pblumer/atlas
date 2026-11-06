@@ -1,0 +1,37 @@
+name: Render worker whitepaper (temporary)
+
+on:
+  push:
+    branches:
+      - docs/worker-architecture-whitepaper-20261106
+    paths:
+      - .github/workflows/render-worker-whitepaper.yml
+      - docs/whitepapers/atlas-worker-whitepaper.html
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PDF renderer
+        run: python -m pip install weasyprint==68.0
+      - name: Render PDF
+        run: |
+          python - <<'PY'
+          from weasyprint import HTML
+          HTML(filename='docs/whitepapers/atlas-worker-whitepaper.html').write_pdf(
+              'docs/whitepapers/atlas-worker-whitepaper.pdf'
+          )
+          PY
+      - name: Commit rendered PDF to documentation branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/whitepapers/atlas-worker-whitepaper.pdf
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: render worker whitepaper PDF [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
