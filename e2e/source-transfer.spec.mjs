@@ -215,6 +215,22 @@ test("a package asks what the directory cannot answer, plans everything at once,
   expect(page.__errors).toEqual([]);
 });
 
+test("a publish the target refuses names its reason, not a bare status, and imports no catalogue", async ({ page }) => {
+  const reason = 'draft "p" does not compile: compiler: entra task "t" has an unknown operation "list-user-groups"';
+  const routes = {
+    "POST /api/v1/applications/source?dryRun=true": { status: 200, data: { created: true, applicationId: "", artifacts: [] } },
+    "POST /api/v1/catalogs/import/answers": { status: 200, data: { document: { catalogs: [{ id: "c" }], products: [] } } },
+    "POST /api/v1/catalogs/import?dryRun=true": { status: 200, data: { artifacts: [] } },
+    "POST /api/v1/applications/source": { status: 200, data: { created: true, applicationId: "a1", name: "K", artifacts: [] } },
+    "GET /api/v1/applications/a1/releases": { status: 200, data: [] },
+    // As handlePublishApplication answers a bundle that does not compile.
+    "POST /api/v1/applications/a1/publish": { status: 409, data: { id: "a1", name: "K", deployed: false, reason } },
+  };
+  page.evaluate(([b, r]) => window.__importPackage(b, r), [shopPackage, routes]);
+  await expect(result(page)).toHaveText("failed: die Veröffentlichung: " + reason);
+  expect((await page.evaluate(() => window.__calls)).map((c) => c.key)).not.toContain("POST /api/v1/catalogs/import");
+});
+
 test("a source tree is a package without a shop: nothing is asked, nothing published", async ({ page }) => {
   const tree = tarGz([["atlas.json", JSON.stringify({ formatVersion: 1, key: "k", name: "K" })]]);
   const routes = {

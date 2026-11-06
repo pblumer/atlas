@@ -56,6 +56,10 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A package import names why the target refused the publish.** When the publish step of a
+  Console package or hub import was refused — for example because a process uses a Worker
+  operation the target's build does not know yet — the import reported only "HTTP 409". It now
+  shows the server's reason, the same message a manual publish shows.
 - **"My services" no longer says "being set up" about parts nobody is providing.** An entry whose
   missing parts were given back, withdrawn or never delivered, with nothing on its way, read
   "being set up: 4 of 7 ready". It now reads "incomplete: 4 of 7 held", and the status filter has
