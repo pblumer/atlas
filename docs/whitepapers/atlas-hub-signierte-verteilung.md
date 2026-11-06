@@ -1,7 +1,17 @@
 # atlas hub – signierte Verteilung von Prozessapplikationen
 
+<!--
+Gepflegtes Dokument: `go test ./docs/whitepapers` hält es an die Architekturentscheide und
+die Grenzwerte im Code gebunden. Bekommt ADR-0499 oder ADR-0467 einen neuen Nachtrag, schlägt
+der Test fehl, bis dieses Whitepaper dagegen geprüft und die passende Zeile unten nachgeführt
+ist. Jede Zeile nennt die letzte Nachtrags-Überschrift, gegen die der Text geprüft wurde.
+
+reviewed-through ADR-0499: Amendment 2026-11-03 (d): installing a release server-side, and over MCP
+reviewed-through ADR-0467: A model other applications use is replaced only when named (amended 2026-11-05)
+-->
+
 **Technisches Whitepaper · Architektur, Sicherheitsmodell und Betrieb**  
-**Stand der Faktenbasis:** 6. November 2026  
+**Stand der Faktenbasis:** 6. November 2026, mit dem Code abgeglichen am 6. November 2026  
 **Einordnung:** Beschreibung des implementierten Registry-Vertrags v1 und der ausdrücklich offenen Folgeschritte. Kein Nachweis einer vollständigen Produkt- oder Betriebsfreigabe.
 
 > **Leseschlüssel:** **Umgesetzt** bezeichnet ein in der bereitgestellten Faktenbasis als vorhanden beschriebenes Verhalten. **Teilweise umgesetzt** bezeichnet einen übergreifenden Entscheid, dessen Gesamtumfang noch nicht abgeschlossen ist. **Geplant/offen** bezeichnet Funktionen oder Nachweise, die gerade nicht als verfügbar gelten dürfen. **Einschätzung** kennzeichnet eine analytische Schlussfolgerung aus den genannten Fakten.
@@ -32,7 +42,7 @@ Die Wiederverwendung fachlicher Prozessapplikationen setzt mehr voraus als das K
 
 Der technische Vertrag heisst weiterhin **Blueprint Registry v1**. Ein Registry-Betreiber veröffentlicht einen `index.json`, dessen exakte Bytes mit Ed25519 signiert werden; jedes dort gelistete Paket ist zusätzlich über den SHA-256-Digest seiner komprimierten Archivbytes gebunden. Eine Installation akzeptiert nur einen Index, der zu einem vom Betreiber ausserhalb der Registry bezogenen und gepinnten öffentlichen Schlüssel passt. Der Schlüssel begründet das Vertrauen in die Quelle, nicht in die Unbedenklichkeit der Inhalte.
 
-Der Import erfolgt kontrolliert: Vorschau und Probelauf zeigen Dateien, Abhängigkeiten und Konflikte; Entscheidungen zu lokalen oder fremden Artefakten werden explizit getroffen; der eigentliche Paketimport verwendet den bestehenden Mechanismus nach ADR-0467. Das Publizieren der importierten Applikation ist ein eigener Schritt. Ein Blueprint-Update migriert keine laufenden Instanzen. Bereits deployte Applikationen bleiben von einer nicht erreichbaren oder deaktivierten Registry unabhängig.
+Der Import erfolgt kontrolliert: Vorschau und Probelauf zeigen Dateien, Abhängigkeiten und Konflikte; Entscheidungen zu lokalen oder fremden Artefakten werden explizit getroffen; der eigentliche Paketimport verwendet den bestehenden Mechanismus nach ADR-0467. Publiziert wird eine importierte Applikation nur dann im selben Ablauf, wenn das Paket Produktkataloge mitbringt, und auch dann erst nach der Bestätigung des Imports; der serverseitige Import und die MCP-Werkzeuge publizieren nie. Ein Blueprint-Update migriert keine laufenden Instanzen. Bereits deployte Applikationen bleiben von einer nicht erreichbaren oder deaktivierten Registry unabhängig.
 
 Die vorliegenden Angaben weisen den **Registry-Vertrag, die Signaturprüfung, Schutzgrenzen, die Veröffentlichung der Beispiele, Console-Abläufe, CLI und MCP-Anbindung sowie konfliktbewusste Importregeln als umgesetzt** aus. Der Grundsatzentscheid ADR-0499 ist dagegen **Accepted / Partial**; der Programmschritt BMP1 ist aktiv. Dauerhafte Installations-Provenienz, historische Paketversionen, verwaltete Updates, mehrere Quellen und kommerzielle Auslieferungsmodelle sind offen beziehungsweise geplant. Das Whitepaper ist daher keine Aussage, dass der gesamte Lebenszyklus bereits abgeschlossen ist.
 
@@ -145,7 +155,7 @@ flowchart LR
 
 Alle Netzwerk- und Validierungsschritte laufen ausserhalb der Engine-Run-Loop. Write-Ahead-Log, die deterministische Zustandsfunktion `applyToState` und die Ausführungsschleife bleiben von der Registry-Integration unberührt. Der Registry-Ausfall ist damit kein Grund, bereits deployte Applikationen anzuhalten. Das ist eine funktionale Grenze und zugleich eine Sicherheitsgrenze: Die Hub-Prüfung darf nicht als neue Laufzeit-Abhängigkeit interpretiert werden.
 
-Ein Import kann Quellartefakte bereitstellen; die tatsächliche Publikation geschieht ausdrücklich später. Ein Blueprint-Update migriert niemals laufende Prozessinstanzen. Wenn ein Update scheitert, bleiben bestehende Deployments unverändert. Diese beiden Regeln verhindern, dass die Herkunfts- und Distributionslogik unbemerkt in die Semantik bereits laufender Prozesse eingreift.
+Ein Import stellt Quellartefakte bereit; publiziert wird ohne Produktkatalog erst in einem eigenen Schritt. Bringt ein Paket Produktkataloge mit, publiziert der Console-Import die Applikation nach der bestätigten Übernahme selbst, weil die Produkte an die dabei deployten Prozesse gebunden werden. Ein Blueprint-Update migriert niemals laufende Prozessinstanzen. Wenn ein Update scheitert, bleiben bestehende Deployments unverändert. Diese beiden Regeln verhindern, dass die Herkunfts- und Distributionslogik unbemerkt in die Semantik bereits laufender Prozesse eingreift.
 
 ### 4.4 Implementierter und zukünftiger Rahmen
 
@@ -270,7 +280,7 @@ Die Datei `examples/hub/bundles.json` fasst Handbuch- und Fachbeispiele nach The
 
 Die Bündelung vermeidet, dass jede kleine Demonstration eine eigenständige lokale Applikation erzeugt. Zugleich besteht eine eindeutige fachliche Zuordnung: Jedes installierbare Handbuchbeispiel gehört genau einem Bundle an. Bundles mit mehreren Beispielen benötigen einen Namen, aus dem sich der portable Applikationsschlüssel ableiten lässt. Ein Shop-Paket reist allein. Innerhalb eines Bundles müssen die IDs für Prozesse, Formulare und Entscheidungen jeweils eindeutig sein. Diese Regeln sind durch Tests abgesichert.
 
-Tags entstehen beim Build aus den verwendeten Worker Types. Für jeden verwendeten Worker Type kann ein passender Tag ergänzt werden, beispielsweise `entra` oder `jira`. Pakete mit Katalog erhalten `shop`. Die Tags verbessern die Suche, machen jedoch keine Aussage über Vollständigkeit von Abhängigkeiten oder Berechtigungen.
+Tags entstehen beim Build aus den verwendeten Worker Types. Für jeden verwendeten Worker Type wird ein passender Tag ergänzt, beispielsweise `entra` oder `jira`. Pakete mit Katalog erhalten `shop`. Die Tags verbessern die Suche, machen jedoch keine Aussage über Vollständigkeit von Abhängigkeiten oder Berechtigungen.
 
 ### 8.2 Reproduzierbare Paketbytes
 
@@ -333,7 +343,7 @@ Nach der Bestätigung ruft die Console `GET …/package` mit dem zuvor geprüfte
 
 ### 9.2 Probelauf, Entscheid und Publikation
 
-Die verifizierten Archivbytes werden an denselben Paketimporter übergeben wie eine hochgeladene Datei nach ADR-0467. Der Paketimport beginnt mit einem Probelauf (`dryRun`) und einem Importplan. Die Console zeigt danach einen Entscheiddialog für Unterschiede, übernimmt gegebenenfalls Quellen und Konstanten und fragt bei Shop-Paketen zusätzlich nach Zielgruppen und Genehmigenden. Das Publizieren ist ausdrücklich eine separate Aktion. Kataloge können im interaktiven Console-Weg mit den nötigen installationsspezifischen Entscheidungen importiert werden.
+Die verifizierten Archivbytes werden an denselben Paketimporter übergeben wie eine hochgeladene Datei nach ADR-0467. Der Paketimport beginnt mit einem Probelauf (`dryRun`) und einem Importplan. Die Console zeigt danach einen Entscheiddialog für Unterschiede, übernimmt gegebenenfalls Quellen und Konstanten und fragt bei Shop-Paketen zusätzlich nach Zielgruppen und Genehmigenden. Ohne Produktkatalog endet der Ablauf mit dem Quellimport; publiziert wird in einem eigenen Schritt. Bringt das Paket Produktkataloge mit, publiziert die Console die Applikation im selben Ablauf, sofern sie noch kein Release hat oder der Import etwas geändert hat, und importiert danach die Kataloge mit den installationsspezifischen Antworten. Die Zustimmung dazu ist die Bestätigung vor dem Bezug des Pakets; der Hinweistext des Dialogs nennt diese mögliche Publikation.
 
 ```mermaid
 sequenceDiagram
@@ -365,8 +375,9 @@ sequenceDiagram
     U->>C: overwrite / keep / adopt wählen
     C->>I: Import mit bestätigten Entscheiden
     I-->>C: Importergebnis
-    opt Ausdrückliches Publizieren
-      U->>C: Publikation bestätigen
+    opt Paket bringt Produktkataloge mit
+      C->>S: Applikation publizieren (neu oder geändert)
+      C->>S: Kataloge mit beantworteten Fragen importieren
     end
   end
 ```
@@ -395,7 +406,9 @@ Der Importer vergleicht jedes Artefakt mit dem aktuellen Serverstand und der ges
 | `ahead` | Nur lokal geändert | Bleibt ohne Rückfrage |
 | `changed` | Beide Seiten geändert oder nie importiert | Nur mit explizitem `overwrite` oder `keep` |
 | `elsewhere` | Artefakt gehört anderer bestehender Applikation | Einzeln benanntes `adopt` erforderlich; bei Inhaltsabweichung zusätzlich `overwrite` oder `keep` |
-| `undecided` | Für einen relevanten Unterschied fehlt ein Entscheid | HTTP 409; Import mit Plan gestoppt |
+| `gap` | Capability oder Wertstrom fehlt in der Capability-Landkarte des Servers (ADR-0528) | `adopt` (Vorschlag des Pakets übernehmen), `map` (einem vorhandenen Key zuordnen) oder `omit` (weglassen) |
+
+`undecided` ist kein Status, sondern das Ergebnis (`outcome`) eines Artefakts, für das ein nötiger Entscheid fehlt. Gibt es solche Artefakte, stoppt der Import vor dem ersten Schreibzugriff mit HTTP 409, dem Plan und der Liste der offenen Referenzen unter `undecided`.
 
 ### 9.6 Referenzgenaue Entscheidungen und Wiederholung
 
@@ -485,7 +498,7 @@ stateDiagram-v2
   BeideGepinnt --> NeuerAktiv: Release-Lock, Signing Secret und Pages wechseln
   NeuerAktiv --> NurNeu: Alten Schlüssel aus Serverkonfiguration entfernen
   NurNeu --> [*]: Alte Sicherungen vernichten
-  Angekündigt --> HubNichtVerfuegbar: Betreiber hat Dual-Pinning ausgelassen
+  NeuerAktiv --> HubNichtVerfuegbar: Installation ohne Dual-Pinning lehnt neuen Index ab
   HubNichtVerfuegbar --> NurNeu: Neuen Schlüssel nach korrekter Prüfung konfigurieren
 ```
 
@@ -493,7 +506,10 @@ Der korrekte Ablauf lautet somit: neuen Schlüssel erzeugen und sichern, Rotatio
 
 ### 12.3 Notfall: Verlust oder Kompromittierung
 
-Bei verlorenem oder kompromittiertem Signierschlüssel gilt **nicht** die geplante Rotation. Betreiber entfernen sofort beide `ATLAS_BLUEPRINT_REGISTRY_*`-Variablen und deaktivieren damit die Hub-Anbindung. Bestehende installierte Inhalte bleiben unverändert. Ein kompromittierter Schlüssel darf nie neben dem neuen gepinnt werden.
+Bei verlorenem oder kompromittiertem Signierschlüssel gilt **nicht** die geplante Rotation; die beiden Fälle unterscheiden sich aber im ersten Schritt.
+
+- **Kompromittiert:** Betreiber entfernen sofort beide `ATLAS_BLUEPRINT_REGISTRY_*`-Variablen und deaktivieren damit die Hub-Anbindung. Bestehende installierte Inhalte bleiben unverändert. Ein kompromittierter Schlüssel darf nie neben dem neuen gepinnt werden.
+- **Verloren, ohne Verdacht auf Missbrauch:** Mit dem verlorenen Schlüssel kann niemand mehr signieren, weder eine Ankündigung noch einen Index. Die Überlappung zweier Schlüssel hilft deshalb nicht. Der neue Schlüssel wird veröffentlicht, und die Betreiber ersetzen den alten direkt durch ihn.
 
 Der neue öffentliche Schlüssel wird ausschliesslich durch persönliche Bestätigung über einen vorher vereinbarten Kanal weitergegeben: Der Eigentümer liest den Fingerprint vor, und der Betreiber vergleicht ihn. Eine signierte Ankündigung gilt im Notfall nicht als sichere Autorisierung, weil gerade der bisherige Signierschlüssel nicht mehr vertrauenswürdig ist. Nach dem Wechsel muss geprüft werden, welche Inhalte seit der vermuteten Kompromittierung importiert worden sind.
 
@@ -550,7 +566,7 @@ ADR-0499 trägt den Status **Accepted** bei **Partial** in der Umsetzung. Die an
 
 Informationsmodelle, Panorama-Modelle, Server-Konstanten, Worker und nicht sämtliche Katalog-Medien werden nicht zusammen mit dem Applikationspaket übertragen. Die Vorschau nennt Bedürfnisse, ersetzt deren Einrichtung aber nicht. Auch die serverdirekte Importroute lässt Kataloge bewusst weg, weil lokale Gruppen und Personen zugeordnet werden müssen.
 
-Ein importiertes Release ist daher nicht mit einer automatisch betriebsfertigen Installation gleichzusetzen. Der letzte Schritt bleibt das bewusste Prüfen und Publizieren der Applikation unter den bestehenden Deploy-Regeln. Auch ein späterer Blueprint-Updatepfad darf laufende Instanzen nicht migrieren.
+Ein importiertes Release ist daher nicht mit einer automatisch betriebsfertigen Installation gleichzusetzen. Für eine Applikation ohne Produktkatalog bleibt das bewusste Prüfen und Publizieren unter den bestehenden Deploy-Regeln ein eigener Schritt. Ein Shop-Paket publiziert der Console-Import nach der Bestätigung selbst; die fehlenden Worker, Konstanten und Zuordnungen bleiben trotzdem einzurichten. Auch ein späterer Blueprint-Updatepfad darf laufende Instanzen nicht migrieren.
 
 ### 14.5 Offene Fragen an die Autorin oder den Autor
 
@@ -592,6 +608,7 @@ Die folgende Liste benennt die im bereitgestellten Material aufgeführten Archit
 - **ADR-0208 – Worker-Type-Pakete:** Grenze zwischen Paketinhalt und ausführbarem Worker-Code.
 - **ADR-0034 – Ungrouped-Artefakte:** Behandlung nicht mehr zugeordneter Artefakte.
 - **ADR-0016 – MCP als HTTP-Adapter:** MCP verwendet die öffentliche HTTP-API.
+- **ADR-0528 – Applikationsbündel und Capability-Landkarte:** fehlende Capabilities und Wertströme erscheinen im Importplan als `gap`.
 - **ADR-0506 – Katalog-Artefakte und sichere Updates:** vorgeschlagen, nicht als vollständig umgesetzt ausgewiesen.
 
 ### 15.3 Selbstprüfung der Aussagen
@@ -604,5 +621,7 @@ Die folgende Liste benennt die im bereitgestellten Material aufgeführten Archit
 | Ist Schweizer Rechtschreibung ohne Scharf-S verwendet? | Ja. |
 | Sind mindestens vier Mermaid-Diagramme und drei Tabellen vorhanden? | Ja; Architektur, Veröffentlichung, Console-Import, Rotation sowie Grenzwerte, Importstatus, Bedrohungen und weitere Tabellen. |
 | Werden nicht belegte Betriebsdaten und Freigaben als solche benannt? | Ja; keine erfundenen Benchmarks, Dienstgüten oder Freigaben. |
+
+**Pflege:** Dieses Dokument ist die gepflegte Quelle; die PDF-Ausgaben werden daraus erzeugt und können einen älteren Stand zeigen. `go test ./docs/whitepapers` prüft, dass die Grenzwerte in Kapitel 5 und 7 den Konstanten im Code entsprechen und dass das Dokument gegen den jüngsten Nachtrag von ADR-0499 und ADR-0467 geprüft ist.
 
 **Redaktionelle Schlussbemerkung:** Das Whitepaper beschreibt die bereitgestellte technische Faktenlage. Es ersetzt weder den Code- und Testnachweis einzelner Komponenten noch eine betriebliche Freigabe einer konkreten Registry-Installation.
