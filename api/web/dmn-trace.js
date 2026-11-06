@@ -73,6 +73,25 @@ export function renderTraceTable(tt, n) {
     `<table class="mgrid">${hr}${body}</table></div>`;
 }
 
+// placeTracePop sets the hover card that shows a trace (the shared .dec-pop) next to
+// the row it explains: above the row when it fits there, below it when it fits
+// there, and otherwise as high as the viewport allows, over the row — the card
+// takes no pointer events, so covering the row does not end the hover. It used to
+// fall back to "below" without asking whether below fitted either, and a tall table
+// ran off the bottom of the window, where nothing could bring it back. The card
+// must be visible when this runs, because its size is what is being placed.
+export function placeTracePop(pop, box, gap = 10, margin = 8) {
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const above = box.top - h - gap;
+  const below = box.bottom + gap;
+  const top = above >= margin ? above
+    : below + h <= vh - margin ? below
+    : Math.max(margin, vh - h - margin);
+  pop.style.left = Math.max(margin, Math.min(box.left, vw - w - margin)) + "px";
+  pop.style.top = top + "px";
+}
+
 // renderTrace draws every table in a trace, numbering them when there is more than
 // one, and says why there is nothing to draw when there is nothing.
 //
