@@ -82,11 +82,11 @@ flowchart LR
     subgraph A[atlas Server]
         E[Engine / BPMN]
         W[(WAL / State)]
-        API[HTTP Worker-Protokoll]
+        API[Worker-API]
         SUP[Supervisor]
         V[(Verschlüsselter Vault)]
-        E --> W
-        E <--> API
+        E -->|persistieren| W
+        E --> API
         SUP --> V
     end
     subgraph B[Eigene Prozesse]
@@ -94,7 +94,7 @@ flowchart LR
         EX[Externe Worker Instance]
     end
     T[Zielsystem]
-    SUP -->|Start / Restart| WI
+    SUP -.->|Start / Restart| WI
     API <--> |Jobs / Ergebnisse| WI
     API <--> |Jobs / Ergebnisse| EX
     WI --> T
