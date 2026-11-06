@@ -13,7 +13,8 @@ Du bist technische Autorin bzw. technischer Autor und Software-Architekt für at
 Erstelle ein **technisches Whitepaper in deutscher Sprache**, das erklärt, was eine
 **atlas-Applikation (Prozessapplikation)** ist, wie sie aufgebaut ist, wie sie
 entsteht, versioniert, veröffentlicht, verteilt, betrieben und gelöscht wird, und
-wo die Grenzen des heutigen Implementierungsstands liegen.
+wie sie vom fachlichen Entwurf bis in die Produktion entwickelt wird und wo die
+Grenzen des heutigen Implementierungsstands liegen.
 
 Das Whitepaper übernimmt das **visuelle Design der öffentlichen Website aus
 `pblumer/atlas-cloud`** und wird im Repository `pblumer/atlas` unter
@@ -84,6 +85,37 @@ promotion, hub), und beziehe sie ein.
 - ADR-0208 und `docs/whitepapers/atlas-worker-whitepaper.md` für die Rolle der
   Worker (Begriff «Worker», nicht «Connector», gemäss `AGENTS.md`)
 
+**Entwicklungsvorgehen: KI-gestützter Entwurf**
+
+- ADR-0016, ADR-0196, ADR-0200 (MCP-Server, authentifizierter Transport,
+  OAuth für gehostete MCP-Clients) — der Weg, über den ein externer KI-Agent
+  Entwürfe, Formulare und Entscheidungen in atlas anlegt
+- ADR-0021 (Diagramm-Entwürfe), ADR-0321 (Entscheidungs-Entwürfe),
+  ADR-0140 (gemeinsames Modellieren von Personen und KI-Agenten in Echtzeit)
+- ADR-0032 (KI-Copilot im Modeler), ADR-0260 (KI-generierte Formulare),
+  ADR-0445 (FEEL-Assistent)
+- ADR-0117 und ADR-0253 bis ADR-0257 nur zur **Abgrenzung**: Sie beschreiben
+  KI-Agenten *zur Laufzeit eines Prozesses*, nicht beim Entwurf einer Applikation
+- `docs/training/lehrgang-prozessentwicklung.md` (Vorgehen vom Entwurf bis in die
+  Produktion, offene Fragen in Abschnitt 7 und Phase 2)
+
+**Entwicklungsvorgehen: Entwicklungsumgebung**
+
+- `deploy/opentofu/m365-devenv/README.md` vollständig, insbesondere «Ablauf»,
+  «Beispiele einspielen», «Geteilter Tenant», «atlas-Server», «Sicherheit»,
+  «Erfahrungen mit einem echten Tenant» und «Bekannte Grenzen»
+- die Einspielskripte unter `deploy/opentofu/m365-devenv/scripts/` sowie
+  `examples/m365-dienste/` und `examples/lizenzmanagement/` als Beispiel dafür,
+  wie eine Applikation in einer Entwicklungsumgebung mit echten Workern
+  integriert wird
+
+**Entwicklungsvorgehen: Auslieferung über Stufen**
+
+- ADR-0129 (Deployment-Ziele und Promotion, z. B. «Test» und «Produktion»),
+  `api/promote.go` und die zugehörigen Tests
+- ADR-0499, ADR-0506 (Katalog-Bundles und Opt-in-Updates) und die Kapitel 7, 9 und
+  14 von `docs/whitepapers/atlas-hub-signierte-verteilung.md`
+
 **Code und Belege** (zur Verifikation, nicht zur Paraphrase von Implementierungsdetails)
 
 - `api/apppackage.go`, `api/packagemappings.go`, `api/promote.go`,
@@ -110,22 +142,114 @@ Faktenbasis für ein Kapitel nicht ausreicht; das ist dann im Text zu begründen
    Werte pro Installation, Architektur-Skizze, Abhängigkeiten zu Workern
 6. **Lebenszyklus** — Entwurf, Validierung, Release, Deployment, Promotion auf
    andere Installationen, Export/Import, Löschen
-7. **Versionierung und Migration** — Verhältnis von Applikationsversion zu
+7. **Entwicklung einer Applikation** — eigenes, ausführliches Kapitel; siehe
+   Abschnitt 4.1
+8. **Versionierung und Migration** — Verhältnis von Applikationsversion zu
    Prozessversionen; was mit laufenden Instanzen geschieht und was nicht
-8. **Konfiguration und Konstanten** — Namensräume, Bindung pro Installation
-9. **Verteilung** — Paketformat, Konfliktbehandlung beim Import, atlas hub
-   (Kurzfassung mit Verweis)
-10. **Sicherheit und Berechtigungen** — nur soweit durch Quellen belegt
-11. **Betrieb** — Werkzeuge (Console, CLI, MCP-Tools, HTTP-API), Beobachtbarkeit
-12. **Durchgehendes Fallbeispiel** anhand einer realen Applikation aus `examples/`
-13. **Offene Punkte, Grenzen und Ausblick** — insbesondere die als `Partial`
+9. **Konfiguration und Konstanten** — Namensräume, Bindung pro Installation;
+   ausdrücklich, welche Werte sich zwischen Entwicklung, Test, Integration und
+   Produktion unterscheiden (Konstanten, Worker-Konfiguration, Secrets)
+10. **Verteilung** — Paketformat, Konfliktbehandlung beim Import, atlas hub
+    (Kurzfassung mit Verweis)
+11. **Sicherheit und Berechtigungen** — nur soweit durch Quellen belegt;
+    einschliesslich der Rechte, mit denen ein KI-Agent über MCP arbeitet
+12. **Betrieb** — Werkzeuge (Console, CLI, MCP-Tools, HTTP-API), Beobachtbarkeit
+13. **Durchgehendes Fallbeispiel** — bevorzugt `examples/m365-dienste` oder
+    `examples/lizenzmanagement`, damit das Beispiel mit der Entwicklungsumgebung
+    aus Abschnitt 4.1 übereinstimmt
+14. **Offene Punkte, Grenzen und Ausblick** — insbesondere die als `Partial`
     oder `Proposed` geführten ADRs
-14. **Glossar und ADR-Verzeichnis** — Tabelle mit ADR-Nummer, Titel, Status,
+15. **Glossar und ADR-Verzeichnis** — Tabelle mit ADR-Nummer, Titel, Status,
     Implementierungsstand und Link
 
-Umfang: Richtwert 15 bis 25 A4-Seiten im PDF. Kurze, fokussierte Absätze.
-Mindestens drei Diagramme: Architektur-Einordnung, Lebenszyklus (Zustände und
-Übergänge), Verteilungsweg zwischen Installationen.
+Umfang: Richtwert 18 bis 30 A4-Seiten im PDF. Kurze, fokussierte Absätze.
+Mindestens vier Diagramme: Architektur-Einordnung, Lebenszyklus (Zustände und
+Übergänge), Entwicklungsvorgehen vom Fachentwurf bis zur Produktion
+(Rollen, Umgebungen, Übergaben, Freigaben), Verteilungsweg zwischen
+Installationen.
+
+### 4.1 Kapitel «Entwicklung einer Applikation»
+
+Das Kapitel beschreibt das Vorgehen in drei Phasen. Für jede Phase sind
+anzugeben: beteiligte Rollen (Fachbereich, Prozessentwicklung, Betrieb),
+Eingaben, Ergebnisse, verwendete atlas-Funktionen, Freigabepunkt und
+Implementierungsstand gemäss Leseschlüssel.
+
+**Phase 1 — Fachlicher Entwurf, gegebenenfalls mit KI-Unterstützung**
+
+- Der Fachbereich erarbeitet zusammen mit der Prozessentwicklung einen ersten
+  Entwurf der Applikation. Ausgangsmaterial sind vorhandene
+  Prozessbeschreibungen, Bilder, Skizzen, bestehende Diagramme, Formulare und
+  Entscheidungstabellen.
+- Erkläre, wie ein KI-Agent daraus Entwürfe erzeugt: Prozessdiagramme (BPMN),
+  Formulare, Entscheidungen (DMN), Informationsmodell und Konstanten, abgelegt
+  als **Entwürfe** in einem Projekt bzw. einer Applikation, nicht als
+  Deployment.
+- **Prüfe und benenne genau, wo die KI läuft.** Nach dem Stand der Quellen
+  interpretiert atlas selbst keine Bilder oder Freitexte zu BPMN; das leistet
+  ein externer KI-Agent, der über die MCP-Schnittstelle mit den Rechten seiner
+  aufrufenden Person arbeitet. Der Modeler-Copilot (ADR-0032) ist
+  `Proposed / Partial`. Bestätige oder korrigiere diese Aussage anhand der
+  aktuellen Quellen, bevor du sie übernimmst.
+- Beschreibe die Qualitätssicherung des Entwurfs: Validierung beim Speichern
+  und vor dem Deploy, Problems-Panel, Simulation (Play-Modus), fachliche
+  Abnahme durch den Fachbereich. Ein KI-Entwurf ist ausdrücklich als Vorschlag
+  zu behandeln, der fachlich geprüft wird.
+- Nenne die Grenzen: Halluzinierte Prozessschritte, falsch übernommene
+  Zuständigkeiten, vertrauliche Inhalte in Ausgangsdokumenten, die an einen
+  externen Modellanbieter gehen. Lege offen, welche dieser Risiken atlas
+  technisch begrenzt und welche organisatorisch zu regeln sind.
+
+**Phase 2 — Integration in einer Entwicklungsumgebung**
+
+- Verwende `deploy/opentofu/m365-devenv` als Referenzbeispiel: Eine
+  Entwicklungsumgebung wird mit OpenTofu reproduzierbar aufgebaut und wieder
+  abgebaut (atlas-Server, Testtenant, Testpersonen, Worker mit minimalen
+  Berechtigungen), und die Beispielapplikationen werden per Skript eingespielt.
+- Erkläre, was in dieser Phase aus dem Entwurf eine lauffähige Applikation
+  macht: Anbindung der Worker, Werte und Konstanten pro Installation,
+  Identitäten und Berechtigungen, Tests gegen echte Zielsysteme, Releases der
+  Applikation.
+- Ordne ein, dass `m365-devenv` laut README **für Entwicklung und temporäre
+  Tests** gedacht ist und nicht für den Betrieb. Übertrage das Muster
+  allgemein (andere Zielsysteme, andere Infrastruktur), ohne Funktionen zu
+  behaupten, die nur für M365 belegt sind.
+
+**Phase 3 — Auslieferung in Test, Integration und Produktion über atlas hub**
+
+- Zielbild des Auftraggebers: Die in der Entwicklungsumgebung freigegebene
+  Applikation wird über **atlas hub** als signiertes, unveränderliches Release
+  veröffentlicht und von dort in die Umgebungen **Test**, **Integration** und
+  **Produktion** übernommen.
+- Beschreibe den Ablauf nach dem implementierten Stand: Veröffentlichen eines
+  Releases (`atlas hub keygen|lock|build`, Signatur, Digest), Import in der
+  Zielumgebung mit Vorschau, Probelauf und Konfliktentscheidungen, danach das
+  **separate** Publizieren der importierten Applikation. Ein Hub-Update
+  migriert keine laufenden Instanzen.
+- **Prüfe dieses Zielbild kritisch gegen die Quellen und stelle das Ergebnis
+  transparent dar.** Mindestens folgende Punkte sind zu klären und im Text als
+  Umgesetzt, Teilweise umgesetzt oder Geplant/offen auszuweisen:
+  - Laut Hub-Whitepaper unterstützt ein Server **eine** Registry, und
+    Verbindungen sind auf HTTPS, öffentliche DNS-Hosts und Port 443 beschränkt;
+    private Adressbereiche werden abgewiesen. Was bedeutet das für eine
+    unternehmensinterne Registry in getrennten Netzzonen?
+  - Verwaltete Updates, mehrere Quellen und dauerhafte Installations-Provenienz
+    sind laut ADR-0499 bzw. ADR-0506 offen. Was bedeutet das für die
+    Nachvollziehbarkeit, welche Version in welcher Stufe läuft?
+  - atlas kennt mit ADR-0129 (**Landed**) einen zweiten Weg: die Promotion
+    einer Applikation an ein Deployment-Ziel. Vergleiche beide Wege sachlich
+    (Pull über signierte Releases gegenüber Push mit Deploy-Token;
+    Vertrauensrichtung, Netzzonen-Trennung, Nachvollziehbarkeit, Freigaben,
+    Implementierungsstand). Gib beiden Wegen ihre stärkste Begründung, bevor
+    du einen davon einordnest.
+  - `docs/training/lehrgang-prozessentwicklung.md` führt den
+    «Referenzweg in die Produktion» (Trennung der Umgebungen, Freigabe vor der
+    Promotion, Schreibschutz auf der Produktion, Worker-Konfiguration je
+    Umgebung) als offene Entscheidung. Übernimm das als offenen Punkt, statt
+    einen Entscheid vorwegzunehmen.
+- Wenn das Zielbild über atlas hub nach Quellenlage nur teilweise umsetzbar
+  ist, beschreibe es als **Zielbild** in einem eigenen, klar gekennzeichneten
+  Unterabschnitt und den heute belegbaren Weg getrennt davon.
 
 ## 5. Sprache und Schreibregeln
 
@@ -236,5 +360,7 @@ schliesst das ausdrücklich aus.
   - welche Quellen verwendet wurden,
   - welche Aussagen als **Einschätzung** markiert sind,
   - welche Fragen aus dem Repository nicht beantwortet werden konnten,
+  - wie weit das Zielbild «Auslieferung über atlas hub in Test, Integration und
+    Produktion» durch den implementierten Stand gedeckt ist,
   - welche Abweichungen zwischen dem Design der Worker-Vorlage und
     `atlas-cloud` bestanden und wie sie aufgelöst wurden.
