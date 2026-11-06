@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Windows service script connects Atlas to an atlas hub.** `install-atlas-service.ps1`
+  takes `-BlueprintRegistryUrl` and `-BlueprintRegistryKey` and writes them into the service
+  configuration as `ATLAS_BLUEPRINT_REGISTRY_URL` and `ATLAS_BLUEPRINT_REGISTRY_KEY`;
+  `-RemoveBlueprintRegistry` takes them out again and `-ExtraEnv` sets further variables. A later
+  run keeps every `<env>` entry of the existing configuration, those added by hand included,
+  where it used to drop them. The script checks both values as Atlas does and hands them to the
+  foreground test, so a wrong key stops the script before the running service is stopped.
 - **An installed Worker Type is configured from its own schema.** A Worker Type's manifest carries
   its configuration as a JSON Schema whose `writeOnly` properties are secrets. An administrator
   configures Workers of an installed type under `/api/v1/worker-types/installed/{id}/workers`: the

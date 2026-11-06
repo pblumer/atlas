@@ -792,6 +792,13 @@ its parameters.
 set the service to stop with `SIGTERM`-equivalent behaviour and allow ~30 seconds
 so the engine finishes in-flight work.
 
+To connect the service to an atlas hub registry
+([`examples/hub/README.md`](../examples/hub/README.md), "Connecting an installation"),
+pass `-BlueprintRegistryUrl` and `-BlueprintRegistryKey` to the script, on installation
+or on any later run. It writes them into the WinSW configuration as
+`ATLAS_BLUEPRINT_REGISTRY_URL` and `ATLAS_BLUEPRINT_REGISTRY_KEY` and keeps them on every
+later run. With a wrapper of your own, put them there as `<env name="…" value="…"/>`.
+
 Then, as on Linux: grant the service account write access to `C:\Atlas\data`
 only, give it a certificate (`--tls-cert`/`--tls-key`, PEM files — the Windows
 certificate store is not read) or put IIS in front as the TLS terminator, and set
@@ -827,9 +834,10 @@ It then does these steps in this order:
    deleted.
 4. It replaces `<InstallRoot>\bin\atlas.exe`, but only if the new file differs from it.
 5. It **rewrites the WinSW configuration from the parameters of this run** and starts
-   the service again.
+   the service again. Only the `<env>` entries of the old configuration are carried over
+   (see the table below).
 
-Step 5 is the trap. The script does not read the old configuration back: every start
+Step 5 is the trap. The script does not read the old start line back: every start
 parameter you gave at installation has to be given again. A parameter you leave out
 falls back to its default. Leave out `-Addr`, `-TlsCert` and `-TlsKey` on a server
 installed with TLS on `:8443`, and the service comes back on `http://127.0.0.1:8080`.
@@ -890,6 +898,8 @@ What each parameter does in update mode:
 | `-WinSWPath`, `-WinSWUrl`, `-WinSWSha256` | Ignored. The wrapper under `service\` is kept. |
 | `-ReadyTimeoutSec` | How long to wait for `recovery is complete` after the start (default 300 s). Raise it for a large data directory. |
 | `-SkipSmokeTest`, `-SkipBackup` | Leave out. |
+| `-BlueprintRegistryUrl`, `-BlueprintRegistryKey` | Optional. The `<env>` entries of the existing configuration are kept, so the atlas hub registry is set once. Give both to change it, `-RemoveBlueprintRegistry` to remove it. Both are checked, and handed to the foreground test, before the service is stopped. |
+| `-ExtraEnv` | Optional. A hashtable of further variables for the service, kept like the registry; an empty value removes one. The values are plain text in the configuration, so no passwords or tokens. `ATLAS_VAULT_KEY_FILE` and `ATLAS_ADMIN_*` are the script's own and refused here. |
 
 At the end the script prints the version now running. `Get-Content
 D:\atlas\service\atlas-service.xml` shows the configuration it wrote.

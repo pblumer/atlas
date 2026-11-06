@@ -299,6 +299,12 @@ ATLAS_BLUEPRINT_REGISTRY_URL=https://pblumer.github.io/atlas/hub/index.json
 ATLAS_BLUEPRINT_REGISTRY_KEY=<publicKey from releases.json>
 ```
 
+On Windows, with the service installed by
+[`deploy/windows/install-atlas-service.ps1`](../../deploy/windows/install-atlas-service.ps1),
+pass the two values as `-BlueprintRegistryUrl` and `-BlueprintRegistryKey`. The script
+keeps them on every later run ([`docs/install.md`](../../docs/install.md), "Windows
+Server").
+
 Take the key from this repository (out of band), never from the Pages site, because the
 registry host is not its own trust root. During a rotation the variable holds two keys
 (see above). The installation must run a build that knows

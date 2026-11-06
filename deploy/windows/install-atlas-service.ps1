@@ -17,7 +17,8 @@
       4.  WinSW bereitstellen und Pruefsumme kontrollieren
       5.  Testlauf im Vordergrund mit einem Wegwerf-Datenverzeichnis
       6.  Script-Interpreter (pwsh, python3, node) im Maschinen-PATH pruefen
-      7.  Vault-Schluessel und Bootstrap-Administrator vorbereiten
+      7.  Vault-Schluessel, Bootstrap-Administrator und Umgebungsvariablen
+          (atlas hub, -ExtraEnv) vorbereiten
       8.  WinSW-Konfiguration schreiben, Dienst installieren, auf das virtuelle
           Konto NT SERVICE\<Dienstname> umstellen
       9.  Zugriffsrechte (ACL) setzen
@@ -29,13 +30,20 @@
     Dienst stoppen, Datenverzeichnis sichern, atlas.exe ersetzen (falls eine
     andere Datei gefunden wurde), Konfiguration neu schreiben, Dienst starten.
 
-    Die Konfiguration wird dabei allein aus den Parametern dieses Laufs
-    geschrieben, nicht aus der bestehenden gelesen. Beim Update daher alle
-    Startparameter der Installation wiederholen (-Addr, -TlsCert, -TlsKey,
-    -ExternalUrl, -DataDir, -ExtraArgs, ...); ein weggelassener Parameter
-    faellt auf seinen Standard zurueck. Die bisherigen stehen in
-    <InstallRoot>\service\<ServiceName>-service.xml unter <arguments>.
+    Die Argumente von "atlas serve" werden dabei allein aus den Parametern
+    dieses Laufs geschrieben, nicht aus der bestehenden Konfiguration gelesen.
+    Beim Update daher alle Startparameter der Installation wiederholen (-Addr,
+    -TlsCert, -TlsKey, -ExternalUrl, -DataDir, -ExtraArgs, ...); ein
+    weggelassener Parameter faellt auf seinen Standard zurueck. Die bisherigen
+    stehen in <InstallRoot>\service\<ServiceName>-service.xml unter <arguments>.
     Ausfuehrlich: docs/install.md, "Upgrade a service the script installed".
+
+    Umgebungsvariablen sind davon ausgenommen: Die <env>-Eintraege der
+    bestehenden Konfiguration bleiben erhalten, auch von Hand eingetragene,
+    solange kein Parameter sie aendert. Ausgenommen sind die Variablen, die das
+    Skript selbst verwaltet (ATLAS_VAULT_KEY_FILE, ATLAS_ADMIN_USERNAME,
+    ATLAS_ADMIN_PASSWORD). Die atlas-hub-Registry (-BlueprintRegistryUrl,
+    -BlueprintRegistryKey) muss daher nur einmal angegeben werden.
 
     Das Skript ist fuer Windows PowerShell 5.1 geschrieben und laeuft auch unter
     PowerShell 7.
@@ -108,6 +116,29 @@
 .PARAMETER ExtraArgs
     Zusaetzliche Argumente fuer "atlas serve", z.B. @('--checkpoint-keep','5')
 
+.PARAMETER BlueprintRegistryUrl
+    Adresse des signierten Index einer atlas-hub-Registry (HTTPS), z.B.
+    https://pblumer.github.io/atlas/hub/index.json. Wird als
+    ATLAS_BLUEPRINT_REGISTRY_URL an den Dienst uebergeben. Nur zusammen mit
+    -BlueprintRegistryKey, ausser die Konfiguration enthaelt den Schluessel bereits.
+
+.PARAMETER BlueprintRegistryKey
+    Oeffentlicher Ed25519-Schluessel der Registry (base64, 32 Byte), bei einer
+    Schluesselrotation zwei durch ein Komma getrennt. Wird als
+    ATLAS_BLUEPRINT_REGISTRY_KEY uebergeben. Fuer den atlas hub dieses Repositorys
+    ist es der Wert "publicKey" in examples/hub/releases.json. Den Schluessel nicht
+    von der Seite uebernehmen, die den Index ausliefert.
+
+.PARAMETER RemoveBlueprintRegistry
+    Entfernt ATLAS_BLUEPRINT_REGISTRY_URL und ATLAS_BLUEPRINT_REGISTRY_KEY aus der
+    Konfiguration. Die Console bietet den atlas hub danach nicht mehr an.
+
+.PARAMETER ExtraEnv
+    Weitere Umgebungsvariablen fuer den Dienst als Hashtable, z.B.
+    @{ ATLAS_SYSTEM_PROXY = 'off' }. Ein leerer Wert entfernt die Variable.
+    Die Werte stehen im Klartext in der WinSW-Konfiguration: keine Passwoerter
+    oder Tokens hier ablegen, sondern im Vault von Atlas.
+
 .PARAMETER SkipSmokeTest
     Testlauf im Vordergrund ueberspringen.
 
@@ -143,6 +174,12 @@
         -ExternalUrl 'https://atlas.example.ch:8443'
 
 .EXAMPLE
+    # atlas hub einbinden (Neuinstallation oder Update); der Schluessel ist
+    # "publicKey" aus examples/hub/releases.json
+    .\install-atlas-service.ps1 -BlueprintRegistryUrl 'https://pblumer.github.io/atlas/hub/index.json' `
+        -BlueprintRegistryKey '<publicKey>'
+
+.EXAMPLE
     .\install-atlas-service.ps1 -Uninstall
 #>
 # Diese Datei ist bewusst reines ASCII (Umlaute als ae/oe/ue): Windows PowerShell
@@ -174,6 +211,10 @@ param(
     [switch]$DefenderExclusion,
     [switch]$KeepAllInterpreters,
     [string[]]$ExtraArgs = @(),
+    [string]$BlueprintRegistryUrl,
+    [string]$BlueprintRegistryKey,
+    [switch]$RemoveBlueprintRegistry,
+    [hashtable]$ExtraEnv = @{},
     [int]$ReadyTimeoutSec = 300,
     [switch]$SkipSmokeTest,
     [switch]$SkipBackup,
@@ -188,6 +229,12 @@ $ProgressPreference = 'SilentlyContinue'   # beschleunigt Invoke-WebRequest unte
 # ("Administratoren") funktioniert.
 $SidAdmins = '*S-1-5-32-544'
 $SidSystem = '*S-1-5-18'
+
+# Umgebungsvariablen, die das Skript bei jedem Lauf selbst setzt oder entfernt.
+# Alle anderen <env>-Eintraege der bestehenden Konfiguration bleiben erhalten.
+$ManagedEnvNames = @('ATLAS_VAULT_KEY_FILE', 'ATLAS_ADMIN_USERNAME', 'ATLAS_ADMIN_PASSWORD')
+$RegistryUrlName = 'ATLAS_BLUEPRINT_REGISTRY_URL'
+$RegistryKeyName = 'ATLAS_BLUEPRINT_REGISTRY_KEY'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -424,7 +471,7 @@ function New-ServiceXml([string[]]$AtlasArgs, $EnvVars) {
     $argLine = ($AtlasArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
     $lines = New-Object Collections.Generic.List[string]
     $lines.Add('<?xml version="1.0" encoding="utf-8"?>')
-    $lines.Add('<!-- Erzeugt von install-atlas-service.ps1. Aenderungen werden beim naechsten Lauf ueberschrieben. -->')
+    $lines.Add('<!-- Erzeugt von install-atlas-service.ps1. Aenderungen werden beim naechsten Lauf ueberschrieben, ausser zusaetzlichen <env>-Eintraegen. -->')
     $lines.Add('<service>')
     $lines.Add("  <id>$(& $esc $ServiceName)</id>")
     $lines.Add('  <name>Atlas BPMN workflow engine</name>')
@@ -449,6 +496,65 @@ function New-ServiceXml([string[]]$AtlasArgs, $EnvVars) {
     }
     $lines.Add('</service>')
     return ($lines -join "`r`n") + "`r`n"
+}
+
+function Read-ServiceXmlEnv([string]$Path) {
+    # Liest die <env>-Eintraege einer bestehenden WinSW-Konfiguration.
+    $result = [ordered]@{}
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $result }
+    try {
+        $doc = New-Object Xml.XmlDocument
+        $doc.Load($Path)
+    } catch {
+        throw "Die bestehende Konfiguration $Path ist kein gueltiges XML: $($_.Exception.Message) Bitte korrigieren oder loeschen; das Skript schreibt sie neu."
+    }
+    foreach ($node in $doc.SelectNodes('/service/env')) {
+        $name = $node.GetAttribute('name')
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $result[$name] = $node.GetAttribute('value')
+    }
+    return $result
+}
+
+function Test-EnvName([string]$Name) {
+    return $Name -match '^[A-Za-z_][A-Za-z0-9_]*$'
+}
+
+function Assert-RegistryUrl([string]$Value) {
+    # Die wichtigsten Regeln von parsePublicIndexURL (api/blueprintregistry/client.go):
+    # HTTPS auf Port 443, DNS-Name statt IP-Adresse, keine Benutzerangabe, Query,
+    # Fragment oder Escapes, Pfad endet auf /index.json. Was hier nicht geprueft
+    # wird, faellt spaetestens im Testlauf auf.
+    $uri = $null
+    $hostType = [UriHostNameType]::Unknown
+    if ([Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri)) { $hostType = $uri.HostNameType }
+    if ($null -eq $uri -or $uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $hostType -ne [UriHostNameType]::Dns -or
+        $uri.UserInfo -ne '' -or $Value.Contains('?') -or $Value.Contains('#') -or $Value.Contains('%') -or
+        -not $uri.AbsolutePath.EndsWith('/index.json')) {
+        throw "$RegistryUrlName '$Value' ist ungueltig: erwartet wird eine HTTPS-Adresse auf Port 443 mit DNS-Namen, ohne Benutzerangabe, Query und Fragment, die auf /index.json endet, z.B. https://pblumer.github.io/atlas/hub/index.json"
+    }
+}
+
+function Assert-RegistryKey([string]$Value) {
+    # Ein oder zwei base64-kodierte Ed25519-Schluessel (32 Byte), kein Schluessel
+    # doppelt (api/blueprints.go, parsePinnedRegistryKeys).
+    $parts = @($Value.Split(','))
+    if ($parts.Count -gt 2) {
+        throw "$RegistryKeyName enthaelt $($parts.Count) Schluessel; erlaubt sind einer oder, waehrend einer Schluesselrotation, zwei."
+    }
+    $seen = @()
+    foreach ($part in $parts) {
+        $p = $part.Trim()
+        $bytes = $null
+        try { $bytes = [Convert]::FromBase64String($p) } catch { }
+        # Der Vergleich mit der Rueckkodierung verlangt die kanonische Form, wie
+        # Atlas sie mit base64.StdEncoding.Strict() prueft.
+        if ($null -eq $bytes -or $bytes.Length -ne 32 -or [Convert]::ToBase64String($bytes) -ne $p) {
+            throw "$RegistryKeyName '$p' ist kein base64-kodierter Ed25519-Schluessel (32 Byte, 44 Zeichen). Fuer den atlas hub dieses Repositorys: Wert ""publicKey"" in examples/hub/releases.json."
+        }
+        if ($seen -contains $p) { throw "$RegistryKeyName enthaelt denselben Schluessel zweimal." }
+        $seen += $p
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -556,6 +662,57 @@ if (-not $listen.Loopback -and -not $UseTls -and -not $AllowPlaintext) {
     throw "-Addr '$Addr' ist von aussen erreichbar, aber ohne TLS. Entweder -TlsCert/-TlsKey angeben, an 127.0.0.1 binden (Reverse-Proxy) oder bewusst -AllowPlaintext setzen."
 }
 $ProbeUrl = "http://$($listen.ProbeHost):$($listen.Port)/readyz"
+
+# Umgebungsvariablen: bestehende Eintraege uebernehmen, dann die Parameter anwenden.
+$customEnv = [ordered]@{}
+$previousEnv = Read-ServiceXmlEnv $WrapperXml
+foreach ($k in $previousEnv.Keys) {
+    if ($ManagedEnvNames -notcontains $k) { $customEnv[$k] = $previousEnv[$k] }
+}
+if ($customEnv.Count -gt 0) {
+    Write-Info "Aus der bestehenden Konfiguration uebernommen: $(@($customEnv.Keys) -join ', ')"
+}
+
+$registryGiven = (-not [string]::IsNullOrWhiteSpace($BlueprintRegistryUrl)) -or (-not [string]::IsNullOrWhiteSpace($BlueprintRegistryKey))
+if ($RemoveBlueprintRegistry -and $registryGiven) {
+    throw '-RemoveBlueprintRegistry kann nicht zusammen mit -BlueprintRegistryUrl oder -BlueprintRegistryKey angegeben werden.'
+}
+if ($RemoveBlueprintRegistry) {
+    $customEnv.Remove($RegistryUrlName)
+    $customEnv.Remove($RegistryKeyName)
+}
+if (-not [string]::IsNullOrWhiteSpace($BlueprintRegistryUrl)) { $customEnv[$RegistryUrlName] = $BlueprintRegistryUrl.Trim() }
+if (-not [string]::IsNullOrWhiteSpace($BlueprintRegistryKey)) { $customEnv[$RegistryKeyName] = $BlueprintRegistryKey.Trim() }
+
+foreach ($k in @($ExtraEnv.Keys)) {
+    $name = [string]$k
+    if (-not (Test-EnvName $name)) { throw "-ExtraEnv: '$name' ist kein gueltiger Variablenname (Buchstaben, Ziffern, _)." }
+    if ($ManagedEnvNames -contains $name) { throw "-ExtraEnv: $name wird vom Skript selbst verwaltet und kann hier nicht gesetzt werden." }
+    if ($name -eq $RegistryUrlName -or $name -eq $RegistryKeyName) {
+        throw "-ExtraEnv: fuer $name bitte -BlueprintRegistryUrl, -BlueprintRegistryKey oder -RemoveBlueprintRegistry verwenden."
+    }
+    $value = [string]$ExtraEnv[$k]
+    if ([string]::IsNullOrEmpty($value)) { $customEnv.Remove($name) } else { $customEnv[$name] = $value }
+}
+
+# atlas hub: Atlas verweigert den Start, wenn nur eine der beiden Variablen gesetzt
+# oder eine ungueltig ist. Hier pruefen, bevor der laufende Dienst gestoppt wird.
+$registryUrl = $null
+$registryKey = $null
+if ($customEnv.Contains($RegistryUrlName)) { $registryUrl = [string]$customEnv[$RegistryUrlName] }
+if ($customEnv.Contains($RegistryKeyName)) { $registryKey = [string]$customEnv[$RegistryKeyName] }
+$UseRegistry = -not [string]::IsNullOrWhiteSpace($registryUrl)
+if ($UseRegistry -xor (-not [string]::IsNullOrWhiteSpace($registryKey))) {
+    throw "$RegistryUrlName und $RegistryKeyName muessen gemeinsam gesetzt sein (-BlueprintRegistryUrl und -BlueprintRegistryKey); Atlas startet sonst nicht. Zum Entfernen: -RemoveBlueprintRegistry."
+}
+if ($UseRegistry) {
+    Assert-RegistryUrl $registryUrl
+    Assert-RegistryKey $registryKey
+    Write-Info "atlas hub: $registryUrl"
+    if (@($registryKey.Split(',')).Count -gt 1) {
+        Write-Warning "$RegistryKeyName enthaelt zwei Schluessel (Schluesselrotation). Den alten entfernen, sobald die Registry mit dem neuen signiert."
+    }
+}
 
 $existing = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
 $UpdateMode = $null -ne $existing
@@ -708,8 +865,21 @@ if (-not $SkipSmokeTest) {
     $testOut = "$testDir.out.log"
     $testErr = "$testDir.err.log"
     $argList = @('serve', '--addr', "127.0.0.1:$testPort", '--data-dir', "`"$testDir`"") + $interpreterArgs
-    $proc = Start-Process -FilePath $testExe -ArgumentList $argList -PassThru -WindowStyle Hidden `
-        -RedirectStandardOutput $testOut -RedirectStandardError $testErr
+    # Der Testlauf erhaelt dieselben Umgebungsvariablen wie der Dienst, damit eine
+    # Einstellung, an der Atlas scheitert, hier auffaellt und nicht erst nach dem
+    # Stoppen des laufenden Dienstes. Start-Process uebernimmt die Umgebung dieses
+    # Prozesses; sie wird danach wiederhergestellt.
+    $savedEnv = @{}
+    foreach ($k in $customEnv.Keys) {
+        $savedEnv[$k] = [Environment]::GetEnvironmentVariable($k, 'Process')
+        [Environment]::SetEnvironmentVariable($k, [string]$customEnv[$k], 'Process')
+    }
+    try {
+        $proc = Start-Process -FilePath $testExe -ArgumentList $argList -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput $testOut -RedirectStandardError $testErr
+    } finally {
+        foreach ($k in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($k, $savedEnv[$k], 'Process') }
+    }
     $ok = $false
     try {
         $deadline = (Get-Date).AddSeconds(60)
@@ -794,6 +964,7 @@ if ($UseTls) {
 Write-Step 'Vault-Schluessel und Administrator vorbereiten'
 
 $envVars = [ordered]@{}
+foreach ($k in $customEnv.Keys) { $envVars[$k] = $customEnv[$k] }
 
 if (Test-Path -LiteralPath $ConfigKey) {
     $VaultKeyMode = 'File'
@@ -855,6 +1026,7 @@ Write-Step 'WinSW-Konfiguration schreiben'
 Write-Utf8NoBom -Path $WrapperXml -Content (New-ServiceXml -AtlasArgs $atlasArgs -EnvVars $adminEnv)
 Write-Info $WrapperXml
 Write-Info ("atlas.exe " + ($atlasArgs -join ' '))
+if ($envVars.Count -gt 0) { Write-Info "Umgebungsvariablen: $(@($envVars.Keys) -join ', ')" }
 
 if (-not $UpdateMode) {
     Write-Step "Dienst '$ServiceName' installieren"
@@ -956,6 +1128,11 @@ Write-Host "  URL:           $url"
 Write-Host "  Daten:         $DataDir"
 Write-Host "  Logs:          $LogsDir"
 Write-Host "  Konfiguration: $WrapperXml"
+if ($UseRegistry) {
+    Write-Host "  atlas hub:     $registryUrl"
+} else {
+    Write-Host '  atlas hub:     nicht konfiguriert (-BlueprintRegistryUrl/-BlueprintRegistryKey)'
+}
 if ($seedAdmin) {
     Write-Host "  Administrator: $AdminUsername"
     if ($generatedPassword) {
