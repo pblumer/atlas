@@ -58,3 +58,44 @@ test("a small instance keeps its replay and opens the explorer from the grouped 
   await expect(page.locator("#rp-tabs")).toBeVisible();
   await expect(page.locator("#tab-details")).toBeVisible();
 });
+
+test("the token legend names a multi-instance activity once, not once per iteration", async ({ page }) => {
+  // Frame 5 holds seven tokens on the multi-instance task: its body and the iterations
+  // running under it. Two hundred chips of "Token … — same task" push the diagram off
+  // the screen and say nothing the history row does not already say.
+  await page.locator("#scrub").evaluate((el) => {
+    el.value = "5";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const chips = page.locator("#token-legend .token-chip");
+  await expect(chips).toHaveCount(1);
+  await expect(chips.first()).toHaveClass(/\bmi\b/);
+  await expect(chips.first()).toContainText("rechne was");
+  await expect(chips.first()).toContainText("7");
+
+  // One token on the shape is still that token, named as before.
+  await page.locator("#scrub").evaluate((el) => {
+    el.value = "2";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(chips).toHaveCount(1);
+  await expect(chips.first()).not.toHaveClass(/\bmi\b/);
+  await expect(chips.first()).toContainText("Token 1");
+});
+
+test("folding the legend keeps other elements' tokens and their order", async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { foldLegendTokens } = await import("/replay-history.js");
+    const tokens = [
+      { elementId: "A", tokenId: "1" },
+      { elementId: "MI", tokenId: "2" },
+      { elementId: "B", tokenId: "3" },
+      { elementId: "MI", tokenId: "4" },
+      { elementId: "MI2", tokenId: "5" },
+    ];
+    return foldLegendTokens(tokens, (id) => id.startsWith("MI")).map((e) =>
+      e.token ? e.token.tokenId : `${e.elementId}x${e.tokens.length}`);
+  });
+  // MI2 holds one token only, so it stays an ordinary chip.
+  expect(result).toEqual(["1", "MIx2", "3", "5"]);
+});

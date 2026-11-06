@@ -61,6 +61,12 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **The replay names a multi-instance activity once below the diagram.** The token row under
+  an instance replay listed one chip per token, so a multi-instance task with 200 iterations
+  filled the screen with 200 identical "Token … — Datensatz prüfen" lines and pushed the diagram
+  out of view. A multi-instance activity holding more than one token is now one chip with its
+  token count and its parallel or sequential marker; its row in the instance history still counts
+  and opens the iterations. Joins, races and standard loops keep one chip per token.
 - **An opened entry of "My services" is laid out in sections.** It starts with the product's name,
   its pie and how it stands. Then come its parts, each with where it stands now (held, on its way,
   no longer held, not held, not chosen) and the basket control for what can be added; its possible
