@@ -73,6 +73,13 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A wide decision table fits its hover card.** The card that shows which rule fired —
+  in Operations → Decisions, the live view and the instance replay — held every cell to one
+  line inside a 480 px card, so a table with a long list of literals or a long input
+  expression ran out past the card's edge over the page beneath it, where nothing could
+  scroll to it. The card now grows to 760 px, never wider than the window, its cells wrap, and it is
+  kept inside the window vertically too: a table too tall for either side of its row is no
+  longer placed off the bottom of the screen.
 - **Why the atlas hub registry could not be read is in the server log.** The Console still
   says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
   the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,

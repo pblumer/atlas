@@ -12,7 +12,7 @@ import {
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
 import { foldCards, pageOf } from "./fold.js";
-import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderTraceTable, placeTracePop, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
 import { outcomeSummary } from "./importchoices.js";
@@ -9151,10 +9151,7 @@ async function viewDecisionDetail(id) {
     pop.innerHTML = `<div class="pop-title">${esc(id)}</div>` +
       tables.map((tt, i) => miniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     pop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - pop.offsetHeight - 10;
-    pop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
-    pop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(pop, row.getBoundingClientRect());
   };
   const hidePop = () => { pop.hidden = true; };
   // Opening the graph is the deliberate half of the same question the hover answers

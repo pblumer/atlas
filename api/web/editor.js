@@ -49,7 +49,7 @@ import { attachShownVersion } from "./shown-version.js";
 // The document behind the diagram as text, corrected in place and applied back onto the
 // canvas — the bar menu's "XML source", shared with the decision editor.
 import { openXmlSource, closeXmlSource } from "./xml-source.js";
-import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderTraceTable, placeTracePop, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
@@ -14374,10 +14374,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
       tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     decPop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - decPop.offsetHeight - 10;
-    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
-    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(decPop, row.getBoundingClientRect());
   };
   const hideDecPop = () => { decPop.hidden = true; };
   varPanel.addEventListener("pointerover", (e) => {
@@ -17665,10 +17662,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
       tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     decPop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - decPop.offsetHeight - 10;
-    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
-    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(decPop, row.getBoundingClientRect());
   };
   const hideDecPop = () => { decPop.hidden = true; };
   decEl.addEventListener("pointerover", (e) => {
