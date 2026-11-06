@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Microsoft 365: Sichtbarkeit nachführen (privat oder öffentlich) für ein Team oder eine SharePoint-Teamwebsite, die der Katalog angelegt hat.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_sichtbarkeit_nachfuehren" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <itemDefinition id="item_M365Gruppe" structureRef="M365Gruppe"/>
+  <dataStore id="ds_entra_id_gruppen" name="Entra ID: Gruppen"/>
+  <process id="proc_m365_sichtbarkeit_nachfuehren" name="Microsoft 365: Sichtbarkeit nachführen" isExecutable="true">
+    <documentation>Stellt die Sichtbarkeit (Private oder Public) der Microsoft-365-Gruppe eines Teams oder einer SharePoint-Teamwebsite um, die der Katalog angelegt hat. Von Hand gestartet (Console, Prozess starten) mit dem Startformular m365-sichtbarkeit-nachfuehren: alias, neueSichtbarkeit, begruendung.
+
+Wozu es ihn neben den Aktionen «Sichtbarkeit ändern» gibt: Eine Position friert die Aktionen ihres Produkts bei der Bestellung ein (ADR-0429, ADR-0312). Ein Team oder eine Site, die bestellt wurden, bevor das Produkt die Aktion sichtbarkeit kannte, bietet sie im Bestand deshalb nicht an, und das Umbinden (ADR-0427) hilft nicht, weil es nur Positionen ohne Lebenszyklus-Prozess bewegt. Für diese Positionen führt der Betrieb die Sichtbarkeit hier nach. Die Position im Bestand bleibt unverändert; die Sichtbarkeit ist kein Recht, das der Bestand führt.
+
+Gefunden wird die Gruppe über ihren Alias (mailNickname). Fehlt dem eingegebenen Alias das Präfix NAME_PREFIX, wird es ergänzt, damit ein geteilter Tenant die Gruppen anderer Installationen nicht trifft. Umgestellt wird nur eine Gruppe, deren Beschreibung die Herkunft «Katalog-Position» trägt, wie Team und Site sie bei der Bereitstellung schreiben; eine Gruppe, die jemand von Hand angelegt hat, bleibt unberührt. Er lässt sich beliebig oft starten: Ein PATCH mit der Sichtbarkeit, die die Gruppe schon hat, ändert nichts.
+
+Worker: ucc_entra. Konstante NAME_PREFIX. Personendaten: keine; das Startformular verlangt eine Begründung ohne Personendaten.</documentation>
+    <extensionElements>
+      <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Von Hand gestartet"><documentation>Startformular m365-sichtbarkeit-nachfuehren: alias, neueSichtbarkeit, begruendung.</documentation><extensionElements><zeebe:formDefinition formId="m365-sichtbarkeit-nachfuehren"/></extensionElements><outgoing>f_s__sc_alias</outgoing></startEvent>
+    <scriptTask id="sc_alias" name="Alias bilden"><documentation>Kleinschreibung und nur die Zeichen, die ein mailNickname tragen kann (a-z, 0-9, Punkt, Unterstrich, Bindestrich): Alles andere fällt weg, auch Leerzeichen und ein Hochkomma, das den Filter der Suche aufbrechen würde. Ist NAME_PREFIX gesetzt und beginnt der Alias nicht damit, steht es davor.</documentation><extensionElements><zeebe:script expression='=(if application.NAME_PREFIX = null or application.NAME_PREFIX = "" or starts with(replace(lower case(alias), "[^a-z0-9._-]", ""), lower case(application.NAME_PREFIX)) then "" else application.NAME_PREFIX) + replace(lower case(alias), "[^a-z0-9._-]", "")' resultVariable="gruppenAlias"/></extensionElements><incoming>f_s__sc_alias</incoming><outgoing>f_sc_alias__st_suchen</outgoing></scriptTask>
+    <serviceTask id="st_suchen" name="Gruppe suchen"><documentation>list-groups mit dem Filter mailNickname eq '&lt;gruppenAlias&gt;'. description trägt die Herkunft, visibility die heutige Sichtbarkeit.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="list-groups" filter="=&quot;mailNickname eq '&quot; + gruppenAlias + &quot;'&quot;" select="id,displayName,mailNickname,visibility,description" maxUsers="5" resultVariable="treffer"/></extensionElements><incoming>f_sc_alias__st_suchen</incoming><outgoing>f_st_suchen__gw_gef</outgoing></serviceTask>
+    <exclusiveGateway id="gw_gef" name="Gruppe des Katalogs?" default="f_gw_gef__e_nicht"><documentation>Weiter nur mit genau einem Treffer, dessen Beschreibung «Katalog-Position» enthält, und einer Sichtbarkeit, die Graph kennt (Private oder Public). Der Default-Fluss endet ohne Änderung (fail-closed); in der Instanz zeigt treffer, was die Suche fand.</documentation><incoming>f_st_suchen__gw_gef</incoming><outgoing>f_gw_gef__st_sicht</outgoing><outgoing>f_gw_gef__e_nicht</outgoing></exclusiveGateway>
+    <serviceTask id="st_sicht" name="Sichtbarkeit setzen"><documentation>update-group: PATCH /groups/{id} mit visibility. Teams und SharePoint übernehmen die Sichtbarkeit der Gruppe.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="update-group" groupId="=treffer[1].id" attributes='{"visibility": "=neueSichtbarkeit"}'/></extensionElements><incoming>f_gw_gef__st_sicht</incoming><outgoing>f_st_sicht__e</outgoing><dataOutputAssociation id="doa_st_sicht"><targetRef>dor_st_sicht</targetRef></dataOutputAssociation></serviceTask>
+    <endEvent id="e" name="Sichtbarkeit nachgeführt"><incoming>f_st_sicht__e</incoming></endEvent>
+    <endEvent id="e_nicht" name="Nicht geändert"><documentation>Keine Gruppe des Katalogs unter diesem Alias, mehr als eine, oder eine unbekannte Sichtbarkeit.</documentation><incoming>f_gw_gef__e_nicht</incoming></endEvent>
+    <sequenceFlow id="f_s__sc_alias" sourceRef="s" targetRef="sc_alias"/>
+    <sequenceFlow id="f_sc_alias__st_suchen" sourceRef="sc_alias" targetRef="st_suchen"/>
+    <sequenceFlow id="f_st_suchen__gw_gef" sourceRef="st_suchen" targetRef="gw_gef"/>
+    <sequenceFlow id="f_gw_gef__st_sicht" sourceRef="gw_gef" targetRef="st_sicht" name="ja"><conditionExpression>=count(treffer) = 1 and treffer[1].description != null and contains(treffer[1].description, "Katalog-Position") and (neueSichtbarkeit = "Private" or neueSichtbarkeit = "Public")</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_gef__e_nicht" sourceRef="gw_gef" targetRef="e_nicht" name="nein"/>
+    <sequenceFlow id="f_st_sicht__e" sourceRef="st_sicht" targetRef="e"/>
+    <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
+    <dataObject id="do_m365_gruppe" name="M365-Gruppe" itemSubjectRef="item_M365Gruppe"/>
+    <dataObjectReference id="dor_st_sicht" name="M365-Gruppe" dataObjectRef="do_m365_gruppe"><dataState name="Aktiv"/></dataObjectReference>
+    <dataStoreReference id="dsr_entra_id_gruppen" name="Entra ID: Gruppen" dataStoreRef="ds_entra_id_gruppen"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_sichtbarkeit_nachfuehren_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_sichtbarkeit_nachfuehren_plane" bpmnElement="proc_m365_sichtbarkeit_nachfuehren">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_alias_di" bpmnElement="sc_alias"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_suchen_di" bpmnElement="st_suchen"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_gef_di" bpmnElement="gw_gef" isMarkerVisible="true"><omgdc:Bounds x="605" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="74" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_sicht_di" bpmnElement="st_sicht"><omgdc:Bounds x="730" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="912" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nicht_di" bpmnElement="e_nicht"><omgdc:Bounds x="762" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__sc_alias_di" bpmnElement="f_s__sc_alias"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_alias__st_suchen_di" bpmnElement="f_sc_alias__st_suchen"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_suchen__gw_gef_di" bpmnElement="f_st_suchen__gw_gef"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="605" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__st_sicht_di" bpmnElement="f_gw_gef__st_sicht"><omgdi:waypoint x="655" y="130"/><omgdi:waypoint x="730" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__e_nicht_di" bpmnElement="f_gw_gef__e_nicht"><omgdi:waypoint x="630" y="155"/><omgdi:waypoint x="630" y="270"/><omgdi:waypoint x="762" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="205" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_sicht__e_di" bpmnElement="f_st_sicht__e"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="912" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_sicht_di" bpmnElement="dor_st_sicht"><omgdc:Bounds x="762" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_sicht_di" bpmnElement="doa_st_sicht"><omgdi:waypoint x="780" y="90"/><omgdi:waypoint x="780" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="162" y="400" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="455" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

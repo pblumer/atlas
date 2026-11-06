@@ -462,6 +462,20 @@
             "en": "Create a channel"
           },
           "form": "m365-team-kanal"
+        },
+        {
+          "key": "sichtbarkeit",
+          "message": "m365.team.sichtbarkeit",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Sichtbarkeit ändern",
+            "en": "Change the visibility"
+          },
+          "form": "m365-sichtbarkeit"
         }
       ],
       "keywords": [
@@ -487,8 +501,8 @@
         "en": "SharePoint: team site"
       },
       "descriptions": {
-        "de": "Eine moderne SharePoint-Teamwebsite mit Microsoft-365-Gruppe unter einer selbst gewählten URL, mit zwei Besitzern. Danach: Gäste einladen, Besitzer ändern, Speicher erhöhen, löschen und innert 30 Tagen wiederherstellen.",
-        "en": "A modern SharePoint team site with a Microsoft 365 group at a URL of your choice, with two owners. Afterwards: invite guests, change owners, increase storage, delete and restore within 30 days."
+        "de": "Eine moderne SharePoint-Teamwebsite mit Microsoft-365-Gruppe unter einer selbst gewählten URL, mit zwei Besitzern. Danach: Gäste einladen, Besitzer ändern, Speicher erhöhen, die Sichtbarkeit ändern, löschen und innert 30 Tagen wiederherstellen.",
+        "en": "A modern SharePoint team site with a Microsoft 365 group at a URL of your choice, with two owners. Afterwards: invite guests, change owners, increase storage, change the visibility, delete and restore within 30 days."
       },
       "approval": {
         "kind": "proc_m365_genehmigung_vorgesetzter"
@@ -555,6 +569,20 @@
             "en": "Increase the storage quota"
           },
           "form": "m365-sharepoint-kontingent"
+        },
+        {
+          "key": "sichtbarkeit",
+          "message": "m365.site.sichtbarkeit",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Sichtbarkeit ändern",
+            "en": "Change the visibility"
+          },
+          "form": "m365-sichtbarkeit"
         },
         {
           "key": "loeschen",
