@@ -3,7 +3,9 @@
 // launches, verifies and supervises (ADR-0535, migration step 3).
 //
 // It serves one job type, com.example.echo, completing each job with the variables
-// it was given plus the name of the instance that echoed them. Build it, write its
+// it was given plus the name of the instance that echoed them. Its manifest's
+// configuration schema asks for a greeting and a secret token; a configured Worker's
+// greeting is echoed, its token only acknowledged. Build it, write its
 // manifest with the binary's digest, and install both:
 //
 //	go build -o echo ./examples/workertypes/echo
@@ -29,7 +31,12 @@ const JobType = "com.example.echo"
 
 func main() {
 	opts := workersdk.LaunchOptions(os.Getenv)
-	opts.Handlers = map[string]workersdk.Exec{JobType: workersdk.ExecFunc(echo(opts.ID))}
+	workers, err := workersdk.LaunchConfig(os.Getenv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "echo:", err)
+		os.Exit(1)
+	}
+	opts.Handlers = map[string]workersdk.Exec{JobType: workersdk.ExecFunc(echo(opts.ID, workers))}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := workersdk.New(opts).Run(ctx); err != nil && ctx.Err() == nil {
@@ -38,12 +45,21 @@ func main() {
 	}
 }
 
-// echo completes a job with its own variables and the echoing instance's id.
-func echo(id string) func(context.Context, workersdk.Job) (map[string]any, error) {
+// echo completes a job with its own variables and the echoing instance's id. With a
+// configured Worker it adds that Worker's greeting, and says whether it was handed its
+// token — never the token itself.
+func echo(id string, workers []workersdk.ConfiguredWorker) func(context.Context, workersdk.Job) (map[string]any, error) {
 	return func(_ context.Context, j workersdk.Job) (map[string]any, error) {
 		out := map[string]any{"echoedBy": id}
 		for k, v := range j.Variables {
 			out[k] = v
+		}
+		if len(workers) > 0 {
+			w := workers[0]
+			out["echoWorker"] = w.Name
+			out["salutation"] = w.Config["greeting"]
+			token, _ := w.Config["token"].(string)
+			out["authenticated"] = token != ""
 		}
 		return out, nil
 	}

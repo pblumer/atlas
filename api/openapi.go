@@ -2202,6 +2202,20 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/worker-types/installed/{id}/{version}", s.handleRemoveInstalledWorkerType, apiOp{
 			summary: "Stop and remove an installed Worker Type release (admin-only)", tag: "Workers", role: RoleAdmin,
 			resp: jsonBody("The removed release", tObject())}},
+		// Configured Workers of an installed Worker Type (ADR-0535 §4): settings checked
+		// against the manifest's JSON Schema, secrets only as vault entry names.
+		{"GET", "/api/v1/worker-types/installed/{id}/workers", s.handleListInstalledWorkers, apiOp{
+			summary: "List the configured Workers of an installed Worker Type; secrets appear only as the vault entries that hold them (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("Configured Workers", tObject())}},
+		{"PUT", "/api/v1/worker-types/installed/{id}/workers/{name}", s.handlePutInstalledWorker, apiOp{
+			summary: "Create or replace a configured Worker of an installed Worker Type: config is checked against every installed release's schema, each secret property names a vault entry under secrets, and the type's instances restart with it (admin-only)", tag: "Workers", role: RoleAdmin,
+			req: jsonBody("Settings and, per secret property, the vault entry holding it", schemaObj(map[string]any{
+				"config": tObject(), "secrets": tObject(),
+			})),
+			resp: jsonBody("The configured Worker", tObject())}},
+		{"DELETE", "/api/v1/worker-types/installed/{id}/workers/{name}", s.handleDeleteInstalledWorker, apiOp{
+			summary: "Remove a configured Worker of an installed Worker Type; its instances restart without it (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("The removed Worker", tObject())}},
 
 		// The legacy /connectors routes remain compatibility aliases during the ADR-0203
 		// migration. They bind to the same handlers and stores, so no second source

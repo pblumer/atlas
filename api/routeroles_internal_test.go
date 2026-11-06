@@ -113,6 +113,10 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/worker-types/installed",
 	"POST /api/v1/worker-types/installed",
 	"DELETE /api/v1/worker-types/installed/{id}/{version}",
+	// Configuring one hands it a credential from the vault.
+	"GET /api/v1/worker-types/installed/{id}/workers",
+	"PUT /api/v1/worker-types/installed/{id}/workers/{name}",
+	"DELETE /api/v1/worker-types/installed/{id}/workers/{name}",
 	"GET /api/v1/workers/{id}/jobs",
 	// And what a mock AD worker holds. Invented entries, but shaped like a staff
 	// list — no more public than the seed file they started from, which is admin-only

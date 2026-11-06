@@ -227,8 +227,11 @@ else of the server's. On top of that it sets:
 | `ATLAS_WORKER_ID` | The instance's id, `workertype:<id>@<version>` |
 | `ATLAS_TOKEN` | The bearer credential to authenticate with |
 | `ATLAS_WORKER_TYPE_ID`, `ATLAS_WORKER_TYPE_VERSION`, `ATLAS_WORKER_TYPE_DIGEST` | The release the supervisor verified, to report in the handshake |
+| `ATLAS_WORKER_CONFIG` | The configured Workers this instance serves, as `{"workers":[{"name":"…","config":{…}}]}`. Each configuration has its secrets resolved from the vault and has been checked against the manifest's `spec.configuration` schema. Absent when nothing is configured. |
 
-`workersdk.LaunchOptions(os.Getenv)` reads these. The instance stops when the server stops
+**Configuration.** A manifest declares its configuration contract inline as `spec.configuration`, a JSON Schema of `"type": "object"`. A top-level property marked `"writeOnly": true` is a secret. An administrator configures a Worker with `PUT /api/v1/worker-types/installed/{id}/workers/{name}`, giving `config` for the settings and `secrets` that map each secret property to the vault entry holding it. A secret value is never stored in the Worker and never shown by the API; only the launched instance receives it. When a Worker changes, the type's instances restart with the new configuration.
+
+`workersdk.LaunchOptions(os.Getenv)` reads these, and `workersdk.LaunchConfig(os.Getenv)` reads the configured Workers. The instance stops when the server stops
 or when the release is removed. The smallest example is
 [`examples/workertypes/echo`](../../../../examples/workertypes/echo/main.go).
 

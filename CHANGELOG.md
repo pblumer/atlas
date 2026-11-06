@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **An installed Worker Type is configured from its own schema.** A Worker Type's manifest carries
+  its configuration as a JSON Schema whose `writeOnly` properties are secrets. An administrator
+  configures Workers of an installed type under `/api/v1/worker-types/installed/{id}/workers`: the
+  settings are checked against the schema, each secret is given only as the name of a vault entry,
+  and the API never shows its value. The launched instance receives every configured Worker with its
+  secrets resolved (`ATLAS_WORKER_CONFIG`, read by `workersdk.LaunchConfig`) and restarts when one
+  changes.
 - **Worker Types can be installed as verified artifacts.** An administrator uploads a Worker Type's
   manifest and its executable for the server's platform to `POST /api/v1/worker-types/installed`;
   the server checks the executable against the manifest's sha256, keeps it content-addressed in the

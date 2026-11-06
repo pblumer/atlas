@@ -74,6 +74,8 @@ func echoManifest(version string, bin []byte) []byte {
 "spec":{"atlasCompatibility":">=0.1.0","workerProtocol":"v1","runtime":{"mode":"external"},
 "jobTypes":["com.example.echo"],"operations":[{"id":"echo","jobType":"com.example.echo"}],
 "configurationSchema":"config.schema.json","modelerTemplate":"template.json",
+"configuration":{"type":"object","required":["greeting"],"additionalProperties":false,
+ "properties":{"greeting":{"type":"string","minLength":1},"token":{"type":"string","writeOnly":true}}},
 "artifacts":[{"platform":%q,"mediaType":%q,"digest":"sha256:%s"}]}}`,
 		version, install.Platform(), workertype.MediaTypeExecutable, hex.EncodeToString(sum[:])))
 }
@@ -343,5 +345,149 @@ func TestAnInstalledReleaseIsLaunchedWhenTheServerStarts(t *testing.T) {
 			t.Fatalf("supervisor = %+v, want %s running", srv.supervisor.list(), id)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// A configured Worker reaches its instance (ADR-0535 §4): its settings are checked
+// against the manifest's schema, its secret is named by a vault entry and resolved only
+// for the launched instance, and the instance restarts with it.
+func TestAConfiguredWorkerReachesItsInstance(t *testing.T) {
+	_, bin := buildEcho(t)
+	srv, ts := installServer(t, true)
+	if code, raw := installUpload(t, ts.URL, echoManifest("1.0.0", bin), bin); code != http.StatusCreated {
+		t.Fatalf("install: status=%d body=%s", code, raw)
+	}
+	if _, err := srv.vault.Set("echo-token", "s3cr3t-value"); err != nil {
+		t.Fatal(err)
+	}
+	put := func(name, body string) (int, string) {
+		code, raw := serveInternal(t, srv, http.MethodPut, "/api/v1/worker-types/installed/com.example.echo/workers/"+name, body, "application/json")
+		return code, string(raw)
+	}
+	for _, tc := range []struct{ name, body, want string }{
+		{"main", `{"config":{"greeting":"Grüezi","token":"inline"}}`, "is a secret"},
+		{"main", `{"config":{},"secrets":{}}`, "greeting"},
+		{"main", `{"config":{"greeting":"x"},"secrets":{"greeting":"echo-token"}}`, "not a secret"},
+		{"main", `{"config":{"greeting":"x"},"secrets":{"token":"no-such-entry"}}`, "does not exist"},
+		{"Bad_Name", `{"config":{"greeting":"x"}}`, "lower-case"},
+	} {
+		if code, raw := put(tc.name, tc.body); code != http.StatusBadRequest || !strings.Contains(raw, tc.want) {
+			t.Errorf("PUT %s %s: %d %s, want 400 naming %q", tc.name, tc.body, code, raw, tc.want)
+		}
+	}
+	if code, raw := put("main", `{"config":{"greeting":"Grüezi"},"secrets":{"token":"echo-token"}}`); code != http.StatusOK {
+		t.Fatalf("PUT main: %d %s", code, raw)
+	}
+	_, raw := serveInternal(t, srv, http.MethodGet, "/api/v1/worker-types/installed/com.example.echo/workers", "", "")
+	if !strings.Contains(string(raw), `"echo-token"`) || strings.Contains(string(raw), "s3cr3t-value") {
+		t.Errorf("list = %s, want the vault entry's name and never its value", raw)
+	}
+
+	if code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", echoBPMN, "application/xml"); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("deploy: %d %s", code, raw)
+	}
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances", `{"variables":{}}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("start: %d %s", code, raw)
+	}
+	var started struct {
+		Key uint64 `json:"instanceKey"`
+	}
+	_ = json.Unmarshal(raw, &started)
+	var vars map[string]any
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		_, raw := serveInternal(t, srv, http.MethodGet, "/api/v1/instances/"+strconv.FormatUint(started.Key, 10)+"/variables", "", "")
+		_ = json.Unmarshal(raw, &vars)
+		if vars["echoedBy"] != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the job was never completed; variables=%s", raw)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if vars["salutation"] != "Grüezi" || vars["authenticated"] != true || vars["echoWorker"] != "main" {
+		t.Errorf("variables = %v, want the configured greeting and the token acknowledged", vars)
+	}
+	for _, v := range vars {
+		if v == "s3cr3t-value" {
+			t.Error("the secret reached the process variables")
+		}
+	}
+	if code, _ := serveInternal(t, srv, http.MethodDelete, "/api/v1/worker-types/installed/com.example.echo/workers/main", "", ""); code != http.StatusOK {
+		t.Errorf("delete: %d", code)
+	}
+	if code, _ := serveInternal(t, srv, http.MethodDelete, "/api/v1/worker-types/installed/com.example.echo/workers/main", "", ""); code != http.StatusNotFound {
+		t.Errorf("delete again: %d, want 404", code)
+	}
+	if code, _ := put("other", `{"config":{"greeting":"x"}}`); code != http.StatusOK {
+		t.Errorf("a Worker without secrets: %d", code)
+	}
+	if code, raw := serveInternal(t, srv, http.MethodPut, "/api/v1/worker-types/installed/com.example.none/workers/x", `{"config":{}}`, "application/json"); code != http.StatusBadRequest || !strings.Contains(string(raw), "no installed") {
+		t.Errorf("a Worker of a type not installed: %d %s", code, raw)
+	}
+}
+
+// A Worker whose configuration no longer holds at spawn — its vault entry gone, or a
+// release that declares no configuration — is left out of what the instance receives
+// rather than handed over half resolved.
+func TestAConfiguredWorkerThatNoLongerResolvesIsLeftOut(t *testing.T) {
+	dir := t.TempDir()
+	srv, _ := newValidateServer(t, WithInstalledWorkerTypes(dir, "http://127.0.0.1:1", false))
+	bin := []byte("not run in this test")
+	inst, err := srv.installedTypes.Install(echoManifest("1.0.0", bin), bytes.NewReader(bin), install.Platform(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.vault.Set("echo-token", "v"); err != nil {
+		t.Fatal(err)
+	}
+	srv.do(func() {
+		err = srv.installedWorkers.Save(installedWorker{WorkerType: inst.ID, Name: "main",
+			Config: map[string]any{"greeting": "Hallo"}, Secrets: map[string]string{"token": "echo-token"}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := srv.installedWorkerConfigEnv(inst)
+	if len(env) != 1 || !strings.Contains(env[0], `"token":"v"`) || !strings.HasPrefix(env[0], "ATLAS_WORKER_CONFIG=") {
+		t.Fatalf("env = %v, want the Worker with its secret resolved", env)
+	}
+	if err := srv.vault.Delete("echo-token"); err != nil {
+		t.Fatal(err)
+	}
+	if env := srv.installedWorkerConfigEnv(inst); env != nil {
+		t.Errorf("env with the vault entry gone = %v, want nothing handed over", env)
+	}
+	// A release whose manifest declares no configuration takes none.
+	bare := inst
+	bare.Manifest = json.RawMessage(strings.Replace(string(inst.Manifest), `"configuration":`, `"x":`, 1))
+	if env := srv.installedWorkerConfigEnv(bare); env != nil {
+		t.Errorf("env for a release that cannot be read = %v, want nothing", env)
+	}
+	if _, err := srv.resolvedConfig(installedWorker{}, nil, nil); err == nil {
+		t.Error("resolvedConfig without a schema = nil error")
+	}
+}
+
+// Without a store there are no configured Workers; a body that is not JSON is refused.
+func TestConfiguredWorkerRoutesWithoutAStoreAndWithBadInput(t *testing.T) {
+	plain, _ := newValidateServer(t)
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+		path := "/api/v1/worker-types/installed/a.b/workers"
+		if method != http.MethodGet {
+			path += "/main"
+		}
+		if code, _ := serveInternal(t, plain, method, path, `{}`, "application/json"); code != http.StatusNotFound {
+			t.Errorf("%s without a store: %d, want 404", method, code)
+		}
+	}
+	srv, _ := newValidateServer(t, WithInstalledWorkerTypes(t.TempDir(), "http://127.0.0.1:1", true))
+	if code, _ := serveInternal(t, srv, http.MethodPut, "/api/v1/worker-types/installed/a.b/workers/main", `{`, "application/json"); code != http.StatusBadRequest {
+		t.Errorf("a body that is not JSON: %d, want 400", code)
+	}
+	if code, raw := serveInternal(t, srv, http.MethodGet, "/api/v1/worker-types/installed/a.b/workers", "", ""); code != http.StatusOK || !strings.Contains(string(raw), `"workers":[]`) {
+		t.Errorf("list of a type with no Workers: %d %s", code, raw)
 	}
 }
