@@ -1801,6 +1801,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
 			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Trusted Blueprint index", tObject())}},
+		{"GET", "/api/v1/blueprints/connection", s.handleBlueprintConnection, apiOp{
+			summary: "Load the signed Blueprint index as GET /api/v1/blueprints does and stream each station of the way there as it is passed or where it stops — name resolved, TCP connection, TLS handshake, index read, signature verified — one JSON object per line: a start line, a line per station with its timing, facts and, on failure, a cause from a fixed vocabulary (the error text only for an administrator), and a done line carrying the verified index and how many releases this atlas may install; returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
+			resp: &bodySpec{mediaType: "application/x-ndjson", schema: tString(), desc: "One JSON object per line: start, a step per station, done"}}},
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/preview", s.handleBlueprintPreview, apiOp{
 			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, catalogue IDs, offered products and home-catalogue ownership, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Verified Blueprint preview", tObject())}},

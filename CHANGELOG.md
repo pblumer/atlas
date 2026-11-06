@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The atlas hub dialog shows the way to the registry, station by station.** Instead of
+  waiting on "Verifying trusted registry…", the dialog draws the real load as a route from this
+  server to the hub — name resolution, TCP connection on 443, TLS handshake, index, signature —
+  with a running timer on the station being waited on, each station's time and what it
+  established (addresses, TLS version and certificate issuer, size, key fingerprint). Where the
+  way ends it names the cause and what it usually means: a firewall that drops or rejects, a
+  name that resolves to an internal address, a TLS inspection, a redirect, a wrong pinned key.
+  Administrators also read the error text. Once connected the route folds into one line above
+  the listing, and a release this atlas is too old for says which version it needs and is not
+  previewed. New route: `GET /api/v1/blueprints/connection` (ADR-0499, amendment e).
 - **Every job carries an idempotency key, and every Worker Type operation says what a repeat
   does.** A leased job's `idempotencyKey` (`atlas:<node id>:<job key>`) is the same for every
   delivery of one task execution — a retry, a redelivery after a lease ran out, the retry an
@@ -63,6 +73,15 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **Why the atlas hub registry could not be read is in the server log.** The Console still
+  says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
+  the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
+  an HTTP status or a signature no pinned key made — so an operator can tell a firewall from
+  a wrong key.
+- **A package import names why the target refused the publish.** When the publish step of a
+  Console package or hub import was refused — for example because a process uses a Worker
+  operation the target's build does not know yet — the import reported only "HTTP 409". It now
+  shows the server's reason, the same message a manual publish shows.
 - **"My services" no longer says "being set up" about parts nobody is providing.** An entry whose
   missing parts were given back, withdrawn or never delivered, with nothing on its way, read
   "being set up: 4 of 7 ready". It now reads "incomplete: 4 of 7 held", and the status filter has

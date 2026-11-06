@@ -162,6 +162,22 @@ server at startup. At startup the server logs the pinned fingerprints as event
 `hub.registry_keys_pinned`: as INFO for one key, and as a WARN for two, so a rotation that
 was never finished does not go unnoticed.
 
+When the registry cannot be read, the Console says only "trusted Blueprint registry is
+unavailable or invalid". The server logs the cause as a WARN with event
+`hub.registry_unavailable`: a DNS failure, a refused or timed-out connection, a TLS error,
+an HTTP status or a signature no pinned key made. The client connects directly to the
+registry on port 443: it ignores `HTTPS_PROXY`, follows no redirect and refuses a
+registry whose name resolves to a private address. A network that reaches the internet only
+through a proxy therefore cannot read the registry.
+
+The Console's atlas hub dialog shows the same load station by station
+(`GET /api/v1/blueprints/connection`, ADR-0499 amendment e): the name resolved, the TCP
+connection, the TLS handshake with the certificate's issuer, the index, the signature with the
+fingerprint of the key that matched. Where the way ends it names the cause and what it
+usually means: a connection nobody answers is a firewall that drops, a refused one a firewall
+that rejects, an unknown certificate issuer a TLS inspection, a signature no pinned key made a
+wrong `ATLAS_BLUEPRINT_REGISTRY_KEY`. Administrators also see the error text.
+
 ### The fixed announcement channel
 
 A new key is only as trustworthy as the way it is announced. Anyone can send a mail or a
