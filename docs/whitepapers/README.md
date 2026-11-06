@@ -36,6 +36,14 @@ implementation status.
   See [roadmap](../../ROADMAP.md) and the relevant
   [architecture decisions](../adr/README.md) for current implementation status.
 
+## Authoring prompts
+
+Prompts that commission a whitepaper from a coding agent live in
+[`prompts/`](prompts/). They are briefs, not whitepapers:
+[`prompts/atlas-applikationen-whitepaper.md`](prompts/atlas-applikationen-whitepaper.md)
+commissions the process applications whitepaper in the `pblumer/atlas-cloud`
+design.
+
 Keep all future whitepapers here, under `docs/whitepapers/`. The former
 singular `docs/whitepaper/` directory has been consolidated into this
 library; update references instead of reintroducing that directory.
