@@ -57,6 +57,20 @@ which runs in every CI job, the docs-only one included:
 Edit the Markdown source and treat it as authoritative. Regenerate the PDFs from it when
 a revision is worth a new edition, and update the edition date in this list.
 
+## Authoring prompts
+
+Prompts that commission a whitepaper from a coding agent live in
+[`prompts/`](prompts/). They are briefs, not whitepapers:
+
+- [`prompts/atlas-applikationen-whitepaper.md`](prompts/atlas-applikationen-whitepaper.md)
+  commissions the process applications whitepaper in the `pblumer/atlas-cloud`
+  design.
+- [`prompts/atlas-hub-signierte-verteilung-whitepaper.md`](prompts/atlas-hub-signierte-verteilung-whitepaper.md)
+  is the brief behind the atlas hub whitepaper: first written on 6 November 2026 for an
+  assistant without repository access, updated with the corrections found against the
+  code, and usable both to write a new edition and to revise the maintained one after an
+  amendment.
+
 Keep all future whitepapers here, under `docs/whitepapers/`. The former
 singular `docs/whitepaper/` directory has been consolidated into this
 library; update references instead of reintroducing that directory.
