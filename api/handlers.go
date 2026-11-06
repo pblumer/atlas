@@ -6610,6 +6610,11 @@ const maxJobsPerPull = 100
 // report the outcome without a second call. Variables are the ones *visible at the
 // task* — the element instance's scope chain, so an activity-local input mapping
 // shadows the instance value exactly as it does for an in-process worker.
+// idempotencyKey names one task execution across every delivery of it.
+func idempotencyKey(nodeID string, jobKey uint64) string {
+	return "atlas:" + nodeID + ":" + strconv.FormatUint(jobKey, 10)
+}
+
 type pulledJob struct {
 	JobKey             uint64 `json:"jobKey"`
 	Type               string `json:"type"`
@@ -6623,8 +6628,14 @@ type pulledJob struct {
 	// outcome, and a report carrying a token the job has moved past is refused
 	// (ADR-0007). It is what makes a second instance of the same worker deployment
 	// distinguishable from the first, which the worker id alone cannot do.
-	LeaseToken uint64         `json:"leaseToken"`
-	Variables  map[string]any `json:"variables"`
+	LeaseToken uint64 `json:"leaseToken"`
+	// IdempotencyKey is the same for every delivery of one task execution — retries,
+	// redelivery after a lease ran out, the retry an incident's resolve starts — and
+	// different for every execution and every installation: atlas:<node id>:<job key>.
+	// A worker hands it to a target that filters duplicates, or checks by it before
+	// acting (ADR-0538 §2).
+	IdempotencyKey string         `json:"idempotencyKey"`
+	Variables      map[string]any `json:"variables"`
 	// Worker is a task resolved into plain values, present only for a
 	// job whose kind Atlas no longer serves itself (ADR-0168). Absent for a plain
 	// job-worker task, where there is nothing authored to resolve.
@@ -7410,6 +7421,7 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 		Retries:            jv.Retries,
 		LeaseExpiresAt:     jv.LeaseExpiresAt,
 		LeaseToken:         jv.LeaseEpoch,
+		IdempotencyKey:     idempotencyKey(s.nodeID, jobKey),
 		Variables:          map[string]any{},
 	}
 	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {

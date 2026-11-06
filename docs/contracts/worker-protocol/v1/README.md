@@ -62,7 +62,32 @@ The server shows the reported `protocol` and `workerType` per Worker Instance in
 A job becomes visible to a Worker only after it is durable on the server: written to the
 log, fsynced, and committed. Execution is **at least once**. A job whose lease runs out
 before it is reported is offered again, so a handler with side effects must be idempotent.
-The job key is a suitable idempotency key.
+
+**Idempotency key.** Every leased job carries `idempotencyKey`, `atlas:<node id>:<job key>`:
+
+- It is the same for every delivery of one task execution: a retry after a failure, a
+  redelivery after a lease ran out, and the retry an operator starts by resolving the
+  job's incident.
+- It is different for every execution (a loop iteration or multi-instance element gets a
+  new job) and for every installation (the node id).
+- Hand it to a target that filters duplicates (an idempotency header, a request id), or
+  use it to check before acting.
+- An installation started from a copy of another's data directory shares its node id and
+  so its keys.
+
+**Declaring idempotency.** A Worker Type's manifest declares, for every operation, its
+`idempotency` and its `effect`; both are required. atlas uses them to decide where to warn
+about a repeated effect
+([ADR-0538](../../../adr/0538-operations-declare-idempotency-and-effect.md)).
+
+| `idempotency` | Meaning |
+|---|---|
+| `natural` | A second delivery is harmless by nature |
+| `key` | The target filters duplicates by `idempotencyKey` |
+| `check` | The worker checks before acting whether the action already happened |
+| `none` | A second delivery can repeat the effect |
+
+`effect` is `reversible` or `irreversible`.
 
 ### Lease: `POST /api/v1/jobs/activate`
 
@@ -97,7 +122,8 @@ Answer:
 ```json
 {"jobs": [{"jobKey": 42, "type": "io.atlas.mail.send", "processInstanceKey": 7,
            "elementInstanceKey": 9, "processDefKey": 1, "elementId": "notify",
-           "retries": 3, "leaseToken": 11, "variables": {"to": "a@example.com"},
+           "retries": 3, "leaseToken": 11,
+           "idempotencyKey": "atlas:4f1c…:42", "variables": {"to": "a@example.com"},
            "connector": {"kind": "mail", "fields": {"…": "…"}}}]}
 ```
 

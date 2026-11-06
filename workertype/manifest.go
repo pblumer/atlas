@@ -77,6 +77,45 @@ type Operation struct {
 	ID           string            `json:"id"`
 	JobType      string            `json:"jobType"`
 	Capabilities []CapabilityClaim `json:"capabilities,omitempty"`
+	// Idempotency and Effect say what a second delivery of one of its jobs does
+	// (ADR-0538): both are required, so the
+	// property is never assumed silently.
+	Idempotency string `json:"idempotency"`
+	Effect      string `json:"effect"`
+}
+
+// How an operation behaves when one of its jobs is delivered a second time.
+const (
+	// IdempotencyNatural: a second delivery is harmless by nature.
+	IdempotencyNatural = "natural"
+	// IdempotencyKey: the target filters duplicates by the job's idempotencyKey.
+	IdempotencyKey = "key"
+	// IdempotencyCheck: the worker checks before acting whether it already happened.
+	IdempotencyCheck = "check"
+	// IdempotencyNone: a second delivery can repeat the effect.
+	IdempotencyNone = "none"
+)
+
+// What a repeated effect means.
+const (
+	// EffectReversible: a repeated effect can be undone or is tolerable.
+	EffectReversible = "reversible"
+	// EffectIrreversible: a repeated effect cannot be undone.
+	EffectIrreversible = "irreversible"
+)
+
+// DuplicateRisk grades what a second delivery of op can do: "" for none, "notice" for
+// a tolerable repeat, "warning" for an irreversible one, as
+// ADR-0538 §3 grades it.
+func (op Operation) DuplicateRisk() string {
+	switch {
+	case op.Idempotency != IdempotencyNone:
+		return ""
+	case op.Effect == EffectReversible:
+		return "notice"
+	default:
+		return "warning"
+	}
 }
 
 // Artifact identifies an executable runtime artifact by content digest.
@@ -176,6 +215,20 @@ func (m Manifest) Validate() error {
 		operations[op.ID] = struct{}{}
 		if _, exists := jobTypes[op.JobType]; !exists {
 			return fmt.Errorf("spec.operations operation %q references undeclared job type %q", op.ID, op.JobType)
+		}
+		switch op.Idempotency {
+		case IdempotencyNatural, IdempotencyKey, IdempotencyCheck, IdempotencyNone:
+		case "":
+			return fmt.Errorf("spec.operations operation %q must declare idempotency (natural, key, check or none): what a second delivery of one of its jobs does", op.ID)
+		default:
+			return fmt.Errorf("spec.operations operation %q idempotency %q must be natural, key, check or none", op.ID, op.Idempotency)
+		}
+		switch op.Effect {
+		case EffectReversible, EffectIrreversible:
+		case "":
+			return fmt.Errorf("spec.operations operation %q must declare effect (reversible or irreversible): whether a repeated effect can be undone", op.ID)
+		default:
+			return fmt.Errorf("spec.operations operation %q effect %q must be reversible or irreversible", op.ID, op.Effect)
 		}
 		if err := validateCapabilityClaims(op.ID, op.Capabilities); err != nil {
 			return err

@@ -624,6 +624,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0534](0534-informationstransfer-operations.md) | Worker operations for transferring resources between two accounts | Accepted | Landed |
 | [0535](0535-worker-types-as-distributed-artifacts.md) | Worker Types are signed artifacts that atlas launches and atlas hub distributes | Accepted | Partial |
 | [0536](0536-worker-sdk-licence-and-hub-curation.md) | The Worker SDK is Apache-2.0, and atlas hub lists executable Worker Types in two curated tiers | Proposed | Not started |
+| [0537](0537-at-most-once-delivery-for-irreversible-operations.md) | At most once for irreversible operations — a lease that runs out raises «outcome unknown» instead of redelivering | Proposed | Not started |
+| [0538](0538-operations-declare-idempotency-and-effect.md) | Every operation declares its idempotency and effect, jobs carry an idempotency key, and atlas warns where a duplicate can do harm | Accepted | Partial |
 
 ## The two states of a record
 

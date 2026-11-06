@@ -8,6 +8,15 @@ implementation status.
 
 ## Library
 
+- **atlas-Applikationen — Von der Idee in den Betrieb** —
+  [dark screen PDF](atlas-applikationen-dark.pdf),
+  [print-friendly PDF](atlas-applikationen-print.pdf),
+  [standalone HTML](atlas-applikationen.html) and
+  [Markdown source](atlas-applikationen.md).
+  German technical whitepaper, **6 November 2026**, about process-application
+  architecture, development, releases, promotions, package import, atlas hub,
+  operational constraints and open implementation gaps. Based on the stated
+  ADR, code and test status; **not acceptance evidence** or certification.
 - **atlas hub — Signed Distribution of Process Applications** —
   [dark screen PDF](atlas-hub-signierte-verteilung-dark.pdf),
   [print-friendly PDF](atlas-hub-signierte-verteilung-print.pdf) and
@@ -35,6 +44,17 @@ implementation status.
   Architecture concept for scaling the durable BPMN workflow engine.
   See [roadmap](../../ROADMAP.md) and the relevant
   [architecture decisions](../adr/README.md) for current implementation status.
+
+## Authoring prompts
+
+Prompts that commission a whitepaper from a coding agent live in
+[`prompts/`](prompts/). They are briefs, not whitepapers:
+[`prompts/atlas-applikationen-whitepaper.md`](prompts/atlas-applikationen-whitepaper.md)
+commissions the process applications whitepaper in the `pblumer/atlas-cloud`
+design;
+[`prompts/atlas-worker-whitepaper.md`](prompts/atlas-worker-whitepaper.md)
+is the self-contained brief (facts A–O, for a model without repository access)
+the worker architecture whitepaper was written from.
 
 Keep all future whitepapers here, under `docs/whitepapers/`. The former
 singular `docs/whitepaper/` directory has been consolidated into this
