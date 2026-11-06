@@ -162,6 +162,14 @@ server at startup. At startup the server logs the pinned fingerprints as event
 `hub.registry_keys_pinned`: as INFO for one key, and as a WARN for two, so a rotation that
 was never finished does not go unnoticed.
 
+When the registry cannot be read, the Console says only "trusted Blueprint registry is
+unavailable or invalid". The server logs the cause as a WARN with event
+`hub.registry_unavailable`: a DNS failure, a refused or timed-out connection, a TLS error,
+an HTTP status or a signature no pinned key made. The client connects directly to the
+registry on port 443: it ignores `HTTPS_PROXY`, follows no redirect and refuses a
+registry whose name resolves to a private address. A network that reaches the internet only
+through a proxy therefore cannot read the registry.
+
 ### The fixed announcement channel
 
 A new key is only as trustworthy as the way it is announced. Anyone can send a mail or a

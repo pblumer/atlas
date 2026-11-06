@@ -93,6 +93,14 @@ func WithBlueprintRegistry(source *blueprintregistry.PublicClient) Option {
 	return func(s *Server) { s.blueprints = source }
 }
 
+// logRegistryUnavailable tells the operator why the registry could not answer.
+// The caller's response stays generic on purpose: it names neither the network
+// nor the registry's answer to whoever asked. Without this line nobody could tell
+// a firewall from a proxy, a TLS interception or a wrong pinned key.
+func logRegistryUnavailable(err error) {
+	logging.Warn(logging.HubRegistryUnavailable, "atlas hub registry could not be read", slog.String("error", err.Error()))
+}
+
 func (s *Server) requireBlueprints(w http.ResponseWriter) bool {
 	w.Header().Set("Cache-Control", "no-store")
 	if s.blueprints != nil {
@@ -108,6 +116,7 @@ func (s *Server) handleListBlueprints(w http.ResponseWriter, r *http.Request) {
 	}
 	index, err := s.blueprints.LoadIndex(r.Context())
 	if err != nil {
+		logRegistryUnavailable(err)
 		httpapi.Error(w, http.StatusBadGateway, "trusted Blueprint registry is unavailable or invalid")
 		return
 	}
@@ -127,6 +136,7 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	}
 	index, err := s.blueprints.LoadIndex(r.Context())
 	if err != nil {
+		logRegistryUnavailable(err)
 		httpapi.Error(w, http.StatusBadGateway, "trusted Blueprint registry is unavailable or invalid")
 		return blueprintregistry.Release{}, nil, false
 	}
@@ -149,6 +159,7 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	// revoked release is never silently replaced by an untrusted package.
 	release, bytes, err := s.blueprints.Fetch(r.Context(), id, version)
 	if err != nil {
+		logRegistryUnavailable(err)
 		httpapi.Error(w, http.StatusBadGateway, "Blueprint package download or signature/digest verification failed")
 		return blueprintregistry.Release{}, nil, false
 	}

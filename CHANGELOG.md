@@ -56,6 +56,11 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **Why the atlas hub registry could not be read is in the server log.** The Console still
+  says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
+  the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
+  an HTTP status or a signature no pinned key made — so an operator can tell a firewall from
+  a wrong key.
 - **A package import names why the target refused the publish.** When the publish step of a
   Console package or hub import was refused — for example because a process uses a Worker
   operation the target's build does not know yet — the import reported only "HTTP 409". It now

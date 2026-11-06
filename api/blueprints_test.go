@@ -241,3 +241,22 @@ func TestBlueprintAPIPreviewIncludesProductsAndCatalogues(t *testing.T) {
 		t.Fatalf("preview omitted real shop identities: %+v", result)
 	}
 }
+
+// TestBlueprintRegistryFailureIsLoggedForTheOperator: the caller learns only that
+// the registry could not be read, but the operator's log names the cause, so a
+// firewall, a proxy or a wrong pinned key can be told apart on a server nobody can
+// debug from the browser.
+func TestBlueprintRegistryFailureIsLoggedForTheOperator(t *testing.T) {
+	sink := captureAuditLog(t)
+	f := sampleBlueprintSource(t)
+	f.loadError = errors.New("registry HTTPS dial failed: connect: connection refused")
+	s := &Server{blueprints: f}
+	fail := blueprintRequest(s, "GET", "/api/v1/blueprints", "", "", "")
+	if fail.Code != http.StatusBadGateway || strings.Contains(fail.Body.String(), "connection refused") {
+		t.Fatalf("caller answer: %d %s", fail.Code, fail.Body.String())
+	}
+	log := sink.String()
+	if !strings.Contains(log, `"event":"hub.registry_unavailable"`) || !strings.Contains(log, "connection refused") || !strings.Contains(log, `"level":"WARN"`) {
+		t.Fatalf("operator log does not name the cause: %s", log)
+	}
+}
