@@ -8,6 +8,13 @@ implementation status.
 
 ## Library
 
+- **atlas hub — Signed Distribution of Process Applications** —
+  [dark screen PDF](atlas-hub-signierte-verteilung-dark.pdf),
+  [print-friendly PDF](atlas-hub-signierte-verteilung-print.pdf) and
+  [Markdown source](atlas-hub-signierte-verteilung.md).
+  German technical whitepaper, **6 November 2026**, about Blueprint Registry v1,
+  publishing, pinned trust, controlled imports, operations and known gaps.
+  This is a design/status explanation, not independent security certification.
 - [Identity-Aware Workflow Execution](identity-aware-workflow-execution.md) —
   user/service identities, delegated execution, policy decision/enforcement,
   obligations and auditable actions. German Markdown edition,
