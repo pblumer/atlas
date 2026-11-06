@@ -8462,3 +8462,58 @@ button.im-problem:hover { background: var(--accent-soft); }
   .mfe2-workspace { grid-template-columns: minmax(0, 1fr); }
   .mfe2-cause-pane, .mfe2-detail-pane { padding: 12px; }
 }
+
+/* The way to atlas hub (hub-connection.js): a route from this server to the hub,
+   one stop per station of the real request. A stop is waited on (active, with a
+   packet travelling down to it and a timer), passed (ok), where the way ended
+   (fail), or never reached (skipped). The thin bar under a passed stop is where
+   its time falls in the whole load, so a slow handshake stands out at a glance. */
+.hub-route { list-style: none; margin: 10px 0 6px; padding: 0; }
+.hub-stop {
+  position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-areas: "dot name ms" "dot detail detail" "dot track track" "dot note note";
+  column-gap: 10px; padding: 3px 0 9px;
+}
+.hub-stop::before {
+  content: ""; position: absolute; left: 8px; top: 17px; bottom: -3px; width: 2px; background: var(--border);
+}
+.hub-stop:last-child::before { display: none; }
+.hub-dot {
+  grid-area: dot; justify-self: center; position: relative; z-index: 1; margin-top: 3px;
+  width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface);
+}
+.hub-name { grid-area: name; font-size: 13px; font-weight: 600; }
+.hub-ms { grid-area: ms; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hub-detail { grid-area: detail; color: var(--muted); overflow-wrap: anywhere; }
+.hub-track { grid-area: track; display: block; height: 3px; margin-top: 4px; }
+.hub-bar { display: block; height: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+.hub-stop[data-state="ok"] .hub-dot { background: var(--ok); border-color: var(--ok); }
+.hub-stop[data-state="ok"]::before { background: var(--ok); }
+.hub-stop[data-state="active"] .hub-dot { border-color: var(--accent); animation: hub-pulse 1.2s ease-in-out infinite; }
+.hub-stop[data-state="active"] .hub-detail { color: var(--accent-text); }
+.hub-stop[data-state="active"]::after {
+  content: ""; position: absolute; left: 6px; top: -14px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); animation: hub-packet 1.2s linear infinite;
+}
+.hub-stop[data-state="fail"] .hub-dot { background: var(--danger); border-color: var(--danger); }
+.hub-stop[data-state="fail"]::before { background: none; border-left: 2px dashed var(--border); width: 0; }
+.hub-stop[data-state="fail"] .hub-detail { color: var(--danger); font-weight: 600; }
+.hub-stop[data-state="fail"] .hub-bar { background: var(--danger); }
+.hub-stop[data-state="skipped"] { opacity: 0.5; }
+.hub-stop[data-state="skipped"] .hub-dot { border-style: dashed; }
+.hub-stop[data-state="skipped"]::before { background: none; border-left: 2px dashed var(--border); width: 0; }
+.hub-note { grid-area: note; }
+.hub-finding {
+  margin: 8px 0 2px; padding: 10px 12px; border: 1px solid var(--danger); border-radius: 8px;
+  background: var(--danger-soft); overflow-wrap: anywhere;
+}
+.hub-finding p { margin: 5px 0 0; }
+.hub-finding p:first-child { margin-top: 0; }
+.hub-connected { margin: 4px 0 8px; border-bottom: 1px solid var(--border); }
+.hub-connected summary { cursor: pointer; padding: 6px 0; color: var(--muted); }
+@keyframes hub-pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); } 50% { box-shadow: 0 0 0 5px var(--accent-soft); } }
+@keyframes hub-packet { from { top: -14px; opacity: 0; } 20% { opacity: 1; } to { top: 4px; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .hub-stop[data-state="active"] .hub-dot, .hub-stop[data-state="active"]::after { animation: none; }
+  .hub-stop[data-state="active"]::after { display: none; }
+}

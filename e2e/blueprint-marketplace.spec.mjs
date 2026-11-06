@@ -37,13 +37,30 @@ const pkg = tarGz([["atlas.json", JSON.stringify({
   formatVersion: 1, key: "purchase", name: "Purchase", processes: [], forms: [], decisions: [],
 })]]);
 
-async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview, indexBody = index } = {}) {
+// healthyWay is the stream GET /api/v1/blueprints/connection answers when every
+// station is passed: a start line, one line per station, a done line with the index.
+const healthyWay = (indexBody, extra = {}) => [
+  { type: "start", host: "registry.example.org", atlasVersion: "0.24.0", stations: ["resolve", "connect", "tls", "index", "signature"] },
+  { type: "step", stage: "resolve", ok: true, ms: 12, host: "registry.example.org", addresses: ["203.0.113.7", "203.0.113.8"] },
+  { type: "step", stage: "connect", ok: true, ms: 31, address: "203.0.113.7:443" },
+  { type: "step", stage: "tls", ok: true, ms: 44, tlsVersion: "TLS 1.3", issuer: "R11 (Let's Encrypt)" },
+  { type: "step", stage: "index", ok: true, ms: 20, status: 200, bytes: 2048 },
+  { type: "step", stage: "signature", ok: true, ms: 9, key: "sha256:3f9a0c1d2e4b5a6978" },
+  { type: "done", ok: true, ms: 116, atlasVersion: "0.24.0", index: indexBody,
+    releases: indexBody.releases.length, compatible: indexBody.releases.length, ...extra },
+];
+
+async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview, indexBody = index, way = null } = {}) {
   const requests = [];
   await page.route("**/api/v1/blueprints**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     requests.push({ path, ifMatch: request.headers()["if-match"] });
-    if (path === "/api/v1/blueprints") {
+    if (path === "/api/v1/blueprints/connection") {
+      await route.fulfill(status === 200
+        ? { status: 200, contentType: "application/x-ndjson", body: (way || healthyWay(indexBody)).map((l) => JSON.stringify(l)).join("\n") + "\n" }
+        : { status, contentType: "application/json", body: JSON.stringify({ error: "Registry not configured" }) });
+    } else if (path === "/api/v1/blueprints") {
       await route.fulfill({ status, contentType: "application/json",
         body: JSON.stringify(status === 200 ? indexBody : { error: "Registry not configured" }) });
     } else if (path.endsWith("/preview")) {
@@ -178,4 +195,88 @@ test("signed tags filter the listing without changing which release is previewed
   await ov.locator("[data-back]").click();
   await ov.locator('[data-tag=""]').click();
   await expect(ov).toContainText("Untagged");
+});
+
+test("the way to the hub is shown folded above the listing, with what each station established", async ({ page }) => {
+  const two = { ...index, releases: [release, { ...release, blueprintId: "org.example.newer", title: "Newer", version: "2.0.0" }] };
+  await stubRegistry(page, { way: healthyWay(two, { compatible: 1,
+    incompatible: [{ blueprintId: "org.example.newer", version: "2.0.0", minAtlas: "0.25.0" }] }) });
+  await page.evaluate(() => window.__open());
+  const ov = page.locator(".modal-ov");
+  const summary = ov.locator(".hub-connected summary");
+  await expect(summary).toContainText("Verbunden mit registry.example.org in 116 ms");
+  await expect(summary).toContainText("TLS 1.3");
+  await expect(summary).toContainText("Releases: 2, davon für atlas 0.24.0: 1");
+  await summary.click();
+  const route = ov.locator(".hub-route");
+  await expect(route.locator('[data-stage="resolve"]')).toHaveAttribute("data-state", "ok");
+  await expect(route.locator('[data-stage="resolve"]')).toContainText("registry.example.org → 203.0.113.7 (+1 weitere)");
+  await expect(route.locator('[data-stage="tls"]')).toContainText("Zertifikat von R11 (Let's Encrypt)");
+  await expect(route.locator('[data-stage="index"]')).toContainText("HTTP 200 · 2,0 KB");
+  await expect(route.locator('[data-stage="signature"]')).toContainText("Schlüssel 3f9a0c1d2e4b…");
+  await expect(route.locator('[data-stage="hub"]')).toHaveAttribute("data-state", "ok");
+  // The release this atlas is too old for says so, and is not previewed.
+  await expect(ov.locator("[data-too-old]")).toHaveText("benötigt atlas ≥ 0.25.0 (dieser Server: 0.24.0)");
+  await expect(ov.locator('[data-preview="1"]')).toBeDisabled();
+  await expect(ov.locator('[data-preview="0"]')).toBeEnabled();
+});
+
+test("a firewall that drops shows as a connection nobody answered, and nothing after it is reached", async ({ page }) => {
+  await stubRegistry(page, { way: [
+    healthyWay(index)[0],
+    healthyWay(index)[1],
+    { type: "step", stage: "connect", ok: false, ms: 10003, cause: "timeout", address: "203.0.113.8:443", tried: 2 },
+    { type: "done", ok: false, ms: 10015, atlasVersion: "0.24.0", releases: 0, compatible: 0 },
+  ] });
+  await page.evaluate(() => window.__open());
+  const ov = page.locator(".modal-ov");
+  await expect(ov.locator('[data-stage="connect"]')).toHaveAttribute("data-state", "fail");
+  await expect(ov.locator('[data-stage="connect"]')).toContainText("10,0 s");
+  for (const later of ["tls", "index", "signature", "hub"]) {
+    await expect(ov.locator(`[data-stage="${later}"]`)).toHaveAttribute("data-state", "skipped");
+  }
+  const finding = ov.locator(".hub-finding");
+  await expect(finding).toHaveAttribute("data-cause", "dropped");
+  await expect(ov.locator('[data-stage="connect"] .hub-detail')).toHaveText("Keine Antwort auf den Verbindungsaufbau");
+  // The finding stands at the station the way ended at.
+  await expect(ov.locator('[data-stage="connect"] .hub-finding')).toHaveCount(1);
+  await expect(finding).toContainText("Keine der 2 Adressen hat innerhalb von 5 s geantwortet");
+  await expect(finding).toContainText("DROP");
+  await expect(finding).toContainText("HTTPS_PROXY wird nicht verwendet");
+  // Without an administrator's error text there is none to show.
+  await expect(finding).not.toContainText("nur für Administratoren");
+  await expect(ov.locator("[data-retry]")).toBeVisible();
+  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+});
+
+test("a TLS inspection shows the issuer nobody expected, and an administrator reads the error", async ({ page }) => {
+  const requests = await stubRegistry(page, { way: [
+    ...healthyWay(index).slice(0, 3),
+    { type: "step", stage: "tls", ok: false, ms: 40, cause: "unknown_authority", issuer: "Fortinet CA <script>",
+      error: "tls: failed to verify certificate: x509: certificate signed by unknown authority" },
+    { type: "done", ok: false, ms: 90, atlasVersion: "0.24.0", releases: 0, compatible: 0 },
+  ] });
+  await page.evaluate(() => window.__open());
+  const finding = page.locator(".hub-finding");
+  await expect(page.locator('[data-stage="tls"] .hub-detail')).toHaveText("Zertifikat nicht vertrauenswürdig");
+  await expect(finding).toContainText("«Fortinet CA <script>»");
+  await expect(finding).toContainText("TLS-Inspektion");
+  await expect(finding).toContainText("certificate signed by unknown authority");
+  await expect(page.locator(".modal-ov script")).toHaveCount(0);
+  // Retrying asks the server again.
+  await page.locator("[data-retry]").click();
+  await expect(page.locator(".hub-finding")).toBeVisible();
+  expect(requests.filter((r) => r.path === "/api/v1/blueprints/connection")).toHaveLength(2);
+});
+
+test("the station being waited on counts up while the others wait", async ({ page }) => {
+  await page.evaluate(() => window.__route([
+    { type: "start", host: "registry.example.org", atlasVersion: "0.24.0", stations: ["resolve", "connect", "tls", "index", "signature"] },
+    { type: "step", stage: "resolve", ok: true, ms: 12, host: "registry.example.org", addresses: ["203.0.113.7"] },
+  ]));
+  const connect = page.locator('#route [data-stage="connect"]');
+  await expect(connect).toHaveAttribute("data-state", "active");
+  await expect(connect).toContainText("Zeitlimit 5 s je Adresse");
+  await expect(connect.locator("[data-wait]")).not.toHaveText("wartet … 0 ms", { timeout: 3000 });
+  await expect(page.locator('#route [data-stage="tls"]')).toHaveAttribute("data-state", "pending");
 });

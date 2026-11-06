@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The atlas hub dialog shows the way to the registry, station by station.** Instead of
+  waiting on "Verifying trusted registry…", the dialog draws the real load as a route from this
+  server to the hub — name resolution, TCP connection on 443, TLS handshake, index, signature —
+  with a running timer on the station being waited on, each station's time and what it
+  established (addresses, TLS version and certificate issuer, size, key fingerprint). Where the
+  way ends it names the cause and what it usually means: a firewall that drops or rejects, a
+  name that resolves to an internal address, a TLS inspection, a redirect, a wrong pinned key.
+  Administrators also read the error text. Once connected the route folds into one line above
+  the listing, and a release this atlas is too old for says which version it needs and is not
+  previewed. New route: `GET /api/v1/blueprints/connection` (ADR-0499, amendment e).
 - **An installed Worker Type is configured from its own schema.** A Worker Type's manifest carries
   its configuration as a JSON Schema whose `writeOnly` properties are secrets. An administrator
   configures Workers of an installed type under `/api/v1/worker-types/installed/{id}/workers`: the

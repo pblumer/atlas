@@ -170,6 +170,14 @@ registry on port 443: it ignores `HTTPS_PROXY`, follows no redirect and refuses 
 registry whose name resolves to a private address. A network that reaches the internet only
 through a proxy therefore cannot read the registry.
 
+The Console's atlas hub dialog shows the same load station by station
+(`GET /api/v1/blueprints/connection`, ADR-0499 amendment e): the name resolved, the TCP
+connection, the TLS handshake with the certificate's issuer, the index, the signature with the
+fingerprint of the key that matched. Where the way ends it names the cause and what it
+usually means: a connection nobody answers is a firewall that drops, a refused one a firewall
+that rejects, an unknown certificate issuer a TLS inspection, a signature no pinned key made a
+wrong `ATLAS_BLUEPRINT_REGISTRY_KEY`. Administrators also see the error text.
+
 ### The fixed announcement channel
 
 A new key is only as trustworthy as the way it is announced. Anyone can send a mail or a
