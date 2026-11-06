@@ -49,6 +49,11 @@
       "path": "hr-eintritt.bpmn"
     },
     {
+      "id": "proc_m365_kalender",
+      "name": "Exchange: Zusätzlicher Kalender",
+      "path": "kalender.bpmn"
+    },
+    {
       "id": "proc_m365_konto_hybrid",
       "name": "Microsoft 365: Konto (hybrid) anlegen",
       "path": "konto-hybrid.bpmn"
@@ -224,6 +229,16 @@
       "id": "m365-governance-befund",
       "name": "m365-governance-befund",
       "path": "m365-governance-befund.form.json"
+    },
+    {
+      "id": "m365-kalender-berechtigung",
+      "name": "m365-kalender-berechtigung",
+      "path": "m365-kalender-berechtigung.form.json"
+    },
+    {
+      "id": "m365-kalender-bestellung",
+      "name": "m365-kalender-bestellung",
+      "path": "m365-kalender-bestellung.form.json"
     },
     {
       "id": "m365-konto-hybrid-bestellung",

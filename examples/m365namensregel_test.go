@@ -51,10 +51,18 @@ func TestM365NamingRuleTakesThePrefix(t *testing.T) {
 			wantAnzeigename: "atlas-test-58o4-Kreditoren", wantAlias: "atlas-test-58o4-kreditoren"},
 		{name: "site without prefix", objekttyp: "site", nullPrefix: true,
 			wantAnzeigename: "Kreditoren", wantAlias: "kreditoren"},
+		{name: "shared tenant calendar", objekttyp: "kalender", praefix: "atlas-test-58o4-",
+			wantAnzeigename: "atlas-test-58o4-KAL-Kreditoren", wantAlias: "atlas-test-58o4-kal-kreditoren"},
+		{name: "calendar without prefix", objekttyp: "kalender", nullPrefix: true,
+			wantAnzeigename: "KAL-Kreditoren", wantAlias: "kal-kreditoren"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := map[string]any{"objekttyp": c.objekttyp, "slug": "kreditoren", "bereich": "fin", "bezeichnung": "Kreditoren"}
+			bereich := "fin"
+			if c.objekttyp == "kalender" {
+				bereich = "" // a calendar has no department: the process hands ""
+			}
+			in := map[string]any{"objekttyp": c.objekttyp, "slug": "kreditoren", "bereich": bereich, "bezeichnung": "Kreditoren"}
 			if c.nullPrefix {
 				in["praefix"] = nil
 			} else {
@@ -92,6 +100,7 @@ func TestM365OrderFormsSearchThePersonTheyName(t *testing.T) {
 	for form, key := range map[string]string{
 		"m365-person": "upn", "m365-team-bestellung": "besitzer", "m365-funktionspostfach-bestellung": "besitzer",
 		"m365-verteiler-bestellung": "besitzer", "m365-postfachzugriff-bestellung": "person",
+		"m365-kalender-bestellung": "besitzer",
 	} {
 		raw, err := os.ReadFile("m365-dienste/" + form + ".form.json")
 		if err != nil {

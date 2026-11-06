@@ -18,14 +18,16 @@
     {
       "id": "cls-zugriffsart",
       "name": "Zugriffsart",
-      "documentation": "Die Rechte, die Atlas an einem Postfach erteilt.",
+      "documentation": "Die Rechte, die Atlas an einem Postfach erteilt; KalenderLesen und KalenderBearbeiten sind Rechte am Kalenderordner eines zusaetzlichen Kalenders.",
       "stereotype": "enumeration",
       "attributes": [],
       "literals": [
         "Vollzugriff",
         "SendenAls",
         "SendenImAuftrag",
-        "Kalenderstellvertretung"
+        "Kalenderstellvertretung",
+        "KalenderLesen",
+        "KalenderBearbeiten"
       ],
       "x": 640,
       "y": 1140
@@ -724,6 +726,104 @@
       }
     },
     {
+      "id": "cls-kalenderpostfach",
+      "name": "Kalenderpostfach",
+      "documentation": "Ein zusaetzlicher Kalender: ein geteiltes Postfach, das nur fuer seinen Standardkalender besteht, sichtbar im Adressbuch, damit Outlook es ueber «Aus Verzeichnis» findet. «Freigegeben» heisst: Die beiden Kalendergruppen haben ihre Rechte am Kalenderordner.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "zweck",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "kalenderordner",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Der Name des Standardkalenders; er haengt von der Sprache des Postfachs ab (Kalender, Calendar …)."
+        }
+      ],
+      "x": 1840,
+      "y": 40,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Freigegeben",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entfernt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-kalenderpostfach-1",
+            "from": "Angelegt",
+            "to": "Freigegeben"
+          },
+          {
+            "id": "t-kalenderpostfach-2",
+            "from": "Freigegeben",
+            "to": "Entfernt"
+          },
+          {
+            "id": "t-kalenderpostfach-3",
+            "from": "Angelegt",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-kalendergruppe",
+      "name": "Kalendergruppe",
+      "documentation": "Eine E-Mail-aktivierte Sicherheitsgruppe, die ein Recht am Kalender eines Kalenderpostfachs traegt: «lesen» (Reviewer) oder «bearbeiten» (Editor). Verborgen im Adressbuch; die Mitglieder sind die berechtigten Personen.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "stufe",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "lesen oder bearbeiten (CustomAttribute5)."
+        }
+      ],
+      "x": 1840,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entfernt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-kalendergruppe-1",
+            "from": "Angelegt",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
       "id": "cls-ressourcenpostfach",
       "name": "Ressourcenpostfach",
       "documentation": "Ein buchbares Postfach mit Buchungsregeln (Kalenderverarbeitung). Den Lebenszyklus tragen Raum- und Geraetepostfach selbst, weil ein Datenzustand gegen die Klasse aufgeloest wird, die das Datenobjekt nennt.",
@@ -972,7 +1072,7 @@
     {
       "id": "cls-verteilermitgliedschaft",
       "name": "Verteilermitgliedschaft",
-      "documentation": "Die Mitgliedschaft eines Empfaengers in einem Verteiler (Selbstanmeldung oder Bestellung).",
+      "documentation": "Die Mitgliedschaft eines Empfaengers in einem Verteiler (Selbstanmeldung oder Bestellung) oder in einer Kalendergruppe.",
       "stereotype": "businessObject",
       "attributes": [],
       "x": 940,
@@ -1014,7 +1114,7 @@
     {
       "id": "cls-postfachberechtigung",
       "name": "Postfachberechtigung",
-      "documentation": "Ein Recht einer Person an einem Postfach: Vollzugriff, Senden als, Senden im Auftrag oder Kalenderstellvertretung.",
+      "documentation": "Ein Recht einer Person oder Gruppe an einem Postfach: Vollzugriff, Senden als, Senden im Auftrag, Kalenderstellvertretung oder ein Recht am Kalender eines zusaetzlichen Kalenders.",
       "stereotype": "businessObject",
       "attributes": [
         {
@@ -1828,6 +1928,26 @@
       }
     },
     {
+      "id": "gen-10",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-kalenderpostfach"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
+      "id": "gen-11",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-kalendergruppe"
+      },
+      "to": {
+        "classId": "cls-verteiler"
+      }
+    },
+    {
       "id": "assoc-1",
       "name": "traegt",
       "kind": "composition",
@@ -2170,6 +2290,21 @@
         "classId": "cls-raumpostfach",
         "role": "raeume",
         "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-24",
+      "name": "berechtigt auf",
+      "kind": "association",
+      "from": {
+        "classId": "cls-kalendergruppe",
+        "role": "gruppen",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-kalenderpostfach",
+        "role": "kalender",
+        "multiplicity": "1"
       }
     }
   ],
