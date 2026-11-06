@@ -32,7 +32,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   default, expands them on demand and still selects an exact iteration. The grouping
   uses persisted parent-token lineage so repeated bodies and orphaned rounds are not
   accidentally merged. A small instance keeps this classic replay and opens the
-  Multi-Instance Explorer from the grouped row.
+  Multi-Instance Explorer from the grouped row. The token row under the diagram names a
+  multi-instance activity holding several tokens once, with its count, instead of one chip
+  per iteration.
 - **`mi-explorer.spec.mjs`** ([OHS2](../docs/planning/operations-history-at-scale-program.md),
   [ADR-0517](../docs/adr/0517-scalable-instance-replay.md)): an instance with 50,000
   iterations opens without requesting `/timeline`, shows its loop as one collapsed group

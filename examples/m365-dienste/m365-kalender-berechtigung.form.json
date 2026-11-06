@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "m365-kalender-berechtigung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Berechtigung am Kalender · Permission on the calendar**\n\n«Lesen» zeigt alle Termine mit Details, «Bearbeiten» erlaubt zusätzlich, Termine zu erstellen, zu ändern und zu löschen. · «Read» shows every appointment with its details, «Edit» also lets the person create, change and delete appointments."
+    },
+    {
+      "key": "person",
+      "type": "textfield",
+      "label": "Person (UPN oder Adresse) · Person (UPN or address)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "stufe",
+      "type": "radio",
+      "label": "Berechtigung · Permission",
+      "values": [
+        {
+          "label": "Lesen · Read",
+          "value": "lesen"
+        },
+        {
+          "label": "Bearbeiten · Edit",
+          "value": "bearbeiten"
+        }
+      ],
+      "defaultValue": "lesen",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

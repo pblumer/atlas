@@ -20,6 +20,18 @@ _Changed_ / _Removed_ for each version.
   application — or under one this person cannot read — sits in the trailing "Nicht zugeordnet"
   group, as in the Modeler's deployed list. Every group keeps the list's sorting, filter row and
   row actions, and the browser remembers the arrangement and each folded group.
+- **The M365 example offers an additional calendar.** `examples/m365-dienste` has a new
+  product «Zusätzlicher Kalender» (`m365-kalender`, in `cat-m365-mitarbeitende` and
+  `cat-m365-ucc`): a shared mailbox kept for its calendar, named by `M365Namensregel` with the
+  new object type `kalender` (`KAL-<Name>`, `kal-<name>`, `NAME_PREFIX` in front), visible in the
+  address book so Outlook finds it under «Add calendar › From directory», and tagged like every
+  catalogue object. Reading and editing go through two hidden mail-enabled security groups that
+  hold `Reviewer` and `Editor` on the calendar folder, whose name is read per mailbox language;
+  the order form's lists of people become their members inside the Exchange worker, because the
+  engine may not loop over personal data. The owner gets `Editor` directly. Actions: grant and
+  revoke a permission (person and level), and return the calendar, which removes mailbox and
+  groups. The approval is the owner's manager, as for the shared mailbox, and the Exchange
+  Server variant of the test environment (`install-m365-dienste.py`) copies the product.
 - **The atlas hub dialog shows the way to the registry, station by station.** Instead of
   waiting on "Verifying trusted registry…", the dialog draws the real load as a route from this
   server to the hub — name resolution, TCP connection on 443, TLS handshake, index, signature —
@@ -68,6 +80,12 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **The replay names a multi-instance activity once below the diagram.** The token row under
+  an instance replay listed one chip per token, so a multi-instance task with 200 iterations
+  filled the screen with 200 identical "Token … — Datensatz prüfen" lines and pushed the diagram
+  out of view. A multi-instance activity holding more than one token is now one chip with its
+  token count and its parallel or sequential marker; its row in the instance history still counts
+  and opens the iterations. Joins, races and standard loops keep one chip per token.
 - **An opened entry of "My services" is laid out in sections.** It starts with the product's name,
   its pie and how it stands. Then come its parts, each with where it stands now (held, on its way,
   no longer held, not held, not chosen) and the basket control for what can be added; its possible
