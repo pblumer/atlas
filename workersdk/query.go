@@ -1,4 +1,4 @@
-package worker
+package workersdk
 
 import (
 	"context"
@@ -9,8 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pblumer/atlas/connector/lookup"
-	"github.com/pblumer/atlas/logging"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // QueryFunc answers one form lookup for the Worker named connector: a page of records
@@ -75,7 +74,7 @@ func (w *Worker) serveQueries(ctx context.Context, jobType string) {
 		// query protocol answers every poll 404, and a worker that logged each would
 		// bury the one line that says why its tenants are not searchable.
 		if !failing {
-			logging.Warn(logging.WorkerPollFailed, "a query poll failed; retrying",
+			w.warn("a query poll failed; retrying",
 				slog.String("worker", w.opts.ID), slog.String("type", jobType),
 				slog.String("error", err.Error()))
 			failing = true
@@ -115,6 +114,10 @@ func (w *Worker) activateQueries(ctx context.Context, jobType string, max int, w
 		// Sent on every poll: it is what makes this Instance present for these Workers,
 		// and what keeps a query for a tenant it does not hold from reaching it.
 		"connectors": w.opts.Connectors,
+		"protocol":   ProtocolVersion,
+	}
+	if w.opts.Identity != nil {
+		body["workerType"] = w.opts.Identity
 	}
 	var out struct {
 		Queries []leasedQuery `json:"queries"`
@@ -155,7 +158,7 @@ func (w *Worker) answerQuery(ctx context.Context, q leasedQuery) {
 	}
 	if err := w.call(ctx, "/api/v1/worker-queries/"+q.ID+"/answer", body, nil); err != nil &&
 		!strings.Contains(err.Error(), "no longer waiting") {
-		logging.Warn(logging.WorkerPollFailed, "a query answer was not taken",
+		w.warn("a query answer was not taken",
 			slog.String("worker", w.opts.ID), slog.String("type", q.Type),
 			slog.String("error", err.Error()))
 	}

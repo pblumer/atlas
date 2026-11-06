@@ -429,6 +429,45 @@ gemeinsam; die Offline-Prüfung des Umschreibens hält beide zusammen:
 python3 -m unittest discover -s scripts -p 'test_install_ad_dienste.py' -v
 ```
 
+### `scripts/install-informationstransfer.py`
+
+Der Informationstransfer (`examples/informationstransfer`) braucht `enable_ad_dc`, den Worker
+`ad_verzeichnis` und je nach Postfachsystem `ucc_exchange_onprem` (Exchange Server) oder
+`ucc_exchange`, dazu `ucc_entra` und für die Telefonnummer `ucc_teams`. Am besten nach
+`install-ad-dienste.py`, dessen Gruppen unter `OU=Gruppen,OU=Atlas` die Übertragung der
+Berechtigungen kopiert:
+
+```bash
+python3 scripts/install-informationstransfer.py --cafile out/caddy-root.crt
+python3 scripts/install-informationstransfer.py --dry-run   # nur anpassen und zeigen, was hochginge
+```
+
+| Option | Vorgabe | Wirkung |
+|---|---|---|
+| `--cafile` | – | wie oben |
+| `--test-ou` | `tofu output -json ad_test_ou` | `AD_PERSONEN_OU`; `AD_GRUPPEN_OU` ist `OU=Gruppen,OU=Atlas,<Test-OU>` |
+| `--postfach` | `exchange-server`, wenn `exchange_onprem` gebaut ist, sonst `exchange-online` | `POSTFACH_SYSTEM` |
+| `--dry-run` | – | passt das Paket an und gibt Dateien, Konstanten und Gruppen aus; meldet sich nirgends an |
+| `--tofu-dir`, `--example` | dieses Verzeichnis, `examples/informationstransfer` | woher die Ausgaben und das Paket kommen |
+
+Es legt die Atlas-Gruppen `Identity Management` (Zielgruppe und Genehmigung),
+`Informationssicherheit`, `M365-Administration` und `M365-Telefonie` an, lädt `it-optionen` hoch,
+importiert und veröffentlicht `beispiel-informationstransfer` mit dem Katalog, setzt die
+Konstanten (`NAME_PREFIX` = Präfix dieser Umgebung; **andere Konstanten bleiben**) und schaltet am
+Worker `ad_verzeichnis` «Forms may search» ein.
+
+**`ENTRA_TRANSFER` bleibt `aus`.** Diese Umgebung hat kein Entra Connect: Der Hard Match über
+`onPremisesImmutableId` kann sich nicht vollenden, und der Transfer löscht ein Cloud-Konto
+endgültig. Wer ihn trotzdem durchspielt, setzt die Konstante in der Console für einen Test von
+Hand auf `ein` und danach zurück; die Freigabe der Informationssicherheit steht vor jeder Löschung,
+und mit `NAME_PREFIX` findet der Prozess nur die Testkonten dieser Umgebung. Der Entra-Worker
+braucht dafür `User.DeleteRestore.All` und für die Cloud-Gruppen `Directory.Read.All`, die nicht in
+der Vorgabe von `entra_graph_permissions` stehen.
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_install_informationstransfer.py' -v
+```
+
 ## Geteilter Tenant (`shared_tenant = true`)
 
 Für einen Tenant, der auch produktiv genutzt wird, etwa den eigenen. Anwendungsberechtigungen

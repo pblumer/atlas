@@ -183,6 +183,18 @@ var (
 	// once the account is licensed, read with get-mailbox.
 	remoteOnly = "a remote mailbox is an Exchange Server object; in Exchange Online the mailbox of a synchronised account is created when the account is licensed and read with get-mailbox"
 
+	// disableOnline is what disable-mailbox says on Exchange Online: there a user's
+	// mailbox exists because the account does and holds a licence, and goes when either
+	// does. There is no step that strips the mailbox from an account and keeps the
+	// content aside.
+	disableOnline = "in Exchange Online a mailbox follows its account and the account's licence, and there is no Disable-Mailbox for a user mailbox; remove the licence or delete the account (Entra Worker), or keep the mailbox and change it with convert-mailbox"
+
+	// restoreOnline is what restore-mailbox-content says on Exchange Online, where
+	// New-MailboxRestoreRequest reads only a soft-deleted or inactive mailbox
+	// (-SourceMailbox) — the source account has to be deleted first. Between two
+	// active accounts the content is moved by people, not by this Worker.
+	restoreOnline = "Exchange Online restores only a soft-deleted or inactive mailbox (New-MailboxRestoreRequest -SourceMailbox), which needs the source account deleted; between two active accounts the content is moved by people"
+
 	// placesOnly is what the Places operations say on Exchange Server, which has no
 	// Set-Place or Get-Place: there a room's city, street and the like are properties of
 	// its account, and in a hybrid organization they reach Exchange Online with it.
@@ -245,6 +257,26 @@ var Ops = map[string]Op{
 	"disable-remote-mailbox": {Area: "mailbox", Label: "disable a remote mailbox", Required: identity,
 		OnPrem:      &Variant{Cmdlet: "Disable-RemoteMailbox"},
 		Unavailable: remoteOnly},
+
+	// Moving a mailbox's content from one account to another on Exchange Server
+	// (ADR-0534). disable-mailbox removes the Exchange
+	// attributes from the source account and disconnects its mailbox; the content stays
+	// in the database for the deleted-mailbox retention period, and
+	// restore-mailbox-content copies it from there into the target's mailbox.
+	// AllowLegacyDNMismatch is fixed because the target is by design a different
+	// mailbox than the one disconnected, which Exchange refuses without it. The
+	// request runs asynchronously in the Mailbox Replication Service; a process reads
+	// its state with run-get-cmdlet and Get-MailboxRestoreRequest, so no read
+	// operation of its own is needed.
+	"disable-mailbox": {Area: "mailbox", Label: "disable a mailbox", Required: identity,
+		OnPrem:      &Variant{Cmdlet: "Disable-Mailbox"},
+		Unavailable: disableOnline},
+	"restore-mailbox-content": {Area: "mailbox", Label: "restore a disconnected mailbox's content",
+		Required:    []string{"SourceDatabase", "SourceStoreMailbox", "TargetMailbox"},
+		Optional:    []string{"Name", "TargetRootFolder", "TargetIsArchive", "IncludeFolders", "ExcludeFolders", "BadItemLimit", "AcceptLargeDataLoss", "BatchName"},
+		Result:      ResultObject,
+		OnPrem:      &Variant{Cmdlet: "New-MailboxRestoreRequest", Fixed: map[string]any{"AllowLegacyDNMismatch": true}},
+		Unavailable: restoreOnline},
 
 	// Permissions.
 	"add-full-access": same(Op{Area: "permission", Label: "grant full access", Required: []string{"Identity", "User"}, Optional: []string{"AutoMapping"}, Result: ResultObject},

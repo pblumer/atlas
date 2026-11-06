@@ -1,0 +1,716 @@
+// Package workersdk is the client half of the Worker protocol: leasing jobs of named
+// types from a running atlas, reporting how each ended, answering the form lookups a
+// Worker Type serves, and asking before acting where the server governs the Worker
+// (ADR-0007, ADR-0168, ADR-0473, ADR-0475).
+//
+// It is the seed of the Worker SDK of ADR-0535:
+// what a Worker Type built outside this repository depends on. That is why it imports
+// nothing of the engine — not job, not state, not compiler — and a test holds it to
+// that (sdk_deps_test.go). The built-in Worker Types in package worker are written
+// against it; package worker keeps its old names as aliases, so nothing that worked
+// against worker.New stops working.
+//
+// The contract for a model-authored job type's code is the one the script worker
+// established: the job arrives as JSON on stdin, and whatever JSON object the command
+// writes to stdout becomes the variables the job completes with ([CmdExec]). A non-zero
+// exit fails the job, carrying the command's stderr as the message an operator reads on
+// the incident.
+package workersdk
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os/exec"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Job is one leased job as the engine hands it over.
+type Job struct {
+	JobKey             uint64         `json:"jobKey"`
+	Type               string         `json:"type"`
+	ProcessInstanceKey uint64         `json:"processInstanceKey"`
+	ElementInstanceKey uint64         `json:"elementInstanceKey"`
+	ProcessDefKey      uint64         `json:"processDefKey"`
+	ElementID          string         `json:"elementId"`
+	Retries            int32          `json:"retries"`
+	LeaseToken         uint64         `json:"leaseToken"`
+	Variables          map[string]any `json:"variables"`
+	// Worker is a task the engine resolved into plain values, present
+	// only for a kind the server no longer serves itself (ADR-0168). Nil for a plain
+	// job-worker task, whose work is the customer's own command.
+	Connector *ConnectorPayload `json:"connector,omitempty"`
+}
+
+// ConnectorPayload is a resolved task: what to do, with no engine concepts
+// in it.
+type ConnectorPayload struct {
+	Kind   string         `json:"kind"`
+	Fields map[string]any `json:"fields"`
+}
+
+// Exec does one job's work and returns the variables it completed with, or an error
+// that fails the job.
+type Exec interface {
+	Run(ctx context.Context, j Job) (map[string]any, error)
+}
+
+// BPMNError is how a handler ends a job in a BPMN error instead of a result (ADR-0089):
+// return one — wrapped or not — and the worker throws Code rather than failing the job.
+// An error boundary or error event subprocess matching Code catches it and the instance
+// takes the error path, with no retry spent. With none in reach the job waits on an
+// incident naming Code and Message until an operator resolves it.
+//
+// It is for an answer the process has a path for — a card declined, a recipient that
+// does not exist — not for a fault: anything else a handler returns fails the job and
+// is retried as before.
+//
+// The engine's in-process runner uses this same type under its own name (job.BPMNError
+// is an alias of it), so a handler shared by both paths — a script task's run — throws
+// the same error on either. It is defined here rather than there because this package
+// may depend on nothing of the engine.
+type BPMNError struct {
+	Code    string
+	Message string
+}
+
+func (e *BPMNError) Error() string {
+	if e.Message == "" {
+		return "BPMN error " + e.Code
+	}
+	return "BPMN error " + e.Code + ": " + e.Message
+}
+
+// ExecFunc adapts a function to [Exec].
+type ExecFunc func(ctx context.Context, j Job) (map[string]any, error)
+
+// Run implements [Exec].
+func (f ExecFunc) Run(ctx context.Context, j Job) (map[string]any, error) { return f(ctx, j) }
+
+// Outcome is everything a job's work produced: the variables it completes with, and
+// — for a central business rule task — the decision evaluation to retain.
+//
+// It mirrors the in-process runner's job.Completion, and for the same reason: a
+// decision's record is durable (ADR-0066), so once the evaluation happens on a worker
+// the worker has to be able to report it. Every other kind completes with variables
+// alone, which is why [Exec] stays the ordinary shape.
+type Outcome struct {
+	Variables map[string]any
+	Decision  *DecisionReport
+	// ToolCalls is a worker's account of what an agent chose to run next
+	// (ADR-0253/ADR-0254). It is the second thing in the sentence above: a round's
+	// answer is usually not variables at all, it is a choice of activities, and a
+	// worker deciding the round is the only one who knows what the model said.
+	//
+	// Empty is an answer, not an omission — the agent saying the run is finished —
+	// so a round that ends completes with variables like any other job.
+	ToolCalls []ToolCallReport
+}
+
+// DecisionReport is a worker's account of a decision it evaluated: which decision, the
+// inputs it was handed, the outputs it got and the service's trace.
+//
+// It is an account, not a record. The engine stamps which element instance it belongs
+// to from the job's own lease, so a report cannot attach itself to a task other than
+// the one it holds.
+type DecisionReport struct {
+	DecisionID string         `json:"decisionId"`
+	Inputs     map[string]any `json:"inputs,omitempty"`
+	Outputs    map[string]any `json:"outputs,omitempty"`
+	Trace      string         `json:"trace,omitempty"`
+}
+
+// ToolCallReport is a worker's account of one tool an agent chose for the next round:
+// which of the container's tools to run, the model's own id for the call, and the
+// arguments it supplied for that tool's declared parameters.
+//
+// Like a [DecisionReport] it is an account, not a record — and the difference matters
+// more here, because a tool call does not describe work that happened, it *causes* work
+// to happen. So the engine reads which container this is from the leased job, and
+// resolves Tool against that container's compiled tool index before anything is
+// activated. A worker cannot name an activity the model does not carry and have it run;
+// naming one it does not carry raises the incident ADR-0253 already defines.
+type ToolCallReport struct {
+	Tool      string         `json:"tool"`
+	CallId    string         `json:"callId,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+// CompletingExec is the widest exec shape: work that completes with more than
+// variables. [Exec] is the decision-less special case, and the ladder is
+// deliberately the one the job package already has (Handler / OutputHandler /
+// CompletingHandler) so the two sides of the protocol are described the same way.
+//
+// A handler implementing both is used as a CompletingExec.
+type CompletingExec interface {
+	RunCompleting(ctx context.Context, j Job) (Outcome, error)
+}
+
+// CompletingExecFunc adapts a function to [CompletingExec].
+type CompletingExecFunc func(ctx context.Context, j Job) (Outcome, error)
+
+// Run implements [Exec] by discarding the decision half, so a CompletingExecFunc can
+// stand wherever an Exec is required.
+func (f CompletingExecFunc) Run(ctx context.Context, j Job) (map[string]any, error) {
+	out, err := f(ctx, j)
+	return out.Variables, err
+}
+
+// RunCompleting implements [CompletingExec].
+func (f CompletingExecFunc) RunCompleting(ctx context.Context, j Job) (Outcome, error) {
+	return f(ctx, j)
+}
+
+// Options configures a [Worker].
+type Options struct {
+	// Server is the base URL of the Atlas to work for, e.g. http://localhost:8080.
+	Server string
+	// ID names this worker. It rides on every lease and every report, and it is what
+	// the Workers view shows — so give each deployment its own.
+	ID string
+	// Token, when set, is sent as a bearer credential on every request.
+	Token string
+	// BrokerKey, when set, is presented when this worker asks whether it may act
+	// (Authorize). A server supervising this worker hands it over (ATLAS_BROKER_KEY)
+	// only to the process serving a Worker whose credential it brokers per job; without
+	// it, the server releases no person's token to this process.
+	BrokerKey string
+	// Handlers is what this worker serves, keyed by job type. A worker with none is a
+	// misconfiguration rather than a process that polls forever over nothing.
+	Handlers map[string]Exec
+	// Lease is how long the engine holds a job for this worker. It must comfortably
+	// exceed how long the work takes: an elapsed lease puts the job back on offer, and
+	// the report that finally arrives is fenced out.
+	Lease time.Duration
+	// Wait is how long a poll may block waiting for work before coming back empty.
+	Wait time.Duration
+	// Retry is how long to wait after a failed poll before trying again. A worker
+	// must not exit because the server was restarting, or because the process using
+	// its job type is not deployed yet — both are ordinary and both resolve.
+	Retry time.Duration
+	// MaxJobs is how many jobs of one type this worker runs at once. A poll leases
+	// only as many as there are free places for, so every leased job starts the
+	// moment it arrives: leased work nobody is running is work nobody else can take
+	// either, and its lease runs down while it waits (ADR-0440).
+	MaxJobs int
+	// Workers are the worker names this worker holds credentials for, reported
+	// to the engine on every poll. Only the worker knows them — once a kind is
+	// offloaded the engine holds no credential for it — and the Workers view
+	// subtracts them from what deployed models reference to show which names are
+	// configured nowhere (ADR-0168). Empty for a worker that serves only plain job
+	// types, which need no credential of their own.
+	Connectors []string
+	// Endpoints are where those workers connect, reduced to scheme, host and port and
+	// keyed by worker name — what lets an architecture sketch draw the system a worker
+	// reaches when the engine holds no configuration for it (ADR-0471). Reported beside
+	// Connectors on every poll; a name with no entry is drawn as holding its endpoint
+	// itself.
+	Endpoints map[string]string
+	// Queries are the form lookups this worker answers, keyed by the job type of the
+	// Worker Type answering them (ADR-0473). A query is not a
+	// job: nothing about it is durable, and it is polled on a path of its own beside the
+	// job poll, under the same identity and for the same Workers.
+	Queries map[string]QueryFunc
+	// MaxQueries is how many queries of one type this worker answers at once.
+	MaxQueries int
+	// RetryBackoff is how long a job this worker failed waits before it is offered
+	// again, given the attempts it has left after the failure, in nanoseconds; nil means
+	// [DefaultRetryBackoff], the delay the server's in-process runner waits too
+	// (ADR-0111, amendment 2026-11-04). A Worker Type that runs out here meets the same
+	// replication delays as one that runs inside the server — a group Microsoft Graph
+	// created a moment earlier is not yet found — so it waits as long before it raises
+	// an incident. NoRetryBackoff retries at once.
+	RetryBackoff func(retriesLeft int32) int64
+	// NoRetryBackoff offers a failed job again at once, as before the amendment; tests
+	// that drive a failing job to its incident use it.
+	NoRetryBackoff bool
+	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
+	HTTP *http.Client
+	// Identity is the Worker Type this instance runs, reported on every poll as part of
+	// the protocol handshake (ADR-0535 §3) and shown in the server's Workers view. Nil
+	// reports none, which a server accepts: an instance an operator runs by hand may
+	// not be a packaged Worker Type at all.
+	Identity *Identity
+	// Logger receives the few lines the worker writes itself — a poll that failed and
+	// will be retried, a query answer the server did not take. Each carries the event
+	// name under the key "event" ([EventPollFailed]), so an operator can alert on it
+	// whatever logger a Worker Type uses. Nil means [slog.Default]; atlas's own worker
+	// leaves it nil, so these lines go through the handler `atlas worker` installs.
+	Logger *slog.Logger
+}
+
+// Defaults, chosen so an unconfigured worker is safe rather than surprising: it
+// takes one job at a time, holds it for five minutes, and parks for thirty seconds
+// per poll.
+const (
+	DefaultLease   = 5 * time.Minute
+	DefaultWait    = 30 * time.Second
+	DefaultMaxJobs = 1
+	DefaultRetry   = 5 * time.Second
+	// DefaultMaxQueries is higher than DefaultMaxJobs on purpose: a query is one short
+	// read that a person is waiting on, and a second person searching should not wait
+	// for the first.
+	DefaultMaxQueries = 4
+)
+
+// ProtocolVersion is the major version of the Worker protocol this client speaks
+// (docs/contracts/worker-protocol). It is sent on every poll; a server that does not
+// accept it refuses the poll with 400, naming the versions it does accept, and the
+// worker logs that and keeps retrying, so an upgrade of either side is visible rather
+// than silent.
+const ProtocolVersion = 1
+
+// Identity names a Worker Type the way its manifest does: a stable reverse-DNS id, a
+// semantic version, and the sha256 digest of the artifact when the instance knows it
+// ("sha256:" and 64 hex digits).
+type Identity struct {
+	ID      string `json:"id"`
+	Version string `json:"version"`
+	Digest  string `json:"digest,omitempty"`
+}
+
+// EventPollFailed is the event name the worker's own warnings carry under the key
+// "event": a poll that failed and will be retried, or a query answer the server did not
+// take. It is atlas's registered event worker.poll_failed (ADR-0142); a test in package
+// worker holds the two equal, because this package may not import atlas's catalogue.
+const EventPollFailed = "worker.poll_failed"
+
+// Worker leases jobs of the types it handles and reports what happened. Build one
+// with [New].
+type Worker struct {
+	opts   Options
+	http   *http.Client
+	logger *slog.Logger
+	types  []string
+	// queryTypes are the job types this worker answers queries for, sorted.
+	queryTypes []string
+}
+
+// New builds a worker, filling in defaults.
+func New(opts Options) *Worker {
+	if opts.Lease <= 0 {
+		opts.Lease = DefaultLease
+	}
+	if opts.Wait <= 0 {
+		opts.Wait = DefaultWait
+	}
+	if opts.MaxJobs <= 0 {
+		opts.MaxJobs = DefaultMaxJobs
+	}
+	if opts.Retry <= 0 {
+		opts.Retry = DefaultRetry
+	}
+	if opts.MaxQueries <= 0 {
+		opts.MaxQueries = DefaultMaxQueries
+	}
+	w := &Worker{opts: opts, http: opts.HTTP, logger: opts.Logger}
+	if w.logger == nil {
+		w.logger = slog.Default()
+	}
+	if w.http == nil {
+		// One request may block for a whole poll and is followed by the work itself, so
+		// the client's ceiling is the poll plus the lease rather than a short timeout.
+		w.http = &http.Client{Timeout: opts.Wait + opts.Lease + 30*time.Second}
+	}
+	for t := range opts.Handlers {
+		w.types = append(w.types, t)
+	}
+	sort.Strings(w.types) // stable order, so a run is reproducible
+	for t := range opts.Queries {
+		w.queryTypes = append(w.queryTypes, t)
+	}
+	sort.Strings(w.queryTypes)
+	return w
+}
+
+// Run works until ctx is cancelled. Each type is polled by its own goroutine, so a
+// slow queue never starves another, and each type runs up to MaxJobs jobs at once.
+// Run returns only once every job it started has returned.
+func (w *Worker) Run(ctx context.Context) error {
+	if len(w.types) == 0 && len(w.queryTypes) == 0 {
+		return errors.New("worker: no job types to handle; give it at least one --handle type=command")
+	}
+	var wg sync.WaitGroup
+	for _, jobType := range w.types {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.serve(ctx, jobType)
+		}()
+	}
+	for _, jobType := range w.queryTypes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.serveQueries(ctx, jobType)
+		}()
+	}
+	wg.Wait()
+	return nil
+}
+
+// serve keeps one job type's places filled until ctx is cancelled.
+//
+// It polls only when a place is free, and asks for exactly as many jobs as are
+// free, so the bound is on what runs rather than on what one poll returns. Running
+// them one after another instead — the shape this replaced — made a slow endpoint
+// cost the sum of its calls rather than the slowest of them, and left every job of
+// a batch but the first holding a lease it was not using
+// (ADR-0440).
+func (w *Worker) serve(ctx context.Context, jobType string) {
+	places := make(chan struct{}, w.opts.MaxJobs)
+	var running sync.WaitGroup
+	defer running.Wait()
+	// Checked first because the select below picks at random between a free place
+	// and a cancelled context, and a cancelled poll would only fail and come back.
+	for ctx.Err() == nil {
+		// Wait for one free place, then take every other one free right now.
+		select {
+		case places <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		free := 1
+	claim:
+		for free < cap(places) {
+			select {
+			case places <- struct{}{}:
+				free++
+			default:
+				break claim
+			}
+		}
+
+		jobs, err := w.activate(ctx, jobType, free)
+		// Hand back the places this poll did not fill.
+		for i := len(jobs); i < free; i++ {
+			<-places
+		}
+		for i, j := range jobs {
+			if i >= free {
+				// More than was asked for. The engine never answers so, but a job it
+				// did lease to this worker is still run — after a place frees up, so the
+				// bound holds whatever the server says.
+				places <- struct{}{}
+			}
+			running.Add(1)
+			go func() {
+				defer running.Done()
+				defer func() { <-places }()
+				w.work(ctx, j)
+			}()
+		}
+		if err == nil || ctx.Err() != nil {
+			continue
+		}
+		// A failed poll is not a reason to exit. The server may be restarting, or the
+		// process that uses this job type may not be deployed yet — the engine
+		// answers 404 for a type it has never seen, which is the honest answer and
+		// what makes a typo visible, and both resolve on their own. So it is logged
+		// and retried; only cancellation ends the loop. A supervised worker that
+		// exited here would flap against its supervisor for as long as the deploy
+		// took.
+		w.warn("a job poll failed; retrying",
+			slog.String("worker", w.opts.ID), slog.String("type", jobType),
+			slog.String("error", err.Error()))
+		select {
+		case <-ctx.Done():
+		case <-time.After(w.opts.Retry):
+		}
+	}
+}
+
+// RunOnce polls every handled type once and works whatever it is given. It is what
+// a test drives, and what a one-shot invocation ("drain the queue and exit") wants.
+func (w *Worker) RunOnce(ctx context.Context) error {
+	if len(w.types) == 0 {
+		return errors.New("worker: no job types to handle; give it at least one --handle type=command")
+	}
+	for _, jobType := range w.types {
+		if err := w.pollOnce(ctx, jobType); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pollOnce leases up to MaxJobs of one type, works them at once, and returns when
+// every one of them has been reported.
+func (w *Worker) pollOnce(ctx context.Context, jobType string) error {
+	jobs, err := w.activate(ctx, jobType, w.opts.MaxJobs)
+	if err != nil {
+		return err
+	}
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.work(ctx, j)
+		}()
+	}
+	wg.Wait()
+	return nil
+}
+
+// work runs one job's handler and reports the outcome. A failure is reported to the
+// engine rather than returned: the retry and incident machinery is what an operator
+// sees, and a worker that swallowed the error would park the token silently. A
+// [BPMNError] is the one error that is not a failure, and it is thrown instead.
+func (w *Worker) work(ctx context.Context, j Job) {
+	out, err := RunHandler(w.AuthorizingContext(ctx, j), w.opts.Handlers[j.Type], j)
+	if errors.Is(err, errPolicyRefused) {
+		// Refused by policy: the server settled the job with its decision.
+		return
+	}
+	if err != nil {
+		// Nothing else to do when a report is refused: the lease will elapse and the job
+		// is offered again.
+		// One without a code names nothing a catch could match and the engine refuses
+		// it, which would hand the job back to this handler after every lease; it is
+		// the handler's own fault, so it fails the job like any other.
+		var be *BPMNError
+		if errors.As(err, &be) && strings.TrimSpace(be.Code) != "" {
+			_ = w.throwError(ctx, j, be)
+			return
+		}
+		_ = w.fail(ctx, j, err.Error())
+		return
+	}
+	_ = w.complete(ctx, j, out)
+}
+
+// RunHandler runs one job through whichever shape its handler implements. A handler
+// that only knows variables is the ordinary case and stays untouched; one that can
+// report a decision is asked for the wider outcome. The worker calls it for every job;
+// it is exported so a Worker Type can test its handler through the same door.
+func RunHandler(ctx context.Context, h Exec, j Job) (Outcome, error) {
+	if c, ok := h.(CompletingExec); ok {
+		return c.RunCompleting(ctx, j)
+	}
+	vars, err := h.Run(ctx, j)
+	return Outcome{Variables: vars}, err
+}
+
+// activate leases up to maxJobs jobs of one type.
+func (w *Worker) activate(ctx context.Context, jobType string, maxJobs int) ([]Job, error) {
+	body := map[string]any{
+		"type": jobType, "worker": w.opts.ID,
+		"leaseMs": w.opts.Lease.Milliseconds(), "waitMs": w.opts.Wait.Milliseconds(),
+		"maxJobs": maxJobs, "protocol": ProtocolVersion,
+	}
+	if w.opts.Identity != nil {
+		body["workerType"] = w.opts.Identity
+	}
+	// Sent on every poll, including one that returns nothing: it is the engine's only
+	// way to learn what this worker can reach, and an idle worker is exactly the case
+	// an operator is looking at when a queue is not moving (ADR-0168).
+	if len(w.opts.Connectors) > 0 {
+		body["connectors"] = w.opts.Connectors
+	}
+	if len(w.opts.Endpoints) > 0 {
+		body["endpoints"] = w.opts.Endpoints
+	}
+	var out struct {
+		Jobs []Job `json:"jobs"`
+	}
+	if err := w.call(ctx, "/api/v1/jobs/activate", body, &out); err != nil {
+		return nil, err
+	}
+	return out.Jobs, nil
+}
+
+func (w *Worker) complete(ctx context.Context, j Job, out Outcome) error {
+	body := map[string]any{"worker": w.opts.ID, "leaseToken": j.LeaseToken}
+	if len(out.Variables) > 0 {
+		body["variables"] = out.Variables
+	}
+	// Only a business rule task has one, and the engine ignores it on any other job
+	// type — sending it is what lets a decision evaluated out here still be retained
+	// as the durable record an operator reads (ADR-0066).
+	if out.Decision != nil {
+		body["decision"] = out.Decision
+	}
+	// Only an agent round has these, and the engine ignores them on any other job type.
+	// Sending nothing is the ending: an agent that reports no calls has said it is
+	// done, which is the same meaning an empty list has in the engine (ADR-0254).
+	if len(out.ToolCalls) > 0 {
+		body["toolCalls"] = out.ToolCalls
+	}
+	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/complete", body, nil)
+}
+
+func (w *Worker) fail(ctx context.Context, j Job, message string) error {
+	// One attempt is spent by this failure; at zero the engine raises an incident.
+	retries := j.Retries - 1
+	if retries < 0 {
+		retries = 0
+	}
+	body := map[string]any{
+		"worker": w.opts.ID, "leaseToken": j.LeaseToken,
+		"retries": retries, "message": message,
+	}
+	// The engine takes the delay in milliseconds and holds the job back until it has
+	// passed; a job with no attempts left raises its incident at once and waits for
+	// nothing.
+	if backoff := w.retryBackoff(int32(retries)); backoff > 0 {
+		body["retryBackoff"] = backoff / int64(time.Millisecond)
+	}
+	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/fail", body, nil)
+}
+
+// retryBackoff is the delay a failed job with retriesLeft attempts waits before it is
+// offered again (Options.RetryBackoff).
+func (w *Worker) retryBackoff(retriesLeft int32) int64 {
+	if w.opts.NoRetryBackoff || retriesLeft <= 0 {
+		return 0
+	}
+	if w.opts.RetryBackoff != nil {
+		return w.opts.RetryBackoff(retriesLeft)
+	}
+	return DefaultRetryBackoff(retriesLeft)
+}
+
+// DefaultRetryBackoff is the delay the server's in-process runner waits before it
+// retries a failed job (ADR-0111, amendment 2026-11-04): a job with one retry left waits
+// a minute, one with more left waits fifteen seconds, one with none raises its incident
+// at once. It is the server's policy restated here, because this package may not import
+// the runner that owns it; a test in package worker holds the two equal.
+func DefaultRetryBackoff(retriesLeft int32) int64 {
+	switch {
+	case retriesLeft <= 0:
+		return 0
+	case retriesLeft == 1:
+		return int64(time.Minute)
+	default:
+		return int64(15 * time.Second)
+	}
+}
+
+// throwError ends a job with a BPMN error (ADR-0089). It spends no attempt: whether the
+// instance goes on is the model's catch, not a retry.
+func (w *Worker) throwError(ctx context.Context, j Job, be *BPMNError) error {
+	body := map[string]any{
+		"worker": w.opts.ID, "leaseToken": j.LeaseToken,
+		"errorCode": be.Code,
+	}
+	if be.Message != "" {
+		body["errorMessage"] = be.Message
+	}
+	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/error", body, nil)
+}
+
+// warn writes one of the worker's own warnings, its event name first so it reads before
+// the payload in text output.
+func (w *Worker) warn(msg string, attrs ...slog.Attr) {
+	w.logger.LogAttrs(context.Background(), slog.LevelWarn, msg,
+		append([]slog.Attr{slog.String("event", EventPollFailed)}, attrs...)...)
+}
+
+// call posts a JSON body and decodes a JSON reply into out (nil to discard it).
+func (w *Worker) call(ctx context.Context, path string, body, out any) error {
+	return w.callWith(ctx, path, nil, body, out)
+}
+
+// callWith is call with extra request headers.
+func (w *Worker) callWith(ctx context.Context, path string, header http.Header, body, out any) error {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.opts.Server+path, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if w.opts.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+w.opts.Token)
+	}
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		var msg struct {
+			Error string `json:"error"`
+		}
+		decodeErr := json.NewDecoder(resp.Body).Decode(&msg)
+		se := &statusError{path: path, status: resp.StatusCode, msg: msg.Error,
+			// A route the server does not have answers the mux's plain-text 404, not
+			// the API's JSON error: that is how "no such step" is told from "no such job".
+			noRoute: resp.StatusCode == http.StatusNotFound && decodeErr != nil}
+		return se
+	}
+	if out == nil {
+		return nil
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// CmdExec runs an operating-system command per job: the job arrives as JSON on
+// stdin, and the JSON object the command writes to stdout becomes the variables the
+// job completes with (no output completes with none). A non-zero exit fails the job
+// and carries the command's stderr, which is what an operator reads on the incident.
+type CmdExec struct {
+	Name string
+	Args []string
+	// Env is added to the process's own environment.
+	Env []string
+}
+
+// Run implements [Exec].
+func (c CmdExec) Run(ctx context.Context, j Job) (map[string]any, error) {
+	payload, err := json.Marshal(j)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
+	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Env = append(cmd.Environ(), c.Env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := bytes.TrimSpace(stderr.Bytes()); len(msg) > 0 {
+			return nil, fmt.Errorf("%s: %w: %s", c.Name, err, msg)
+		}
+		return nil, fmt.Errorf("%s: %w", c.Name, err)
+	}
+	trimmed := bytes.TrimSpace(stdout.Bytes())
+	if len(trimmed) == 0 {
+		return nil, nil
+	}
+	var vars map[string]any
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	dec.UseNumber()
+	if err := dec.Decode(&vars); err != nil {
+		return nil, fmt.Errorf("%s: its output is not a JSON object of variables: %w", c.Name, err)
+	}
+	return vars, nil
+}
+
+// statusError is a non-200 answer from the server.
+type statusError struct {
+	path    string
+	status  int
+	msg     string
+	noRoute bool
+}
+
+func (e *statusError) Error() string {
+	if e.msg != "" {
+		return fmt.Sprintf("worker: %s: %s", e.path, e.msg)
+	}
+	return fmt.Sprintf("worker: %s: status %d", e.path, e.status)
+}

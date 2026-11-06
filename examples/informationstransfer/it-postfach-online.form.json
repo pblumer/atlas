@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "it-postfach-online",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Postfachinhalt übertragen (Exchange Online) · Move the mailbox content (Exchange Online)**\n\nQuelle · Source: **{{pfQuelle.DisplayName}}** <{{pfQuelle.PrimarySmtpAddress}}>\n\nZiel · Target: **{{pfZiel.DisplayName}}** <{{pfZiel.PrimarySmtpAddress}}>\n\nExchange Online hat keine Operation, die den Inhalt eines bestehenden Postfachs in ein anderes verschiebt. · Exchange Online has no operation that moves a live mailbox's content into another.\n\n1. Den Inhalt übertragen, z. B. mit einer eDiscovery-Suche (Purview) über das Quellpostfach, Export als PST und Import in das Zielpostfach, oder mit dem Migrationswerkzeug des Betriebs.\n2. Prüfen, dass der Inhalt im Ziel ist.\n3. Das Quellpostfach entfernen (Exchange-Lizenz der Quelle entziehen), damit ihre Adresse frei wird, falls auch die Primäradresse übertragen wird.\n4. Diese Aufgabe mit dem Ergebnis abschliessen."
+    },
+    {
+      "key": "inhaltUebertragen",
+      "type": "radio",
+      "label": "Inhalt übertragen und Quellpostfach entfernt? · Content moved and source mailbox removed?",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung · Remark",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

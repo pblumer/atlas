@@ -16,9 +16,9 @@ import (
 
 	"github.com/pblumer/atlas/api/workerquery"
 	"github.com/pblumer/atlas/compiler"
-	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/worker"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // queryServer is the worker half of the query protocol, served by the server's own

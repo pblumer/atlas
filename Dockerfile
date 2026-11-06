@@ -26,8 +26,12 @@ COPY . .
 # and reproducible.
 ARG TARGETOS
 ARG TARGETARCH
+# atlas-workers is the worker-only executable; placed beside /atlas, the server's
+# supervised workers run it instead of the server binary (ADR-0535).
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -trimpath -ldflags="-s -w" -o /out/atlas ./cmd/atlas
+    go build -trimpath -ldflags="-s -w" -o /out/atlas ./cmd/atlas && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -trimpath -ldflags="-s -w" -o /out/atlas-workers ./cmd/atlas-workers
 
 # ---------------------------------------------------------------------------
 
@@ -79,6 +83,7 @@ RUN groupadd -g 65532 atlas \
     && mkdir -p /data && chown 65532:65532 /data
 
 COPY --from=build /out/atlas /atlas
+COPY --from=build /out/atlas-workers /atlas-workers
 
 EXPOSE 8080
 VOLUME ["/data"]

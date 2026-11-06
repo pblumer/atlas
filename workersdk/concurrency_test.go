@@ -1,4 +1,4 @@
-package worker_test
+package workersdk_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pblumer/atlas/worker"
+	"github.com/pblumer/atlas/workersdk"
 )
 
 // jobStub is an engine stand-in that hands out a fixed number of jobs of one type
@@ -100,8 +100,8 @@ func newGate() *gate {
 	return &gate{entered: make(chan struct{}, 64), release: make(chan struct{})}
 }
 
-func (g *gate) exec() worker.Exec {
-	return worker.ExecFunc(func(ctx context.Context, _ worker.Job) (map[string]any, error) {
+func (g *gate) exec() workersdk.Exec {
+	return workersdk.ExecFunc(func(ctx context.Context, _ workersdk.Job) (map[string]any, error) {
 		g.mu.Lock()
 		g.running++
 		g.peak = max(g.peak, g.running)
@@ -135,7 +135,7 @@ func (g *gate) peakRunning() int {
 	return g.peak
 }
 
-func runUntilCancelled(t *testing.T, w *worker.Worker) (cancel func()) {
+func runUntilCancelled(t *testing.T, w *workersdk.Worker) (cancel func()) {
 	t.Helper()
 	ctx, stop := context.WithCancel(context.Background())
 	exited := make(chan error, 1)
@@ -160,9 +160,9 @@ func runUntilCancelled(t *testing.T, w *worker.Worker) (cancel func()) {
 func TestWorkerRunsJobsOfOneTypeConcurrently(t *testing.T) {
 	stub, ts := newJobStub(t, 3, 3)
 	g := newGate()
-	w := worker.New(worker.Options{
+	w := workersdk.New(workersdk.Options{
 		Server: ts.URL, ID: "rest-1", MaxJobs: 3, Wait: 20 * time.Millisecond, Retry: 10 * time.Millisecond,
-		Handlers: map[string]worker.Exec{"call": g.exec()},
+		Handlers: map[string]workersdk.Exec{"call": g.exec()},
 	})
 	cancel := runUntilCancelled(t, w)
 	defer cancel()
@@ -172,7 +172,7 @@ func TestWorkerRunsJobsOfOneTypeConcurrently(t *testing.T) {
 		t.Errorf("peak concurrency = %d, want 3", peak)
 	}
 	close(g.release)
-	waitFor(t, "every job to be reported", func() bool {
+	waitUntil(t, "every job to be reported", func() bool {
 		_, completed := stub.snapshot()
 		return completed == 3
 	})
@@ -185,9 +185,9 @@ func TestWorkerRunsJobsOfOneTypeConcurrently(t *testing.T) {
 func TestWorkerLeasesOnlyTheSlotsItHasFree(t *testing.T) {
 	stub, ts := newJobStub(t, 2, 1)
 	g := newGate()
-	w := worker.New(worker.Options{
+	w := workersdk.New(workersdk.Options{
 		Server: ts.URL, ID: "rest-1", MaxJobs: 2, Wait: 20 * time.Millisecond, Retry: 10 * time.Millisecond,
-		Handlers: map[string]worker.Exec{"call": g.exec()},
+		Handlers: map[string]workersdk.Exec{"call": g.exec()},
 	})
 	cancel := runUntilCancelled(t, w)
 	defer cancel()
@@ -204,12 +204,12 @@ func TestWorkerLeasesOnlyTheSlotsItHasFree(t *testing.T) {
 	}
 
 	close(g.release)
-	waitFor(t, "both jobs to be reported", func() bool {
+	waitUntil(t, "both jobs to be reported", func() bool {
 		_, completed := stub.snapshot()
 		return completed == 2
 	})
 	// Once the slots free up the worker polls again for both of them.
-	waitFor(t, "a poll for the freed slots", func() bool {
+	waitUntil(t, "a poll for the freed slots", func() bool {
 		asked, _ := stub.snapshot()
 		return len(asked) >= 3 && asked[len(asked)-1] == 2
 	})
@@ -220,16 +220,16 @@ func TestWorkerLeasesOnlyTheSlotsItHasFree(t *testing.T) {
 // concurrency has been getting all along.
 func TestWorkerRunsOneJobAtATimeByDefault(t *testing.T) {
 	stub, ts := newJobStub(t, 2, 2)
-	w := worker.New(worker.Options{
+	w := workersdk.New(workersdk.Options{
 		Server: ts.URL, ID: "cmd-1", Wait: 20 * time.Millisecond, Retry: 10 * time.Millisecond,
-		Handlers: map[string]worker.Exec{"call": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) {
+		Handlers: map[string]workersdk.Exec{"call": workersdk.ExecFunc(func(context.Context, workersdk.Job) (map[string]any, error) {
 			return nil, nil
 		})},
 	})
 	cancel := runUntilCancelled(t, w)
 	defer cancel()
 
-	waitFor(t, "both jobs to be reported", func() bool {
+	waitUntil(t, "both jobs to be reported", func() bool {
 		_, completed := stub.snapshot()
 		return completed == 2
 	})
@@ -237,8 +237,8 @@ func TestWorkerRunsOneJobAtATimeByDefault(t *testing.T) {
 	// the second from being leased while the first runs.
 	asked, _ := stub.snapshot()
 	for i, n := range asked {
-		if n != worker.DefaultMaxJobs {
-			t.Errorf("poll %d asked for %d jobs, want the default of %d", i, n, worker.DefaultMaxJobs)
+		if n != workersdk.DefaultMaxJobs {
+			t.Errorf("poll %d asked for %d jobs, want the default of %d", i, n, workersdk.DefaultMaxJobs)
 		}
 	}
 }
@@ -248,9 +248,9 @@ func TestWorkerRunsOneJobAtATimeByDefault(t *testing.T) {
 func TestRunOnceWorksALeasedBatchConcurrently(t *testing.T) {
 	stub, ts := newJobStub(t, 3, 3)
 	g := newGate()
-	w := worker.New(worker.Options{
+	w := workersdk.New(workersdk.Options{
 		Server: ts.URL, ID: "rest-1", MaxJobs: 3, Wait: 20 * time.Millisecond,
-		Handlers: map[string]worker.Exec{"call": g.exec()},
+		Handlers: map[string]workersdk.Exec{"call": g.exec()},
 	})
 	done := make(chan error, 1)
 	go func() { done <- w.RunOnce(context.Background()) }()
@@ -278,9 +278,9 @@ func TestWorkerKeepsItsBoundWhenTheServerSendsTooMany(t *testing.T) {
 	stub, ts := newJobStub(t, 3, 3)
 	stub.ignoreMax = true
 	g := newGate()
-	w := worker.New(worker.Options{
+	w := workersdk.New(workersdk.Options{
 		Server: ts.URL, ID: "rest-1", MaxJobs: 1, Wait: 20 * time.Millisecond, Retry: 10 * time.Millisecond,
-		Handlers: map[string]worker.Exec{"call": g.exec()},
+		Handlers: map[string]workersdk.Exec{"call": g.exec()},
 	})
 	cancel := runUntilCancelled(t, w)
 	defer cancel()
@@ -289,7 +289,7 @@ func TestWorkerKeepsItsBoundWhenTheServerSendsTooMany(t *testing.T) {
 		g.waitEntered(t, 1)
 		g.release <- struct{}{}
 	}
-	waitFor(t, "all three jobs to be reported", func() bool {
+	waitUntil(t, "all three jobs to be reported", func() bool {
 		_, completed := stub.snapshot()
 		return completed == 3
 	})

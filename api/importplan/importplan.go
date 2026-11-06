@@ -133,6 +133,19 @@ type Artifact struct {
 	// Detail says in words why an artifact is planned as it is, where the status alone
 	// does not: a proposal for a key the map has is never written over the map's record.
 	Detail string `json:"detail,omitempty"`
+	// SharedWith names the decisions outside the importing application that resolve
+	// a model this import would replace (ADR-0467 amendment 2026-11-05). Such a model
+	// is written only when the caller names it under overwrite: neither * nor behind
+	// replaces it, because replacing it changes those decisions too.
+	SharedWith []Use `json:"sharedWith,omitempty"`
+}
+
+// Use is a decision outside the importing application that resolves a model, with
+// the application it belongs to — named only for a caller who may see it.
+type Use struct {
+	Decision    string  `json:"decision"`
+	Name        string  `json:"name"`
+	Application *Holder `json:"application,omitempty"`
 }
 
 // Holder is the application an artifact belongs to before an import adopts it.

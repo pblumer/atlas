@@ -63,24 +63,55 @@ export function gapChoices(rows) {
   return { adopt, map, omit };
 }
 
+// shared reports whether replacing a model changes decisions outside the importing
+// application (ADR-0467 amendment 2026-11-05). Such a box starts unticked, is never
+// set by "tick all", and is always named, so only a person's own tick replaces it.
+const shared = (a) => (a.sharedWith || []).length > 0;
+
+// kindOf is the artifact's kind as a person reads it: "Prozess", "Formular" …
+const kindOf = (ref) => {
+  const kind = String(ref).split(":")[0];
+  const key = "choices.kind." + kind;
+  const label = t(key);
+  return label === key ? kind : label;
+};
+
 // openImportChoices shows the plan and asks what to replace and what to take from
-// another application. Resolves to { overwrite, keep, adopt } — refs — or null on
-// cancel, Escape or a click outside.
-export function openImportChoices({ title, artifacts }) {
+// another application. target names the application the import goes into. Resolves
+// to { overwrite, keep, adopt } — refs — or null on cancel, Escape or a click outside.
+export function openImportChoices({ title, artifacts, target }) {
   return new Promise((resolve) => {
     const count = (status) => artifacts.filter((a) => a.status === status).length;
     const fresh = artifacts.filter((a) => a.status === "new");
-    const label = (a) => `<code>${esc(a.ref)}</code>${a.name && a.name !== a.ref.split(":").slice(1).join(":")
-      ? ` ${esc(a.name)}` : ""}`;
+    const into = target ? `«${esc(target)}»` : esc(t("choices.thisApplication"));
+    // A row names the kind and the name first, and the ref beside it: the ref is what
+    // the decision is sent as, the name is what a person recognises.
+    const label = (a) => {
+      const id = a.ref.split(":").slice(1).join(":");
+      const name = a.name && a.name !== id ? a.name : id;
+      return `<span class="muted small">${esc(kindOf(a.ref))}</span> <b>${esc(name)}</b> <code class="small">${esc(a.ref)}</code>`;
+    };
+    const uses = (a) => (a.sharedWith || []).map((u) => t("choices.sharedUse", {
+      name: esc(u.name || u.decision),
+      application: esc(u.application ? u.application.name : t("choices.elsewhereHidden")),
+    })).join(", ");
+    // What happens to the row as its boxes stand, said in words next to it.
+    const fate = (a, ticked) => `<span class="import-fate small${ticked ? " import-fate-replace" : ""}">${ticked
+      ? t("choices.willReplace") : t("choices.willKeep")}</span>`;
     const group = (g) => {
       const items = artifacts.filter((a) => a.status === g.status);
       if (!items.length) return "";
       return `<section class="import-group" data-status="${g.status}">
           <h3>${esc(t(g.title))} <span class="muted">(${items.length})</span></h3>
           <p class="muted small">${esc(t(g.hint))}</p>
-          <ul class="import-changed">${items.map((a) => `
-            <li><label><input type="checkbox" class="import-pick" value="${esc(a.ref)}"
-              data-status="${g.status}"${g.ticked ? " checked" : ""}> ${t("choices.replace", { label: label(a) })}</label></li>`).join("")}</ul>
+          <ul class="import-changed">${items.map((a) => {
+            const ticked = g.ticked && !shared(a);
+            return `
+            <li class="import-row${shared(a) ? " import-shared" : ""}"><label><input type="checkbox" class="import-pick" value="${esc(a.ref)}"
+              data-status="${g.status}"${shared(a) ? " data-shared" : ""}${ticked ? " checked" : ""}> ${t("choices.replace", { label: label(a) })}</label>
+              <div class="import-detail">${fate(a, ticked)}</div>
+              ${shared(a) ? `<p class="import-warning small">${t("choices.sharedWith", { uses: uses(a) })}</p>` : ""}</li>`;
+          }).join("")}</ul>
         </section>`;
     };
     // Artifacts another application holds (ADR-0467 amendment 2026-11-03): taken
@@ -94,9 +125,10 @@ export function openImportChoices({ title, artifacts }) {
           <h3>${esc(t("choices.elsewhere"))} <span class="muted">(${items.length})</span></h3>
           <p class="muted small">${esc(t("choices.elsewhereHint"))}</p>
           <ul class="import-changed">${items.map((a) => `
-            <li><label><input type="checkbox" class="import-adopt" value="${esc(a.ref)}">
+            <li class="import-row" data-holder="${esc(holder(a))}"><label><input type="checkbox" class="import-adopt" value="${esc(a.ref)}">
               ${t("choices.adopt", { label: label(a), holder: esc(holder(a)) })}</label>
-              ${a.compared === "changed" ? `<br><label class="small" style="margin-left:1.6em"><input type="checkbox"
+              <div class="import-detail"><span class="import-fate small">${t("choices.willStay", { holder: esc(holder(a)) })}</span></div>
+              ${a.compared === "changed" ? `<label class="small import-detail"><input type="checkbox"
                 class="import-adopt-content" value="${esc(a.ref)}"> ${esc(t("choices.adoptContent"))}</label>` : ""}</li>`).join("")}</ul>
         </section>`;
     };
@@ -131,6 +163,7 @@ export function openImportChoices({ title, artifacts }) {
           <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
         </div>
         <div class="modal-body">
+          <p class="import-target">${t("choices.target", { target: into })}</p>
           <p class="import-counts">${t("choices.counts", {
             created: count("new"), unchanged: count("unchanged"), behind: count("behind"),
             ahead: count("ahead"), changed: count("changed"),
@@ -146,7 +179,7 @@ export function openImportChoices({ title, artifacts }) {
             <ul>${fresh.map((a) => `<li>${label(a)}</li>`).join("")}</ul></details>` : ""}
         </div>
         <div class="modal-foot">
-          <span></span>
+          <span class="import-blocked small" hidden>${esc(t("choices.blocked"))}</span>
           <span class="modal-actions">
             <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
             <button type="button" class="btn" data-ok>${esc(t("choices.import"))}</button>
@@ -175,11 +208,44 @@ export function openImportChoices({ title, artifacts }) {
     ov.addEventListener("mousedown", (e) => { if (e.target === ov) finish(null); });
     ov.querySelector("[data-x]").addEventListener("click", () => finish(null));
     ov.querySelector("[data-cancel]").addEventListener("click", () => finish(null));
-    ov.querySelector("[data-all]").addEventListener("click", () => picks().forEach((p) => { p.checked = true; }));
-    ov.querySelector("[data-none]").addEventListener("click", () => picks().forEach((p) => { p.checked = false; }));
+    // Every box a bulk button may set: what to replace, what to take from another
+    // application and whether to take its content too — never a shared model's.
+    const bulk = () => [...picks().filter((p) => !p.hasAttribute("data-shared")),
+      ...ov.querySelectorAll(".import-adopt, .import-adopt-content")];
+    const ok = ov.querySelector("[data-ok]");
+    const blocked = ov.querySelector(".import-blocked");
+    // The words beside each row follow its boxes, and the import waits until every
+    // artifact another application holds is taken: the server refuses it otherwise.
+    const refresh = () => {
+      for (const p of picks()) {
+        const f = p.closest("li").querySelector(".import-fate");
+        f.textContent = t(p.checked ? "choices.willReplace" : "choices.willKeep");
+        f.classList.toggle("import-fate-replace", p.checked);
+      }
+      let held = 0;
+      for (const p of ov.querySelectorAll(".import-adopt")) {
+        const li = p.closest("li");
+        const content = li.querySelector(".import-adopt-content");
+        if (content) content.disabled = !p.checked;
+        const f = li.querySelector(".import-fate");
+        const holder = li.dataset.holder;
+        f.innerHTML = !p.checked ? t("choices.willStay", { holder: esc(holder) })
+          : t(content ? (content.checked ? "choices.willMoveReplaced" : "choices.willMoveKept") : "choices.willMove",
+            { holder: esc(holder), target: into });
+        f.classList.toggle("import-fate-replace", p.checked);
+        if (!p.checked) held++;
+      }
+      ok.disabled = held > 0;
+      blocked.hidden = held === 0;
+    };
+    ov.addEventListener("change", refresh);
+    ov.querySelector("[data-all]").addEventListener("click", () => { bulk().forEach((p) => { p.checked = true; }); refresh(); });
+    ov.querySelector("[data-none]").addEventListener("click", () => { bulk().forEach((p) => { p.checked = false; }); refresh(); });
+    refresh();
     ov.querySelector("[data-ok]").addEventListener("click", () => {
-      // Changed is always named; behind and ahead only where a box was moved.
-      const named = picks().filter((p) => p.dataset.status === "changed" || p.checked !== startsTicked(p));
+      // Changed and shared are always named; behind and ahead only where a box was moved.
+      const named = picks().filter((p) => p.dataset.status === "changed" || p.hasAttribute("data-shared") ||
+        p.checked !== startsTicked(p));
       const adopt = [...ov.querySelectorAll(".import-adopt")].filter((p) => p.checked).map((p) => p.value);
       // An adopted artifact whose content differs is named too: replaced where the
       // second box is ticked, kept as this server has it where it is not.
@@ -199,7 +265,7 @@ export function openImportChoices({ title, artifacts }) {
         omit: gapped.omit,
       });
     });
-    ov.querySelector("[data-ok]").focus();
+    ok.focus();
   });
 }
 
@@ -212,7 +278,7 @@ export async function importAsking(send, { title }) {
   const plan = await send("dryRun=true");
   const artifacts = (plan && plan.artifacts) || [];
   if (!needsAsking(artifacts)) return send("");
-  const choice = await openImportChoices({ title, artifacts });
+  const choice = await openImportChoices({ title, artifacts, target: plan && plan.name });
   if (!choice) return null;
   return send(decisionQuery(choice));
 }

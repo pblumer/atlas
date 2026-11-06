@@ -32,6 +32,8 @@ import (
 	"embed"
 	"encoding/hex"
 	"fmt"
+	"github.com/pblumer/atlas/api/sidecar"
+	"github.com/pblumer/atlas/workertype/install"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -158,11 +160,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.23.1"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.24.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.23.1-dev"
+var Version = "0.24.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -307,6 +309,16 @@ type Server struct {
 	SuperviseSpecs   []SuperviseSpec
 	superviseHandles [][]string
 	superviseURL     string
+	// workerTypesDir holds installed Worker Type artifacts, and installedTypes is its
+	// store, opened in New; allowUnsignedWorkerTypes admits unsigned ones, for
+	// development only (ADR-0535, migration step 3). See [WithInstalledWorkerTypes].
+	workerTypesDir           string
+	installedURL             string
+	allowUnsignedWorkerTypes bool
+	installedTypes           *install.Store
+	// installedWorkers are the configured Workers of installed Worker Types, run-loop
+	// owned like the other design-time stores (ADR-0535 §4).
+	installedWorkers *sidecar.Store[installedWorker]
 	// offloadedKinds are the managed Worker Types this server does not serve
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
 	offloadedKinds []string
@@ -2186,6 +2198,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for _, opt := range opts {
 		opt(s)
 	}
+	if err := s.openInstalledWorkerTypes(); err != nil {
+		return nil, err
+	}
 	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
 	s.newFormDecisions()
@@ -2606,6 +2621,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			args := supervisedWorkerArgs(s.superviseURL, spec, s.superviseHandles[i])
 			s.supervisor.add(spec, args, s.superviseEnv(spec))
 		}
+	}
+	// Installed Worker Type artifacts (ADR-0535, migration step 3). They are
+	// verified before every start; an install while running adds to this supervisor.
+	s.superviseInstalled(quit)
+	if s.supervisor != nil {
 		s.supervisor.start()
 	}
 	go s.timerScheduler(time.Second)

@@ -600,7 +600,7 @@ func TestStrictSandboxWrapsTheInterpreterAndUsesPrivateScratch(t *testing.T) {
 	if name != wantExe {
 		t.Errorf("command = %q, want the Atlas executable %q", name, wantExe)
 	}
-	if len(args) < 6 || args[0] != sandboxSubcommand || args[1] != "--scratch" || args[3] != "--" {
+	if len(args) < 6 || args[0] != SandboxSubcommand || args[1] != "--scratch" || args[3] != "--" {
 		t.Fatalf("sandbox argv = %q, want internal subcommand, scratch and --", args)
 	}
 	scratch := args[2]

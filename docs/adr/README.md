@@ -620,6 +620,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0530](0530-compare-process-versions.md) | Comparing two versions of a process, element by element | Accepted | Landed |
 | [0531](0531-entra-subscribed-skus.md) | The Entra Worker reads the tenant's licence subscriptions and the last sign-in | Accepted | Landed |
 | [0532](0532-exchange-room-lists-and-places.md) | Rooms Outlook can find — room lists and Places metadata in the Exchange Worker | Accepted | Landed |
+| [0533](0533-modeler-walks-and-restores-versions.md) | The Modeler walks a process's versions and restores one as the draft | Accepted | Landed |
+| [0534](0534-informationstransfer-operations.md) | Worker operations for transferring resources between two accounts | Accepted | Landed |
+| [0535](0535-worker-types-as-distributed-artifacts.md) | Worker Types are signed artifacts that atlas launches and atlas hub distributes | Accepted | Partial |
+| [0536](0536-worker-sdk-licence-and-hub-curation.md) | The Worker SDK is Apache-2.0, and atlas hub lists executable Worker Types in two curated tiers | Proposed | Not started |
 
 ## The two states of a record
 

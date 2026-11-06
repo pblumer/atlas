@@ -84,3 +84,20 @@ func TestAShortReceiptIsAnErrorNotAnAnswer(t *testing.T) {
 		t.Fatal("a 3-byte receipt read back without an error")
 	}
 }
+
+// TestACommittedReceiptIsReadOutsideATransaction: a reader such as a job handler reads
+// a receipt from a batch already committed straight off the store.
+func TestACommittedReceiptIsReadOutsideATransaction(t *testing.T) {
+	s := openStore(t)
+	tx := s.NewTransaction()
+	if err := tx.PutTriggerReceipt("hr", "leaver-9", 91, 1000); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	commit(t, tx)
+	if key, ok, err := s.TriggerReceipt("hr", "leaver-9"); err != nil || !ok || key != 91 {
+		t.Errorf("store read: key=%d ok=%v err=%v, want 91", key, ok, err)
+	}
+	if _, ok, err := s.TriggerReceipt("hr", "nobody"); err != nil || ok {
+		t.Errorf("an absent receipt: ok=%v err=%v", ok, err)
+	}
+}

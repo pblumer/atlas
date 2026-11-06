@@ -23,13 +23,17 @@ import (
 // both directions: the flag, its environment variable, and the commands it is on.
 const tlsHandbook = "../../api/web/handbuch.html"
 
-// tlsFlagCommands is where TLS flags are defined, by the command the handbook
-// names them under.
-var tlsFlagCommands = map[string]string{
-	"runServe":  "serve",
-	"runWorker": "worker",
-	"runMCPOn":  "mcp",
+// tlsFlagCommands is where TLS flags are defined — the source file and the function —
+// by the command the handbook names them under. The worker's flags live in
+// internal/workercmd, which `atlas worker` and `atlas-workers` share (ADR-0535).
+var tlsFlagCommands = map[tlsFlagSource]string{
+	{"main.go", "runServe"}:                          "serve",
+	{"../../internal/workercmd/workercmd.go", "Run"}: "worker",
+	{"main.go", "runMCPOn"}:                          "mcp",
 }
+
+// tlsFlagSource is one function that defines flags, and the file it is in.
+type tlsFlagSource struct{ file, fn string }
 
 // tlsFlag is one --tls-* flag: the environment variable that is its default, and
 // the commands that define it, sorted.
@@ -70,58 +74,65 @@ func TestTheHandbookDocumentsEveryTLSFlag(t *testing.T) {
 // process on -h, and runServe starts a server.
 func definedTLSFlags(t *testing.T) map[string]tlsFlag {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
-	if err != nil {
-		t.Fatalf("parse main.go: %v", err)
-	}
 	definers := map[string]bool{"String": true, "Bool": true, "Duration": true, "Int": true}
 	flags := map[string]tlsFlag{}
-	seen := map[string]bool{}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		command, ok := tlsFlagCommands[fn.Name.Name]
-		if !ok {
-			continue
-		}
-		seen[fn.Name.Name] = true
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) < 2 {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !definers[sel.Sel.Name] {
-				return true
-			}
-			if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != "fs" {
-				return true
-			}
-			name, ok := stringLiteral(call.Args[0])
-			if !ok || !strings.HasPrefix(name, "tls-") {
-				return true
-			}
-			f := flags[name]
-			if env, ok := getenvArg(call.Args[1]); ok {
-				f.env = env
-			}
-			f.commands = append(f.commands, command)
-			sort.Strings(f.commands)
-			flags[name] = f
-			return true
-		})
+	seen := map[tlsFlagSource]bool{}
+	files := map[string]bool{}
+	for src := range tlsFlagCommands {
+		files[src.file] = true
 	}
-	for fn := range tlsFlagCommands {
-		if !seen[fn] {
-			t.Fatalf("main.go has no func %s — the TLS flags this test reads moved", fn)
+	for path := range files {
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			src := tlsFlagSource{path, fn.Name.Name}
+			command, ok := tlsFlagCommands[src]
+			if !ok {
+				continue
+			}
+			seen[src] = true
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok || len(call.Args) < 2 {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || !definers[sel.Sel.Name] {
+					return true
+				}
+				if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != "fs" {
+					return true
+				}
+				name, ok := stringLiteral(call.Args[0])
+				if !ok || !strings.HasPrefix(name, "tls-") {
+					return true
+				}
+				f := flags[name]
+				if env, ok := getenvArg(call.Args[1]); ok {
+					f.env = env
+				}
+				f.commands = append(f.commands, command)
+				sort.Strings(f.commands)
+				flags[name] = f
+				return true
+			})
+		}
+	}
+	for src := range tlsFlagCommands {
+		if !seen[src] {
+			t.Fatalf("%s has no func %s — the TLS flags this test reads moved", src.file, src.fn)
 		}
 	}
 	// Finding none means the flags moved out from under this reader, not that
 	// atlas has none; passing here would hold the table to nothing.
 	if len(flags) == 0 {
-		t.Fatal("found no --tls-* flags in runServe, runWorker or runMCPOn — did they move to another function?")
+		t.Fatal("found no --tls-* flags in runServe, workercmd.Run or runMCPOn — did they move to another function?")
 	}
 	return flags
 }

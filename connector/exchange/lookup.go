@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/connector/exchange/catalog"
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // A recipient lookup answers the one question a name field asks of Exchange: does a

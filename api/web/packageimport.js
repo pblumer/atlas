@@ -184,7 +184,7 @@ export async function importPackage(file, { call, title = t("package.title") }) 
     ...((shopPlan && shopPlan.artifacts) || [])];
   let query = "";
   if (needsAsking(artifacts)) {
-    const choice = await openImportChoices({ title, artifacts });
+    const choice = await openImportChoices({ title, artifacts, target: plan.name });
     if (!choice) return null;
     query = decisionQuery(choice);
   }

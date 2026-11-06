@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // TestValidLookupValueAsHoldsEachPropertyToItsShape: a user is identified by its

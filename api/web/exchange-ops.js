@@ -28,6 +28,8 @@ export const EXCHANGE_OPERATIONS = [
   { v: "get-remote-mailbox", l: "pnl.ops.exchange.op.get-remote-mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["onprem"] },
   { v: "list-remote-mailboxes", l: "pnl.ops.exchange.op.list-remote-mailboxes", area: "mailbox", req: [], opt: ["Filter", "Anr", "OrganizationalUnit"], sets: [], result: "array", targets: ["onprem"] },
   { v: "disable-remote-mailbox", l: "pnl.ops.exchange.op.disable-remote-mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "", targets: ["onprem"] },
+  { v: "disable-mailbox", l: "pnl.ops.exchange.op.disable-mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "", targets: ["onprem"] },
+  { v: "restore-mailbox-content", l: "pnl.ops.exchange.op.restore-mailbox-content", area: "mailbox", req: ["SourceDatabase", "SourceStoreMailbox", "TargetMailbox"], opt: ["Name", "TargetRootFolder", "TargetIsArchive", "IncludeFolders", "ExcludeFolders", "BadItemLimit", "AcceptLargeDataLoss", "BatchName"], sets: ["AllowLegacyDNMismatch"], result: "object", targets: ["onprem"] },
   { v: "add-full-access", l: "pnl.ops.exchange.op.add-full-access", area: "permission", req: ["Identity", "User"], opt: ["AutoMapping"], sets: ["AccessRights", "InheritanceType"], result: "object", targets: ["online", "onprem"] },
   { v: "remove-full-access", l: "pnl.ops.exchange.op.remove-full-access", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "InheritanceType"], result: "", targets: ["online", "onprem"] },
   { v: "list-mailbox-permissions", l: "pnl.ops.exchange.op.list-mailbox-permissions", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online", "onprem"] },
@@ -106,7 +108,8 @@ export function exchangeParametersPlaceholder(name) {
   if (!keys.length) return op.v === "run-get-cmdlet" ? '{\n  "Identity": "=postfach"\n}' : "{}";
   const example = { Identity: "=postfach", User: "=mitarbeiter.mail", Member: "=mitarbeiter.mail", Name: "=name",
     Address: "=\"smtp:\" + alias", AccessRights: "Reviewer", Type: "Shared", AutoReplyState: "Enabled",
-    ForwardingSmtpAddress: "=weiterleitung", ExternalEmailAddress: "=extern.mail" };
+    ForwardingSmtpAddress: "=weiterleitung", ExternalEmailAddress: "=extern.mail",
+    SourceDatabase: "=quelle.datenbank", SourceStoreMailbox: "=quelle.postfachGuid", TargetMailbox: "=ziel.mail" };
   return "{\n" + keys.map((k) => `  "${k}": ${JSON.stringify(example[k] || "=" + k.toLowerCase())}`).join(",\n") + "\n}";
 }
 

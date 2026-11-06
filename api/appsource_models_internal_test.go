@@ -255,35 +255,97 @@ func TestApplySourceTreeWritesDecisionModels(t *testing.T) {
 	}
 }
 
-// TestApplySourceTreeRefusesAModelOthersUse: a handle is resolved by every
-// reference on the server. Overwriting the model under one that a decision outside
-// the application points at would change that decision without its author knowing,
-// which is the silent damage the ownership refusals exist to prevent.
-func TestApplySourceTreeRefusesAModelOthersUse(t *testing.T) {
+// TestASharedModelIsReplacedOnlyWhenNamed: a handle is resolved by every reference
+// on the server. Replacing the model under one that a decision outside the
+// application points at changes that decision too, so the plan names that decision
+// and the model is written only when the caller names it under overwrite — never by
+// * (ADR-0467 amendment 2026-11-05).
+func TestASharedModelIsReplacedOnlyWhenNamed(t *testing.T) {
 	for _, theirs := range []dmnRef{
 		{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: "other"},
 		{ID: "loose", Name: "Ungrouped", ModelRef: "freigabe"},
 	} {
 		t.Run(theirs.ID, func(t *testing.T) {
 			s, dir := modelStoresFor(t)
+			if err := s.projects.Save(project{ID: "other", Name: "Andere", Key: "andere"}); err != nil {
+				t.Fatal(err)
+			}
 			writeModelFile(t, dir, "freigabe.dmn", "<old/>")
 			if err := s.dmnrefs.Save(theirs); err != nil {
 				t.Fatalf("save ref: %v", err)
 			}
 			man, byPath := modelTree(sourceModelXML)
-			_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{OverwriteAll: true})
-			var refusal sourceRefusal
-			if !errors.As(err, &refusal) || refusal.status != http.StatusConflict ||
-				!strings.Contains(refusal.msg, `decision model "freigabe"`) {
-				t.Fatalf("err = %v, want a 409 naming the model", err)
+			sees := func(project) bool { return true }
+			res, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow, sees: sees}, importplan.Decisions{DryRun: true})
+			if err != nil {
+				t.Fatalf("plan: %v", err)
+			}
+			got := res.Artifacts[len(res.Artifacts)-1]
+			if got.Ref != "model:freigabe" || len(got.SharedWith) != 1 || got.SharedWith[0].Decision != theirs.ID {
+				t.Fatalf("the model = %+v, want it shared with %s", got, theirs.ID)
+			}
+			if theirs.ProjectID != "" && (got.SharedWith[0].Application == nil || got.SharedWith[0].Application.Name != "Andere") {
+				t.Errorf("the plan does not name the application the decision belongs to: %+v", got.SharedWith[0])
+			}
+
+			_, err = s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{OverwriteAll: true})
+			var undecided sourceUndecided
+			if !errors.As(err, &undecided) {
+				t.Fatalf("overwrite=* = %v, want the shared model left undecided", err)
 			}
 			if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != "<old/>" {
-				t.Errorf("the model was overwritten anyway: %q", data)
+				t.Errorf("overwrite=* replaced a shared model: %q", data)
 			}
-			if all, _ := s.projects.LoadAll(); len(all) != 0 {
-				t.Errorf("a refused import created the application: %+v", all)
+
+			if _, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow},
+				importplan.Decisions{Overwrite: map[string]bool{"model:freigabe": true}}); err != nil {
+				t.Fatalf("named overwrite: %v", err)
+			}
+			if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != sourceModelXML {
+				t.Errorf("the named model was not replaced: %q", data)
 			}
 		})
+	}
+}
+
+// Replacing a shared model needs the editor role on every application whose decision
+// changes with it, and never touches the protected system application's.
+func TestASharedModelNeedsTheOtherApplicationsEditorRole(t *testing.T) {
+	for _, tc := range []struct {
+		holder project
+		status int
+	}{
+		{project{ID: "other", Name: "Andere", Key: "andere"}, http.StatusNotFound},
+		{project{ID: "system", Name: "Atlas System", Key: "atlas-system", Protected: true}, http.StatusForbidden},
+	} {
+		s, dir := modelStoresFor(t)
+		if err := s.projects.Save(tc.holder); err != nil {
+			t.Fatal(err)
+		}
+		writeModelFile(t, dir, "freigabe.dmn", "<old/>")
+		if err := s.dmnrefs.Save(dmnRef{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: tc.holder.ID}); err != nil {
+			t.Fatal(err)
+		}
+		notTheHolder := func(p project) (int, string) {
+			if p.ID == tc.holder.ID {
+				return http.StatusNotFound, "no such project"
+			}
+			return 0, ""
+		}
+		man, byPath := modelTree(sourceModelXML)
+		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: notTheHolder},
+			importplan.Decisions{Overwrite: map[string]bool{"model:freigabe": true}})
+		var refusal sourceRefusal
+		if !errors.As(err, &refusal) || refusal.status != tc.status || !strings.Contains(refusal.msg, `decision model "freigabe"`) {
+			t.Fatalf("%s: err = %v, want %d naming the model", tc.holder.ID, err, tc.status)
+		}
+		if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != "<old/>" {
+			t.Errorf("%s: the model was replaced anyway: %q", tc.holder.ID, data)
+		}
+		if _, err := s.applySourceTree(man, byPath, sourceCaller{authorize: notTheHolder},
+			importplan.Decisions{Keep: map[string]bool{"model:freigabe": true}}); err != nil {
+			t.Errorf("%s: keeping the model: %v", tc.holder.ID, err)
+		}
 	}
 }
 
@@ -370,10 +432,10 @@ func TestCheckSourceModelsRefusesWhatDoesNotCompile(t *testing.T) {
 	}
 }
 
-// TestABehindModelOthersUseIsStillRefused: a model the last import wrote and a newer
-// tree brings is taken without a question — unless a decision outside the
-// application resolves it, whose author would see it change unasked.
-func TestABehindModelOthersUseIsStillRefused(t *testing.T) {
+// TestABehindModelOthersUseIsAsked: a model the last import wrote and a newer tree
+// brings is taken without a question — unless a decision outside the application
+// resolves it: then it waits for a decision, and is replaced only when named.
+func TestABehindModelOthersUseIsAsked(t *testing.T) {
 	s, dir := modelStoresFor(t)
 	man, byPath := modelTree("<v1/>")
 	res, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
@@ -390,10 +452,17 @@ func TestABehindModelOthersUseIsStillRefused(t *testing.T) {
 	if err := s.dmnrefs.Save(dmnRef{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: "other"}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
+	res, err = s.applySourceTree(newer, newerPath, sourceCaller{authorize: allow}, importplan.Decisions{DryRun: true})
+	if err != nil {
+		t.Fatalf("plan with a shared model: %v", err)
+	}
+	if got := res.Artifacts[len(res.Artifacts)-1]; got.Status != importplan.Behind || got.Outcome != importplan.Undecided || len(got.SharedWith) != 1 {
+		t.Fatalf("the shared model = %+v, want behind, undecided and shared", got)
+	}
 	_, err = s.applySourceTree(newer, newerPath, sourceCaller{authorize: allow}, importplan.Decisions{})
-	var refusal sourceRefusal
-	if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
-		t.Fatalf("err = %v, want a 409", err)
+	var undecided sourceUndecided
+	if !errors.As(err, &undecided) {
+		t.Fatalf("err = %v, want the shared model undecided", err)
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != "<v1/>" {
 		t.Errorf("the model was replaced anyway: %q", data)

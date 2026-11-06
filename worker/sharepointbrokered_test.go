@@ -86,7 +86,7 @@ func governedBy(t *testing.T, answer http.HandlerFunc, j Job) context.Context {
 	t.Helper()
 	srv, _ := newAskingAtlas(t, answer)
 	w := New(Options{Server: srv.URL, ID: "sharepoint", BrokerKey: "bk-1"})
-	return w.withAuthorizer(context.Background(), j)
+	return w.AuthorizingContext(context.Background(), j)
 }
 
 // permitCarrying answers an enforced permit covering fields, with token brokered for it.

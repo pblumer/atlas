@@ -97,6 +97,9 @@ expr/       FEEL expression compilation and evaluation
 job/        Job store, worker subscription, gRPC streaming protocol
 dmn/        DMN registry, resolver, validation, and the business-rule-task worker
 connector/  Worker Type implementations — one package per type (ADR-0203)
+worker/     The built-in Worker Types served out of process (`atlas worker`), over workersdk
+workersdk/  The Worker protocol client, importing nothing of the engine: the seed of the
+            Worker SDK (ADR-0535)
 api/        HTTP API, web UI, command submission and queries
   runloop/    The single-writer boundary: a service reaches shared state only through it
   httpapi/    Response envelope, client IP, request principal — what every handler uses
@@ -119,6 +122,8 @@ api/        HTTP API, web UI, command submission and queries
               completion (ADR-0473)
   workerquery/ The Worker protocol's non-durable query beside the job: an in-memory
               broker Worker Instances lease from, never the log
+  workerproto/ The Worker protocol handshake: the versions this server speaks and the
+              Worker Type an instance reports (ADR-0535)
   storage/    The disk under the data directory: the monitor that reads it off the run
               loop, the reserve below which writes are refused, and the forecast
               (ADR-0481)
@@ -129,6 +134,11 @@ mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
 cmd/atlas/  The single binary (ADR-0011)
+cmd/atlas-workers/ The worker-only executable the server's supervised workers run when it
+            sits beside the server binary (ADR-0535)
+internal/workercmd/ The out-of-process worker's command line, shared by `atlas worker` and
+            `atlas-workers`
+internal/trustroots/ The host's certificate roots plus an operator's CA bundle (--tls-ca)
 internal/dirsync/ Opening a directory so it can be fsynced — the one step that differs
             on Windows, shared by wal/, checkpoint/ and api/sidecar/
 internal/sharedread/ Reading a file without blocking a delete of it or a rename over it,

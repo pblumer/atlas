@@ -1,0 +1,18 @@
+{
+  "type": "default",
+  "id": "it-entra-sync",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Synchronisation vorbereiten · Prepare the synchronisation**\n\nQuelle (bisheriges Cloud-Konto) · Source: {{quelleKonto.entries[1].attributes.displayName[1]}} ({{quelle}}, {{quelleKonto.entries[1].attributes.userPrincipalName[1]}})\n\nZiel (neues AD-Konto) · Target: {{zielKonto.entries[1].attributes.displayName[1]}} ({{ziel}}, {{zielKonto.entries[1].attributes.userPrincipalName[1]}})\n\n1. Entra Connect anhalten (`Set-ADSyncScheduler -SyncCycleEnabled $false`), damit kein Lauf zwischen den Schritten das neue Cloud-Konto wieder anlegt.\n2. Sicherstellen, dass beide Cloud-Konten von der Cloud verwaltet sind (onPremisesSyncEnabled nicht true). Ein synchronisiertes Konto nimmt Graph nicht zum Löschen an; die Übernahme in die Cloud macht das Produkt «Konto in die Cloud übernehmen» der Microsoft-365-Dienste, oder das AD-Konto verlässt den Synchronisationsbereich.\n3. Diese Aufgabe abschliessen. Atlas prüft danach selbst, ob beide Konten von der Cloud verwaltet sind.\n\nIn der Testumgebung gibt es kein Entra Connect: Schritt 1 und 2 entfallen. · In the test environment there is no Entra Connect: steps 1 and 2 do not apply."
+    },
+    {
+      "key": "syncVorbereitet",
+      "type": "checkbox",
+      "label": "Vorbereitet · Prepared",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

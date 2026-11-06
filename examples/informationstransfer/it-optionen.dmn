@@ -1,0 +1,722 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  InfotransferOptionen: welche Optionen eines Informationstransfers im Szenario zulässig sind, mit Gründen und Hinweisen.
+  Eingaben: szenario (variantId: internalisierung, externalisierung, amtswechsel, abteilungswechsel) und Wahrheitswerte –
+  die gewählten Optionen, was die Suchen über die Konten herausgefunden haben, und drei Applikationskonstanten.
+  Ausgabe (COLLECT): eine Liste {art, text}; art = "grund" verhindert den Transfer (der Text geht an die bestellende Person),
+  art = "hinweis" steht in der Genehmigung. Keine Zeile der Art grund heisst: zulässig.
+  Kein Personendatum: Die Vergleiche über Adressen und Konten haben die Suchfilter des AD-Workers gemacht.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_InfotransferOptionen" name="InfotransferOptionen" namespace="http://atlas/dmn">
+  <inputData id="id_szenario" name="szenario"/>
+  <inputData id="id_postfachOption" name="postfachOption"/>
+  <inputData id="id_mail" name="mail"/>
+  <inputData id="id_inhalt" name="inhalt"/>
+  <inputData id="id_kontingent" name="kontingent"/>
+  <inputData id="id_telefon" name="telefon"/>
+  <inputData id="id_rechte" name="rechte"/>
+  <inputData id="id_kuerzel" name="kuerzel"/>
+  <inputData id="id_entra" name="entra"/>
+  <inputData id="id_quelleDa" name="quelleDa"/>
+  <inputData id="id_zielDa" name="zielDa"/>
+  <inputData id="id_quelleTransferiert" name="quelleTransferiert"/>
+  <inputData id="id_gleicheDomain" name="gleicheDomain"/>
+  <inputData id="id_domainBestaetigt" name="domainBestaetigt"/>
+  <inputData id="id_pfQuelleDa" name="pfQuelleDa"/>
+  <inputData id="id_pfZielDa" name="pfZielDa"/>
+  <inputData id="id_entraTransferAktiv" name="entraTransferAktiv"/>
+  <inputData id="id_kuerzelGeneriert" name="kuerzelGeneriert"/>
+  <inputData id="id_postfachSystem" name="postfachSystem"/>
+  <decision id="InfotransferOptionen" name="InfotransferOptionen">
+    <informationRequirement id="ir_szenario"><requiredInput href="#id_szenario"/></informationRequirement>
+    <informationRequirement id="ir_postfachOption"><requiredInput href="#id_postfachOption"/></informationRequirement>
+    <informationRequirement id="ir_mail"><requiredInput href="#id_mail"/></informationRequirement>
+    <informationRequirement id="ir_inhalt"><requiredInput href="#id_inhalt"/></informationRequirement>
+    <informationRequirement id="ir_kontingent"><requiredInput href="#id_kontingent"/></informationRequirement>
+    <informationRequirement id="ir_telefon"><requiredInput href="#id_telefon"/></informationRequirement>
+    <informationRequirement id="ir_rechte"><requiredInput href="#id_rechte"/></informationRequirement>
+    <informationRequirement id="ir_kuerzel"><requiredInput href="#id_kuerzel"/></informationRequirement>
+    <informationRequirement id="ir_entra"><requiredInput href="#id_entra"/></informationRequirement>
+    <informationRequirement id="ir_quelleDa"><requiredInput href="#id_quelleDa"/></informationRequirement>
+    <informationRequirement id="ir_zielDa"><requiredInput href="#id_zielDa"/></informationRequirement>
+    <informationRequirement id="ir_quelleTransferiert"><requiredInput href="#id_quelleTransferiert"/></informationRequirement>
+    <informationRequirement id="ir_gleicheDomain"><requiredInput href="#id_gleicheDomain"/></informationRequirement>
+    <informationRequirement id="ir_domainBestaetigt"><requiredInput href="#id_domainBestaetigt"/></informationRequirement>
+    <informationRequirement id="ir_pfQuelleDa"><requiredInput href="#id_pfQuelleDa"/></informationRequirement>
+    <informationRequirement id="ir_pfZielDa"><requiredInput href="#id_pfZielDa"/></informationRequirement>
+    <informationRequirement id="ir_entraTransferAktiv"><requiredInput href="#id_entraTransferAktiv"/></informationRequirement>
+    <informationRequirement id="ir_kuerzelGeneriert"><requiredInput href="#id_kuerzelGeneriert"/></informationRequirement>
+    <informationRequirement id="ir_postfachSystem"><requiredInput href="#id_postfachSystem"/></informationRequirement>
+    <decisionTable id="dt_InfotransferOptionen" hitPolicy="COLLECT">
+      <input id="in_0" label="szenario"><inputExpression id="ie_0" typeRef="string"><text>szenario</text></inputExpression></input>
+      <input id="in_1" label="postfachOption"><inputExpression id="ie_1" typeRef="boolean"><text>postfachOption</text></inputExpression></input>
+      <input id="in_2" label="mail"><inputExpression id="ie_2" typeRef="boolean"><text>mail</text></inputExpression></input>
+      <input id="in_3" label="inhalt"><inputExpression id="ie_3" typeRef="boolean"><text>inhalt</text></inputExpression></input>
+      <input id="in_4" label="kontingent"><inputExpression id="ie_4" typeRef="boolean"><text>kontingent</text></inputExpression></input>
+      <input id="in_5" label="telefon"><inputExpression id="ie_5" typeRef="boolean"><text>telefon</text></inputExpression></input>
+      <input id="in_6" label="rechte"><inputExpression id="ie_6" typeRef="boolean"><text>rechte</text></inputExpression></input>
+      <input id="in_7" label="kuerzel"><inputExpression id="ie_7" typeRef="boolean"><text>kuerzel</text></inputExpression></input>
+      <input id="in_8" label="entra"><inputExpression id="ie_8" typeRef="boolean"><text>entra</text></inputExpression></input>
+      <input id="in_9" label="quelleDa"><inputExpression id="ie_9" typeRef="boolean"><text>quelleDa</text></inputExpression></input>
+      <input id="in_10" label="zielDa"><inputExpression id="ie_10" typeRef="boolean"><text>zielDa</text></inputExpression></input>
+      <input id="in_11" label="quelleTransferiert"><inputExpression id="ie_11" typeRef="boolean"><text>quelleTransferiert</text></inputExpression></input>
+      <input id="in_12" label="gleicheDomain"><inputExpression id="ie_12" typeRef="boolean"><text>gleicheDomain</text></inputExpression></input>
+      <input id="in_13" label="domainBestaetigt"><inputExpression id="ie_13" typeRef="boolean"><text>domainBestaetigt</text></inputExpression></input>
+      <input id="in_14" label="pfQuelleDa"><inputExpression id="ie_14" typeRef="boolean"><text>pfQuelleDa</text></inputExpression></input>
+      <input id="in_15" label="pfZielDa"><inputExpression id="ie_15" typeRef="boolean"><text>pfZielDa</text></inputExpression></input>
+      <input id="in_16" label="entraTransferAktiv"><inputExpression id="ie_16" typeRef="boolean"><text>entraTransferAktiv</text></inputExpression></input>
+      <input id="in_17" label="kuerzelGeneriert"><inputExpression id="ie_17" typeRef="boolean"><text>kuerzelGeneriert</text></inputExpression></input>
+      <input id="in_18" label="postfachSystem"><inputExpression id="ie_18" typeRef="string"><text>postfachSystem</text></inputExpression></input>
+      <output id="out_0" label="art" name="art" typeRef="string"/>
+      <output id="out_1" label="text" name="text" typeRef="string"/>
+      <rule id="r1">
+        <description>Szenario unbekannt</description>
+        <inputEntry id="r1_i0"><text>not("internalisierung","externalisierung","amtswechsel","abteilungswechsel")</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <inputEntry id="r1_i2"><text>-</text></inputEntry>
+        <inputEntry id="r1_i3"><text>-</text></inputEntry>
+        <inputEntry id="r1_i4"><text>-</text></inputEntry>
+        <inputEntry id="r1_i5"><text>-</text></inputEntry>
+        <inputEntry id="r1_i6"><text>-</text></inputEntry>
+        <inputEntry id="r1_i7"><text>-</text></inputEntry>
+        <inputEntry id="r1_i8"><text>-</text></inputEntry>
+        <inputEntry id="r1_i9"><text>-</text></inputEntry>
+        <inputEntry id="r1_i10"><text>-</text></inputEntry>
+        <inputEntry id="r1_i11"><text>-</text></inputEntry>
+        <inputEntry id="r1_i12"><text>-</text></inputEntry>
+        <inputEntry id="r1_i13"><text>-</text></inputEntry>
+        <inputEntry id="r1_i14"><text>-</text></inputEntry>
+        <inputEntry id="r1_i15"><text>-</text></inputEntry>
+        <inputEntry id="r1_i16"><text>-</text></inputEntry>
+        <inputEntry id="r1_i17"><text>-</text></inputEntry>
+        <inputEntry id="r1_i18"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Das Szenario ist unbekannt; erlaubt sind Internalisierung, Externalisierung, Amtswechsel und Abteilungswechsel."</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Keine Ressource gewählt</description>
+        <inputEntry id="r2_i0"><text>-</text></inputEntry>
+        <inputEntry id="r2_i1"><text>-</text></inputEntry>
+        <inputEntry id="r2_i2"><text>false</text></inputEntry>
+        <inputEntry id="r2_i3"><text>false</text></inputEntry>
+        <inputEntry id="r2_i4"><text>false</text></inputEntry>
+        <inputEntry id="r2_i5"><text>false</text></inputEntry>
+        <inputEntry id="r2_i6"><text>false</text></inputEntry>
+        <inputEntry id="r2_i7"><text>false</text></inputEntry>
+        <inputEntry id="r2_i8"><text>false</text></inputEntry>
+        <inputEntry id="r2_i9"><text>-</text></inputEntry>
+        <inputEntry id="r2_i10"><text>-</text></inputEntry>
+        <inputEntry id="r2_i11"><text>-</text></inputEntry>
+        <inputEntry id="r2_i12"><text>-</text></inputEntry>
+        <inputEntry id="r2_i13"><text>-</text></inputEntry>
+        <inputEntry id="r2_i14"><text>-</text></inputEntry>
+        <inputEntry id="r2_i15"><text>-</text></inputEntry>
+        <inputEntry id="r2_i16"><text>-</text></inputEntry>
+        <inputEntry id="r2_i17"><text>-</text></inputEntry>
+        <inputEntry id="r2_i18"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Wähle mindestens eine Ressource, die übertragen werden soll."</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Quelle fehlt</description>
+        <inputEntry id="r3_i0"><text>-</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <inputEntry id="r3_i2"><text>-</text></inputEntry>
+        <inputEntry id="r3_i3"><text>-</text></inputEntry>
+        <inputEntry id="r3_i4"><text>-</text></inputEntry>
+        <inputEntry id="r3_i5"><text>-</text></inputEntry>
+        <inputEntry id="r3_i6"><text>-</text></inputEntry>
+        <inputEntry id="r3_i7"><text>-</text></inputEntry>
+        <inputEntry id="r3_i8"><text>-</text></inputEntry>
+        <inputEntry id="r3_i9"><text>false</text></inputEntry>
+        <inputEntry id="r3_i10"><text>-</text></inputEntry>
+        <inputEntry id="r3_i11"><text>-</text></inputEntry>
+        <inputEntry id="r3_i12"><text>-</text></inputEntry>
+        <inputEntry id="r3_i13"><text>-</text></inputEntry>
+        <inputEntry id="r3_i14"><text>-</text></inputEntry>
+        <inputEntry id="r3_i15"><text>-</text></inputEntry>
+        <inputEntry id="r3_i16"><text>-</text></inputEntry>
+        <inputEntry id="r3_i17"><text>-</text></inputEntry>
+        <inputEntry id="r3_i18"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"Das Quellkonto ist im Active Directory (unter AD_PERSONEN_OU) nicht zu finden."</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Ziel fehlt oder gleich</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <inputEntry id="r4_i2"><text>-</text></inputEntry>
+        <inputEntry id="r4_i3"><text>-</text></inputEntry>
+        <inputEntry id="r4_i4"><text>-</text></inputEntry>
+        <inputEntry id="r4_i5"><text>-</text></inputEntry>
+        <inputEntry id="r4_i6"><text>-</text></inputEntry>
+        <inputEntry id="r4_i7"><text>-</text></inputEntry>
+        <inputEntry id="r4_i8"><text>-</text></inputEntry>
+        <inputEntry id="r4_i9"><text>-</text></inputEntry>
+        <inputEntry id="r4_i10"><text>false</text></inputEntry>
+        <inputEntry id="r4_i11"><text>-</text></inputEntry>
+        <inputEntry id="r4_i12"><text>-</text></inputEntry>
+        <inputEntry id="r4_i13"><text>-</text></inputEntry>
+        <inputEntry id="r4_i14"><text>-</text></inputEntry>
+        <inputEntry id="r4_i15"><text>-</text></inputEntry>
+        <inputEntry id="r4_i16"><text>-</text></inputEntry>
+        <inputEntry id="r4_i17"><text>-</text></inputEntry>
+        <inputEntry id="r4_i18"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Das Zielkonto ist nicht zu finden, oder es ist dasselbe Konto wie die Quelle."</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Schon transferiert</description>
+        <inputEntry id="r5_i0"><text>-</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <inputEntry id="r5_i2"><text>-</text></inputEntry>
+        <inputEntry id="r5_i3"><text>-</text></inputEntry>
+        <inputEntry id="r5_i4"><text>-</text></inputEntry>
+        <inputEntry id="r5_i5"><text>-</text></inputEntry>
+        <inputEntry id="r5_i6"><text>-</text></inputEntry>
+        <inputEntry id="r5_i7"><text>-</text></inputEntry>
+        <inputEntry id="r5_i8"><text>-</text></inputEntry>
+        <inputEntry id="r5_i9"><text>-</text></inputEntry>
+        <inputEntry id="r5_i10"><text>-</text></inputEntry>
+        <inputEntry id="r5_i11"><text>true</text></inputEntry>
+        <inputEntry id="r5_i12"><text>-</text></inputEntry>
+        <inputEntry id="r5_i13"><text>-</text></inputEntry>
+        <inputEntry id="r5_i14"><text>-</text></inputEntry>
+        <inputEntry id="r5_i15"><text>-</text></inputEntry>
+        <inputEntry id="r5_i16"><text>-</text></inputEntry>
+        <inputEntry id="r5_i17"><text>-</text></inputEntry>
+        <inputEntry id="r5_i18"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Das Quellkonto trägt schon den Vermerk «Ressourcen transferiert». Nur ein AD-Administrator kann ihn entfernen."</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>Entra nur Internalisierung</description>
+        <inputEntry id="r6_i0"><text>not("internalisierung")</text></inputEntry>
+        <inputEntry id="r6_i1"><text>-</text></inputEntry>
+        <inputEntry id="r6_i2"><text>-</text></inputEntry>
+        <inputEntry id="r6_i3"><text>-</text></inputEntry>
+        <inputEntry id="r6_i4"><text>-</text></inputEntry>
+        <inputEntry id="r6_i5"><text>-</text></inputEntry>
+        <inputEntry id="r6_i6"><text>-</text></inputEntry>
+        <inputEntry id="r6_i7"><text>-</text></inputEntry>
+        <inputEntry id="r6_i8"><text>true</text></inputEntry>
+        <inputEntry id="r6_i9"><text>-</text></inputEntry>
+        <inputEntry id="r6_i10"><text>-</text></inputEntry>
+        <inputEntry id="r6_i11"><text>-</text></inputEntry>
+        <inputEntry id="r6_i12"><text>-</text></inputEntry>
+        <inputEntry id="r6_i13"><text>-</text></inputEntry>
+        <inputEntry id="r6_i14"><text>-</text></inputEntry>
+        <inputEntry id="r6_i15"><text>-</text></inputEntry>
+        <inputEntry id="r6_i16"><text>-</text></inputEntry>
+        <inputEntry id="r6_i17"><text>-</text></inputEntry>
+        <inputEntry id="r6_i18"><text>-</text></inputEntry>
+        <outputEntry id="r6_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r6_o1"><text>"Den Entra-Transfer gibt es nur bei einer Internalisierung (extern → intern); bei Externalisierung, Amts- und Abteilungswechsel ist er technisch und prozessual nicht vorgesehen."</text></outputEntry>
+      </rule>
+      <rule id="r7">
+        <description>Entra ausgeschaltet</description>
+        <inputEntry id="r7_i0"><text>-</text></inputEntry>
+        <inputEntry id="r7_i1"><text>-</text></inputEntry>
+        <inputEntry id="r7_i2"><text>-</text></inputEntry>
+        <inputEntry id="r7_i3"><text>-</text></inputEntry>
+        <inputEntry id="r7_i4"><text>-</text></inputEntry>
+        <inputEntry id="r7_i5"><text>-</text></inputEntry>
+        <inputEntry id="r7_i6"><text>-</text></inputEntry>
+        <inputEntry id="r7_i7"><text>-</text></inputEntry>
+        <inputEntry id="r7_i8"><text>true</text></inputEntry>
+        <inputEntry id="r7_i9"><text>-</text></inputEntry>
+        <inputEntry id="r7_i10"><text>-</text></inputEntry>
+        <inputEntry id="r7_i11"><text>-</text></inputEntry>
+        <inputEntry id="r7_i12"><text>-</text></inputEntry>
+        <inputEntry id="r7_i13"><text>-</text></inputEntry>
+        <inputEntry id="r7_i14"><text>-</text></inputEntry>
+        <inputEntry id="r7_i15"><text>-</text></inputEntry>
+        <inputEntry id="r7_i16"><text>false</text></inputEntry>
+        <inputEntry id="r7_i17"><text>-</text></inputEntry>
+        <inputEntry id="r7_i18"><text>-</text></inputEntry>
+        <outputEntry id="r7_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r7_o1"><text>"Der Entra-Transfer ist in dieser Umgebung ausgeschaltet (Applikationskonstante ENTRA_TRANSFER)."</text></outputEntry>
+      </rule>
+      <rule id="r8">
+        <description>Domain verschieden, unbestätigt</description>
+        <inputEntry id="r8_i0"><text>-</text></inputEntry>
+        <inputEntry id="r8_i1"><text>-</text></inputEntry>
+        <inputEntry id="r8_i2"><text>true</text></inputEntry>
+        <inputEntry id="r8_i3"><text>-</text></inputEntry>
+        <inputEntry id="r8_i4"><text>-</text></inputEntry>
+        <inputEntry id="r8_i5"><text>-</text></inputEntry>
+        <inputEntry id="r8_i6"><text>-</text></inputEntry>
+        <inputEntry id="r8_i7"><text>-</text></inputEntry>
+        <inputEntry id="r8_i8"><text>-</text></inputEntry>
+        <inputEntry id="r8_i9"><text>-</text></inputEntry>
+        <inputEntry id="r8_i10"><text>-</text></inputEntry>
+        <inputEntry id="r8_i11"><text>-</text></inputEntry>
+        <inputEntry id="r8_i12"><text>false</text></inputEntry>
+        <inputEntry id="r8_i13"><text>false</text></inputEntry>
+        <inputEntry id="r8_i14"><text>-</text></inputEntry>
+        <inputEntry id="r8_i15"><text>-</text></inputEntry>
+        <inputEntry id="r8_i16"><text>-</text></inputEntry>
+        <inputEntry id="r8_i17"><text>-</text></inputEntry>
+        <inputEntry id="r8_i18"><text>-</text></inputEntry>
+        <outputEntry id="r8_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r8_o1"><text>"Quell- und Zielkonto haben nicht dieselbe Mail-Domain. Die Primäradresse lässt sich dann nicht sauber übertragen; bestätige es im Bestellformular ausdrücklich, wenn es trotzdem sein soll."</text></outputEntry>
+      </rule>
+      <rule id="r9">
+        <description>Kürzel importiert</description>
+        <inputEntry id="r9_i0"><text>-</text></inputEntry>
+        <inputEntry id="r9_i1"><text>-</text></inputEntry>
+        <inputEntry id="r9_i2"><text>-</text></inputEntry>
+        <inputEntry id="r9_i3"><text>-</text></inputEntry>
+        <inputEntry id="r9_i4"><text>-</text></inputEntry>
+        <inputEntry id="r9_i5"><text>-</text></inputEntry>
+        <inputEntry id="r9_i6"><text>-</text></inputEntry>
+        <inputEntry id="r9_i7"><text>true</text></inputEntry>
+        <inputEntry id="r9_i8"><text>-</text></inputEntry>
+        <inputEntry id="r9_i9"><text>-</text></inputEntry>
+        <inputEntry id="r9_i10"><text>-</text></inputEntry>
+        <inputEntry id="r9_i11"><text>-</text></inputEntry>
+        <inputEntry id="r9_i12"><text>-</text></inputEntry>
+        <inputEntry id="r9_i13"><text>-</text></inputEntry>
+        <inputEntry id="r9_i14"><text>-</text></inputEntry>
+        <inputEntry id="r9_i15"><text>-</text></inputEntry>
+        <inputEntry id="r9_i16"><text>-</text></inputEntry>
+        <inputEntry id="r9_i17"><text>false</text></inputEntry>
+        <inputEntry id="r9_i18"><text>-</text></inputEntry>
+        <outputEntry id="r9_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r9_o1"><text>"Die Kürzel kommen in dieser Umgebung aus einem anderen System (Applikationskonstante KUERZEL_HERKUNFT); dort wird das Kürzel übertragen, nicht hier."</text></outputEntry>
+      </rule>
+      <rule id="r10">
+        <description>Entra und Telefon</description>
+        <inputEntry id="r10_i0"><text>-</text></inputEntry>
+        <inputEntry id="r10_i1"><text>-</text></inputEntry>
+        <inputEntry id="r10_i2"><text>-</text></inputEntry>
+        <inputEntry id="r10_i3"><text>-</text></inputEntry>
+        <inputEntry id="r10_i4"><text>-</text></inputEntry>
+        <inputEntry id="r10_i5"><text>true</text></inputEntry>
+        <inputEntry id="r10_i6"><text>-</text></inputEntry>
+        <inputEntry id="r10_i7"><text>-</text></inputEntry>
+        <inputEntry id="r10_i8"><text>true</text></inputEntry>
+        <inputEntry id="r10_i9"><text>-</text></inputEntry>
+        <inputEntry id="r10_i10"><text>-</text></inputEntry>
+        <inputEntry id="r10_i11"><text>-</text></inputEntry>
+        <inputEntry id="r10_i12"><text>-</text></inputEntry>
+        <inputEntry id="r10_i13"><text>-</text></inputEntry>
+        <inputEntry id="r10_i14"><text>-</text></inputEntry>
+        <inputEntry id="r10_i15"><text>-</text></inputEntry>
+        <inputEntry id="r10_i16"><text>-</text></inputEntry>
+        <inputEntry id="r10_i17"><text>-</text></inputEntry>
+        <inputEntry id="r10_i18"><text>-</text></inputEntry>
+        <outputEntry id="r10_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r10_o1"><text>"Mit dem Entra-Transfer behält das bisherige Cloud-Konto seine Telefonnummer; wähle die Telefonnummer ab."</text></outputEntry>
+      </rule>
+      <rule id="r11">
+        <description>Entra und Postfach online</description>
+        <inputEntry id="r11_i0"><text>-</text></inputEntry>
+        <inputEntry id="r11_i1"><text>true</text></inputEntry>
+        <inputEntry id="r11_i2"><text>-</text></inputEntry>
+        <inputEntry id="r11_i3"><text>-</text></inputEntry>
+        <inputEntry id="r11_i4"><text>-</text></inputEntry>
+        <inputEntry id="r11_i5"><text>-</text></inputEntry>
+        <inputEntry id="r11_i6"><text>-</text></inputEntry>
+        <inputEntry id="r11_i7"><text>-</text></inputEntry>
+        <inputEntry id="r11_i8"><text>true</text></inputEntry>
+        <inputEntry id="r11_i9"><text>-</text></inputEntry>
+        <inputEntry id="r11_i10"><text>-</text></inputEntry>
+        <inputEntry id="r11_i11"><text>-</text></inputEntry>
+        <inputEntry id="r11_i12"><text>-</text></inputEntry>
+        <inputEntry id="r11_i13"><text>-</text></inputEntry>
+        <inputEntry id="r11_i14"><text>-</text></inputEntry>
+        <inputEntry id="r11_i15"><text>-</text></inputEntry>
+        <inputEntry id="r11_i16"><text>-</text></inputEntry>
+        <inputEntry id="r11_i17"><text>-</text></inputEntry>
+        <inputEntry id="r11_i18"><text>"exchange-online"</text></inputEntry>
+        <outputEntry id="r11_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r11_o1"><text>"Mit Exchange Online behält das bisherige Cloud-Konto beim Entra-Transfer sein Postfach; wähle Primäradresse, Postfachinhalt und Kontingent ab."</text></outputEntry>
+      </rule>
+      <rule id="r12">
+        <description>Quelle ohne Postfach</description>
+        <inputEntry id="r12_i0"><text>-</text></inputEntry>
+        <inputEntry id="r12_i1"><text>true</text></inputEntry>
+        <inputEntry id="r12_i2"><text>-</text></inputEntry>
+        <inputEntry id="r12_i3"><text>-</text></inputEntry>
+        <inputEntry id="r12_i4"><text>-</text></inputEntry>
+        <inputEntry id="r12_i5"><text>-</text></inputEntry>
+        <inputEntry id="r12_i6"><text>-</text></inputEntry>
+        <inputEntry id="r12_i7"><text>-</text></inputEntry>
+        <inputEntry id="r12_i8"><text>-</text></inputEntry>
+        <inputEntry id="r12_i9"><text>true</text></inputEntry>
+        <inputEntry id="r12_i10"><text>-</text></inputEntry>
+        <inputEntry id="r12_i11"><text>-</text></inputEntry>
+        <inputEntry id="r12_i12"><text>-</text></inputEntry>
+        <inputEntry id="r12_i13"><text>-</text></inputEntry>
+        <inputEntry id="r12_i14"><text>false</text></inputEntry>
+        <inputEntry id="r12_i15"><text>-</text></inputEntry>
+        <inputEntry id="r12_i16"><text>-</text></inputEntry>
+        <inputEntry id="r12_i17"><text>-</text></inputEntry>
+        <inputEntry id="r12_i18"><text>-</text></inputEntry>
+        <outputEntry id="r12_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r12_o1"><text>"Primäradresse, Postfachinhalt und Kontingent brauchen ein Postfach der Quelle; das Quellkonto hat keines."</text></outputEntry>
+      </rule>
+      <rule id="r13">
+        <description>Ziel ohne Postfach</description>
+        <inputEntry id="r13_i0"><text>-</text></inputEntry>
+        <inputEntry id="r13_i1"><text>true</text></inputEntry>
+        <inputEntry id="r13_i2"><text>-</text></inputEntry>
+        <inputEntry id="r13_i3"><text>-</text></inputEntry>
+        <inputEntry id="r13_i4"><text>-</text></inputEntry>
+        <inputEntry id="r13_i5"><text>-</text></inputEntry>
+        <inputEntry id="r13_i6"><text>-</text></inputEntry>
+        <inputEntry id="r13_i7"><text>-</text></inputEntry>
+        <inputEntry id="r13_i8"><text>-</text></inputEntry>
+        <inputEntry id="r13_i9"><text>-</text></inputEntry>
+        <inputEntry id="r13_i10"><text>true</text></inputEntry>
+        <inputEntry id="r13_i11"><text>-</text></inputEntry>
+        <inputEntry id="r13_i12"><text>-</text></inputEntry>
+        <inputEntry id="r13_i13"><text>-</text></inputEntry>
+        <inputEntry id="r13_i14"><text>-</text></inputEntry>
+        <inputEntry id="r13_i15"><text>false</text></inputEntry>
+        <inputEntry id="r13_i16"><text>-</text></inputEntry>
+        <inputEntry id="r13_i17"><text>-</text></inputEntry>
+        <inputEntry id="r13_i18"><text>-</text></inputEntry>
+        <outputEntry id="r13_o0"><text>"grund"</text></outputEntry>
+        <outputEntry id="r13_o1"><text>"Primäradresse, Postfachinhalt und Kontingent brauchen ein Postfach des Ziels; das Zielkonto hat keines."</text></outputEntry>
+      </rule>
+      <rule id="r14">
+        <description>Kombiniert</description>
+        <inputEntry id="r14_i0"><text>-</text></inputEntry>
+        <inputEntry id="r14_i1"><text>-</text></inputEntry>
+        <inputEntry id="r14_i2"><text>true</text></inputEntry>
+        <inputEntry id="r14_i3"><text>true</text></inputEntry>
+        <inputEntry id="r14_i4"><text>-</text></inputEntry>
+        <inputEntry id="r14_i5"><text>-</text></inputEntry>
+        <inputEntry id="r14_i6"><text>-</text></inputEntry>
+        <inputEntry id="r14_i7"><text>-</text></inputEntry>
+        <inputEntry id="r14_i8"><text>-</text></inputEntry>
+        <inputEntry id="r14_i9"><text>-</text></inputEntry>
+        <inputEntry id="r14_i10"><text>-</text></inputEntry>
+        <inputEntry id="r14_i11"><text>-</text></inputEntry>
+        <inputEntry id="r14_i12"><text>-</text></inputEntry>
+        <inputEntry id="r14_i13"><text>-</text></inputEntry>
+        <inputEntry id="r14_i14"><text>-</text></inputEntry>
+        <inputEntry id="r14_i15"><text>-</text></inputEntry>
+        <inputEntry id="r14_i16"><text>-</text></inputEntry>
+        <inputEntry id="r14_i17"><text>-</text></inputEntry>
+        <inputEntry id="r14_i18"><text>-</text></inputEntry>
+        <outputEntry id="r14_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r14_o1"><text>"Kombiniert: Die Quelle erhält kein Präfix transfered.; ihr Postfach wird gelöscht, das Ziel übernimmt Inhalt, Primäradresse und UPN."</text></outputEntry>
+      </rule>
+      <rule id="r15">
+        <description>Nur Adresse</description>
+        <inputEntry id="r15_i0"><text>-</text></inputEntry>
+        <inputEntry id="r15_i1"><text>-</text></inputEntry>
+        <inputEntry id="r15_i2"><text>true</text></inputEntry>
+        <inputEntry id="r15_i3"><text>false</text></inputEntry>
+        <inputEntry id="r15_i4"><text>-</text></inputEntry>
+        <inputEntry id="r15_i5"><text>-</text></inputEntry>
+        <inputEntry id="r15_i6"><text>-</text></inputEntry>
+        <inputEntry id="r15_i7"><text>-</text></inputEntry>
+        <inputEntry id="r15_i8"><text>-</text></inputEntry>
+        <inputEntry id="r15_i9"><text>-</text></inputEntry>
+        <inputEntry id="r15_i10"><text>-</text></inputEntry>
+        <inputEntry id="r15_i11"><text>-</text></inputEntry>
+        <inputEntry id="r15_i12"><text>-</text></inputEntry>
+        <inputEntry id="r15_i13"><text>-</text></inputEntry>
+        <inputEntry id="r15_i14"><text>-</text></inputEntry>
+        <inputEntry id="r15_i15"><text>-</text></inputEntry>
+        <inputEntry id="r15_i16"><text>-</text></inputEntry>
+        <inputEntry id="r15_i17"><text>-</text></inputEntry>
+        <inputEntry id="r15_i18"><text>-</text></inputEntry>
+        <outputEntry id="r15_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r15_o1"><text>"Die Quelle erhält die Primäradresse und die UPN transfered.&lt;bisherige&gt;; das Ziel übernimmt beide und behält seine bisherige Adresse als weitere."</text></outputEntry>
+      </rule>
+      <rule id="r16">
+        <description>Inhalt Server</description>
+        <inputEntry id="r16_i0"><text>-</text></inputEntry>
+        <inputEntry id="r16_i1"><text>-</text></inputEntry>
+        <inputEntry id="r16_i2"><text>-</text></inputEntry>
+        <inputEntry id="r16_i3"><text>true</text></inputEntry>
+        <inputEntry id="r16_i4"><text>-</text></inputEntry>
+        <inputEntry id="r16_i5"><text>-</text></inputEntry>
+        <inputEntry id="r16_i6"><text>-</text></inputEntry>
+        <inputEntry id="r16_i7"><text>-</text></inputEntry>
+        <inputEntry id="r16_i8"><text>-</text></inputEntry>
+        <inputEntry id="r16_i9"><text>-</text></inputEntry>
+        <inputEntry id="r16_i10"><text>-</text></inputEntry>
+        <inputEntry id="r16_i11"><text>-</text></inputEntry>
+        <inputEntry id="r16_i12"><text>-</text></inputEntry>
+        <inputEntry id="r16_i13"><text>-</text></inputEntry>
+        <inputEntry id="r16_i14"><text>-</text></inputEntry>
+        <inputEntry id="r16_i15"><text>-</text></inputEntry>
+        <inputEntry id="r16_i16"><text>-</text></inputEntry>
+        <inputEntry id="r16_i17"><text>-</text></inputEntry>
+        <inputEntry id="r16_i18"><text>"exchange-server"</text></inputEntry>
+        <outputEntry id="r16_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r16_o1"><text>"Der Inhalt des Quellpostfachs wird in das Zielpostfach wiederhergestellt. Das Quellpostfach wird dabei abgetrennt, alle Exchange-Attribute der Quelle werden entfernt; Identity Management gibt diese Löschung unmittelbar davor frei."</text></outputEntry>
+      </rule>
+      <rule id="r17">
+        <description>Inhalt Online</description>
+        <inputEntry id="r17_i0"><text>-</text></inputEntry>
+        <inputEntry id="r17_i1"><text>-</text></inputEntry>
+        <inputEntry id="r17_i2"><text>-</text></inputEntry>
+        <inputEntry id="r17_i3"><text>true</text></inputEntry>
+        <inputEntry id="r17_i4"><text>-</text></inputEntry>
+        <inputEntry id="r17_i5"><text>-</text></inputEntry>
+        <inputEntry id="r17_i6"><text>-</text></inputEntry>
+        <inputEntry id="r17_i7"><text>-</text></inputEntry>
+        <inputEntry id="r17_i8"><text>-</text></inputEntry>
+        <inputEntry id="r17_i9"><text>-</text></inputEntry>
+        <inputEntry id="r17_i10"><text>-</text></inputEntry>
+        <inputEntry id="r17_i11"><text>-</text></inputEntry>
+        <inputEntry id="r17_i12"><text>-</text></inputEntry>
+        <inputEntry id="r17_i13"><text>-</text></inputEntry>
+        <inputEntry id="r17_i14"><text>-</text></inputEntry>
+        <inputEntry id="r17_i15"><text>-</text></inputEntry>
+        <inputEntry id="r17_i16"><text>-</text></inputEntry>
+        <inputEntry id="r17_i17"><text>-</text></inputEntry>
+        <inputEntry id="r17_i18"><text>not("exchange-server")</text></inputEntry>
+        <outputEntry id="r17_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r17_o1"><text>"In Exchange Online überträgt der Exchange-Betrieb den Postfachinhalt von Hand (Aufgabe) und entfernt danach das Quellpostfach."</text></outputEntry>
+      </rule>
+      <rule id="r18">
+        <description>Kontingent</description>
+        <inputEntry id="r18_i0"><text>-</text></inputEntry>
+        <inputEntry id="r18_i1"><text>-</text></inputEntry>
+        <inputEntry id="r18_i2"><text>-</text></inputEntry>
+        <inputEntry id="r18_i3"><text>-</text></inputEntry>
+        <inputEntry id="r18_i4"><text>true</text></inputEntry>
+        <inputEntry id="r18_i5"><text>-</text></inputEntry>
+        <inputEntry id="r18_i6"><text>-</text></inputEntry>
+        <inputEntry id="r18_i7"><text>-</text></inputEntry>
+        <inputEntry id="r18_i8"><text>-</text></inputEntry>
+        <inputEntry id="r18_i9"><text>-</text></inputEntry>
+        <inputEntry id="r18_i10"><text>-</text></inputEntry>
+        <inputEntry id="r18_i11"><text>-</text></inputEntry>
+        <inputEntry id="r18_i12"><text>-</text></inputEntry>
+        <inputEntry id="r18_i13"><text>-</text></inputEntry>
+        <inputEntry id="r18_i14"><text>-</text></inputEntry>
+        <inputEntry id="r18_i15"><text>-</text></inputEntry>
+        <inputEntry id="r18_i16"><text>-</text></inputEntry>
+        <inputEntry id="r18_i17"><text>-</text></inputEntry>
+        <inputEntry id="r18_i18"><text>-</text></inputEntry>
+        <outputEntry id="r18_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r18_o1"><text>"Das Kontingent geht nur über, wenn das Quellpostfach mehr Platz hat (verglichen in KB)."</text></outputEntry>
+      </rule>
+      <rule id="r19">
+        <description>Telefon</description>
+        <inputEntry id="r19_i0"><text>-</text></inputEntry>
+        <inputEntry id="r19_i1"><text>-</text></inputEntry>
+        <inputEntry id="r19_i2"><text>-</text></inputEntry>
+        <inputEntry id="r19_i3"><text>-</text></inputEntry>
+        <inputEntry id="r19_i4"><text>-</text></inputEntry>
+        <inputEntry id="r19_i5"><text>true</text></inputEntry>
+        <inputEntry id="r19_i6"><text>-</text></inputEntry>
+        <inputEntry id="r19_i7"><text>-</text></inputEntry>
+        <inputEntry id="r19_i8"><text>-</text></inputEntry>
+        <inputEntry id="r19_i9"><text>-</text></inputEntry>
+        <inputEntry id="r19_i10"><text>-</text></inputEntry>
+        <inputEntry id="r19_i11"><text>-</text></inputEntry>
+        <inputEntry id="r19_i12"><text>-</text></inputEntry>
+        <inputEntry id="r19_i13"><text>-</text></inputEntry>
+        <inputEntry id="r19_i14"><text>-</text></inputEntry>
+        <inputEntry id="r19_i15"><text>-</text></inputEntry>
+        <inputEntry id="r19_i16"><text>-</text></inputEntry>
+        <inputEntry id="r19_i17"><text>-</text></inputEntry>
+        <inputEntry id="r19_i18"><text>-</text></inputEntry>
+        <outputEntry id="r19_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r19_o1"><text>"Die Telefonnummer geht in Teams Phone über; das Telefonie-Team erhält danach eine Aufgabe, um seine Verwaltung nachzuführen."</text></outputEntry>
+      </rule>
+      <rule id="r20">
+        <description>Rechte</description>
+        <inputEntry id="r20_i0"><text>-</text></inputEntry>
+        <inputEntry id="r20_i1"><text>-</text></inputEntry>
+        <inputEntry id="r20_i2"><text>-</text></inputEntry>
+        <inputEntry id="r20_i3"><text>-</text></inputEntry>
+        <inputEntry id="r20_i4"><text>-</text></inputEntry>
+        <inputEntry id="r20_i5"><text>-</text></inputEntry>
+        <inputEntry id="r20_i6"><text>true</text></inputEntry>
+        <inputEntry id="r20_i7"><text>-</text></inputEntry>
+        <inputEntry id="r20_i8"><text>false</text></inputEntry>
+        <inputEntry id="r20_i9"><text>-</text></inputEntry>
+        <inputEntry id="r20_i10"><text>-</text></inputEntry>
+        <inputEntry id="r20_i11"><text>-</text></inputEntry>
+        <inputEntry id="r20_i12"><text>-</text></inputEntry>
+        <inputEntry id="r20_i13"><text>-</text></inputEntry>
+        <inputEntry id="r20_i14"><text>-</text></inputEntry>
+        <inputEntry id="r20_i15"><text>-</text></inputEntry>
+        <inputEntry id="r20_i16"><text>-</text></inputEntry>
+        <inputEntry id="r20_i17"><text>-</text></inputEntry>
+        <inputEntry id="r20_i18"><text>-</text></inputEntry>
+        <outputEntry id="r20_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r20_o1"><text>"Übertragen werden die direkten Mitgliedschaften in manuellen Gruppen (AD unter AD_GRUPPEN_OU, zugewiesene Cloud-Gruppen), keine verschachtelten und keine automatischen."</text></outputEntry>
+      </rule>
+      <rule id="r21">
+        <description>Rechte mit Entra</description>
+        <inputEntry id="r21_i0"><text>-</text></inputEntry>
+        <inputEntry id="r21_i1"><text>-</text></inputEntry>
+        <inputEntry id="r21_i2"><text>-</text></inputEntry>
+        <inputEntry id="r21_i3"><text>-</text></inputEntry>
+        <inputEntry id="r21_i4"><text>-</text></inputEntry>
+        <inputEntry id="r21_i5"><text>-</text></inputEntry>
+        <inputEntry id="r21_i6"><text>true</text></inputEntry>
+        <inputEntry id="r21_i7"><text>-</text></inputEntry>
+        <inputEntry id="r21_i8"><text>true</text></inputEntry>
+        <inputEntry id="r21_i9"><text>-</text></inputEntry>
+        <inputEntry id="r21_i10"><text>-</text></inputEntry>
+        <inputEntry id="r21_i11"><text>-</text></inputEntry>
+        <inputEntry id="r21_i12"><text>-</text></inputEntry>
+        <inputEntry id="r21_i13"><text>-</text></inputEntry>
+        <inputEntry id="r21_i14"><text>-</text></inputEntry>
+        <inputEntry id="r21_i15"><text>-</text></inputEntry>
+        <inputEntry id="r21_i16"><text>-</text></inputEntry>
+        <inputEntry id="r21_i17"><text>-</text></inputEntry>
+        <inputEntry id="r21_i18"><text>-</text></inputEntry>
+        <outputEntry id="r21_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r21_o1"><text>"Mit dem Entra-Transfer werden nur die AD-Gruppen übertragen; die Cloud-Gruppen bleiben beim bisherigen Cloud-Konto."</text></outputEntry>
+      </rule>
+      <rule id="r22">
+        <description>Kürzel</description>
+        <inputEntry id="r22_i0"><text>-</text></inputEntry>
+        <inputEntry id="r22_i1"><text>-</text></inputEntry>
+        <inputEntry id="r22_i2"><text>-</text></inputEntry>
+        <inputEntry id="r22_i3"><text>-</text></inputEntry>
+        <inputEntry id="r22_i4"><text>-</text></inputEntry>
+        <inputEntry id="r22_i5"><text>-</text></inputEntry>
+        <inputEntry id="r22_i6"><text>-</text></inputEntry>
+        <inputEntry id="r22_i7"><text>true</text></inputEntry>
+        <inputEntry id="r22_i8"><text>-</text></inputEntry>
+        <inputEntry id="r22_i9"><text>-</text></inputEntry>
+        <inputEntry id="r22_i10"><text>-</text></inputEntry>
+        <inputEntry id="r22_i11"><text>-</text></inputEntry>
+        <inputEntry id="r22_i12"><text>-</text></inputEntry>
+        <inputEntry id="r22_i13"><text>-</text></inputEntry>
+        <inputEntry id="r22_i14"><text>-</text></inputEntry>
+        <inputEntry id="r22_i15"><text>-</text></inputEntry>
+        <inputEntry id="r22_i16"><text>-</text></inputEntry>
+        <inputEntry id="r22_i17"><text>true</text></inputEntry>
+        <inputEntry id="r22_i18"><text>-</text></inputEntry>
+        <outputEntry id="r22_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r22_o1"><text>"Das Kürzel wird an der Quelle entfernt und dem Ziel gegeben."</text></outputEntry>
+      </rule>
+      <rule id="r23">
+        <description>Entra</description>
+        <inputEntry id="r23_i0"><text>-</text></inputEntry>
+        <inputEntry id="r23_i1"><text>-</text></inputEntry>
+        <inputEntry id="r23_i2"><text>-</text></inputEntry>
+        <inputEntry id="r23_i3"><text>-</text></inputEntry>
+        <inputEntry id="r23_i4"><text>-</text></inputEntry>
+        <inputEntry id="r23_i5"><text>-</text></inputEntry>
+        <inputEntry id="r23_i6"><text>-</text></inputEntry>
+        <inputEntry id="r23_i7"><text>-</text></inputEntry>
+        <inputEntry id="r23_i8"><text>true</text></inputEntry>
+        <inputEntry id="r23_i9"><text>-</text></inputEntry>
+        <inputEntry id="r23_i10"><text>-</text></inputEntry>
+        <inputEntry id="r23_i11"><text>-</text></inputEntry>
+        <inputEntry id="r23_i12"><text>-</text></inputEntry>
+        <inputEntry id="r23_i13"><text>-</text></inputEntry>
+        <inputEntry id="r23_i14"><text>-</text></inputEntry>
+        <inputEntry id="r23_i15"><text>-</text></inputEntry>
+        <inputEntry id="r23_i16"><text>-</text></inputEntry>
+        <inputEntry id="r23_i17"><text>-</text></inputEntry>
+        <inputEntry id="r23_i18"><text>-</text></inputEntry>
+        <outputEntry id="r23_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r23_o1"><text>"Entra-Transfer: Beide Cloud-Konten werden gelöscht, das neue interne endgültig; das bisherige wird wiederhergestellt und über onPremisesImmutableId mit dem neuen AD-Konto verknüpft (Hard Match). Informationssicherheit gibt unmittelbar davor frei."</text></outputEntry>
+      </rule>
+      <rule id="r24">
+        <description>Domain bestätigt</description>
+        <inputEntry id="r24_i0"><text>-</text></inputEntry>
+        <inputEntry id="r24_i1"><text>-</text></inputEntry>
+        <inputEntry id="r24_i2"><text>true</text></inputEntry>
+        <inputEntry id="r24_i3"><text>-</text></inputEntry>
+        <inputEntry id="r24_i4"><text>-</text></inputEntry>
+        <inputEntry id="r24_i5"><text>-</text></inputEntry>
+        <inputEntry id="r24_i6"><text>-</text></inputEntry>
+        <inputEntry id="r24_i7"><text>-</text></inputEntry>
+        <inputEntry id="r24_i8"><text>-</text></inputEntry>
+        <inputEntry id="r24_i9"><text>-</text></inputEntry>
+        <inputEntry id="r24_i10"><text>-</text></inputEntry>
+        <inputEntry id="r24_i11"><text>-</text></inputEntry>
+        <inputEntry id="r24_i12"><text>false</text></inputEntry>
+        <inputEntry id="r24_i13"><text>true</text></inputEntry>
+        <inputEntry id="r24_i14"><text>-</text></inputEntry>
+        <inputEntry id="r24_i15"><text>-</text></inputEntry>
+        <inputEntry id="r24_i16"><text>-</text></inputEntry>
+        <inputEntry id="r24_i17"><text>-</text></inputEntry>
+        <inputEntry id="r24_i18"><text>-</text></inputEntry>
+        <outputEntry id="r24_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r24_o1"><text>"Verschiedene Mail-Domains: Die bestellende Person hat den Transfer der Primäradresse ausdrücklich bestätigt."</text></outputEntry>
+      </rule>
+      <rule id="r25">
+        <description>Wechsel: Inhalt üblich</description>
+        <inputEntry id="r25_i0"><text>"amtswechsel","abteilungswechsel"</text></inputEntry>
+        <inputEntry id="r25_i1"><text>-</text></inputEntry>
+        <inputEntry id="r25_i2"><text>true</text></inputEntry>
+        <inputEntry id="r25_i3"><text>false</text></inputEntry>
+        <inputEntry id="r25_i4"><text>-</text></inputEntry>
+        <inputEntry id="r25_i5"><text>-</text></inputEntry>
+        <inputEntry id="r25_i6"><text>-</text></inputEntry>
+        <inputEntry id="r25_i7"><text>-</text></inputEntry>
+        <inputEntry id="r25_i8"><text>-</text></inputEntry>
+        <inputEntry id="r25_i9"><text>-</text></inputEntry>
+        <inputEntry id="r25_i10"><text>-</text></inputEntry>
+        <inputEntry id="r25_i11"><text>-</text></inputEntry>
+        <inputEntry id="r25_i12"><text>-</text></inputEntry>
+        <inputEntry id="r25_i13"><text>-</text></inputEntry>
+        <inputEntry id="r25_i14"><text>-</text></inputEntry>
+        <inputEntry id="r25_i15"><text>-</text></inputEntry>
+        <inputEntry id="r25_i16"><text>-</text></inputEntry>
+        <inputEntry id="r25_i17"><text>-</text></inputEntry>
+        <inputEntry id="r25_i18"><text>-</text></inputEntry>
+        <outputEntry id="r25_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r25_o1"><text>"Beim Amts- und Abteilungswechsel wird üblicherweise der Postfachinhalt übertragen; die Primäradresse nur bei gleicher Mail-Domain."</text></outputEntry>
+      </rule>
+      <rule id="r26">
+        <description>Inter/Extern: Adresse üblich</description>
+        <inputEntry id="r26_i0"><text>"internalisierung","externalisierung"</text></inputEntry>
+        <inputEntry id="r26_i1"><text>-</text></inputEntry>
+        <inputEntry id="r26_i2"><text>false</text></inputEntry>
+        <inputEntry id="r26_i3"><text>true</text></inputEntry>
+        <inputEntry id="r26_i4"><text>-</text></inputEntry>
+        <inputEntry id="r26_i5"><text>-</text></inputEntry>
+        <inputEntry id="r26_i6"><text>-</text></inputEntry>
+        <inputEntry id="r26_i7"><text>-</text></inputEntry>
+        <inputEntry id="r26_i8"><text>-</text></inputEntry>
+        <inputEntry id="r26_i9"><text>-</text></inputEntry>
+        <inputEntry id="r26_i10"><text>-</text></inputEntry>
+        <inputEntry id="r26_i11"><text>-</text></inputEntry>
+        <inputEntry id="r26_i12"><text>-</text></inputEntry>
+        <inputEntry id="r26_i13"><text>-</text></inputEntry>
+        <inputEntry id="r26_i14"><text>-</text></inputEntry>
+        <inputEntry id="r26_i15"><text>-</text></inputEntry>
+        <inputEntry id="r26_i16"><text>-</text></inputEntry>
+        <inputEntry id="r26_i17"><text>-</text></inputEntry>
+        <inputEntry id="r26_i18"><text>-</text></inputEntry>
+        <outputEntry id="r26_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r26_o1"><text>"Bei Internalisierung und Externalisierung wird üblicherweise die Primäradresse übertragen."</text></outputEntry>
+      </rule>
+      <rule id="r27">
+        <description>Vermerk</description>
+        <inputEntry id="r27_i0"><text>-</text></inputEntry>
+        <inputEntry id="r27_i1"><text>-</text></inputEntry>
+        <inputEntry id="r27_i2"><text>-</text></inputEntry>
+        <inputEntry id="r27_i3"><text>-</text></inputEntry>
+        <inputEntry id="r27_i4"><text>-</text></inputEntry>
+        <inputEntry id="r27_i5"><text>-</text></inputEntry>
+        <inputEntry id="r27_i6"><text>-</text></inputEntry>
+        <inputEntry id="r27_i7"><text>-</text></inputEntry>
+        <inputEntry id="r27_i8"><text>-</text></inputEntry>
+        <inputEntry id="r27_i9"><text>-</text></inputEntry>
+        <inputEntry id="r27_i10"><text>-</text></inputEntry>
+        <inputEntry id="r27_i11"><text>-</text></inputEntry>
+        <inputEntry id="r27_i12"><text>-</text></inputEntry>
+        <inputEntry id="r27_i13"><text>-</text></inputEntry>
+        <inputEntry id="r27_i14"><text>-</text></inputEntry>
+        <inputEntry id="r27_i15"><text>-</text></inputEntry>
+        <inputEntry id="r27_i16"><text>-</text></inputEntry>
+        <inputEntry id="r27_i17"><text>-</text></inputEntry>
+        <inputEntry id="r27_i18"><text>-</text></inputEntry>
+        <outputEntry id="r27_o0"><text>"hinweis"</text></outputEntry>
+        <outputEntry id="r27_o1"><text>"Nach der Ausführung trägt das Quellkonto den Vermerk «Ressourcen transferiert»; nur ein AD-Administrator kann ihn entfernen."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>
