@@ -889,6 +889,7 @@ var mcpOmittedRoutes = map[string]string{
 	// application APIs, returning a raw downloaded package to an MCP agent
 	// would bypass the dedicated import decision UI without adding a distinct
 	// agent capability. MCP uses the existing application/import tools.
+	"GET /api/v1/blueprints/connection":                      "a stream of the registry load's stations (NDJSON) for the Console to draw live; an agent lists with atlas_hub_list_releases, whose failure the operator's log explains (hub.registry_unavailable)",
 	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; an agent installs through atlas_hub_import_release, which the server feeds the verified bytes, so MCP never moves raw package bytes",
 
 	// Repository: package management, an admin/UI concern.

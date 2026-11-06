@@ -113,7 +113,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
           <button type="button" class="btn ghost small toggle" data-tag="" aria-pressed="${activeTag === ""}">${esc(t("blueprint.allTags"))}</button>
           ${allTags.map((tag) => `<button type="button" class="btn ghost small toggle" data-tag="${esc(tag)}" aria-pressed="${activeTag === tag}">${esc(tag)}</button>`).join("")}
         </div>` : "";
-      body.innerHTML = `<details class="hub-connected">
+      body.innerHTML = `<details class="fold-sub hub-connected">
           <summary class="small">${esc(routeSummary(connection.done, connection.steps, connection.host))}</summary>
           <div data-route></div>
           <div class="between"><span></span><button type="button" class="btn ghost small" data-retry>${esc(t("blueprint.route.retry"))}</button></div>
