@@ -190,7 +190,7 @@ def adapt(src, dst, sku, with_telephony, department, sharepoint_host, with_site)
 
 # The on-premises variant (exchange.tf): the Exchange products once more, in a catalogue
 # of their own, served by the Exchange worker on the Exchange server.
-ONPREM_PRODUCTS = ["m365-funktionspostfach", "m365-verteiler", "m365-postfachzugriff", "m365-raum", "m365-geraet"]
+ONPREM_PRODUCTS = ["m365-funktionspostfach", "m365-verteiler", "m365-postfachzugriff", "m365-kalender", "m365-raum", "m365-geraet"]
 ONPREM_WORKER = "ucc_exchange_onprem"
 ONLINE_STORE = "Exchange Online: Empfaenger"
 ONPREM_STORE = "Exchange Server: Empfaenger"

@@ -16,8 +16,8 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 27 Prozesse, 61 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
-| `katalog.json` | Das Katalogdokument: vier Kataloge, achtzehn Produkte, vier Beziehungen |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 28 Prozesse, 63 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
+| `katalog.json` | Das Katalogdokument: vier Kataloge, neunzehn Produkte, vier Beziehungen |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
 | `*.dmn` | Die acht Entscheidungsmodelle |
@@ -30,8 +30,8 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Katalog | Rang | Zielgruppe | Produkte |
 |---|---|---|---|
-| Microsoft 365 für Mitarbeitende (`cat-m365-mitarbeitende`) | 500 | `{{zielgruppe}}` | Lizenz, Telefonie, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach, Verteiler, Postfachzugriff |
-| Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | die dreizehn Produkte des Shops |
+| Microsoft 365 für Mitarbeitende (`cat-m365-mitarbeitende`) | 500 | `{{zielgruppe}}` | Lizenz, Telefonie, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach, Verteiler, Postfachzugriff, Zusätzlicher Kalender |
+| Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | die vierzehn Produkte des Shops |
 | Microsoft 365: HR-Eintritte (`cat-m365-hr`) | 520 | keine | Eintrittspaket, Lizenz mit Postfach (Eintritt), Mitgliedschaften der Organisationseinheit |
 | Microsoft 365: Identität (hybrid) (`cat-m365-identitaet`) | 530 | `{{zielgruppe-identitaet}}` | Konto (hybrid) anlegen, Konto in die Cloud übernehmen (siehe «Hybride Identität (Entra Connect)») |
 
@@ -48,8 +48,8 @@ Sein Rang muss trotzdem frei sein, weil das Veröffentlichen jeden Rang nur einm
 Die Testumgebung (`deploy/opentofu/m365-devenv`, `scripts/install-m365-dienste.py`) legt mit
 einem Exchange Server einen fünften Katalog an, der nicht in `katalog.json` steht:
 «Exchange Server (OnPrem)» (`cat-m365-onprem`, Rang 400, Zielgruppe wie
-`cat-m365-mitarbeitende`) mit Funktionspostfach, Verteiler, Postfachzugriff, Sitzungszimmer und
-Gerät als Kopien `…-onprem`, deren Prozesse den Worker `ucc_exchange_onprem` ansprechen
+`cat-m365-mitarbeitende`) mit Funktionspostfach, Verteiler, Postfachzugriff, Zusätzlicher Kalender,
+Sitzungszimmer und Gerät als Kopien `…-onprem`, deren Prozesse den Worker `ucc_exchange_onprem` ansprechen
 (Applikation `beispiel-m365-dienste-onprem`).
 
 ## Die Produkte
@@ -63,6 +63,7 @@ Gerät als Kopien `…-onprem`, deren Prozesse den Worker `ucc_exchange_onprem` 
 | Viva Engage: Community (`m365-engage`) | Entra | vorgesetzte Person der Besitzerin oder des Besitzers | `engage-community.bpmn` (Lebenszyklus) | Community löschen, Person aufnehmen, Person entfernen |
 | Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person der verantwortlichen Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
 | Verteilerliste (`m365-verteiler`) | Exchange | keine | `verteiler.bpmn` (Lebenszyklus) | entfernen, Mitglied aufnehmen, Mitglied entfernen |
+| Zusätzlicher Kalender (`m365-kalender`) | Exchange | vorgesetzte Person der verantwortlichen Person | `kalender.bpmn` (Lebenszyklus) | Kalender zurückgeben, Berechtigung erteilen, Berechtigung entziehen |
 | Zugriff auf ein Postfach (`m365-postfachzugriff`), 365 Tage befristet | Exchange | vorgesetzte Person der Person, die den Zugriff erhält, je nach Regel zusätzlich Informationssicherheit | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Sitzungszimmer (`m365-raum`) | Exchange | `{{facility-management}}` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` (getrennte Prozesse), beide mit `raumliste.bpmn`; `raum-nachfuehren.bpmn` von Hand | Rückgabe |
 | Gerät (`m365-geraet`): Beamer, Fahrzeug, Leihgerät | Exchange | `{{facility-management}}` | `geraet-einrichten.bpmn`, `geraet-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
@@ -135,6 +136,10 @@ ihrem Bestand im Shop; «Betrieb»: eine Person mit der Rolle operator. Die drei
 | `m365-verteiler` | Verteiler entfernen (`deprovision`) | `m365.verteiler.entfernen` | Rückgabe | Bestand, Betrieb | – |
 | `m365-verteiler` | Mitglied aufnehmen (`mitglied-aufnehmen`) | `m365.verteiler.mitglied-aufnehmen` | Änderung | Bestand, Betrieb | `m365-postfach-person` |
 | `m365-verteiler` | Mitglied entfernen (`mitglied-entfernen`) | `m365.verteiler.mitglied-entfernen` | Änderung | Bestand, Betrieb | `m365-postfach-person` |
+| `m365-kalender` | Bestellung (`provision`) | `m365.kalender.erstellen` | Bereitstellung | Shop | `m365-kalender-bestellung` |
+| `m365-kalender` | Kalender zurückgeben (`deprovision`) | `m365.kalender.entfernen` | Rückgabe | Bestand, Betrieb | – |
+| `m365-kalender` | Berechtigung erteilen (`berechtigung-erteilen`) | `m365.kalender.berechtigung-erteilen` | Änderung | Bestand, Betrieb | `m365-kalender-berechtigung` |
+| `m365-kalender` | Berechtigung entziehen (`berechtigung-entziehen`) | `m365.kalender.berechtigung-entziehen` | Änderung | Bestand, Betrieb | `m365-kalender-berechtigung` |
 | `m365-postfachzugriff` | Bestellung, Rückgabe (getrennte Prozesse `proc_m365_postfachzugriff_erteilen`, `proc_m365_postfachzugriff_entziehen`) | – | Bereitstellung, Rückgabe | Shop, Bestand | `m365-postfachzugriff-bestellung` |
 | `m365-raum` | Bestellung, Rückgabe (getrennte Prozesse `proc_m365_raum_einrichten`, `proc_m365_raum_entfernen`) | – | Bereitstellung, Rückgabe | Shop, Bestand | `m365-raum-bestellung` |
 | `m365-geraet` | Bestellung, Rückgabe (getrennte Prozesse `proc_m365_geraet_einrichten`, `proc_m365_geraet_entfernen`) | – | Bereitstellung, Rückgabe | Shop, Bestand | `m365-geraet-bestellung` |
@@ -168,7 +173,7 @@ ihrem Bestand im Shop; «Betrieb»: eine Person mit der Rolle operator. Die drei
 
 ## Prozesse im Überblick
 
-Die 27 Prozesse des Pakets und was sie startet:
+Die 28 Prozesse des Pakets und was sie startet:
 
 | Prozess | Datei | Gestartet durch |
 |---|---|---|
@@ -179,6 +184,7 @@ Die 27 Prozesse des Pakets und was sie startet:
 | `proc_m365_engage_community` | `engage-community.bpmn` | Aktionen von `m365-engage` |
 | `proc_m365_funktionspostfach` | `funktionspostfach.bpmn` | Aktionen von `m365-funktionspostfach` |
 | `proc_m365_verteiler` | `verteiler.bpmn` | Aktionen von `m365-verteiler` |
+| `proc_m365_kalender` (Zusätzlicher Kalender) | `kalender.bpmn` | Aktionen von `m365-kalender` (siehe «Der zusätzliche Kalender») |
 | `proc_m365_postfachzugriff_erteilen`, `proc_m365_postfachzugriff_entziehen` | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` | Bestellung und Rückgabe von `m365-postfachzugriff` |
 | `proc_m365_raum_einrichten`, `proc_m365_raum_entfernen` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` | Bestellung und Rückgabe von `m365-raum` |
 | `proc_m365_raumliste` (Sitzungszimmer auffindbar machen) | `raumliste.bpmn` | Call Activity aus `raum-einrichten.bpmn` und `raum-nachfuehren.bpmn` (siehe «Sitzungszimmer in der Raumsuche») |
@@ -192,7 +198,7 @@ Die 27 Prozesse des Pakets und was sie startet:
 | `proc_m365_hr_eintritt` (Eintritt und Austritt) | `hr-eintritt.bpmn` | Meldung des HR-Systems (siehe «Eintritt und Austritt (HR-Ereignis)») |
 | `proc_m365_konto_hybrid` | `konto-hybrid.bpmn` | Aktionen von `m365-konto-hybrid` |
 | `proc_m365_konto_in_cloud` | `konto-in-cloud.bpmn` | Aktionen von `m365-konto-cloud` |
-| `proc_m365_genehmigung_vorgesetzter` | `genehmigung-vorgesetzter.bpmn` | Genehmigungsart von Lizenz, Team, SharePoint-Teamwebsite, Community, Funktionspostfach und Postfachzugriff (siehe «Die Genehmigung durch die vorgesetzte Person») |
+| `proc_m365_genehmigung_vorgesetzter` | `genehmigung-vorgesetzter.bpmn` | Genehmigungsart von Lizenz, Team, SharePoint-Teamwebsite, Community, Funktionspostfach, Zusätzlicher Kalender und Postfachzugriff (siehe «Die Genehmigung durch die vorgesetzte Person») |
 | `proc_m365_partnerzugang` | `partnerzugang.bpmn` | öffentliches Formular (siehe «Die öffentlichen Formulare») |
 | `proc_m365_verteiler_anmeldung` | `verteiler-anmeldung.bpmn` | öffentliches Formular |
 | `proc_m365_governance_pruefung` | `governance-pruefung.bpmn` | wöchentlicher Timer, oder von Hand (siehe «Governance») |
@@ -593,14 +599,104 @@ Rolle und «auch als Admin» sind nicht personenbezogene Felder; nur sie liest e
 deren Anzeigenamen; Besitzer der Gruppe sind Admins der Community; und wer die Gruppe löscht,
 löscht die Community mit.
 
+## Der zusätzliche Kalender
+
+Das Produkt `m365-kalender` («Zusätzlicher Kalender») gibt einem Team oder einem Vorhaben einen
+eigenen Kalender, etwa einen Ferienplan. Technisch ist es ein geteiltes Postfach, das nur für
+seinen Standardkalender besteht: Es braucht keine Lizenz, und es geht nicht mit einer Person, wie
+ein Ordner in deren Postfach es täte. Es baut auf derselben Mechanik auf wie das
+Funktionspostfach (Namensregel, Herkunftskennzeichnung, Genehmigung durch die vorgesetzte
+Person der verantwortlichen Person, Suche über die Kennzeichnung).
+
+**Bestellung** (`m365-kalender-bestellung`): Name des Kalenders (z.B. «Ferienplan Projekte»),
+Zweck, verantwortliche Person (Suche in Entra ID), Personen mit Leserecht und Personen mit
+Bearbeitungsrecht. Die beiden Listen sind Textfelder, eine UPN je Zeile (Komma und Semikolon
+gehen auch); beide dürfen leer bleiben. Eine Suche mit Mehrfachauswahl kennen die Formulare
+nicht.
+
+**Namen.** Die Namensregel bildet mit dem Objekttyp `kalender` (Regel r14, ohne Bereich)
+Anzeigename «KAL-Ferienplan Projekte» und Alias `kal-ferienplan-projekte`, in der geteilten
+Testumgebung mit `NAME_PREFIX` davor (`atlas-test-58o4-KAL-Ferienplan Projekte`). Die beiden
+Berechtigungsgruppen heissen «KAL-Ferienplan Projekte (lesen)» und «… (bearbeiten)», Alias mit
+`-lesen` und `-bearbeiten`.
+
+**Bereitstellung** (`kalender.bpmn`):
+
+1. Namensregel; ein abgelehnter Name endet als Ablehnung mit Begründung.
+2. Geteiltes Postfach anlegen und kennzeichnen (`CustomAttribute1` bis `4`). Es bleibt im
+   Adressbuch **sichtbar**: «Kalender hinzufügen › Aus Verzeichnis» findet nur, was das
+   Adressbuch zeigt.
+3. Je Stufe eine E-Mail-aktivierte Sicherheitsgruppe anlegen (`Type Security`), mit den Personen
+   aus dem Formular als Mitgliedern und der verantwortlichen Person als Verwalterin
+   (`ManagedBy`); danach kennzeichnen (`CustomAttribute1` bis `4` wie am Postfach,
+   `CustomAttribute5` = `lesen` oder `bearbeiten`) und im Adressbuch verbergen.
+4. Fünf Minuten warten, dann den Namen des Kalenderordners lesen (`run-get-cmdlet` mit
+   `Get-MailboxFolderStatistics -FolderScope Calendar`, wie bei der Kalenderstellvertretung): Er
+   hängt von der Sprache des Postfachs ab (Kalender, Calendar …). Die Sprache selbst setzt der
+   Prozess nicht, weil der Exchange-Worker `Set-MailboxRegionalConfiguration` nicht anbietet.
+5. Berechtigungen am Kalenderordner (`add-folder-permission`): Gruppe «lesen» `Reviewer`, Gruppe
+   «bearbeiten» `Editor`, die verantwortliche Person direkt `Editor`. Sie erhält keinen
+   Vollzugriff: Der gäbe ihr das ganze Postfach (mit AutoMapping als weiteres Postfach in
+   Outlook) und erlaubte ihr, die Freigaben an Atlas vorbei zu ändern. Die
+   Standardberechtigung (nur Verfügbarkeit) bleibt.
+6. Position als erledigt melden; die bestellende Person sieht die Bereitstellung im Shop.
+
+**Warum Gruppen und nicht eine Berechtigung je Person.** `leser` und `bearbeiter` sind
+Personendaten. Eine Berechtigung je Person bräuchte eine Mehrfachinstanz über diese Listen, und
+deren Sammlung wertet die Engine aus, die nur Chiffretext hält; der Compiler weist das zurück
+(ADR-0314). Die Gruppe nimmt die ganze Liste in einem Aufruf (`New-DistributionGroup -Members`),
+den der Exchange-Worker im Klartext bildet. Die Mehrfachinstanzen des Prozesses laufen nur über
+die feste Liste der zwei Stufen und über die gefundenen Gruppen.
+
+**Aktionen am Bestand:**
+
+- **Berechtigung erteilen** (`berechtigung-erteilen`, Formular `m365-kalender-berechtigung`:
+  Person und Stufe): nimmt die Person in die Gruppe der Stufe auf. Ist sie schon Mitglied, wird
+  die Aufgabe zum Incident. Wer von «lesen» zu «bearbeiten» wechselt, steht danach in beiden
+  Gruppen und kann bearbeiten; «Berechtigung entziehen» mit «lesen» räumt die alte Stufe auf.
+- **Berechtigung entziehen** (`berechtigung-entziehen`, dasselbe Formular): nimmt die Person
+  aus der Gruppe der Stufe. Die direkte Berechtigung der verantwortlichen Person bleibt.
+- **Kalender zurückgeben** (`deprovision`): entfernt das Postfach (Exchange Online hält es 30
+  Tage wiederherstellbar) und die beiden Gruppen, die es über die Kennzeichnung findet, und
+  meldet die Rückgabe. Ein schon entferntes Postfach ist kein Fehler.
+
+Die Rückmeldung an den Shop: die Bereitstellung über die Positionsroute (`done`), jede Aktion
+über eine Shop-Aufgabe (`atlas:shopTask mode="outcome"`, `completed`).
+
+**Anleitung für die Personen mit Berechtigung** (sinngemäss in die Produktbeschreibung oder
+die Bestätigung übernehmen):
+
+- *Outlook im Web und neues Outlook:* Kalender › «Kalender hinzufügen» › «Aus Verzeichnis
+  hinzufügen», den Namen «KAL-…» suchen, «Hinzufügen». Der Kalender erscheint unter «Andere
+  Kalender» bzw. «Freigegebene Kalender».
+- *Outlook klassisch (Windows):* Kalender › «Kalender hinzufügen» › «Aus Adressbuch …», «KAL-…»
+  wählen.
+- *Outlook für Mac und mobil:* Ein Kalender, der im Web hinzugefügt ist, erscheint dort nach
+  der nächsten Synchronisation.
+
+Eine neue Mitgliedschaft wirkt nicht sofort: Exchange liest die Gruppen eines Benutzers mit
+Verzögerung, in der Regel innert einer Stunde.
+
+**Exchange Server.** Der Kalender ist Teil der Exchange-Server-Variante der Testumgebung
+(`m365-kalender-onprem`, siehe «Die Kataloge»): Alle Cmdlets gibt es auch dort, die
+Gruppen entstehen als universelle Sicherheitsgruppen im Standard-OU des Exchange-Servers, und
+Outlook im Web heisst dort «Kalender hinzufügen › Aus Verzeichnis» ebenso.
+
+**Nicht geprüft** gegen einen Tenant: ob `Get-MailboxFolderStatistics` über den REST-Endpunkt von
+Exchange Online bedient wird (wie bei der Kalenderstellvertretung offen), ob fünf Minuten für
+ein neues Postfach immer reichen (sonst wiederholt der Worker), und wie Outlook klassisch eine
+Bearbeitungsberechtigung über eine Gruppe behandelt (Microsoft unterstützt Freigaben an
+E-Mail-aktivierte Sicherheitsgruppen; Stellvertretungen über Gruppen nicht, und eine solche
+vergibt der Prozess nicht).
+
 ## Die Genehmigung durch die vorgesetzte Person
 
-Lizenz, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach und Postfachzugriff nennen als Genehmigungsart den Prozess
+Lizenz, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach, Zusätzlicher Kalender und Postfachzugriff nennen als Genehmigungsart den Prozess
 `proc_m365_genehmigung_vorgesetzter` (`genehmigung-vorgesetzter.bpmn`) und nicht die
 eingebaute Art «superior». Der Grund: Die eingebaute Art fragt die vorgesetzte Person der
 **bestellenden** Person und kennt dafür nur deren Atlas-Konto. Bestellt wird hier aber für
 jemanden, den das Bestellformular nennt: `upn` (Lizenz), `besitzer` (Team,
-SharePoint-Teamwebsite, Community, Funktionspostfach) oder `person` (Postfachzugriff). Diese Antworten erhält nur ein
+SharePoint-Teamwebsite, Community, Funktionspostfach, Kalender) oder `person` (Postfachzugriff). Diese Antworten erhält nur ein
 Genehmigungsprozess der Installation selbst (ADR-0441).
 
 Ablauf:
@@ -632,7 +728,7 @@ nächsthöheren Vorgesetzten weiter (`…/escalate`). Die Aufgabe bleibt dabei o
 **Personenfelder.** Wo ein Bestellformular eine Person im Tenant nennt, ist das Feld eine
 Auswahl mit Suche in Entra ID (`atlasDataSource`, Worker `ucc_entra`, Ressource `users`,
 ADR-0473): Besitzer und Stellvertretung der SharePoint-Teamwebsite, Besitzer von Team,
-Community, Verteiler und Funktionspostfach, die Person des Postfachzugriffs und der Lizenz
+Community, Verteiler, Funktionspostfach und Kalender, die Person des Postfachzugriffs und der Lizenz
 sowie das Postfach der Aufbewahrung. Das Feld übermittelt die UPN (`option.value`
 `userPrincipalName`); die Prozesse lesen also denselben Wert wie früher aus dem Textfeld, und
 Atlas prüft die Wahl beim Bestellen noch einmal gegen das Verzeichnis. Die Aufbewahrung sucht
@@ -644,7 +740,7 @@ geprüft würde (ADR-0473, Amendment 2026-11-02); im öffentlichen Antrag für e
 der ohne Anmeldung läuft; in den Teilen des Eintrittspakets, weil das Konto beim Bestellen erst
 Sekunden alt ist; bei Gästen, externen Adressen und Ressourcenkonten.
 
-**Personendaten.** `upn`, `besitzer`, `stellvertretung`, `person`, `postfach` und `anlass` sind im
+**Personendaten.** `upn`, `besitzer`, `stellvertretung`, `person`, `postfach`, `anlass`, `leser` und `bearbeiter` sind im
 Genehmigungsprozess als Personendaten der empfangenden Person deklariert. Kein Ausdruck, den
 die Engine auswertet, liest sie (der Compiler weist das zurück): die betroffene Person wählt
 der `userId`-Ausdruck der Entra-Aufgabe, der erst bei der Übergabe des Jobs an den Worker
@@ -1127,8 +1223,8 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
   `CustomAttribute4` = verantwortliche Person (beim Raum und beim Gerät: Standort; das Gerät
   trägt in `CustomAttribute5` zusätzlich die Geräteart). Rückgabe und
   Änderungen finden das Objekt über diese Kennzeichnung, nicht über den Namen.
-- **Governance-Prüfung.** `governance-pruefung.bpmn` sucht wöchentlich Funktionspostfächer
-  und Verteiler ohne Kennzeichnung sowie Microsoft-365-Gruppen ausserhalb der Namensregel
+- **Governance-Prüfung.** `governance-pruefung.bpmn` sucht wöchentlich geteilte Postfächer
+  (Funktionspostfächer und Kalender) und Verteiler ohne Kennzeichnung sowie Microsoft-365-Gruppen ausserhalb der Namensregel
   (ausgenommen die gekennzeichneten Gruppen der SharePoint-Teamwebsites und die Gruppen der
   Communities, deren Anzeigename mit «EC-» der Namensregel folgt) und legt den Befund `M365-Administration` vor. Der Befund entzieht nichts; gehandelt wird
   durch Menschen.
@@ -1139,7 +1235,7 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
 - **Zusatzfreigabe und Befristung.** Vollzugriff und «Senden als» auf ein persönliches
   Postfach verlangen die Zustimmung der Informationssicherheit; der Zugriff ist auf ein
   Jahr befristet.
-- **Besitz.** Teams, Funktionspostfächer und Verteiler entstehen mit einer verantwortlichen
+- **Besitz.** Teams, Funktionspostfächer, Kalender und Verteiler entstehen mit einer verantwortlichen
   Person; das Recht steht im Bestand der empfangenden Person und ist rezertifizierbar.
 - **Personendaten.** UPNs, Namen, Begründungen und Rufnummern sind in den Prozessen als
   Personendaten deklariert (`atlas:personal`) und werden verschlüsselt gespeichert. Sie
@@ -1654,5 +1750,10 @@ Für die Sitzungszimmer rechnet `TestM365RoomListFollowsTheLocation` die Zerlegu
 Standorts und den Namen der Raumliste nach, und `TestM365RoomsReachRoomFinderOnEveryPath` hält
 fest, dass Bereitstellung und Nachführung `proc_m365_raumliste` aufrufen und die Rückgabe den Raum
 vor dem Entfernen aus seinen Raumlisten nimmt.
+Für den zusätzlichen Kalender rechnet `TestM365CalendarGroupsTakeTheListsAsTyped` die Mitglieder
+der Gruppen aus den eingegebenen Listen nach (leer heisst: kein `-Members`),
+`TestM365CalendarPermissionNamesTheCalendarFolder` die Identität des Kalenderordners, und
+`TestM365CalendarKeepsThePeopleOutOfTheEngine` hält fest, dass eine Mehrfachinstanz über eine
+Personenliste nicht kompiliert.
 `go test ./api/layout` hält alle Diagramme an die Layout-Regeln (keine Überlappungen,
 keine Kreuzungen, Beschriftungen frei).
