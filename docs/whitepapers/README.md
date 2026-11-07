@@ -24,6 +24,11 @@ implementation status.
   German technical whitepaper, **6 November 2026**, about Blueprint Registry v1,
   publishing, pinned trust, controlled imports, operations and known gaps.
   This is a design/status explanation, not independent security certification.
+- **Capability-driven Automation (historical edition)** —
+  [original PDF](Atlas_Whitepaper_Capability_Driven_Automation.pdf).
+  Earlier concept whitepaper; use the [CDA delivery programme](../planning/capability-driven-automation-program.md)
+  and [ADRs](../adr/README.md) for current implementation status. This PDF is
+  not acceptance evidence or a production-readiness assessment.
 - [Identity-Aware Workflow Execution](identity-aware-workflow-execution.md) —
   user/service identities, delegated execution, policy decision/enforcement,
   obligations and auditable actions. German Markdown edition,
@@ -54,7 +59,10 @@ commissions the process applications whitepaper in the `pblumer/atlas-cloud`
 design;
 [`prompts/atlas-worker-whitepaper.md`](prompts/atlas-worker-whitepaper.md)
 is the self-contained brief (facts A–O, for a model without repository access)
-the worker architecture whitepaper was written from.
+the worker architecture whitepaper was written from;
+[`prompts/atlas-capability-driven-automation-whitepaper.md`](prompts/atlas-capability-driven-automation-whitepaper.md)
+is the source-verified authoring brief for revising the CDA whitepaper in the
+current atlas-cloud design, while preserving the historical PDF.
 
 Keep all future whitepapers here, under `docs/whitepapers/`. The former
 singular `docs/whitepaper/` directory has been consolidated into this
