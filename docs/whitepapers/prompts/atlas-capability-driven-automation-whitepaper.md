@@ -270,7 +270,7 @@ Markdown-Standort `docs/whitepapers/`.
 
 ## 7. Sprache und Publikationsstil
 
-- Sachliches, formelles Deutsch (Schweiz); immer `ss`, nie `ß`,
+- Sachliches, formelles Deutsch (Schweiz); immer `ss`, nie `Eszett`,
   Umlaute ä/ö/ü verwenden.
 - `atlas` als Wortmarke und im Fliesstext klein; `Atlas` nur
   am Satz- oder Überschriftsanfang. `atlas hub` klein.
@@ -356,7 +356,7 @@ Runtime- oder Produktversprechen.
    einer Änderungsübersicht dokumentieren.
 3. Relativlinks auf Existenz prüfen, inkl.
    verlinkter ADRs und Referenzbeispiele.
-4. Deutschprüfung: kein `ß`; Marken-/Begriffskonsistenz.
+4. Deutschprüfung: kein `Eszett`; Marken-/Begriffskonsistenz.
 5. Eigenständiges HTML bei 1440, 820 und 390 px
    visuell testen; keine horizontale Überläufe oder
    abgeschnittenen SVG-Texte.
