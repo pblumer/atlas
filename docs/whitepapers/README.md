@@ -29,6 +29,17 @@ implementation status.
   Earlier concept whitepaper; use the [CDA delivery programme](../planning/capability-driven-automation-program.md)
   and [ADRs](../adr/README.md) for current implementation status. This PDF is
   not acceptance evidence or a production-readiness assessment.
+- **Capability-driven Automation — Current Architecture and Implementation Status** —
+  [dark screen PDF](atlas-capability-driven-automation-dark.pdf),
+  [print-friendly PDF](atlas-capability-driven-automation-print.pdf),
+  [Markdown source](atlas-capability-driven-automation.md) and
+  [standalone HTML](atlas-capability-driven-automation.html).
+  German technical whitepaper, **7 November 2026**, verified against `main`
+  at commit `8c6d819b2591af02a2b49b3d8ad362dc234df476`.
+  Covers CDA0–CDA8, technical capability claims, contract schemas, evidence
+  records and the independent approval boundary. **Not acceptance evidence.**
+  The historic [original PDF](Atlas_Whitepaper_Capability_Driven_Automation.pdf)
+  remains available for reference.
 - [Identity-Aware Workflow Execution](identity-aware-workflow-execution.md) —
   user/service identities, delegated execution, policy decision/enforcement,
   obligations and auditable actions. German Markdown edition,
