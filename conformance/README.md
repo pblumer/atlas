@@ -7,11 +7,15 @@ the design rationale; this file is the how-to.
 
 The suite keeps two questions apart:
 
-- **Completeness** — *do we cover every BPMN execution feature?* Answered by an
-  explicit register ([`scenario.go`](scenario.go)) mapped onto the recognized
-  [workflow control-flow patterns](http://www.workflowpatterns.com/). A feature
-  with no covering scenario shows up as a gap in [`COVERAGE.md`](COVERAGE.md), so
-  "we cover everything" is a checkable claim, not a vibe.
+- **Registered scenario coverage** — which features **this suite lists**, and
+  which listed features have a scenario? See [`scenario.go`](scenario.go) and
+  [`COVERAGE.md`](COVERAGE.md). This is a closed, narrow 34-feature/9-WCP
+  denominator, not a complete OMG BPMN execution inventory.
+- **Normative candidate inventory** — [registry/registry.json](registry/registry.json)
+  lists candidates, implementation/evidence states, 63 legal event-position
+  combinations and 43 WCP entries. [NORMATIVE_COVERAGE.md](NORMATIVE_COVERAGE.md)
+  is generated independently and **does not claim OMG conformance**; its
+  denominator is explicitly pending maintainer review.
 - **Correctness** — *does the engine produce the right result, not merely a
   self-consistent one?* Answered by four layered oracles.
 
