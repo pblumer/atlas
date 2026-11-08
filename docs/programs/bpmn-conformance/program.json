@@ -101,7 +101,7 @@
       "evidence": [
         "../../../conformance/differential/differential_test.go",
         "../../../conformance/differential/reference/models/linear-independent.bpmn",
-        "../../../../.github/workflows/ci.yml"
+        "../../../.github/workflows/ci.yml"
       ]
     },
     {
