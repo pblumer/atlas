@@ -2,22 +2,29 @@
   "id": "bpmn-conformance",
   "name": "BPMN 2.x Conformance",
   "summary": "Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.",
-  "status": "planned",
+  "status": "active",
   "owner": "pblumer",
   "last_reviewed": "2026-11-08",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Confirm CON0 coordinating owner and start a normative OMG BPMN 2.0.2 clause-by-clause inventory and source/test mapping. Do not claim a compliance percentage until the denominator is reviewed.",
+  "next_action": "Review the CON0 normative crosswalk, 63 legal event-position cells, 43 WCP names and explicit code/test gaps in issue #1615. Complete per-attribute semantics/CI evidence and approve denominator/exclusions before accepting CON0 or starting CON1.",
   "slices": [
     {
       "id": "CON0",
       "title": "Normative inventory and source-to-evidence audit",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [],
-      "issues": [],
+      "issues": [
+        1615
+      ],
       "prs": [],
-      "note": "Review OMG clauses and event/attribute variants, all 43 WCP entries and existing code/tests; approve the applicable denominator. Initial planning seed is not accepted CON0 evidence."
+      "note": "CON0 started 2026-11-08. Draft evidence: normative §2.3/§13 audit, 63 legal event-family/position cells, all 43 WCP titles and source/test traceability in docs/planning/bpmn-conformance-con0-*.md. Still open: all SHALL/attribute variants, full evidence/test execution, owner-approved denominator and sign-off. No engine implementation or conformance claim; do not mark complete.",
+      "evidence": [
+        "../../planning/bpmn-conformance-con0-audit.md",
+        "../../planning/bpmn-conformance-con0-event-matrix.md",
+        "../../planning/bpmn-conformance-con0-workflow-patterns.md"
+      ]
     },
     {
       "id": "CON1",
