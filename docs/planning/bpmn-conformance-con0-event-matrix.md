@@ -1,6 +1,6 @@
 # CON0 — Event legality and evidence matrix (BPMN 2.0.2)
 
-**Source:** [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/PDF/) **Table 10.93, pp. 259–260** (PDF pages 288–289), and Tables 10.84–10.92, ``10.5.4–10.5.5 and 13.5.  
+**Source:** [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/PDF/) **Table 10.93, pp. 259–260** (PDF pages 288–289), and Tables 10.84–10.92, §10.5.4–10.5.5 and 13.5.  
 **Programme:** [CON0](bpmn-conformance-program.md) · [Issue #1615](https://github.com/pblumer/atlas/issues/1615) · [normative audit](bpmn-conformance-con0-audit.md).  
 **Status:** Legality transcribed from the official marker table; implementation evidence below remains **provisional**. No aggregate execution conformance claim.
 
@@ -50,14 +50,14 @@ The seed status table must be checked against precise code, not inferred from th
 
 ## 3. Mandatory special constraints
 
-- **Cancel** boundary catch is only legal attached to a Transaction Sub-Process, and Cancel End only inside a transaction (`10.5.5). No Cancel in normal flow.
+- **Cancel** boundary catch is only legal attached to a Transaction Sub-Process, and Cancel End only inside a transaction (§10.5.5). No Cancel in normal flow.
 - **Compensation** Start is only legal within an Event Subprocess; a compensation boundary catches completed handler execution and has different sequence-flow rules from normal boundary catches.
 - **Error** cannot be a root start, non-interrupting event-subprocess start or non-interrupting boundary event. These combinations are *spec-illegal*.
 - **Link** is a paired intermediate catch/throw within a single scope; no start/end/boundary variant, no simultaneous incoming and outgoing sequence flows on one link.
 - **Multiple** combines more than one EventDefinition; **Parallel Multiple** uses the `parallelMultiple` boolean attribute rather than its own event-definition subtype. Restrictions of the included triggers still apply.
 - **Timer** subtypes timeDate, timeDuration, timeCycle have position-specific semantics. The current compiler expressly rejects timeCycle on an ordinary intermediate catch (`compiler/scope_compile.go`).
 - **None** at an intermediate position is a **Throw**, not a normal Catch.
-- **`10.5.4**: ordinary intermediate events with multiple incoming flows exhibit uncontrolled-flow semantics; boundary events have no incoming flow.
+- **§10.5.4**: ordinary intermediate events with multiple incoming flows exhibit uncontrolled-flow semantics; boundary events have no incoming flow.
 
 ## 4. Source anchors and remaining validation
 
@@ -70,6 +70,6 @@ The seed status table must be checked against precise code, not inferred from th
 | Terminate end | `compiler/parse_test.go:TestParseTerminateEndCompiles` | No central scenario |
 | Link catch and throw | `compiler/process.go:TypeLinkThrowEvent` and ADR-0132 | No central scenario |
 | Message/timer/signal | `conformance/scenario.go` and `engine/behavior.go` | Position, payload, repeating timing and parallel trigger variants missing |
-| Multiple/Parallel Multiple | ``10.5.4–10.5.5, `13.2 | No evidence sufficient for support classification |
+| Multiple/Parallel Multiple | §10.5.4–10.5.5, §13.2 | No evidence sufficient for support classification |
 
 **CON0 completion gates still outstanding:** expand the **63** legal cells into attribute/trigger/interruptibility/repetition/nesting variants; inspect exact code and tests per row; independently review expected semantics and reject illegal variants with correct diagnostics; obtain owner approval on the normative denominator before CON1 calculates anything. A successful compilation of one example is not a pass for its entire cell.
