@@ -31,22 +31,22 @@ func TestCON2ExecutionOracles(t *testing.T) {
 		},
 		{
 			name: "parallel-independent", clause: "13.4.2",
-			must: []string{"fork", "set_x", "set_y", "end"},
+			must:   []string{"fork", "set_x", "set_y", "end"},
 			visits: map[string]int{"fork": 1, "join": 2, "end": 1},
 		},
 		{
 			name: "inclusive-gateway", clause: "13.4.3",
-			must: []string{"priority", "eu_check", "end"},
+			must:   []string{"priority", "eu_check", "end"},
 			visits: map[string]int{"join": 2, "end": 1},
 		},
 		{
 			name: "boundary-error", clause: "13.5",
-			must: []string{"on_error", "handled"},
+			must:   []string{"on_error", "handled"},
 			visits: map[string]int{"handled": 1},
 		},
 		{
 			name: "boundary-message-noninterrupting", clause: "13.5",
-			must: []string{"notified", "done"},
+			must:   []string{"notified", "done"},
 			visits: map[string]int{"notified": 1, "done": 1},
 		},
 	}
