@@ -2,7 +2,7 @@
 
 **Status:** Proposed and not normatively complete; prepared 2026-11-08 for the [CON programme](bpmn-conformance-program.md).  
 **Authority:** [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/PDF/), [OMG XSD/CMOF catalogue](https://www.omg.org/spec/BPMN/).  
-**IMPORTANT:** This is an initial audit seed, NOT a compliance claim or finalized denominator. CON0 must review the specification clause by clause (including `2, `8–`13), verify positions/variant legality, and map stable IDs to test evidence.
+**IMPORTANT:** This is an initial audit seed, NOT a compliance claim or finalized denominator. CON0 must review the specification clause by clause (including `2, §8–`13), verify positions/variant legality, and map stable IDs to test evidence.
 
 ### Classification and governance
 
@@ -128,7 +128,7 @@ Each authoritative machine-readable row needs `id`, normative `specClause`, `con
 | COLL-04 | Lane/childLaneSet and flowNodeRef | I | ADR-0121 Layer A |
 | COLL-05 | Collaboration import, atomic multi-process deployment | P | roadmap gap |
 | COLL-06 | Resource/role and interface/operation metadata | ? | model metadata vs execution |
-| MODEL-01 | BPMN XML/XSD import and validation | ? | class `2.3 import requirement |
+| MODEL-01 | BPMN XML/XSD import and validation | ? | class §2.3 import requirement |
 | MODEL-02 | BPMNDI/layout/visual round trip | ? | modelling conformance, separate KPI |
 | MODEL-03 | XML export/foreign namespaces and extensions | ? | interoperability evaluation |
 | MODEL-04 | Documentation/artifacts | ? | non-executable subset |
@@ -143,7 +143,7 @@ The current suite tracks **WCP-1, WCP-2, WCP-3, WCP-4, WCP-5, WCP-6, WCP-7, WCP-
 
 ## Review checklist (CON0 deliverable)
 
-- [ ] Cross-check this seed against normative OMG ``2 and 8–13, XSD and CMOF; add every missing legal element/attribute/position and interaction.
+- [ ] Cross-check this seed against normative OMG §2 and 8–13, XSD and CMOF; add every missing legal element/attribute/position and interaction.
 - [ ] Classify **each** relevant element in at least Process Execution, Process Modeling, Choreography and BPEL lanes, with a reason for exclusions.
 - [ ] Split rows for interrupting/non, repeatability, event combinations, nested scopes, concurrent tokens, loops, default handling and error propagation.
 - [ ] Distinguish spec-illegal constructs from valid-but-unsupported constructs.
