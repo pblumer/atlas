@@ -1,4 +1,6 @@
-# BPMN conformance coverage
+# Registered BPMN scenario coverage (not OMG conformance)
+
+**Scope:** 34 registered features and 9 registered workflow patterns only. This report is not a BPMN 2.0.2 normative completeness or certification claim. See [normative candidate evidence](NORMATIVE_COVERAGE.md).
 
 Generated from the register in `scenario.go` by `go test ./conformance -update`. Do not edit by hand.
 
