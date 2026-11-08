@@ -18,8 +18,10 @@
       "issues": [
         1615
       ],
-      "prs": [],
-      "note": "Normative source audit, 13x8 event legality (63 legal), and all 43 revised WCP titles inventoried. Reviewer sign-off on complete SHALL-level denominator and exact §13.1 exclusions remains open; PR #1616 is superseded by the combined CON0/CON1 review branch. Do not mark complete on an inventory count alone.",
+      "prs": [
+        1618
+      ],
+      "note": "Normative source audit, 13x8 event legality (63 legal), and all 43 revised WCP titles inventoried. Reviewer sign-off on complete SHALL-level denominator and exact §13.1 exclusions remains open; PR #1616 has been superseded by combined PR #1618. Do not mark complete on an inventory count alone.",
       "evidence": [
         "../../planning/bpmn-conformance-con0-audit.md",
         "../../planning/bpmn-conformance-con0-event-matrix.md",
@@ -37,7 +39,9 @@
       "issues": [
         1617
       ],
-      "prs": [],
+      "prs": [
+        1618
+      ],
       "note": "Owner-requested combined CON0/CON1 implementation against explicitly frozen provisional CON0 candidate IDs: JSON registry, 105 requirements, 104 event cells, 43 WCPs; Python validator, 15 regression tests, generated evidence report, CI gate, legacy report correction. Dependency exception is implementation-only, not acceptance. Await green final CI, normative per-SHALL review and CON0 sign-off.",
       "evidence": [
         "../../../conformance/registry/registry.json",
