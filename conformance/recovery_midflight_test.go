@@ -51,8 +51,9 @@ func con3CaptureWait(s *state.Store) (con3WaitState, error) {
 		return v, fmt.Errorf("completed processes: %w", err)
 	}
 	if err = s.ActiveElementInstances(func(key uint64, ei *model.ElementInstanceValue) error {
-		v.elements = append(v.elements, fmt.Sprintf("%d:%d:%d:%d:%d:%d",
-			key, ei.ProcessInstanceKey, ei.ElementId, ei.FlowScopeKey, ei.TokenID, ei.State))
+		v.elements = append(v.elements, fmt.Sprintf("%d:%d:%d:%d:%d:%d:%d:%d:%d",
+			key, ei.ProcessInstanceKey, ei.ElementId, ei.FlowScopeKey, ei.TokenID,
+			ei.BpmnElementType, ei.EventGatewayKey, ei.MultiInstance, ei.SourceFlowId))
 		if ei.FlowScopeKey != 0 {
 			scopes[ei.FlowScopeKey] = struct{}{}
 		}
