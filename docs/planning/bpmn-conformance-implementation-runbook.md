@@ -1,7 +1,7 @@
 # CON implementation and acceptance runbook
 
 **Status:** Proposed implementation instructions; no test or code work completed by this document.  
-**Programme:** [BPMN Conformance](bpmn-conformance-program.md) · [source baseline](bpmn-conformance-baseline.md) · [feature inventory](bpmn-conformance-feature-inventory.md) · [operational manifest](../programs/con/program.json).
+**Programme:** [BPMN Conformance](bpmn-conformance-program.md) · [source baseline](bpmn-conformance-baseline.md) · [feature inventory](bpmn-conformance-feature-inventory.md) · [operational manifest](../programs/bpmn-conformance/program.json).
 
 ## Working agreement
 
@@ -98,4 +98,4 @@ python3 -m unittest discover -s scripts -p 'test_programs.py'
 
 Format `gofmt -l .` must print nothing. Test a dedicated reference-engine job separately when present (`go test -tags differential ./conformance/differential/` with installed dependencies). Do not claim checks succeeded if they were not executed. Planning-only PRs should validate local links, JSON manifest schema and generated programme index.
 
-**After each PR:** record merged commit and actual test evidence in `docs/programs/con/program.json`, update `ROADMAP.md` and accepted ADR statuses as appropriate, regenerate `docs/programs/README.md`, and leave a next-slice handoff. A merged PR is not automatically an accepted slice.
+**After each PR:** record merged commit and actual test evidence in `docs/programs/bpmn-conformance/program.json`, update `ROADMAP.md` and accepted ADR statuses as appropriate, regenerate `docs/programs/README.md`, and leave a next-slice handoff. A merged PR is not automatically an accepted slice.
