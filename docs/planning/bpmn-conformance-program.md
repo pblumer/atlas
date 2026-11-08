@@ -1,11 +1,11 @@
 # BPMN 2.x Conformance (CON) delivery programme
 
-**Programme ID:** CON  
+**Programme ID:** bpmn-conformance (CON delivery slices; Windows-safe manifest ID)  
 **Baseline:** `pblumer/atlas` main, reviewed 2026-11-08.  
 **Status:** Planned; programme charter and working inventory only. No implementation slice is accepted or complete.  
 **Accountable programme owner:** pblumer (initiating repository maintainer); a coordinating owner is assigned explicitly when each slice starts.  
 **Strategic track:** [Milestone 1 — Core BPMN](../../ROADMAP.md#milestone-1--core-bpmn-), with dependencies on Milestone 2 (events/data), Milestone 3 (structure), and Milestone 4 (operability).  
-**Operational status:** [programme manifest](../programs/con/program.json).  
+**Operational status:** [programme manifest](../programs/bpmn-conformance/program.json).  
 **Delivery protocol:** [Programme Delivery Protocol](../development/program-delivery.md).
 
 ## Purpose and user-visible outcome
@@ -135,6 +135,6 @@ Follow [AGENTS.md](../../AGENTS.md) and [invariants](../architecture/invariants.
 
 ## Delivery rules and next action
 
-Keep at most two active integration slices; today all slices are **planned**. Start **CON0** first after owner/coordinator confirmation. A finished planning PR is not completion of CON0. At each merge: update `docs/programs/con/program.json` with actual status, issue/PR evidence, blockers and next step; regenerate `docs/programs/README.md` with `python3 scripts/programs.py`. For code, use red/green tests and run `go build ./...`, `go test ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` and `gofmt -l .`.
+Keep at most two active integration slices; today all slices are **planned**. Start **CON0** first after owner/coordinator confirmation. A finished planning PR is not completion of CON0. At each merge: update `docs/programs/bpmn-conformance/program.json` with actual status, issue/PR evidence, blockers and next step; regenerate `docs/programs/README.md` with `python3 scripts/programs.py`. For code, use red/green tests and run `go build ./...`, `go test ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` and `gofmt -l .`.
 
 **Immediate next executable output:** reviewed OMG inventory with a clause-by-clause completeness checklist, a disaggregated baseline and an owner-approved CON1 registry schema. The initial planning documents intentionally do not claim that work is done.
