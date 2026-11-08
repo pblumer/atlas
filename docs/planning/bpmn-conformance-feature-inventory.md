@@ -2,7 +2,7 @@
 
 **Status:** Proposed and not normatively complete; prepared 2026-11-08 for the [CON programme](bpmn-conformance-program.md).  
 **Authority:** [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/PDF/), [OMG XSD/CMOF catalogue](https://www.omg.org/spec/BPMN/).  
-**IMPORTANT:** This is an initial audit seed, NOT a compliance claim or finalized denominator. CON0 must review the specification clause by clause (including `2, §8–`13), verify positions/variant legality, and map stable IDs to test evidence.
+**IMPORTANT:** This is an initial audit seed, NOT a compliance claim or finalized denominator. CON0 must review the specification clause by clause (including §2 and §§8–13), verify positions/variant legality, and map stable IDs to test evidence.
 
 ### Classification and governance
 
@@ -28,6 +28,8 @@ Each authoritative machine-readable row needs `id`, normative `specClause`, `con
 | FLOW-12 | Unstructured cycles and process completion | ? | add divergent token/recovery tests |
 | FLOW-13 | Gateway default-flow and no-match failure | ? | explicit variant oracles |
 | FLOW-14 | Model validation: reachability/scope/refs | I | `compiler/validation.go`; diagnostic matrix incomplete |
+| FLOW-15 | Uncontrolled flow: one activity arrival per token, multiple outgoing flow, mixed conditional/unconditional | ? | OMG §13.3.1; distinct from AND/OR gateways; review `engine/behavior.go` |
+| FLOW-16 | Process completion: no tokens and no active activities, including boundary/event subprocess/MI | ? | OMG §13.2; live and crash/replay proof outstanding |
 
 ## Task and activity families
 
@@ -53,7 +55,8 @@ Each authoritative machine-readable row needs `id`, normative `specClause`, `con
 | ACT-18 | MI completionCondition and ordered outputCollection | ? | map existing engine tests |
 | ACT-19 | Activity I/O mappings and variable scope | ? | ADR-0068; not centrally registered |
 | ACT-20 | Compensation handler selection/reverse completion order | P | `compensation`; broader spec matrix |
-| ACT-21 | Activity lifecycle, boundary interruption, nested termination | ? | spec `13; recovery checkpoints |
+| ACT-21 | Activity lifecycle, boundary interruption, nested termination | ? | OMG §13.3; recovery checkpoints |
+| ACT-22 | Receive Task with instantiate=true | ? | OMG §13.2 permits instance creation; ordinary `receive-task` does not verify this |
 
 ## Start and intermediate catch events
 
@@ -67,7 +70,7 @@ Each authoritative machine-readable row needs `id`, normative `specClause`, `con
 | EVT-06 | Conditional/Error/Escalation Start in event subprocess | ? | legal context must be verified |
 | EVT-07 | Multiple Start / Parallel Multiple Start | ? | inspect spec and compiler |
 | EVT-08 | Intermediate Message Catch | I | `message-catch` |
-| EVT-09 | Intermediate Timer Catch | I | `timer-catch` |
+| EVT-09 | Intermediate Timer Catch | P | `timer-catch` covers a subset; `compiler/scope_compile.go` rejects intermediate-catch `timeCycle` |
 | EVT-10 | Intermediate Signal Catch | I | `signal-throw-catch` |
 | EVT-11 | Intermediate Conditional Catch | I | `compiler/conditional_test.go` |
 | EVT-12 | Intermediate Link Catch | I | ADR-0132 |
@@ -135,11 +138,13 @@ Each authoritative machine-readable row needs `id`, normative `specClause`, `con
 | MODEL-05 | Choreography Task/Sub-Choreography | ? | separate OMG conformance class |
 | MODEL-06 | Conversation Node/Link | ? | modelling/interchange classification |
 | MODEL-07 | BPEL Process Execution mapping | ? | separate OMG class, evaluate out-of-scope |
-| MODEL-08 | Activity/process lifecycle and token semantics (`13) | ? | cross-cutting semantic requirements |
+| MODEL-08 | Activity/process lifecycle and token semantics (OMG §13) | ? | cross-cutting semantic requirements |
 
 ## Workflow Patterns — independent second axis
 
-The current suite tracks **WCP-1, WCP-2, WCP-3, WCP-4, WCP-5, WCP-6, WCP-7, WCP-16 and WCP-21**. During CON0, enumerate **WCP-1 through WCP-43** against [workflowpatterns.com](https://workflowpatterns.com/), recording authoritative pattern names, BPMN realizability, implementation/verification status, negative variants and tests. WCP coverage is **not** a BPMN normative conformance percentage.
+The current suite tracks **WCP-1, WCP-2, WCP-3, WCP-4, WCP-5, WCP-6, WCP-7, WCP-16 and WCP-21**. CON0 has now listed **WCP-1 through WCP-43** in the [43-pattern inventory](bpmn-conformance-con0-workflow-patterns.md). Registration currently exists for nine IDs; detailed semantic realizability and evidence review are still open. WCP coverage is **not** a BPMN normative conformance percentage.
+
+See the [normative source-to-evidence audit](bpmn-conformance-con0-audit.md) and [OMG Table 10.93 event-position matrix](bpmn-conformance-con0-event-matrix.md): the latter separates 63 legal cells from spec-illegal combinations, without claiming 63 features are implemented.
 
 ## Review checklist (CON0 deliverable)
 
@@ -148,5 +153,5 @@ The current suite tracks **WCP-1, WCP-2, WCP-3, WCP-4, WCP-5, WCP-6, WCP-7, WCP-
 - [ ] Split rows for interrupting/non, repeatability, event combinations, nested scopes, concurrent tokens, loops, default handling and error propagation.
 - [ ] Distinguish spec-illegal constructs from valid-but-unsupported constructs.
 - [ ] Link to concrete compiler, behavior and test paths; independently review the provisional I/P/N/? classifications.
-- [ ] Enumerate all 43 WCP patterns independently; do not equate them to OMG execution semantics.
+- [x] Enumerate all 43 WCP pattern names/IDs independently; **behavioural realizability and support are not yet reviewed**.
 - [ ] Publish a versioned authoritative register with stable IDs, reviewed clauses and explicitly approved denominator; then enable CI checks in CON1.
