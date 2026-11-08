@@ -1336,7 +1336,12 @@ What it takes to run this for real.
 
 ## Milestone 5 — Scale-out 🔲
 
-Beyond a single node.
+Beyond a single node. The target topology is described in
+[ADR-0175](docs/adr/0175-replicated-partition-cells.md)
+(**Proposed / Not started**). Until clustering lands, **all new milestone work
+must pass the [scale-out readiness review](docs/architecture/scale-out-readiness.md)**.
+This is a forward-compatibility design gate, not evidence that multi-node
+execution or HA is available. Existing standalone operation remains supported.
 
 - 🔲 Networked inter-partition message transport (ADR-0006)
 - 🔲 Cross-partition message correlation and call activities

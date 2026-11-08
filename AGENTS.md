@@ -28,6 +28,22 @@ These are load-bearing. If your task seems to require breaking one, **stop and f
 5. **Compile, don't interpret.** Work that can happen at deploy time (XML parsing, validation, string interning, FEEL compilation) must never happen on the runtime hot path. (ADR-0004, ADR-0008)
 6. **Events are facts; commands are intentions.** Only events are persisted. Generated keys and timestamps are written *into* events so replay is deterministic. Never regenerate them on replay. (ADR-0001, data-model.md)
 
+**Scale-out readiness is mandatory for every feature and architectural change.**
+Beyond invariants I1–I6, evaluate future multi-node operation **before coding**,
+even while the shipping engine is single-node. Every design must identify state
+ownership, stable partition routing, service boundaries, durability/failover,
+idempotency, cross-partition communication, query consistency, and a migration
+seam that preserves standalone mode. Follow the concrete
+[scale-out readiness checklist](docs/architecture/scale-out-readiness.md)
+and record an explicit assessment in each PR. Do not use
+`instanceKey % partitionCount`, require direct access to another partition's
+state, or introduce a host-local singleton as an unqualified cluster-wide
+source of truth. [ADR-0175](docs/adr/0175-replicated-partition-cells.md)
+is the **proposed and not-yet-implemented** Milestone-5 target, not permission
+to silently implement undecided cluster mechanics. Stop and seek an ADR for a
+conflicting architecture decision; do not defer an incompatible feature design
+without an agreed migration boundary.
+
 ## Commands
 
 The single source of truth for how to build, test, and check. Run these from the repo root.
@@ -262,6 +278,9 @@ Do not start additional parallel slices for a programme with no accountable owne
 1. **Locate it on the roadmap.** [`ROADMAP.md`](ROADMAP.md) is organized by milestone. Confirm the task belongs to the current milestone and isn't blocked by an unstarted dependency.
 2. **Read the relevant deep-dive(s)** for the package you're touching, plus any ADR they reference.
 3. **Check the invariants** above against your plan *before* writing code.
+   Perform the [mandatory scale-out design review](docs/architecture/scale-out-readiness.md)
+   for every feature, including API, UI, Workers and design-time state.
+   State the result and any tracked migration seam in the PR.
 4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
 6. **Ship the feature on every surface, and say so where people read it.** A feature is not done while only one door reaches it:
