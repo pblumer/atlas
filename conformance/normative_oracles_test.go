@@ -16,8 +16,8 @@ import (
 func TestCON2ExecutionOracles(t *testing.T) {
 	cases := []struct {
 		name, clause string
-		must, absent  []string
-		visits        map[string]int
+		must, absent []string
+		visits       map[string]int
 	}{
 		{
 			name: "event-gateway-message", clause: "13.4.4",
