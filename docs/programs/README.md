@@ -11,8 +11,8 @@ See [delivery protocol](../development/program-delivery.md) and
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Owner key ceremony for the atlas hub sample registry (atlas hub keygen, two offline backups checked with atlas hub fingerprint, publicKey in examples/hub/releases.json, secret ATLAS_HUB_SIGNING_KEY), first Pages publication and a Console import from a real installation; then rebase draft PR #1424 and finish verified installation finalization and restart recovery (#1422). |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [BPMN 2.x Conformance](../planning/bpmn-conformance-program.md) | planned | 0/7 | pblumer | Confirm CON0 coordinating owner and start a normative OMG BPMN 2.0.2 clause-by-clause inventory and source/test mapping. Do not claim a compliance percentage until the denominator is reviewed. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/8 | pblumer | MFE1 server and UI slices (#1492, #1495, #1497, #1498) are merged and the "published" question is decided (newest deployed version). Review and merge the handbook follow-up PR #1500, then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1459's DMN fork and npm-lockfile licence evidence; inspect actual generated DMN JS/CSS/font bundle, run reproducible rebuild and SBOM/notice checks, verify copied fixtures, and explicitly accept or revise ADR-0513 before authoring changes. |
@@ -32,6 +32,22 @@ Multi-layer trusted discovery and distribution of process applications and relat
 | **BMP2** — Managed updates and provenance | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
 | **BMP3** — Federated and private hub sources | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
 
+## BPMN 2.x Conformance (BPMN-CONFORMANCE)
+
+Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.
+
+**[Programme plan](../planning/bpmn-conformance-program.md) · [Roadmap track](../../ROADMAP.md#milestone-1--core-bpmn-) · [Manifest](bpmn-conformance/program.json) · Reviewed: 2026-11-08**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **CON0** — Normative inventory and source-to-evidence audit | planned | pblumer | — | — | Review OMG clauses and event/attribute variants, all 43 WCP entries and existing code/tests; approve the applicable denominator. Initial planning seed is not accepted CON0 evidence. |
+| **CON1** — Machine-readable registry and truthful coverage generator | planned | pblumer | CON0 | — | Validate unique IDs, normative references, explicit unknown/unsupported/partial status and evidence; fail CI when rows disappear or generated claims drift. |
+| **CON2** — Supported semantics and negative diagnostic fixtures | planned | pblumer | CON1 | — | Add specification-reviewed scenarios for supported variants and exact diagnostic-code negatives for unsupported/invalid combinations. |
+| **CON3** — Full-state and mid-flight recovery oracles | planned | pblumer | CON1 | — | Add deterministic restart-at-wait checkpoints and full persisted-state comparison across jobs, timers, subscriptions, incidents, scopes and compensation. |
+| **CON4** — Independent differential validation and portable TCK | planned | pblumer | CON1, CON2 | — | Extend reference translations beyond four cases, review expectations independently and run an explicit non-skipping differential CI job. |
+| **CON5** — Public normative conformance report and documentation reconciliation | planned | pblumer | CON1, CON2, CON3, CON4 | — | Render denominator-specific report; align README, roadmap, TCK docs and conformance gallery with evidence-backed claims. |
+| **CON6** — Close genuine BPMN semantics gaps via ADR-gated slices | planned | pblumer | CON0, CON1 | — | Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. |
+
 ## Capability-driven Automation (CDA)
 
 Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.
@@ -49,22 +65,6 @@ Connect business outcomes to verified technical operation semantics and, only af
 | **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6. |
 | **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7. |
 | **CDA8** — Controlled Worker rebinding without redeployment | planned | unassigned | CDA6, CDA7 | [PR #1355](https://github.com/pblumer/atlas/pull/1355) | Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. Review questions deferred until CDA7 has landed; the binding-slot scope is settled when CDA6 starts. |
-
-## BPMN 2.x Conformance (CON)
-
-Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.
-
-**[Programme plan](../planning/bpmn-conformance-program.md) · [Roadmap track](../../ROADMAP.md#milestone-1--core-bpmn-) · [Manifest](con/program.json) · Reviewed: 2026-11-08**
-
-| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
-| --- | --- | --- | --- | --- | --- |
-| **CON0** — Normative inventory and source-to-evidence audit | planned | pblumer | — | — | Review OMG clauses and event/attribute variants, all 43 WCP entries and existing code/tests; approve the applicable denominator. Initial planning seed is not accepted CON0 evidence. |
-| **CON1** — Machine-readable registry and truthful coverage generator | planned | pblumer | CON0 | — | Validate unique IDs, normative references, explicit unknown/unsupported/partial status and evidence; fail CI when rows disappear or generated claims drift. |
-| **CON2** — Supported semantics and negative diagnostic fixtures | planned | pblumer | CON1 | — | Add specification-reviewed scenarios for supported variants and exact diagnostic-code negatives for unsupported/invalid combinations. |
-| **CON3** — Full-state and mid-flight recovery oracles | planned | pblumer | CON1 | — | Add deterministic restart-at-wait checkpoints and full persisted-state comparison across jobs, timers, subscriptions, incidents, scopes and compensation. |
-| **CON4** — Independent differential validation and portable TCK | planned | pblumer | CON1, CON2 | — | Extend reference translations beyond four cases, review expectations independently and run an explicit non-skipping differential CI job. |
-| **CON5** — Public normative conformance report and documentation reconciliation | planned | pblumer | CON1, CON2, CON3, CON4 | — | Render denominator-specific report; align README, roadmap, TCK docs and conformance gallery with evidence-backed claims. |
-| **CON6** — Close genuine BPMN semantics gaps via ADR-gated slices | planned | pblumer | CON0, CON1 | — | Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. |
 
 ## Identity-aware Execution (IAE)
 
