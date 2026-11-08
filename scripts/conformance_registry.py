@@ -207,7 +207,12 @@ def main() -> int:
         validate(data)
         report = render(data)
         if opts.check:
-            if not REPORT.is_file() or REPORT.read_text(encoding="utf-8") != report:
+            current = REPORT.read_text(encoding="utf-8") if REPORT.is_file() else ""
+            if current != report:
+                import difflib
+                sys.stderr.writelines(difflib.unified_diff(
+                    current.splitlines(True), report.splitlines(True),
+                    fromfile="checked-in", tofile="generated"))
                 raise RegistryError("generated report out of date: run python3 scripts/conformance_registry.py")
         else:
             REPORT.write_text(report, encoding="utf-8")
