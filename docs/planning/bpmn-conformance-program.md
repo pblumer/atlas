@@ -2,7 +2,7 @@
 
 **Programme ID:** bpmn-conformance (CON delivery slices; Windows-safe manifest ID)  
 **Baseline:** `pblumer/atlas` main, reviewed 2026-11-08.  
-**Status:** Planned; programme charter and working inventory only. No implementation slice is accepted or complete.  
+**Status:** CON0 active (source/specification desk audit underway); no CON0 completion or normative denominator sign-off yet.  
 **Accountable programme owner:** pblumer (initiating repository maintainer); a coordinating owner is assigned explicitly when each slice starts.  
 **Strategic track:** [Milestone 1 — Core BPMN](../../ROADMAP.md#milestone-1--core-bpmn-), with dependencies on Milestone 2 (events/data), Milestone 3 (structure), and Milestone 4 (operability).  
 **Operational status:** [programme manifest](../programs/bpmn-conformance/program.json).  
@@ -82,7 +82,7 @@ Follow [AGENTS.md](../../AGENTS.md) and [invariants](../architecture/invariants.
 ### CON0 — Normative inventory and source-to-evidence audit (first executable slice)
 
 **Depends on:** none. **Review gate:** a maintainer accepts this charter and the owner/coordinator.  
-- Reconcile `bpmn-conformance-feature-inventory.md` against the OMG `2, §8–§13 inventory and XSD/CMOF, enumerating all applicable positions, flags, interactions and normative exclusions with clause anchors.
+- Reconcile `bpmn-conformance-feature-inventory.md` against the OMG §2 and §§8–13 inventory and XSD/CMOF, enumerating all applicable positions, flags, interactions and normative exclusions with clause anchors.
 - Audit compiler parse/validation, compiled types, engine behaviors, modeler restrictions, existing tests, ADRs and roadmap; use repeatable searches and record paths (ideally test names) per row.
 - Count and label all 43 WCP patterns as independent taxonomy. No guessed support from a similar element.
 - **Acceptance:** no normative class or element family silently omitted; every row classified or explicitly `unknown`; unsupported/unreviewed examples visible; reviewer sign-off on denominator and scoping; signed baseline numbers in report. Deliver a reviewer-ready complete inventory with traceability.
@@ -137,4 +137,4 @@ Follow [AGENTS.md](../../AGENTS.md) and [invariants](../architecture/invariants.
 
 Keep at most two active integration slices; today all slices are **planned**. Start **CON0** first after owner/coordinator confirmation. A finished planning PR is not completion of CON0. At each merge: update `docs/programs/bpmn-conformance/program.json` with actual status, issue/PR evidence, blockers and next step; regenerate `docs/programs/README.md` with `python3 scripts/programs.py`. For code, use red/green tests and run `go build ./...`, `go test ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` and `gofmt -l .`.
 
-**Immediate next executable output:** reviewed OMG inventory with a clause-by-clause completeness checklist, a disaggregated baseline and an owner-approved CON1 registry schema. The initial planning documents intentionally do not claim that work is done.
+**CON0 working evidence:** [normative crosswalk and source audit](bpmn-conformance-con0-audit.md), [OMG event legal-position matrix](bpmn-conformance-con0-event-matrix.md), and [all 43 Workflow Control-Flow Patterns](bpmn-conformance-con0-workflow-patterns.md). The unresolved per-attribute normative review, explicit denominator and maintainer acceptance are tracked in [Issue #1615](https://github.com/pblumer/atlas/issues/1615). Only an approved CON0 can unlock a conformance percentage; these documents do not assert a completed implementation.
