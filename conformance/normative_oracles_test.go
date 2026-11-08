@@ -3,7 +3,6 @@ package conformance
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// TestCON2ExecutionOracles asserts individual "13 behavioral outcomes, not the
+// TestCON2ExecutionOracles asserts individual BPMN section 13 behavioral outcomes, not the
 // golden file that -update can silently rewrite. These are specific normative
 // variants; they are not proof of complete OMG Process Execution Conformance.
 func TestCON2ExecutionOracles(t *testing.T) {
@@ -59,7 +58,7 @@ func TestCON2ExecutionOracles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sc, ok := registered[tc.name]
 			if !ok {
-				t.Fatalf("normative "13 case missing registered scenario %q", tc.name)
+				t.Fatalf("normative section 13 case missing registered scenario %q", tc.name)
 			}
 			data, err := sc.load()
 			if err != nil {
@@ -67,10 +66,10 @@ func TestCON2ExecutionOracles(t *testing.T) {
 			}
 			got, err := Run(t.TempDir(), data, sc.Root, sc.Start, sc.Driver)
 			if err != nil {
-				t.Fatalf("execute "%s of OMG BPMN 2.0.2: %v", tc.clause, err)
+				t.Fatalf("execute section %s of OMG BPMN 2.0.2: %v", tc.clause, err)
 			}
 			if got.State != model.PICompleted {
-				t.Fatalf(""%s: state %v, want completed", tc.clause, got.State)
+				t.Fatalf("section %s: state %v, want completed", tc.clause, got.State)
 			}
 			visits := make(map[string]int)
 			for _, id := range got.Path {
@@ -78,17 +77,17 @@ func TestCON2ExecutionOracles(t *testing.T) {
 			}
 			for _, id := range tc.must {
 				if visits[id] == 0 {
-					t.Errorf(""%s: path %v omitted required activity %q", tc.clause, got.Path, id)
+					t.Errorf("section %s: path %v omitted required activity %q", tc.clause, got.Path, id)
 				}
 			}
 			for _, id := range tc.absent {
 				if visits[id] != 0 {
-					t.Errorf(""%s: path %v incorrectly executed losing branch %q", tc.clause, got.Path, id)
+					t.Errorf("section %s: path %v incorrectly executed losing branch %q", tc.clause, got.Path, id)
 				}
 			}
 			for id, count := range tc.visits {
 				if visits[id] != count {
-					t.Errorf(""%s: activity %q visits = %d, want %d; path=%v",
+					t.Errorf("section %s: activity %q visits = %d, want %d; path=%v",
 						tc.clause, id, visits[id], count, got.Path)
 				}
 			}
@@ -105,20 +104,20 @@ func TestCON2UnsupportedVariantsHaveExactDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 	gatewayXML := func(attrs string) []byte {
-		old := []byte("<eventBasedGateway id="gw"/>")
-		updated := []byte("<eventBasedGateway id="gw" " + attrs + "/>")
+		old := []byte(`<eventBasedGateway id="gw"/>`)
+		updated := []byte(`<eventBasedGateway id="gw" ` + attrs + `/>`)
 		if !bytes.Contains(eventXML, old) {
 			t.Fatal("base event gateway fixture changed")
 		}
 		return bytes.Replace(eventXML, old, updated, 1)
 	}
-	conditionalXML := []byte("<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p" isExecutable="true"><startEvent id="s"><conditionalEventDefinition><condition>=true</condition></conditionalEventDefinition></startEvent><endEvent id="end"/><sequenceFlow id="f" sourceRef="s" targetRef="end"/></process></definitions>")
+	conditionalXML := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p" isExecutable="true"><startEvent id="s"><conditionalEventDefinition><condition>=true</condition></conditionalEventDefinition></startEvent><endEvent id="end"/><sequenceFlow id="f" sourceRef="s" targetRef="end"/></process></definitions>`)
 	cases := []struct {
 		name, rule, element string
 		xml                 []byte
 	}{
-		{"event-gateway-parallel", compiler.RuleEventGatewayKind, "gw", gatewayXML("eventGatewayType="Parallel"")},
-		{"event-gateway-instantiating", compiler.RuleEventGatewayKind, "gw", gatewayXML("instantiate="true"")},
+		{"event-gateway-parallel", compiler.RuleEventGatewayKind, "gw", gatewayXML(`eventGatewayType="Parallel"`)},
+		{"event-gateway-instantiating", compiler.RuleEventGatewayKind, "gw", gatewayXML(`instantiate="true"`)},
 		{"root-conditional-start", compiler.RuleConditionalStart, "s", conditionalXML},
 	}
 	for _, tc := range cases {
@@ -163,7 +162,7 @@ func TestCON2UnsupportedVariantsHaveExactDiagnostics(t *testing.T) {
 // TestCON2ComplexGatewayIsNotAFalsePositive verifies a known valid, unimplemented
 // construct is rejected by name rather than silently interpreted as XOR.
 func TestCON2ComplexGatewayIsNotAFalsePositive(t *testing.T) {
-	xml := []byte("<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p" isExecutable="true"><startEvent id="start"/><complexGateway id="complex"/><endEvent id="end"/><sequenceFlow id="f1" sourceRef="start" targetRef="complex"/><sequenceFlow id="f2" sourceRef="complex" targetRef="end"/></process></definitions>")
+	xml := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p" isExecutable="true"><startEvent id="start"/><complexGateway id="complex"/><endEvent id="end"/><sequenceFlow id="f1" sourceRef="start" targetRef="complex"/><sequenceFlow id="f2" sourceRef="complex" targetRef="end"/></process></definitions>`)
 	_, err := compiler.Parse(7, 1, bytes.NewReader(xml))
 	if err == nil || !strings.Contains(err.Error(), "complexGateway") ||
 		!strings.Contains(err.Error(), "complex") {
