@@ -256,7 +256,18 @@ func TestCON3MidflightRecoveryAndContinuation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("uninterrupted reference: %v", err)
 			}
-			if !equalResult(got, uninterrupted) {
+			// BPMN does not define ordering between recording cancellation of
+			// a losing event-gateway catch and progressing the winning end event.
+			// Compare exactly the same activity *multiplicity* at this race;
+			// all other checkpoints must retain their full ordered paths.
+			compareGot, compareWant := got, uninterrupted
+			if tc.checkpoint == "race" {
+				compareGot.Path = append([]string(nil), got.Path...)
+				compareWant.Path = append([]string(nil), uninterrupted.Path...)
+				sort.Strings(compareGot.Path)
+				sort.Strings(compareWant.Path)
+			}
+			if !equalResult(compareGot, compareWant) {
 				t.Fatalf("restart changed outcome\nrestarted=%s\nnormal=%s",
 					got.Golden(), uninterrupted.Golden())
 			}
