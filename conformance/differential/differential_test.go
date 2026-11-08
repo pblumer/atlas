@@ -12,10 +12,10 @@ package differential
 
 import (
 	"encoding/json"
-	"sort"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/pblumer/atlas/conformance"
@@ -76,7 +76,7 @@ func TestDifferential(t *testing.T) {
 				t.Fatalf("read portable TCK %s: %v", tckFile, err)
 			}
 			var expected struct {
-				Completed bool     `json:"completed"`
+				Completed  bool     `json:"completed"`
 				Activities []string `json:"activities"`
 			}
 			if err := json.Unmarshal(data, &expected); err != nil {
