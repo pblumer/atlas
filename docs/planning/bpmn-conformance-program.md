@@ -2,7 +2,7 @@
 
 **Programme ID:** bpmn-conformance (CON delivery slices; Windows-safe manifest ID)  
 **Baseline:** `pblumer/atlas` main, reviewed 2026-11-08.  
-**Status:** Planned; programme charter and working inventory only. No implementation slice is accepted or complete.  
+**Status:** CON0 and CON1 implementation active, based on an explicitly provisional CON0 candidate interface; denominator review and both acceptance gates remain pending.  
 **Accountable programme owner:** pblumer (initiating repository maintainer); a coordinating owner is assigned explicitly when each slice starts.  
 **Strategic track:** [Milestone 1 — Core BPMN](../../ROADMAP.md#milestone-1--core-bpmn-), with dependencies on Milestone 2 (events/data), Milestone 3 (structure), and Milestone 4 (operability).  
 **Operational status:** [programme manifest](../programs/bpmn-conformance/program.json).  
@@ -14,14 +14,14 @@ Build a trustworthy, reproducible explanation of **which normative BPMN 2.0.2 fe
 
 **End-to-end proof:** Take a model using a supported interrupting boundary event, a still-unsupported complex gateway, and a separately supported but not-yet-in-suite escalation variant. The registry shows all three; the report links the first to a specification-derived expected outcome and executable recovery test, the second to a diagnostic-code assertion, and the third to an explicit untested gap rather than a green check. Regenerating the report cannot turn an unsupported/unknown row into a pass merely by omitting it.
 
-A successful programme does **not** itself establish OMG certification or permit a general “BPMN compliant” marketing claim. Any conformance claim requires an explicit, separately reviewed assessment of the relevant OMG `2 requirements, not a percentage.
+A successful programme does **not** itself establish OMG certification or permit a general “BPMN compliant” marketing claim. Any conformance claim requires an explicit, separately reviewed assessment of the relevant OMG §2 requirements, not a percentage.
 
 ## Normative authority and scope
 
-- Primary authority: [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/PDF/), including `2.2 Process Modeling, `2.3 Process Execution, `2.4 BPEL Process Execution and `2.5 Choreography Modeling conformance; `13 is the execution-semantics authority. Validate exact clause citations during CON0.
+- Primary authority: [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/PDF/), including §2.2 Process Modeling, §2.3 Process Execution, §2.4 BPEL Process Execution and §2.5 Choreography Modeling conformance; §13 is the execution-semantics authority. Validate exact clause citations during CON0.
 - Machine-readable references: [OMG BPMN schema and metamodel index](https://www.omg.org/spec/BPMN/) (BPMN20.xsd, Semantic.xsd, BPMNDI.xsd, BPMN20.cmof).
 - Secondary taxonomy: [Workflow Patterns Initiative](https://workflowpatterns.com/) control-flow patterns (WCP) are a **separate descriptive axis**, not a substitute for BPMN normative clauses. Explicitly inventory the 43 classic WCP control-flow entries, mapping any not directly representable in BPMN to `not-applicable` with a reason; never divide BPMN compliance by 43.
-- The normative target for this engine is **Process Execution Conformance** (`2.3), including import of process diagrams and their defining collaboration. Process Modeling, Choreography Modeling and BPEL mapping remain independently reported lanes; there is no implication that all four are required for `2.3.
+- The normative target for this engine is **Process Execution Conformance** (§2.3), including import of process diagrams and their defining collaboration. Process Modeling, Choreography Modeling and BPEL mapping remain independently reported lanes; there is no implication that all four are required for §2.3.
 - Extensions (e.g. `zeebe:`, `atlas:`, FEEL task scripts, worker protocol, Incidents, replay, deployment) have separate rows and evidence, never counted as normative BPMN capabilities.
 
 ### Coverage taxonomy
@@ -82,7 +82,7 @@ Follow [AGENTS.md](../../AGENTS.md) and [invariants](../architecture/invariants.
 ### CON0 — Normative inventory and source-to-evidence audit (first executable slice)
 
 **Depends on:** none. **Review gate:** a maintainer accepts this charter and the owner/coordinator.  
-- Reconcile `bpmn-conformance-feature-inventory.md` against the OMG `2, `8–`13 inventory and XSD/CMOF, enumerating all applicable positions, flags, interactions and normative exclusions with clause anchors.
+- Reconcile `bpmn-conformance-feature-inventory.md` against the OMG §2 and §§8–13 inventory and XSD/CMOF, enumerating all applicable positions, flags, interactions and normative exclusions with clause anchors.
 - Audit compiler parse/validation, compiled types, engine behaviors, modeler restrictions, existing tests, ADRs and roadmap; use repeatable searches and record paths (ideally test names) per row.
 - Count and label all 43 WCP patterns as independent taxonomy. No guessed support from a similar element.
 - **Acceptance:** no normative class or element family silently omitted; every row classified or explicitly `unknown`; unsupported/unreviewed examples visible; reviewer sign-off on denominator and scoping; signed baseline numbers in report. Deliver a reviewer-ready complete inventory with traceability.
@@ -137,4 +137,6 @@ Follow [AGENTS.md](../../AGENTS.md) and [invariants](../architecture/invariants.
 
 Keep at most two active integration slices; today all slices are **planned**. Start **CON0** first after owner/coordinator confirmation. A finished planning PR is not completion of CON0. At each merge: update `docs/programs/bpmn-conformance/program.json` with actual status, issue/PR evidence, blockers and next step; regenerate `docs/programs/README.md` with `python3 scripts/programs.py`. For code, use red/green tests and run `go build ./...`, `go test ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` and `gofmt -l .`.
 
-**Immediate next executable output:** reviewed OMG inventory with a clause-by-clause completeness checklist, a disaggregated baseline and an owner-approved CON1 registry schema. The initial planning documents intentionally do not claim that work is done.
+**CON0 working evidence:** [normative crosswalk and source audit](bpmn-conformance-con0-audit.md), [OMG event legal-position matrix](bpmn-conformance-con0-event-matrix.md), and [all 43 Workflow Control-Flow Patterns](bpmn-conformance-con0-workflow-patterns.md). The unresolved per-attribute normative review, explicit denominator and maintainer acceptance are tracked in [Issue #1615](https://github.com/pblumer/atlas/issues/1615). Only an approved CON0 can unlock a conformance percentage; these documents do not assert a completed implementation.
+
+**CON1 implementation evidence:** [candidate register](../../conformance/registry/registry.json), [generated normative candidate report](../../conformance/NORMATIVE_COVERAGE.md), [validator](../../scripts/conformance_registry.py) and [regression tests](../../scripts/test_conformance_registry.py). The two-step implementation was authorized together; CON1 output must not be accepted or treated as normative compliance until the CON0 reviewer and CI gates pass.
