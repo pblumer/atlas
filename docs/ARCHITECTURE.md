@@ -204,9 +204,11 @@ The timer index is illustrative: because `dueDate` is the prefix, "which timers 
 
 ## Partitioning and scaling
 
-A partition is a fully independent unit: its own command queue, single-writer processor, WAL, and state store. A process instance lives entirely within one partition. Routing is `instanceKey % N` (and the partition is encoded in every key).
+Today, the standalone engine operates on a single node. The partition design assigns each partition its own command queue, single-writer processor, WAL, and state store; a process instance belongs to one stable partition for its lifetime. **Ownership is encoded in the entity key**, not calculated as `instanceKey % N` from a mutable partition count. Adding partitions must not remap existing entity keys.
 
-Partitions do not share state and do not coordinate for normal execution, so throughput scales close to linearly with cores. Cross-partition concerns (message correlation across partitions, call activities spanning partitions) require explicit message passing and are handled as a deliberate, separate mechanism — see [ADR-0006](adr/0006-partition-routing-and-cross-partition.md) and the roadmap.
+The multi-node **target**, not yet implemented, is described in [ADR-0175](adr/0175-replicated-partition-cells.md) (currently **Proposed / Not started**): independently placed partition cells with leader-ordered events and replicated state, alongside stateless gateways, scalable Workers, and a cluster operator. Adding partition leaders increases aggregate execution throughput; adding replicas primarily improves availability. Cross-partition interactions must use durable asynchronous messages, never direct shared-state access (see [ADR-0006](adr/0006-partition-routing-and-cross-partition.md)).
+
+**All new services and features must be designed for that eventual deployment topology**, without imposing its dependencies on standalone mode. The mandatory [scale-out readiness checklist](architecture/scale-out-readiness.md) covers routing, ownership, side effects, design-time stores, cross-node queries, recovery, and review evidence.
 
 ## Durability and recovery
 
