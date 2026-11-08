@@ -61,7 +61,9 @@
       "issues": [
         1619
       ],
-      "prs": [],
+      "prs": [
+        1622
+      ],
       "note": "CON2 implemented subset in combined branch: execution outcomes for exclusive event race, parallel/inclusive joins and boundary paths; exact rule/severity/element diagnostic tests for unsupported variants, plus explicit Complex Gateway rejection. No hidden spec-wide support claim. Owner review of clauses, other valid variants and CI pending.",
       "evidence": [
         "../../../conformance/normative_oracles_test.go"
@@ -78,7 +80,9 @@
       "issues": [
         1620
       ],
-      "prs": [],
+      "prs": [
+        1622
+      ],
       "note": "CON3 implemented six deterministic mid-flight checkpoints: activatable job, message, timer, incident, event-based competing waits and noninterrupting boundary. Restart via WAL into a fresh state; compare durable process, element, job, timers, incidents, variables and subscription counter; repeat Recover and continue. Remaining full-state families/child scopes, checkpoint compaction and failover scenarios require owner review and follow-ups.",
       "evidence": [
         "../../../conformance/recovery_midflight_test.go"
@@ -96,7 +100,9 @@
       "issues": [
         1621
       ],
-      "prs": [],
+      "prs": [
+        1622
+      ],
       "note": "CON4 expanded independent bpmn-engine translations from four to five control-flow models; enforce non-skipping pinned npm reference CI, compare atlas and portable TCK expected projection. Separate Node/version and executable-dialect limitations remain. Full normative differential breadth and portability acceptance pending.",
       "evidence": [
         "../../../conformance/differential/differential_test.go",
