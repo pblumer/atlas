@@ -18,8 +18,10 @@
       "issues": [
         1615
       ],
-      "prs": [],
-      "note": "CON0 started 2026-11-08. Draft evidence: normative §2.3/§13 audit, 63 legal event-family/position cells, all 43 WCP titles and source/test traceability in docs/planning/bpmn-conformance-con0-*.md. Still open: all SHALL/attribute variants, full evidence/test execution, owner-approved denominator and sign-off. No engine implementation or conformance claim; do not mark complete.",
+      "prs": [
+        1616
+      ],
+      "note": "CON0 started 2026-11-08; PR #1616 created and remains in review. Draft evidence: normative §2.3/§13 audit, 63 legal event-family/position cells, all 43 WCP titles and source/test traceability in docs/planning/bpmn-conformance-con0-*.md. Still open: all SHALL/attribute variants, full evidence/test execution, owner-approved denominator and sign-off. No engine implementation or conformance claim; do not mark complete.",
       "evidence": [
         "../../planning/bpmn-conformance-con0-audit.md",
         "../../planning/bpmn-conformance-con0-event-matrix.md",
