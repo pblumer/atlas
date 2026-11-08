@@ -9,7 +9,7 @@ This directory contains **product and engineering plans for atlas**: implementat
 | [Process applications (ADR-0128)](0128-process-applications-plan.md) | Application delivery model and engineering slices |
 | [Product actions (ADR-0429)](0429-product-actions-plan.md) | Product action contracts and implementation slices |
 | [Audit follow-up (2026-09-07)](audit-2026-09-07-umsetzungsplan.md) | Findings and remediation plan from the September audit |
-| [BPMN 2.x Conformance](bpmn-conformance-program.md) | Normative OMG coverage programme (CON), with [baseline](bpmn-conformance-baseline.md), [feature inventory](bpmn-conformance-feature-inventory.md) and [implementation runbook](bpmn-conformance-implementation-runbook.md) |
+| [BPMN 2.x Conformance](bpmn-conformance-program.md) | Normative OMG coverage programme (CON), with [baseline](bpmn-conformance-baseline.md), [feature inventory](bpmn-conformance-feature-inventory.md), [CON0 normative audit](bpmn-conformance-con0-audit.md), [event matrix](bpmn-conformance-con0-event-matrix.md), [43 workflow patterns](bpmn-conformance-con0-workflow-patterns.md) and [implementation runbook](bpmn-conformance-implementation-runbook.md) |
 | [Capability-driven Automation](capability-driven-automation-program.md) | Multi-slice capability-driven automation programme |
 | [Identity-aware Execution](identity-aware-execution-program.md) | Identity and policy-aware worker execution programme |
 | [Technical Capability Contract](technical-capability-contract.md) | Capability contract semantics, conformance and integration plan |
