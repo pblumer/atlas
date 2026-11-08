@@ -190,7 +190,7 @@ def render(data: dict) -> str:
             "The 105 rows are a **frozen candidate seed**, not an approved normative denominator.",
             "The 63 legal event-position cells need further expansion by attribute, scope,",
             "trigger combination, interruption, repetition and crash-recovery variants.",
-            "OMG issue BPMN21-443 exposes the Ad-Hoc Process versus Sub-Process `13.1 ambiguity.",
+            "OMG issue BPMN21-443 exposes the Ad-Hoc Process versus Sub-Process §13.1 ambiguity.",
             "Review [CON0 source audit](../docs/planning/bpmn-conformance-con0-audit.md) and",
             "[event legality](../docs/planning/bpmn-conformance-con0-event-matrix.md).", "",
             "Run: `python3 scripts/conformance_registry.py`", "",
