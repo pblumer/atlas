@@ -433,7 +433,9 @@ jobs:
     name: e2e · token simulation
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 does not provide Chromium for ubuntu-26.04;
+    # pin the compatible runner instead of following ubuntu-latest.
+    runs-on: ubuntu-24.04
     # A browser job's failure mode is the hang, not the error: a stalled apt mirror or a
     # wedged browser holds the runner for the six-hour default. The bound has to cover the
     # Chromium install at its worst (five minutes, then the fallback below) plus the suite,

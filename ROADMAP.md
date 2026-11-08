@@ -25,6 +25,8 @@ The skeleton that proves the three pillars fit together end to end.
 
 The control-flow basics most real models use.
 
+- 📋 **BPMN 2.x Conformance (CON) programme — planned**: [programme plan](docs/planning/bpmn-conformance-program.md), [source baseline](docs/planning/bpmn-conformance-baseline.md), [normative inventory seed](docs/planning/bpmn-conformance-feature-inventory.md), [implementation runbook](docs/planning/bpmn-conformance-implementation-runbook.md), and [operational manifest](docs/programs/bpmn-conformance/program.json). CON0 audits OMG BPMN 2.0.2 against the implemented compiler/engine and tests; CON1–CON5 deliver truthful cataloguing, executable/negative/recovery/differential evidence and reporting; CON6 addresses separately approved engine gaps. **Current 34 registered features / 9 patterns and "Gaps: None" are registry-local figures, not proof of complete OMG coverage.** No CON slice is implemented merely by creating this plan.
+
 - ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
   `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
 - ✅ **Script tasks**: evaluate FEEL in-engine (reading input variables) and write
