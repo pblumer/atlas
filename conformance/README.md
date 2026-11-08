@@ -124,11 +124,11 @@ growing set of negative models. Planned extensions, roughly in order:
   tasks) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
 - More **differential** reference translations, growing the cross-engine subset
   beyond pure control flow (see [`differential/README.md`](differential/README.md)).
-- More negative models as unsupported constructs are pinned (terminate end is the
-  latest — the compiler rejects it rather than silently degrading it).
-- **Escalation** events once the engine supports them — there is no
-  `escalationEventDefinition` in the compiler yet, so there is no feature to
-  exercise; this stays out until it lands.
+- More negative models for **actually unsupported** constructs (Complex Gateway,
+  parallel/instantiating event gateways, root conditional start, sequential Ad-Hoc
+  Sub-Process). Terminate End and Escalation are **already implemented** in compiler
+  and engine; they lack complete central-suite normative fixtures and must not be
+  presented as rejected/unavailable.
 - More negative models as the compiler's validation grows (unroutable gateways,
   multiple defaults, cross-scope references).
 - Optionally, a **differential** job comparing outcomes against a reference
