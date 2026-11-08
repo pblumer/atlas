@@ -1760,9 +1760,9 @@
     {
       "id": "MODEL-01",
       "title": "BPMN XML/XSD import and validation",
-      "conformanceClass": "process-modeling",
+      "conformanceClass": "process-import",
       "clause": "2.3.2",
-      "applicability": "out-of-scope",
+      "applicability": "required",
       "implementation": "unknown",
       "verification": "unverified",
       "sourceRefs": [
@@ -1792,9 +1792,9 @@
     {
       "id": "MODEL-03",
       "title": "XML export/foreign namespaces and extensions",
-      "conformanceClass": "process-modeling",
+      "conformanceClass": "process-import",
       "clause": "2.3.2",
-      "applicability": "out-of-scope",
+      "applicability": "required",
       "implementation": "unknown",
       "verification": "unverified",
       "sourceRefs": [
@@ -1872,9 +1872,9 @@
     {
       "id": "MODEL-08",
       "title": "Activity/process lifecycle and token semantics (OMG §13)",
-      "conformanceClass": "process-modeling",
+      "conformanceClass": "process-execution",
       "clause": "13.1",
-      "applicability": "out-of-scope",
+      "applicability": "required",
       "implementation": "unknown",
       "verification": "unverified",
       "sourceRefs": [
