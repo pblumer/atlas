@@ -7,12 +7,12 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../adr/0535-worker-types-as-distributed-artifacts.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "WTD3: owner review of the per-release credential (ADR-0545); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: sign off WTD1 and WTD2, and decide the rule for new built-in Worker Types (ADR-0540 SharePoint Server landed on the old path).",
+  "next_action": "WTD3: owner review of the per-release credential (ADR-0545, merged in #1646); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: decide the rule for new built-in Worker Types (ADR-0540 SharePoint Server landed on the old path).",
   "slices": [
     {
       "id": "WTD1",
       "title": "SDK, protocol contract and handshake (ADR-0535 step 1)",
-      "status": "active",
+      "status": "complete",
       "owner": "pblumer",
       "depends_on": [],
       "issues": [],
@@ -21,7 +21,7 @@
         1592,
         1593
       ],
-      "note": "Code on main: workersdk imports nothing of atlas (TestTheSDKImportsNothingOfAtlas), protocol contract v1, handshake (protocol, workerType) in api/workerproto and workertype.CheckIdentity. Open gate: owner acceptance; no approving review is recorded on the PRs, so the slice is not set complete. Residual work is tracked elsewhere: the SDK's own Go module waits for ADR-0536 (WTD5); the built-in Worker Types' imports of job/compiler/expr/dmn move with WTD4.",
+      "note": "Complete: accepted by the programme owner on 2026-11-09. On main: workersdk imports nothing of atlas (TestTheSDKImportsNothingOfAtlas), protocol contract v1, handshake (protocol, workerType) in api/workerproto and workertype.CheckIdentity. Residual work is tracked elsewhere: the SDK's own Go module waits for ADR-0536 (WTD5); the built-in Worker Types' imports of job/compiler/expr/dmn move with WTD4.",
       "evidence": [
         "../../../workersdk/sdk_deps_test.go",
         "../../../workersdk/protocol_test.go",
@@ -33,7 +33,7 @@
     {
       "id": "WTD2",
       "title": "Worker-only executable atlas-workers (ADR-0535 step 2)",
-      "status": "active",
+      "status": "complete",
       "owner": "pblumer",
       "depends_on": [
         "WTD1"
@@ -42,7 +42,7 @@
       "prs": [
         1594
       ],
-      "note": "Code on main: cmd/atlas-workers and internal/workercmd; the supervisor runs atlas-workers when it sits beside the server binary (ATLAS_WORKERS_BINARY overrides). Open gate: owner acceptance, as for WTD1. By design atlas-workers is trusted like the server binary and not digest-verified; the server binary still contains every Worker Type until WTD4 and WTD8.",
+      "note": "Complete: accepted by the programme owner on 2026-11-09. On main: cmd/atlas-workers and internal/workercmd; the supervisor runs atlas-workers when it sits beside the server binary (ATLAS_WORKERS_BINARY overrides). By design atlas-workers is trusted like the server binary and not digest-verified; the server binary still contains every Worker Type until WTD4 and WTD8.",
       "evidence": [
         "../../../internal/workercmd/run_test.go",
         "../../../api/supervisorexe_internal_test.go"
@@ -58,9 +58,10 @@
       ],
       "issues": [],
       "prs": [
-        1595
+        1595,
+        1646
       ],
-      "note": "On main (#1595): content-addressed store workertype/install, digest checked at install and before every launch, /api/v1/worker-types/installed, --allow-unsigned-worker-types for development, allowlisted launch environment, pilot examples/workertypes/echo. Credential per installed release (ADR-0545, Proposed/Partial pending owner acceptance): in-memory secret confined to the manifest's job types and the instance's own id, revoked at removal, replaced at server start; closes the shared worker-token gap for installed artifacts. Open: (1) process confinement for installed artifacts (Landlock/seccomp, Windows job object); (2) the Console view of installed releases; (3) comparing the reported digest with the launched one (ADR-0535 §3). Placement per configured Worker belongs with WTD6.",
+      "note": "On main (#1595): content-addressed store workertype/install, digest checked at install and before every launch, /api/v1/worker-types/installed, --allow-unsigned-worker-types for development, allowlisted launch environment, pilot examples/workertypes/echo. Credential per installed release (#1646; ADR-0545, Proposed/Partial pending owner acceptance): in-memory secret confined to the manifest's job types and the instance's own id, revoked at removal, replaced at server start; closes the shared worker-token gap for installed artifacts. Open: (1) process confinement for installed artifacts (Landlock/seccomp, Windows job object); (2) the Console view of installed releases; (3) comparing the reported digest with the launched one (ADR-0535 §3). Placement per configured Worker belongs with WTD6.",
       "evidence": [
         "../../../workertype/install/install_test.go",
         "../../../api/workertypeinstall_internal_test.go",
