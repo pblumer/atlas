@@ -6,7 +6,7 @@
 // The actual import is ADR-0467's existing packageimport.js workflow — including
 // dry-run conflict decisions, caller authorization, optional publish and needs.
 import { importPackage, packageSummary } from "./packageimport.js";
-import { connectToHub, openRoute, routeSummary } from "./hub-connection.js";
+import { connectToHub, explainStop, openRoute, routeSummary } from "./hub-connection.js";
 import { t } from "./i18n.js";
 
 const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g,
@@ -15,10 +15,22 @@ const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g,
 const route = (id, version) => "/api/v1/blueprints/" + encodeURIComponent(id) +
   "/releases/" + encodeURIComponent(version);
 
+// refused is the error a refused registry request throws. When the registry could
+// not be read, the server names the station the way ended at; the error carries it,
+// so the dialog can say where and why instead of the server's one English sentence.
+function refused(data) {
+  const err = new Error(data.error || t("blueprint.failed"));
+  if (data.station && data.station.stage) {
+    err.station = data.station;
+    err.host = data.registryHost || "";
+  }
+  return err;
+}
+
 async function trustedJSON(url) {
   const res = await fetch(url, { cache: "no-store" });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || t("blueprint.failed"));
+  if (!res.ok) throw refused(data);
   return data;
 }
 
@@ -60,9 +72,24 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   ov.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
 
+  // error replaces the dialog's content with what went wrong. Where the registry
+  // could not be read, it says at which station the way ended and what that cause
+  // usually means, as the route does, and offers to check the whole way again.
   const error = (err) => {
-    if (!closed) body.innerHTML = `<p class="muted">${esc(t("blueprint.failed"))}: ${esc(err.message || err)}</p>
-      <button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>`;
+    if (closed) return;
+    if (err && err.station) {
+      const stop = explainStop(err.station, err.host);
+      body.innerHTML = `<p class="muted" data-stopped>${esc(t("blueprint.failed"))}. ${esc(stop.line)}</p>
+        ${stop.html}
+        <div class="between" style="margin-top:10px">
+          <button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>
+          <button type="button" class="btn ghost" data-retry>${esc(t("blueprint.route.retry"))}</button>
+        </div>`;
+      body.querySelector("[data-retry]").addEventListener("click", () => { void list(true); });
+    } else {
+      body.innerHTML = `<p class="muted">${esc(t("blueprint.failed"))}: ${esc(err.message || err)}</p>
+        <button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>`;
+    }
     body.querySelector("[data-back]")?.addEventListener("click", () => { void list(); });
   };
 
@@ -209,10 +236,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
           const res = await fetch(route(inspected.blueprintId, inspected.version) + "/package", {
             cache: "no-store", headers: { "If-Match": '"' + inspected.digest + '"' },
           });
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || t("blueprint.failed"));
-          }
+          if (!res.ok) throw refused(await res.json().catch(() => ({})));
           // The server rechecks its pinned index and inspected digest. Importing
           // a package is still a separate authorized user action, not a GET effect.
           const file = new File([await res.blob()], "blueprint-" + inspected.version + ".tar.gz", {
@@ -225,7 +249,8 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
             await reload();
           }
         } catch (err) {
-          if (!closed) notify(t("blueprint.importFailed") + ": " + (err.message || err), "err");
+          const reason = err && err.station ? explainStop(err.station, err.host).line : (err.message || err);
+          if (!closed) notify(t("blueprint.importFailed") + ": " + reason, "err");
         } finally {
           busy = false;
           if (!closed) install.disabled = false;

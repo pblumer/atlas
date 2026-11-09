@@ -23,6 +23,11 @@ const (
 	StageSignature = "signature" // index.json.sig read, and a pinned key made it
 )
 
+// StagePackage is the station after the index that only a release's download
+// passes: its package read and checked against the size and SHA-256 the signed
+// index states. It is not one of the Stations of an index load.
+const StagePackage = "package"
+
 // The causes a station can stop at. The vocabulary is fixed, so a caller may be
 // shown which one without being shown an error text that names the network.
 const (
@@ -46,6 +51,7 @@ const (
 	CauseSignatureUnavailable = "signature_unavailable" // index.json.sig could not be read
 	CauseNoPinnedKey          = "no_pinned_key"         // a signature no pinned key made
 	CauseIndexInvalid         = "index_invalid"         // signed, but not a valid v1 index
+	CausePackageMismatch      = "package_mismatch"      // package bytes other than the signed index states
 )
 
 // Step is one station of a traced index load. Millis is the time since the
@@ -73,20 +79,48 @@ type Step struct {
 	Err error `json:"-"`
 }
 
-// tracer collects the stations of one load. Every method is safe on a nil
-// tracer, which is the untraced LoadIndex: the same code runs either way.
+// StopError is a registry load or download that stopped at a station. Step names
+// the station and its cause from the fixed vocabulary, with the facts the station
+// established; it is what a traced load reports last. Err is the error itself:
+// StopError reads and unwraps as Err, so a caller that tests for a cause keeps
+// working.
+type StopError struct {
+	Step Step
+	Err  error
+}
+
+func (e *StopError) Error() string { return e.Err.Error() }
+func (e *StopError) Unwrap() error { return e.Err }
+
+// Stopped returns the station a registry load or download stopped at, when its
+// error names one. The Step's Err is for the operator's log, never for a caller.
+func Stopped(err error) (Step, bool) {
+	var stop *StopError
+	if errors.As(err, &stop) {
+		return stop.Step, true
+	}
+	return Step{}, false
+}
+
+// tracer collects the stations of one load and keeps the one it stopped at. Every
+// load has one, traced or not, so an untraced load still says where it stopped;
+// only a traced load reports the stations as it passes them. Every method is also
+// safe on a nil tracer.
 type tracer struct {
 	mu       sync.Mutex
 	report   func(Step)
 	mark     time.Time
 	stopped  bool
+	stop     Step
 	closed   bool
 	location string
 }
 
+// newTracer starts a load's tracer. report receives each station as it is passed
+// or where it stops; nil reports nothing and only keeps the stop.
 func newTracer(report func(Step)) *tracer {
 	if report == nil {
-		return nil
+		report = func(Step) {}
 	}
 	return &tracer{report: report, mark: time.Now()}
 }
@@ -117,9 +151,23 @@ func (tr *tracer) emit(step Step, ok bool) {
 	now := time.Now()
 	step.OK, step.Millis, tr.mark = ok, now.Sub(tr.mark).Milliseconds(), now
 	if !ok {
-		tr.stopped = true
+		tr.stopped, tr.stop = true, step
 	}
 	tr.report(step)
+}
+
+// wrap names the station the load stopped at in its error, when it stopped at one.
+func (tr *tracer) wrap(err error) error {
+	if tr == nil || err == nil {
+		return err
+	}
+	tr.mu.Lock()
+	stopped, stop := tr.stopped, tr.stop
+	tr.mu.Unlock()
+	if !stopped {
+		return err
+	}
+	return &StopError{Step: stop, Err: err}
 }
 
 func (tr *tracer) pass(step Step) { tr.emit(step, true) }
@@ -165,22 +213,27 @@ func (tr *tracer) passIndex(size int) {
 	tr.pass(Step{Stage: StageIndex, Status: 200, Bytes: size})
 }
 
-// failIndex reports why the index request failed, unless a station before it
-// already said so: a failed connection or handshake is also the request's error.
-func (tr *tracer) failIndex(err error) {
+// failRequest reports why the request of a station — the index, or a release's
+// package — failed, unless a station before it already said so: a failed
+// connection or handshake is also the request's error.
+func (tr *tracer) failRequest(stage string, err error) {
 	if tr == nil {
 		return
 	}
 	tr.mu.Lock()
 	location := tr.location
 	tr.mu.Unlock()
-	step := Step{Stage: StageIndex, Err: err}
+	step := Step{Stage: stage, Err: err}
 	var status statusError
 	switch {
 	case location != "":
 		step.Cause, step.Location = CauseRedirect, location
 	case errors.As(err, &status):
 		step.Cause, step.Status = CauseHTTPStatus, status.code
+	case strings.Contains(err.Error(), "exceeds configured byte limit") && stage == StagePackage:
+		// A package is read up to the size the signed index states: more bytes
+		// than that are bytes the index did not sign.
+		step.Cause = CausePackageMismatch
 	case strings.Contains(err.Error(), "exceeds configured byte limit"):
 		step.Cause = CauseTooLarge
 	case isTimeout(err):

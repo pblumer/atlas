@@ -346,3 +346,115 @@ func TestBlueprintConnectionNamesTheCauseToEveryoneAndTheErrorToAdmins(t *testin
 		t.Fatalf("not logged: %s", sink.String())
 	}
 }
+
+// TestBlueprintRegistryFailureNamesTheStationToEveryoneAndTheErrorToAdmins: when the
+// list, the preview or the package cannot reach the registry, the answer names the
+// station the way ended at and its cause — in the message an agent reads and as the
+// station the Console explains — with the facts the connection route shows a modeler.
+// The error text, which can name this network, is an administrator's alone, as on the
+// connection route (ADR-0499 amendment e).
+func TestBlueprintRegistryFailureNamesTheStationToEveryoneAndTheErrorToAdmins(t *testing.T) {
+	stop := &blueprintregistry.StopError{
+		Step: blueprintregistry.Step{Stage: blueprintregistry.StageTLS, Cause: blueprintregistry.CauseUnknownAuthority,
+			Issuer: "Fortinet CA", Err: errors.New("tls: failed to verify certificate: x509: certificate signed by unknown authority (10.0.0.1)")},
+		Err: errors.New("load registry index: registry HTTPS request: x509: certificate signed by unknown authority (10.0.0.1)"),
+	}
+	type station struct {
+		Stage  string `json:"stage"`
+		OK     bool   `json:"ok"`
+		Cause  string `json:"cause"`
+		Issuer string `json:"issuer"`
+		Error  string `json:"error"`
+	}
+	type answer struct {
+		Error        string   `json:"error"`
+		Station      *station `json:"station"`
+		RegistryHost string   `json:"registryHost"`
+	}
+	read := func(t *testing.T, w *httptest.ResponseRecorder) answer {
+		t.Helper()
+		if w.Code != http.StatusBadGateway {
+			t.Fatalf("status %d: %s", w.Code, w.Body.String())
+		}
+		var a answer
+		if err := json.Unmarshal(w.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	as := func(s *Server, method, path, id, version, match string, roles ...string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.SetPathValue("id", id)
+		req.SetPathValue("version", version)
+		if match != "" {
+			req.Header.Set("If-Match", match)
+		}
+		req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "u", Roles: roles}))
+		w := httptest.NewRecorder()
+		switch {
+		case strings.HasSuffix(path, "/preview"):
+			s.handleBlueprintPreview(w, req)
+		case strings.HasSuffix(path, "/package"):
+			s.handleBlueprintPackage(w, req)
+		default:
+			s.handleListBlueprints(w, req)
+		}
+		return w
+	}
+	const preview = "/api/v1/blueprints/org.example.purchase/releases/1.0.0/preview"
+
+	for _, tc := range []struct {
+		name, path, prefix string
+		breakIt            func(*fakeBlueprintSource)
+	}{
+		{"the list", "/api/v1/blueprints", "trusted Blueprint registry is unavailable or invalid",
+			func(f *fakeBlueprintSource) { f.loadError = stop }},
+		{"the preview's index", preview, "trusted Blueprint registry is unavailable or invalid",
+			func(f *fakeBlueprintSource) { f.loadError = stop }},
+		{"the preview's package", preview, "Blueprint package download or signature/digest verification failed",
+			func(f *fakeBlueprintSource) { f.fetchError = stop }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &tracedFake{fakeBlueprintSource: sampleBlueprintSource(t)}
+			tc.breakIt(f.fakeBlueprintSource)
+			s := &Server{blueprints: f, authEnabled: true}
+
+			modeler := read(t, as(s, "GET", tc.path, "org.example.purchase", "1.0.0", "", RoleModeler))
+			if !strings.HasPrefix(modeler.Error, tc.prefix) || !strings.Contains(modeler.Error, "tls") ||
+				!strings.Contains(modeler.Error, "unknown_authority") || strings.Contains(modeler.Error, "10.0.0.1") {
+				t.Fatalf("modeler message: %q", modeler.Error)
+			}
+			if modeler.Station == nil || modeler.Station.Stage != "tls" || modeler.Station.OK ||
+				modeler.Station.Cause != "unknown_authority" || modeler.Station.Issuer != "Fortinet CA" || modeler.Station.Error != "" {
+				t.Fatalf("modeler station: %+v", modeler.Station)
+			}
+			if modeler.RegistryHost != "registry.example.org" {
+				t.Fatalf("registry host: %q", modeler.RegistryHost)
+			}
+			admin := read(t, as(s, "GET", tc.path, "org.example.purchase", "1.0.0", "", RoleAdmin))
+			if admin.Station == nil || !strings.Contains(admin.Station.Error, "10.0.0.1") || strings.Contains(admin.Error, "10.0.0.1") {
+				t.Fatalf("admin answer: %+v %+v", admin, admin.Station)
+			}
+		})
+	}
+
+	t.Run("the package route", func(t *testing.T) {
+		f := &tracedFake{fakeBlueprintSource: sampleBlueprintSource(t)}
+		f.fetchError = stop
+		s := &Server{blueprints: f, authEnabled: true}
+		a := read(t, as(s, "GET", "/api/v1/blueprints/org.example.purchase/releases/1.0.0/package",
+			"org.example.purchase", "1.0.0", `"`+f.release.Artifact.Digest+`"`, RoleModeler))
+		if a.Station == nil || a.Station.Cause != "unknown_authority" {
+			t.Fatalf("package answer: %+v", a)
+		}
+	})
+
+	t.Run("an error that names no station keeps the plain answer", func(t *testing.T) {
+		f := sampleBlueprintSource(t)
+		f.loadError = errors.New("registry client is not configured")
+		a := read(t, blueprintRequest(&Server{blueprints: f}, "GET", "/api/v1/blueprints", "", "", ""))
+		if a.Error != "trusted Blueprint registry is unavailable or invalid" || a.Station != nil {
+			t.Fatalf("plain answer: %+v", a)
+		}
+	})
+}
