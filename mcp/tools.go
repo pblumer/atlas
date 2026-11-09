@@ -437,7 +437,7 @@ func runtimeTools() []Tool {
 				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/variables"))
 			},
 		},
-		// The document store (ADR-draft-a-file-is-a-document-not-a-variable): a file a
+		// The document store (ADR-0543): a file a
 		// process received is a document, and a variable holds only its reference
 		// {"$document": "doc_…", …}. These read and create documents for an agent, under
 		// the same access rule as everyone: a document is its uploader's until it enters

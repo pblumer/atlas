@@ -48,7 +48,7 @@ const (
 	// OpStoreAttachment puts an attachment into Atlas's own document store and answers
 	// the reference a variable holds: get-attachment's purpose without its 1 MiB
 	// variable budget, and export-attachment's size without an S3 Worker
-	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	// (ADR-0543).
 	OpStoreAttachment = "store-attachment"
 )
 

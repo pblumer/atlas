@@ -347,7 +347,7 @@ func TestNewestVerifiedCheckpointFallsPastAllCorrupt(t *testing.T) {
 }
 
 // The document store is in a snapshot only when it is asked for
-// (ADR-draft-a-file-is-a-document-not-a-variable): it can dwarf everything else, and an
+// (ADR-0543): it can dwarf everything else, and an
 // installation keeping its documents in a bucket has a backup of its own for them.
 func TestSnapshotCarriesDocumentsOnlyWhenAsked(t *testing.T) {
 	fsys := fstest.MapFS{

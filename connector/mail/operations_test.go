@@ -533,7 +533,7 @@ func (a *atlasDocuments) StoreDocument(_ context.Context, name, contentType stri
 // store-attachment puts an inspected attachment into Atlas's document store and answers
 // a reference, so a document of any size up to the document budget reaches a process
 // without an S3 Worker and without passing through a variable
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func TestStoreAttachmentAnswersAReference(t *testing.T) {
 	docs := &atlasDocuments{}
 	j := mail.Job{Connector: "box", Operation: mail.OpStoreAttachment, Target: "m1", Attachment: "2"}

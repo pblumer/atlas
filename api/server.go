@@ -733,7 +733,7 @@ type Server struct {
 
 	// docCfg is where this installation keeps documents, and docState the document
 	// store, opened on first use (documents.go,
-	// ADR-draft-a-file-is-a-document-not-a-variable).
+	// ADR-0543).
 	docCfg   documentConfig
 	docState documentState
 
@@ -2499,7 +2499,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// every process under the reserved CSV-import job type.
 	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// A source variable may name an uploaded document rather than hold its text
-		// (ADR-draft-a-file-is-a-document-not-a-variable).
+		// (ADR-0543).
 		return csvimport.HandlerWithDocuments(rd, s.processLookup, s.readDocumentBytes)
 	})
 	// A web-scraping service task fetches a model-authored URL and extracts the
@@ -3363,7 +3363,7 @@ func (s *Server) drive() error { return s.driveThen(nil) }
 // driveThen is drive with afterDurable run once, right after the first RunUntilIdle
 // has made the caller's command durable and before any worker is handed a job it
 // unblocked. It is where a route binds the documents its command carried
-// (ADR-draft-a-file-is-a-document-not-a-variable): bound later, a worker could already
+// (ADR-0543): bound later, a worker could already
 // be asked to read a document its instance does not hold yet.
 func (s *Server) driveThen(afterDurable func()) error {
 	var pendingBinds []jobBind
@@ -3433,7 +3433,7 @@ func (s *Server) driveThen(afterDurable func()) error {
 		}
 		// A worker's output may name a document it stored (an S3 get-document); it is
 		// bound to the job's instance once the completion is durable, which is the next
-		// round's RunUntilIdle (ADR-draft-a-file-is-a-document-not-a-variable).
+		// round's RunUntilIdle (ADR-0543).
 		for i := range outcomes {
 			if outcomes[i].Err != nil {
 				continue

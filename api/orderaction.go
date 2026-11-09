@@ -207,7 +207,7 @@ func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actio
 	}
 	// An order action's variables travel through the order to whatever its product's
 	// process does with them; a document reference there would name a file nothing
-	// binds (ADR-draft-a-file-is-a-document-not-a-variable).
+	// binds (ADR-0543).
 	if code, msg := refuseDocumentRefs(extra); code != 0 {
 		return actionResp{}, code, msg
 	}

@@ -71,7 +71,7 @@ function installMock(page, sent, opts = {}) {
         return route.fulfill({ status: 413, json: { error: "the logo exceeds the 524288 byte limit" } });
       }
       // The document store answers an upload with the reference a variable holds
-      // (ADR-draft-a-file-is-a-document-not-a-variable).
+      // (ADR-0543).
       if (path === "/api/v1/documents") {
         if (opts.documentFails) {
           return route.fulfill({ status: 413, json: { error: "the document is larger than the 36700160 bytes a document may be" } });
@@ -179,7 +179,7 @@ test("a failed upload leaves the task open and says why", async ({ page }) => {
 });
 
 test("a task that names no catalogue uploads the file as a document and completes with its reference", async ({ page }) => {
-  // The other answer, changed by ADR-draft-a-file-is-a-document-not-a-variable: the file
+  // The other answer, changed by ADR-0543: the file
   // is no longer read as text into csvText, where every later step rewrote it into the
   // log. It is uploaded to the document store, and the field's own key — csvText, in the
   // CSV import's form — receives the reference.

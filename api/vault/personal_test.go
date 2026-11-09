@@ -451,7 +451,7 @@ func TestConnectionCredentialsAreReservedAndUnlisted(t *testing.T) {
 
 // A document a personal variable names is enciphered whole under the subject's key, bound
 // to the document's id, and becomes unreadable with the key
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func TestSealBytesRoundTripAndErasure(t *testing.T) {
 	v := newTestVault(t)
 	plain := []byte("personalnummer;name\nP-1;Anna\n")

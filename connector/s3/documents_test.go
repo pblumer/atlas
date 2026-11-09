@@ -98,7 +98,7 @@ func TestAStoreThatCannotTakeADocumentSaysSo(t *testing.T) {
 }
 
 // Atlas's own document store reads a document back whole and deletes it through the
-// Worker it keeps documents with (ADR-draft-a-file-is-a-document-not-a-variable): the
+// Worker it keeps documents with (ADR-0543): the
 // read is bounded by the document budget, not by a variable's, and a missing key is an
 // answer the store can tell apart from a failure.
 func TestGetAndDeleteDocument(t *testing.T) {
@@ -165,7 +165,7 @@ func (f *fakeDocs) StoreDocument(_ context.Context, name, _ string, data []byte)
 }
 
 // The two document operations move a document between a bucket and Atlas's document
-// store without it passing through a variable (ADR-draft-a-file-is-a-document-not-a-variable).
+// store without it passing through a variable (ADR-0543).
 func TestDocumentOperations(t *testing.T) {
 	objects := map[string][]byte{}
 	disposition := map[string]string{}

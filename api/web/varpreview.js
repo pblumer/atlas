@@ -124,7 +124,7 @@ export function variableShape(v) {
   return null;
 }
 
-// A variable that names a document (ADR-draft-a-file-is-a-document-not-a-variable) holds
+// A variable that names a document (ADR-0543) holds
 // a small JSON object, {"$document": "doc_…", name, contentType, size, sha256}, and the
 // file itself is in the document store. documentRef reads one, or answers null for any
 // other value. It is never cut by a preview: a reference is far below the 512 bytes a

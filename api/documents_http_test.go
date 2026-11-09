@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/limits"
 )
 
-// The document store over HTTP (ADR-draft-a-file-is-a-document-not-a-variable): a file
+// The document store over HTTP (ADR-0543): a file
 // is uploaded once, a variable holds the reference, the instance it enters binds it,
 // and the CSV import parses the file from the store rather than from a variable.
 
@@ -251,7 +251,7 @@ func TestADocumentIsOnlyItsUploadersUntilItEntersAnInstance(t *testing.T) {
 
 // Every route that lets variable values in refuses a reference to a document that does
 // not exist, before anything is submitted; a tool call's arguments refuse any
-// reference (ADR-draft-a-file-is-a-document-not-a-variable).
+// reference (ADR-0543).
 func TestEveryEntryRefusesAnUnknownDocument(t *testing.T) {
 	ts := newTestServer(t)
 	do := func(method, path, body string) (int, []byte) {

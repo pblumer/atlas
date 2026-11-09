@@ -2581,7 +2581,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .var-panel .vp-more-vars { margin-top: 4px; padding: 0 6px; font-size: 11px; }
 /* A variable that names a document: the file is in the document store, and the value is
-   a link to it (ADR-draft-a-file-is-a-document-not-a-variable). */
+   a link to it (ADR-0543). */
 .vdoc { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; min-width: 0;
   color: var(--accent-text); text-decoration: none; }
 .vdoc:hover .vdoc-name { text-decoration: underline; }

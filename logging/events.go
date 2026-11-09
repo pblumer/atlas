@@ -561,7 +561,7 @@ var (
 	// DocumentsSwept says the document store removed documents nobody can reach any
 	// more: uploads never used within their time to live, and documents whose every
 	// instance history retention removed
-	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	// (ADR-0543).
 	DocumentsSwept = newEvent("documents.swept")
 	// DocumentSweepFailed says a sweep of the document store stopped part-way; the next
 	// one starts over.

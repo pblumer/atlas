@@ -59,7 +59,7 @@ func s3DocModel(op, extra string) string {
 }
 
 // An in-process S3 task moves documents between a bucket and the document store
-// (ADR-draft-a-file-is-a-document-not-a-variable): put-document puts the document a
+// (ADR-0543): put-document puts the document a
 // reference names, get-document takes an object in and answers a reference that is
 // bound to the instance. A document the instance was never given is refused, whatever
 // id a model writes.

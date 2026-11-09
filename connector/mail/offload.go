@@ -134,7 +134,7 @@ type DocumentStore interface {
 }
 
 // AttachmentStore is Atlas's own document store, where store-attachment puts an
-// attachment (ADR-draft-a-file-is-a-document-not-a-variable). A DocumentStore a caller
+// attachment (ADR-0543). A DocumentStore a caller
 // passes may implement it too; the server's does, and a Worker Instance's reaches the
 // store through its job.
 type AttachmentStore interface {

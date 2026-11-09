@@ -21,7 +21,7 @@ func documentTool(t *testing.T, name string) Tool {
 
 // The three document tools reach the document routes with what the agent gave them,
 // and refuse an argument that is missing or malformed before any request
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func TestDocumentToolsReachTheDocumentRoutes(t *testing.T) {
 	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

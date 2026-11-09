@@ -10,7 +10,7 @@ import (
 
 // A person holding a task reads a document of its instance only when a field of the
 // task's form shows the reference — the same rule as for the instance's variables
-// (ADR-0275, ADR-draft-a-file-is-a-document-not-a-variable). A document the instance
+// (ADR-0275, ADR-0543). A document the instance
 // holds in a variable no form asks for stays theirs to never see, and a stranger sees
 // neither.
 func TestTaskHolderReadsOnlyTheDocumentTheirFormShows(t *testing.T) {

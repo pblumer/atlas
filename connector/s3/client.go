@@ -214,7 +214,7 @@ var Ops = map[string]Op{
 		NeedsResult: true, TakesResult: true, Label: "mint an upload link",
 	},
 	// The two operations between a bucket and Atlas's own document store
-	// (ADR-draft-a-file-is-a-document-not-a-variable). Neither carries the bytes through
+	// (ADR-0543). Neither carries the bytes through
 	// a variable: put-document's content is a *reference* to a document the process
 	// holds, and get-document answers with one. Both are bounded by limits.Document, not
 	// by a variable's budget.

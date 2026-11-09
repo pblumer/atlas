@@ -132,7 +132,7 @@ func (s *Server) seal(p personalSealing, vars []model.VariableValue) error {
 		// A personal variable that names a document makes the document personal data
 		// too: its bytes are enciphered under the same subject's key, so an erasure
 		// reaches the file as it reaches the value
-		// (ADR-draft-a-file-is-a-document-not-a-variable). Here, before the value's own
+		// (ADR-0543). Here, before the value's own
 		// envelope hides the reference.
 		if v.Kind == model.VarJSON {
 			if err := s.sealDocuments(p.subject, docstore.FindRefsInJSON(v.Text)); err != nil {

@@ -951,7 +951,7 @@ func runCSV(ctx context.Context, j Job) (map[string]any, error) {
 		return nil, fmt.Errorf("csv: cannot read the resolved detail: %w", err)
 	}
 	// The source is an uploaded document the engine did not read: read it here, under
-	// this job's lease (ADR-draft-a-file-is-a-document-not-a-variable).
+	// this job's lease (ADR-0543).
 	if task.SourceDocument != "" && task.Source == "" {
 		data, _, err := workersdk.ReadDocument(ctx, task.SourceDocument)
 		if err != nil {
@@ -1160,7 +1160,7 @@ func announceADMock(mock *ad.MockDirectory, seed string) {
 
 // mailDocuments is what a mail job on a Worker Instance hands documents to: the S3
 // Workers this host holds, for export-attachment, and Atlas's document store through the
-// job, for store-attachment (ADR-draft-a-file-is-a-document-not-a-variable).
+// job, for store-attachment (ADR-0543).
 type mailDocuments struct{ objects mail.DocumentStore }
 
 func (d mailDocuments) PutDocument(ctx context.Context, worker, bucket, key, contentType, disposition string, data []byte, metadata map[string]string) (map[string]any, error) {

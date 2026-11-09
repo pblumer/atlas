@@ -291,7 +291,7 @@ func runServe(args []string) error {
 	eventFeedTTL := fs.Duration("event-feed-ttl", envDuration("ATLAS_EVENT_FEED_TTL"), "how long a row of the event feed GET /api/v1/events serves is kept (ADR-0429 §5): a consumer whose cursor is older is answered 410 with the oldest cursor still held; 0 keeps the default of 720h")
 	eventLogTTL := fs.Duration("event-log-ttl", envDuration("ATLAS_EVENT_LOG_TTL"), "how long a row of the event log GET /api/v1/event-log serves is kept (ADR-0472 §4): every signal thrown, message sent and where each arrived; 0 keeps the default of 720h")
 	messageTTLMax := fs.Duration("message-ttl-max", envDuration("ATLAS_MESSAGE_TTL_MAX"), "the longest timeToLiveMs a published message may ask for (ADR-0370): a message nothing waits for yet is kept that long for a subscription that opens later, and a publish asking for more is refused with 400; 0 keeps the default of 168h")
-	documentsBackend := fs.String("documents-backend", envOr("ATLAS_DOCUMENTS_BACKEND", "local"), "where the files processes receive are kept (ADR-draft-a-file-is-a-document-not-a-variable): \"local\" (default) in the data directory, or \"s3\" in a bucket reached through an S3 Worker this server defines — name it with --documents-s3-worker and --documents-s3-bucket. Its access key stays in the vault. A document keeps the backend it was written to (or ATLAS_DOCUMENTS_BACKEND)")
+	documentsBackend := fs.String("documents-backend", envOr("ATLAS_DOCUMENTS_BACKEND", "local"), "where the files processes receive are kept (ADR-0543): \"local\" (default) in the data directory, or \"s3\" in a bucket reached through an S3 Worker this server defines — name it with --documents-s3-worker and --documents-s3-bucket. Its access key stays in the vault. A document keeps the backend it was written to (or ATLAS_DOCUMENTS_BACKEND)")
 	documentsS3Worker := fs.String("documents-s3-worker", os.Getenv("ATLAS_DOCUMENTS_S3_WORKER"), "the S3 Worker the \"s3\" document backend writes through (or ATLAS_DOCUMENTS_S3_WORKER)")
 	documentsS3Bucket := fs.String("documents-s3-bucket", os.Getenv("ATLAS_DOCUMENTS_S3_BUCKET"), "the bucket the \"s3\" document backend writes into (or ATLAS_DOCUMENTS_S3_BUCKET)")
 	documentsS3Prefix := fs.String("documents-s3-prefix", os.Getenv("ATLAS_DOCUMENTS_S3_PREFIX"), "a key prefix inside that bucket, e.g. atlas/documents (or ATLAS_DOCUMENTS_S3_PREFIX)")
@@ -587,7 +587,7 @@ type retentionConfig struct {
 	// (ADR-0370); zero keeps the default of seven days.
 	messageTTLMax time.Duration
 	// The document store's backend and how long an unused upload is kept
-	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	// (ADR-0543).
 	documentsBackend, documentsS3Worker, documentsS3Bucket, documentsS3Prefix string
 	documentPendingTTL                                                        time.Duration
 }

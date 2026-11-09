@@ -28,7 +28,7 @@ import (
 )
 
 // The document store, as the server serves it
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 //
 // A file a process receives — a CSV upload in a task form — is stored once in
 // api/docstore, and the variable holds a reference to it. This file is the server's
@@ -618,7 +618,7 @@ func (s *Server) sweepDocuments() {
 
 // handleJobDocument hands a Worker Instance the bytes of a document its job needs —
 // the CSV a CSV-import task parses, the file an S3 task puts into a bucket
-// (ADR-draft-a-file-is-a-document-not-a-variable, slice 5). The answer to the open
+// (ADR-0543, slice 5). The answer to the open
 // question the record left: over the HTTP API the worker already speaks, under the
 // lease it holds, not over a second channel. Holding the lease is what makes the read
 // the job's and not the token's: a worker token reads no document of its own accord,

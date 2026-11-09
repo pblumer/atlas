@@ -15,7 +15,7 @@ import (
 // A record the store cannot parse, bytes that are gone and a store directory that
 // cannot be written are each reported where they are met, with a status that tells
 // them apart from a document that does not exist
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func TestDocumentRoutesReportAStoreThatFails(t *testing.T) {
 	srv, _ := newOffLoopServer(t)
 	ts := httptest.NewServer(srv.Handler())

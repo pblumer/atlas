@@ -1,6 +1,6 @@
 # Documents instead of variables — delivery plan
 
-**Decision record:** [ADR-draft-a-file-is-a-document-not-a-variable](../adr/draft-a-file-is-a-document-not-a-variable.md)
+**Decision record:** [ADR-0543](../adr/0543-a-file-is-a-document-not-a-variable.md)
 (Accepted). **Status of this plan:** all six slices landed (S0–S4 on 2026-11-05, S5–S6 on
 2026-11-09). The ADR's *As built* sections say what each slice became; what remains open is
 listed there and under *Out of scope* below.

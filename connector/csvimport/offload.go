@@ -26,7 +26,7 @@ type Job struct {
 	// SourceDocument is the id of the uploaded document a reading task's source variable
 	// names, when the file was not read where the job was resolved — on the engine's run
 	// loop, which does no file or network I/O. The worker reads it under the job's lease
-	// and parses it as Source (ADR-draft-a-file-is-a-document-not-a-variable).
+	// and parses it as Source (ADR-0543).
 	SourceDocument string   `json:"sourceDocument,omitempty"`
 	Delimiter      string   `json:"delimiter,omitempty"`
 	HasHeader      bool     `json:"hasHeader"`

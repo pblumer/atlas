@@ -71,7 +71,7 @@ func (c *HTTPClient) PutDocument(ctx context.Context, bucket, key, contentType, 
 // DocumentGetter is a [Client] that can read a document back whole, bounded by
 // limits.Document rather than by a variable's budget, and delete it — what Atlas's own
 // document store needs of a bucket it keeps documents in
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 type DocumentGetter interface {
 	GetDocument(ctx context.Context, bucket, key string) ([]byte, error)
 	DeleteDocument(ctx context.Context, bucket, key string) error
@@ -171,7 +171,7 @@ func (d Documenter) PutDocument(ctx context.Context, worker, bucket, key, conten
 }
 
 // DocumentStore is Atlas's own document store as an S3 task reaches it
-// (ADR-draft-a-file-is-a-document-not-a-variable): the server's store in process, the
+// (ADR-0543): the server's store in process, the
 // job's lease-bound access on a Worker Instance.
 type DocumentStore interface {
 	// ReadDocument reads a document the task's instance holds.

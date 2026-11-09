@@ -53,7 +53,7 @@ const offloadedCSVBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 // The worker-lease route answers a document only to the worker holding the job's lease,
-// and only one the job's instance was given (ADR-draft-a-file-is-a-document-not-a-variable).
+// and only one the job's instance was given (ADR-0543).
 // The CSV payload names the document instead of carrying its text.
 func TestJobDocumentRoute(t *testing.T) {
 	srv, _ := newOffLoopServer(t, WithOffloadedConnectorKinds([]string{"csv"}))

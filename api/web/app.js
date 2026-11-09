@@ -10047,7 +10047,7 @@ async function viewTasks(preselectKey) {
           return;
         }
       } else if (picked) {
-        // Every other file becomes a document (ADR-draft-a-file-is-a-document-not-a-variable):
+        // Every other file becomes a document (ADR-0543):
         // it is uploaded to the document store first, and the task is completed with the
         // reference under the field's own key. The file itself never enters a variable —
         // it used to be read as text into `csvText`, whatever the field was called, and

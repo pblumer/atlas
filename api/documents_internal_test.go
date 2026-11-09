@@ -28,7 +28,7 @@ const docSweepBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
 </definitions>`
 
 // The sweep removes what nobody can reach and keeps what an instance holds
-// (ADR-draft-a-file-is-a-document-not-a-variable): an upload no variable named within
+// (ADR-0543): an upload no variable named within
 // its time to live, and a document whose every instance is gone; a document a running
 // instance refers to stays, and its binding is on disk for the next server to read.
 func TestDocumentSweepKeepsWhatAnInstanceHolds(t *testing.T) {
@@ -134,7 +134,7 @@ const personalDocBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/201005
 // A document a personal variable names is personal data: its bytes are enciphered under
 // the data subject's key, it reads back the same while the subject exists, and an erasure
 // makes it unreadable and the sweep removes it (ADR-0314,
-// ADR-draft-a-file-is-a-document-not-a-variable).
+// ADR-0543).
 func TestAPersonalDocumentIsErasedWithItsSubject(t *testing.T) {
 	srv, _ := newOffLoopServer(t)
 	if srv.vault == nil {

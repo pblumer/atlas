@@ -11,7 +11,7 @@ import (
 )
 
 // TestEveryVariableEntryChecksDocumentReferences is the guard the document store's
-// binding rests on (ADR-draft-a-file-is-a-document-not-a-variable).
+// binding rests on (ADR-0543).
 //
 // A variable that names a document is only as safe as the route it came in on: the
 // route must refuse a reference the caller may not use, and bind the document to the

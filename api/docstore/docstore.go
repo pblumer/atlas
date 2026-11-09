@@ -1,5 +1,5 @@
 // Package docstore keeps the files processes receive, so that a process variable can
-// hold a reference to a file instead of the file (ADR-draft-a-file-is-a-document-not-a-variable).
+// hold a reference to a file instead of the file (ADR-0543).
 //
 // A variable is a business record: every write of one is an event in the log, a value
 // in state and a full copy in the per-step variable history, and the variable budget
@@ -355,7 +355,7 @@ func (s *Store) OpenBytes(ctx context.Context, rec Record) (io.ReadCloser, error
 }
 
 // Seal enciphers a document's bytes under a data subject's key: a variable the process
-// declares personal names it (ADR-0314, ADR-draft-a-file-is-a-document-not-a-variable).
+// declares personal names it (ADR-0314, ADR-0543).
 // The plain bytes stay where they were until a sweep finds no record naming them — at
 // once, unless another document holds the same content. Sealing a document already
 // sealed for the same subject changes nothing; for another subject it is refused, since

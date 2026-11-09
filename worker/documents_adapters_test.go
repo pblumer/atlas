@@ -11,7 +11,7 @@ import (
 
 // Outside a job the adapters a Worker Instance hands its connectors reach no document
 // store, and say so; a mail job on a host with no S3 Worker cannot export
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func TestDocumentAdaptersOutsideAJob(t *testing.T) {
 	ctx := context.Background()
 	if _, _, _, err := (sdkDocuments{}).ReadDocument(ctx, "doc_a"); !errors.Is(err, workersdk.ErrNoDocuments) {

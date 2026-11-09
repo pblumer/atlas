@@ -62,7 +62,7 @@ func uploadDocument(t *testing.T, ts *httptest.Server, name, body string) string
 }
 
 // A Worker Instance parses an uploaded CSV it was handed only by reference
-// (ADR-draft-a-file-is-a-document-not-a-variable, slice 5): the engine resolved the
+// (ADR-0543, slice 5): the engine resolved the
 // task on its run loop, where no document is read, so the payload names the document,
 // and the worker reads it under the job's lease.
 func TestWorkerReadsAReferencedCsvUnderItsLease(t *testing.T) {

@@ -3320,7 +3320,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	// An operator may point a variable at a document they may read; it is bound to this
-	// instance once the change is durable (ADR-draft-a-file-is-a-document-not-a-variable).
+	// instance once the change is durable (ADR-0543).
 	docIDs, code, msg := s.checkDocumentRefs(r, vars)
 	if code != 0 {
 		httpapi.Error(w, code, msg)
@@ -4435,7 +4435,7 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	// Which instance a message reaches is decided by correlation, possibly long after
 	// this request, so a document it named could not be bound to it
-	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	// (ADR-0543).
 	if code, msg := refuseDocumentRefs(vars); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
@@ -5672,7 +5672,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	}
 	// A worker's result may name a document; the worker (or operator) must be one who
 	// may use it, and it is bound to the job's instance once the completion is durable
-	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	// (ADR-0543).
 	docIDs, code, msg := s.checkDocumentRefs(r, vars)
 	if code != 0 {
 		httpapi.Error(w, code, msg)
@@ -6045,7 +6045,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// A file field's answer is a reference to the document its browser uploaded; the
 	// person completing must be one who may use it, and it is bound to the task's
 	// instance once the completion is durable
-	// (ADR-draft-a-file-is-a-document-not-a-variable). Before sealing, which would hide
+	// (ADR-0543). Before sealing, which would hide
 	// a reference inside a personal value.
 	docIDs, code, msg := s.checkDocumentRefs(r, vars)
 	if code != 0 {
@@ -7100,7 +7100,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// and reading a document is file or network I/O. The payload carries the
 		// document's id instead, and the Worker Instance reads it under the job's lease
 		// (POST /api/v1/jobs/{key}/documents/{id},
-		// ADR-draft-a-file-is-a-document-not-a-variable).
+		// ADR-0543).
 		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease

@@ -81,7 +81,7 @@ type storeEntry struct {
 	// number. Classified, backed up, and not walked.
 	ownMechanism bool
 	// optIn marks a store a whole-instance snapshot carries only when it is asked for.
-	// The document store is the case (ADR-draft-a-file-is-a-document-not-a-variable): it
+	// The document store is the case (ADR-0543): it
 	// can be many times the size of everything else, and not every installation needs
 	// its documents back from a snapshot — some keep them in a bucket with its own
 	// backup. A restore still accepts it whenever an archive carries it.
@@ -100,7 +100,7 @@ var persistentStores = []storeEntry{
 	{name: "jobtypes", class: classRuntime, why: "the numbers already-stored jobs mean by their type, and the high-water mark that keeps one from being issued twice; re-interning assigns different ones"},
 	{name: "keyspace", class: classRuntime, why: "the highest definition key ever issued; without it a deleted definition's key comes back and the next one inherits its instance history"},
 	{name: "exporter", class: classRuntime, onDemand: true, why: "how far the event export has read, so a restore does not re-export history"},
-	{name: "documents", class: classRuntime, onDemand: true, optIn: true, why: "the files processes received — CSV uploads, PDFs — that variables refer to by reference (ADR-draft-a-file-is-a-document-not-a-variable). A snapshot carries them only when asked to; restored without them, the references stay and say the document is not available"},
+	{name: "documents", class: classRuntime, onDemand: true, optIn: true, why: "the files processes received — CSV uploads, PDFs — that variables refer to by reference (ADR-0543). A snapshot carries them only when asked to; restored without them, the references stay and say the document is not available"},
 
 	// --- design time -------------------------------------------------------
 	{name: "deployments", class: classDesignTime, why: "the deployed process definitions"},

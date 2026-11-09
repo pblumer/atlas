@@ -11,7 +11,7 @@ import (
 )
 
 // The document paths refuse what they cannot do with a reason, rather than calling a
-// store half-way (ADR-draft-a-file-is-a-document-not-a-variable).
+// store half-way (ADR-0543).
 func TestDocumentPathsRefuse(t *testing.T) {
 	ctx := context.Background()
 	if _, err := s3.Documents(nil).GetDocument(ctx, "w", "b", "k"); err == nil {

@@ -101,7 +101,7 @@ type startGuard func(d *deployment) (status int, msg string)
 func (s *Server) startInstanceGuarded(w http.ResponseWriter, r *http.Request, key uint64, startVars []model.VariableValue, guard startGuard) {
 	// A start variable may name an uploaded document; the caller must be one who may use
 	// it, and it is bound to the new instance once the start is durable
-	// (ADR-draft-a-file-is-a-document-not-a-variable). Checked before sealing, which
+	// (ADR-0543). Checked before sealing, which
 	// would hide a reference inside a personal value's ciphertext.
 	docIDs, code, msg := s.checkDocumentRefs(r, startVars)
 	if code != 0 {

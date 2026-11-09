@@ -243,7 +243,7 @@ func (v *Vault) Open(name string, e Envelope) (string, error) {
 // SealBytes enciphers a document under the subject's data key, creating the key on first
 // use, and answers the nonce and the ciphertext as one opaque value. name binds it to
 // what it is — a document's id — as Seal binds a value to its variable
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func (v *Vault) SealBytes(subject, name string, plain []byte) ([]byte, error) {
 	if subject == "" {
 		return nil, fmt.Errorf("vault: seal %q: no data subject", name)

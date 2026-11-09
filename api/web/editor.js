@@ -696,7 +696,7 @@ function renderVarsBody(list, collapsed) {
 
 // documentLink renders a variable that names a document as a download link: the file is
 // in the document store, and the variable holds only its reference
-// (ADR-draft-a-file-is-a-document-not-a-variable). cls is the surface's own class.
+// (ADR-0543). cls is the surface's own class.
 function documentLink(ref, cls) {
   const size = documentSizeText(ref);
   return `<a class="${cls} vdoc" href="${esc(documentHref(ref.id))}" download="${esc(ref.name)}"

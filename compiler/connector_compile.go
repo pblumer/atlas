@@ -1588,7 +1588,7 @@ var mailOps = map[string]mailOp{
 	"forward":           {forward: true, message: true},
 	"get-attachment":    {attachment: true, message: true, needsResult: true, takesResult: true},
 	"export-attachment": {attachment: true, export: true, message: true, takesResult: true},
-	// Into Atlas's document store (ADR-draft-a-file-is-a-document-not-a-variable).
+	// Into Atlas's document store (ADR-0543).
 	"store-attachment": {attachment: true, message: true, needsResult: true, takesResult: true},
 }
 
@@ -2957,7 +2957,7 @@ var s3Ops = map[string]s3Op{
 	"delete-object": {needsBucket: true, needsKey: true},
 	"presign-get":   {needsBucket: true, needsKey: true, takesExpiry: true, needsResult: true, takesResult: true},
 	"presign-put":   {needsBucket: true, needsKey: true, takesExpiry: true, takesContentType: true, needsResult: true, takesResult: true},
-	// Between a bucket and the document store (ADR-draft-a-file-is-a-document-not-a-variable).
+	// Between a bucket and the document store (ADR-0543).
 	"put-document": {needsBucket: true, needsKey: true, needsContent: true, takesMetadata: true, takesResult: true},
 	"get-document": {needsBucket: true, needsKey: true, needsResult: true, takesResult: true},
 }

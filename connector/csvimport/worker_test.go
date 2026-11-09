@@ -224,7 +224,7 @@ func TestCSVRowsFromConnector(t *testing.T) {
 	}
 }
 
-// The CSV upload is a document now (ADR-draft-a-file-is-a-document-not-a-variable):
+// The CSV upload is a document now (ADR-0543):
 // csvText may hold a reference to the uploaded file instead of its text, and the same
 // file yields the same rows either way. Without a reader, or for a document that cannot
 // be read, the task fails naming the variable rather than producing an empty batch.

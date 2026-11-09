@@ -88,7 +88,7 @@ func (s *Server) fireTrigger(defKey uint64, message, source, triggerID string, v
 
 // fireTriggerBinding is fireTrigger that binds the documents the variables carry to the
 // instance it created, once that is durable
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func (s *Server) fireTriggerBinding(defKey uint64, message, source, triggerID string, docIDs []string, vars []model.VariableValue) (engine.TriggerResult, error) {
 	var res engine.TriggerResult
 	s.do(func() { s.proc.TriggerStart(defKey, message, source, triggerID, &res, vars...) })

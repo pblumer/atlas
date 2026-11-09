@@ -62,7 +62,7 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 }
 
 // DocumentReader reads the bytes of a document by its id, for the job's process
-// instance (ADR-draft-a-file-is-a-document-not-a-variable). A source variable may hold a
+// instance (ADR-0543). A source variable may hold a
 // reference to an uploaded file instead of the file's text; the server passes a reader
 // for its document store that answers only for a document that instance was given, and
 // a worker without one says so rather than parsing nothing.

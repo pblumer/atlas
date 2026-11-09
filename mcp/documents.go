@@ -8,7 +8,7 @@ import (
 
 // documentText renders a document for an agent: a text document's content, cut at max
 // bytes on a character boundary and saying so; for anything else, what it is and how big
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func documentText(id, contentType string, body []byte, max int) string {
 	if !textual(contentType) || !utf8.Valid(body) {
 		return fmt.Sprintf("document %s is %s, %d bytes; it is not text, so its content is not returned", id, contentType, len(body))

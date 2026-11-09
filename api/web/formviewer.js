@@ -351,7 +351,7 @@ const FORM_FIELD_TYPES = {
   checklist: "array",
   taglist: "array",
   // A file field writes the reference to the uploaded document, an object
-  // (ADR-draft-a-file-is-a-document-not-a-variable).
+  // (ADR-0543).
   filepicker: "object",
 };
 

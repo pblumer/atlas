@@ -33,7 +33,7 @@ _Changed_ / _Removed_ for each version.
   `atlas_document_meta`, `atlas_read_document` and `atlas_upload_document` reach the store. A
   document a personal variable names is enciphered under the data subject's key and becomes
   unreadable with an erasure. Operations and the replay show a reference as a download link
-  (ADR-draft-a-file-is-a-document-not-a-variable).
+  (ADR-0543).
 - **A process can publish an interface, not its model.** A deployed definition's message
   entry points can be published as a small, versioned contract another domain binds to
   (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition

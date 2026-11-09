@@ -298,7 +298,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A visitor on a public link is nobody the document store knows, so nothing they
-	// could name is theirs to use (ADR-draft-a-file-is-a-document-not-a-variable).
+	// could name is theirs to use (ADR-0543).
 	if code, msg := refuseDocumentRefs(vars); code != 0 {
 		httpapi.Error(w, code, msg)
 		return

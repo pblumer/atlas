@@ -57,7 +57,7 @@ func fakeDocumentServer(t *testing.T, seen *[]string) *httptest.Server {
 }
 
 // A job's handler reads a document under its lease and stores a new one through the
-// upload route (ADR-draft-a-file-is-a-document-not-a-variable).
+// upload route (ADR-0543).
 func TestDocumentContextReadsAndUploadsForItsJob(t *testing.T) {
 	var seen []string
 	srv := fakeDocumentServer(t, &seen)

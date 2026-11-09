@@ -26,7 +26,7 @@ func (d serverDocuments) PutDocument(ctx context.Context, worker, bucket, key, c
 
 // StoreDocument is where a store-attachment run inside this server puts its attachment:
 // the document store, pending until the job's completion binds it
-// (ADR-draft-a-file-is-a-document-not-a-variable).
+// (ADR-0543).
 func (d serverDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
 	return jobDocuments{s: d.s}.StoreDocument(ctx, name, contentType, data)
 }

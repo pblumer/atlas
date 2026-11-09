@@ -12,7 +12,7 @@ import (
 	"strconv"
 )
 
-// Documents a job works with (ADR-draft-a-file-is-a-document-not-a-variable).
+// Documents a job works with (ADR-0543).
 //
 // A file a process received is kept in the server's document store, and a variable holds
 // a reference to it: {"$document": "doc_…", "name", "contentType", "size", "sha256"}. A

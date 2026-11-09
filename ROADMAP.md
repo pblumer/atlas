@@ -1653,7 +1653,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   resolver and other `ATLAS_*_TOKEN` references, and a Console Organization →
   Secrets panel over the CRUD endpoints.
 - ✅ **A file a process receives is a document, not a variable**
-  ([ADR-draft-a-file-is-a-document-not-a-variable](docs/adr/draft-a-file-is-a-document-not-a-variable.md),
+  ([ADR-0543](docs/adr/0543-a-file-is-a-document-not-a-variable.md),
   [plan](docs/planning/documents-instead-of-variables.md)). ✅ A document store (local by
   default, S3 selectable), upload/download routes with per-document access, binding to the
   instance a reference enters, a sweep for unused uploads and released documents, the Tasks
