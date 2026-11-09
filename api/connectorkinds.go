@@ -382,7 +382,11 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		newRegistry:    func(s *Server) { s.s3Registry = s3.NewRegistry() },
 		registerHandlers: func(s *Server, store *state.Store) {
 			s.jobRunner.HandleWithOutput(compiler.S3JobTypeIndex, func(rd state.Reader) job.OutputHandler {
-				return s3.Handler(rd, s.processLookup, s.s3Registry)
+				// The two document operations reach the document store, for this job's
+				// instance only (ADR-draft-a-file-is-a-document-not-a-variable).
+				return s3.HandlerWith(rd, s.processLookup, s.s3Registry, func(instance uint64) s3.DocumentStore {
+					return jobDocuments{s: s, instance: instance}
+				})
 			})
 		},
 		rebuild: func(s *Server) error {

@@ -3340,7 +3340,15 @@ func WithWorkerHistory(connector, scope string) Option {
 // Handlers read through a [state.ReadView] taken while the loop is held, so each
 // round sees one coherent state rather than whatever the writer has reached since —
 // the guarantee they used to get for free by running on the writer itself.
-func (s *Server) drive() error {
+func (s *Server) drive() error { return s.driveThen(nil) }
+
+// driveThen is drive with afterDurable run once, right after the first RunUntilIdle
+// has made the caller's command durable and before any worker is handed a job it
+// unblocked. It is where a route binds the documents its command carried
+// (ADR-draft-a-file-is-a-document-not-a-variable): bound later, a worker could already
+// be asked to read a document its instance does not hold yet.
+func (s *Server) driveThen(afterDurable func()) error {
+	var pendingBinds []jobBind
 	for {
 		var (
 			jobs []job.Job
@@ -3367,6 +3375,14 @@ func (s *Server) drive() error {
 		if err != nil {
 			return err
 		}
+		// The caller's command, and the previous round's completions, are durable now:
+		// RunUntilIdle above wrote them.
+		if afterDurable != nil {
+			afterDurable()
+			afterDurable = nil
+		}
+		s.bindJobOutputs(pendingBinds)
+		pendingBinds = nil
 		if len(jobs) == 0 {
 			return nil
 		}
@@ -3395,6 +3411,17 @@ func (s *Server) drive() error {
 			}
 			if sealErr := s.encipherJobVars(outcomes[i].Job.Key, outcomes[i].Completion.Outputs); sealErr != nil {
 				outcomes[i].Err = sealErr
+			}
+		}
+		// A worker's output may name a document it stored (an S3 get-document); it is
+		// bound to the job's instance once the completion is durable, which is the next
+		// round's RunUntilIdle (ADR-draft-a-file-is-a-document-not-a-variable).
+		for i := range outcomes {
+			if outcomes[i].Err != nil {
+				continue
+			}
+			if ids := documentRefsOf(outcomes[i].Completion.Outputs); len(ids) > 0 {
+				pendingBinds = append(pendingBinds, jobBind{ids: ids, instance: outcomes[i].Job.ProcessInstanceKey})
 			}
 		}
 		s.driveMu.Lock()

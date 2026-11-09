@@ -173,7 +173,7 @@ func (s *Server) startInstanceGuarded(w http.ResponseWriter, r *http.Request, ke
 	// read-back's is now only long enough to take a view, not to do the counting
 	// (ADR-0266).
 	if driveNeeded {
-		if runErr = s.drive(); runErr == nil {
+		if runErr = s.driveThen(func() { s.bindDocuments(docIDs, instKey) }); runErr == nil {
 			stats, statErr = s.statsOffLoop()
 		}
 	}
@@ -201,7 +201,6 @@ func (s *Server) startInstanceGuarded(w http.ResponseWriter, r *http.Request, ke
 	case statErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		s.bindDocuments(docIDs, instKey)
 		s.notePositionInstance(startVars, instKey, processID)
 		resp := createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats}
 		// A start that ran into a wizard carries the starter to its first screen

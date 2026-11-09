@@ -113,14 +113,13 @@ func (s *Server) handleTrigger(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	res, err := s.fireTrigger(key, message, source, req.TriggerID, vars)
+	res, err := s.fireTriggerBinding(key, message, source, req.TriggerID, docIDs, vars)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "trigger: "+err.Error())
 		return
 	}
 	switch res.Outcome {
 	case engine.TriggerCreated:
-		s.bindDocuments(docIDs, res.InstanceKey)
 		httpapi.JSON(w, http.StatusCreated, triggerResp{InstanceKey: res.InstanceKey})
 	case engine.TriggerReplayed:
 		httpapi.JSON(w, http.StatusOK, triggerResp{InstanceKey: res.InstanceKey, Replayed: true})

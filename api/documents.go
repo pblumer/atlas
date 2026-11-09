@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -466,24 +467,85 @@ func rootInstanceOf(rv *state.ReadView, instance uint64) (uint64, error) {
 	return key, nil
 }
 
-// readDocumentBytes reads a whole document for an in-process worker — the CSV import
-// parsing a referenced upload. The reference was checked when it entered the instance;
-// the worker reads on the instance's behalf.
-func (s *Server) readDocumentBytes(id string) ([]byte, error) {
+// readJobDocument reads a whole document for an in-process worker working a job of the
+// given process instance — the CSV import parsing a referenced upload, an S3 task
+// putting it into a bucket. Like a Worker Instance's read under its lease, it answers
+// only for a document bound to the root of that instance: a model can write any id into
+// a FEEL expression, and a worker reads on the instance's behalf, not on its own.
+func (s *Server) readJobDocument(instance uint64, id string) ([]byte, docstore.Record, error) {
 	docs, err := s.documents()
 	if err != nil {
-		return nil, err
+		return nil, docstore.Record{}, err
 	}
 	rec, err := docs.Get(id)
 	if err != nil {
-		return nil, err
+		return nil, docstore.Record{}, err
+	}
+	var root uint64
+	if err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		var err error
+		root, err = rootInstanceOf(rv, instance)
+		return err
+	}); err != nil {
+		return nil, docstore.Record{}, err
+	}
+	if !boundTo(rec, root) {
+		return nil, docstore.Record{}, fmt.Errorf("document %s was not given to this instance", id)
 	}
 	rc, err := docs.OpenBytes(context.Background(), rec)
 	if err != nil {
-		return nil, err
+		return nil, docstore.Record{}, err
 	}
 	defer rc.Close()
-	return io.ReadAll(io.LimitReader(rc, s.budgets().Document+1))
+	data, err := io.ReadAll(io.LimitReader(rc, s.budgets().Document+1))
+	return data, rec, err
+}
+
+// readDocumentBytes is readJobDocument for a worker that wants the bytes only.
+func (s *Server) readDocumentBytes(instance uint64, id string) ([]byte, error) {
+	data, _, err := s.readJobDocument(instance, id)
+	return data, err
+}
+
+// jobDocuments is the document store as an in-process S3 task of one instance reaches
+// it: reads only what that instance was given; stores a new document, pending until the
+// job's completion binds it (drive, bindJobOutputs).
+type jobDocuments struct {
+	s        *Server
+	instance uint64
+}
+
+func (d jobDocuments) ReadDocument(_ context.Context, id string) ([]byte, string, string, error) {
+	data, rec, err := d.s.readJobDocument(d.instance, id)
+	return data, rec.Name, rec.ContentType, err
+}
+
+func (d jobDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	docs, err := d.s.documents()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := docs.Put(ctx, name, contentType, "", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	return rec.Ref(), nil
+}
+
+// bindJobOutputs binds the documents an in-process worker's outputs name to the job's
+// instance. The outputs do not pass through the completion route, where an external
+// worker's are checked and bound, so drive binds them here once the completion is
+// durable.
+func (s *Server) bindJobOutputs(binds []jobBind) {
+	for _, b := range binds {
+		s.bindDocuments(b.ids, b.instance)
+	}
+}
+
+// jobBind is one completed job's documents, waiting for the completion to be durable.
+type jobBind struct {
+	ids      []string
+	instance uint64
 }
 
 // --- the sweep ------------------------------------------------------------------

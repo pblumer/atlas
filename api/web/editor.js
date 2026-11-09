@@ -5660,6 +5660,8 @@ const SERVICE_TASK_KINDS = [
           { v: "delete-object", l: "Delete object" },
           { v: "presign-get", l: "Link to download" },
           { v: "presign-put", l: "Link to upload" },
+          { v: "put-document", l: "Put document" },
+          { v: "get-document", l: "Take into document store" },
         ],
       },
       {
@@ -5673,8 +5675,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "content", label: "Content", placeholder: "=antwort", fx: true,
-        showIf: (v) => v.operation === "put-object",
-        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+        showIf: (v) => v.operation === "put-object" || v.operation === "put-document",
+        hint: (v) => (v.operation === "put-document"
+          ? "A variable holding a document reference, e.g. =antrag — the file a task form uploaded. The document goes from Atlas's document store into the bucket, up to 35 MiB, and only a document this instance was given."
+          : "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store."),
       },
       {
         key: "encoding", label: "Content is", type: "select",
@@ -5726,7 +5730,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "meta", label: "Metadata & headers", type: "map", childType: "atlas:S3Meta", fx: true,
-        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object",
+        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object" || v.operation === "put-document",
         hint: "Extra request headers. A plain name becomes user metadata on the object (x-amz-meta-<name>), which is where a case number belongs; a name starting with x-amz- is sent as itself, which is how you reach server-side encryption or a storage class. On a copy these replace the source's metadata rather than adding to it — the store offers no third option.",
       },
       { group: "Output" },
@@ -5751,6 +5755,10 @@ const SERVICE_TASK_KINDS = [
               return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through atlas.";
             case "copy-object":
               return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
+            case "get-document":
+              return "A reference to the new document lands here — =datei.name, =datei.size, =datei.contentType. The file itself is in Atlas's document store, not in the variable; a form, Operations and Put document all take the reference.";
+            case "put-document":
+              return "The stored object's identity lands here — =datei.etag, =datei.key, and =datei.document, the reference it came from. Leave empty to discard it.";
             default:
               return "The stored object's identity lands here — =datei.etag, and =datei.versionId on a versioned bucket. Leave empty to discard it.";
           }

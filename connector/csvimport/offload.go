@@ -161,7 +161,7 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 
 // ResolveWithDocuments is [Resolve] with a document reader, for a reading task whose
 // source variable names an uploaded document rather than holding its text.
-func ResolveWithDocuments(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs DocumentReader) (Job, error) {
+func ResolveWithDocuments(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs func(string) ([]byte, error)) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("csv-import: task has no detail")
 	}

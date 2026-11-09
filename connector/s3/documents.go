@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 
@@ -166,4 +168,91 @@ func (d Documenter) PutDocument(ctx context.Context, worker, bucket, key, conten
 		return nil, fmt.Errorf("s3: Worker %q cannot store a document handed to it by another Worker", worker)
 	}
 	return p.PutDocument(ctx, bucket, key, contentType, disposition, data, metadata)
+}
+
+// DocumentStore is Atlas's own document store as an S3 task reaches it
+// (ADR-draft-a-file-is-a-document-not-a-variable): the server's store in process, the
+// job's lease-bound access on a Worker Instance.
+type DocumentStore interface {
+	// ReadDocument reads a document the task's instance holds.
+	ReadDocument(ctx context.Context, id string) (data []byte, name, contentType string, err error)
+	// StoreDocument stores bytes as a new document and answers its reference.
+	StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error)
+}
+
+// documentIDOf reads the document id from a resolved content value: the canonical JSON
+// of a reference, {"$document": "doc_…", …}.
+func documentIDOf(content string) string {
+	var ref struct {
+		ID string `json:"$document"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(content)), &ref) != nil || !strings.HasPrefix(ref.ID, "doc_") {
+		return ""
+	}
+	return ref.ID
+}
+
+// putFromStore performs put-document: the document a reference names goes from the
+// document store into the bucket, under its detected type. A type a browser would run
+// as a page is stored as an attachment, so a link to it downloads it.
+func putFromStore(ctx context.Context, j Job, client Client, docs DocumentStore) (any, error) {
+	id := documentIDOf(j.Content)
+	if id == "" {
+		return nil, fmt.Errorf("s3: put-document's content must be a document reference (a variable holding {\"$document\": …}), and it is not")
+	}
+	if docs == nil {
+		return nil, fmt.Errorf("s3: put-document names document %s, and this worker has no access to the document store", id)
+	}
+	p, ok := client.(DocumentPutter)
+	if !ok {
+		return nil, fmt.Errorf("s3: Worker %q cannot store a document", j.Connector)
+	}
+	data, name, contentType, err := docs.ReadDocument(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("s3: read document %s: %w", id, err)
+	}
+	disposition := "inline"
+	if rendersAsPage(contentType) {
+		disposition = "attachment"
+	}
+	if name != "" {
+		disposition += "; filename*=UTF-8''" + url.PathEscape(name)
+	}
+	res, err := p.PutDocument(ctx, j.Bucket, j.Key, contentType, disposition, data, j.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	res["document"] = id
+	return res, nil
+}
+
+// getIntoStore performs get-document: the object is read whole, bounded by
+// limits.Document, and stored as a new document whose reference is the answer.
+func getIntoStore(ctx context.Context, j Job, client Client, docs DocumentStore) (any, error) {
+	if docs == nil {
+		return nil, fmt.Errorf("s3: get-document stores into the document store, and this worker has no access to it")
+	}
+	g, ok := client.(DocumentGetter)
+	if !ok {
+		return nil, fmt.Errorf("s3: Worker %q cannot read a document for the document store", j.Connector)
+	}
+	data, err := g.GetDocument(ctx, j.Bucket, j.Key)
+	if err != nil {
+		return nil, err
+	}
+	name := path.Base(strings.TrimSpace(j.Key))
+	return docs.StoreDocument(ctx, name, "", data)
+}
+
+// rendersAsPage reports whether a browser would run a document of this type as a page.
+// The same list as the document store's (api/docstore.RendersAsPage), kept here because
+// a connector does not import the server.
+func rendersAsPage(contentType string) bool {
+	ct := strings.ToLower(contentType)
+	for _, p := range []string{"text/html", "image/svg", "text/xml", "application/xml", "application/xhtml", "text/xsl"} {
+		if strings.HasPrefix(ct, p) {
+			return true
+		}
+	}
+	return false
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/pblumer/atlas/connector/s3"
+	"github.com/pblumer/atlas/workersdk"
 )
 
 // s3EnvPrefix is where an S3 worker's object-store identities live.
@@ -83,7 +84,7 @@ func RunS3Job(ctx context.Context, j Job, reg *s3.Registry) (map[string]any, err
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("s3: cannot read the resolved detail: %w", err)
 	}
-	res, err := s3.Run(ctx, task, reg)
+	res, err := s3.RunWith(ctx, task, reg, sdkDocuments{})
 	if err != nil {
 		return nil, err
 	}
@@ -94,4 +95,18 @@ func RunS3Job(ctx context.Context, j Job, reg *s3.Registry) (map[string]any, err
 		return nil, nil
 	}
 	return map[string]any{task.ResultVariable: res}, nil
+}
+
+// sdkDocuments is the document store as a Worker Instance reaches it: reads under the
+// job's lease, stores through the upload route, and the completion binds what it stored
+// (ADR-draft-a-file-is-a-document-not-a-variable).
+type sdkDocuments struct{}
+
+func (sdkDocuments) ReadDocument(ctx context.Context, id string) ([]byte, string, string, error) {
+	data, d, err := workersdk.ReadDocument(ctx, id)
+	return data, d.Name, d.ContentType, err
+}
+
+func (sdkDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	return workersdk.UploadDocument(ctx, name, contentType, data)
 }

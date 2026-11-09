@@ -61,11 +61,12 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 	return HandlerWithDocuments(store, lookup, nil)
 }
 
-// DocumentReader reads the bytes of a document by its id
-// (ADR-draft-a-file-is-a-document-not-a-variable). A source variable may hold a
+// DocumentReader reads the bytes of a document by its id, for the job's process
+// instance (ADR-draft-a-file-is-a-document-not-a-variable). A source variable may hold a
 // reference to an uploaded file instead of the file's text; the server passes a reader
-// for its document store, and a worker without one says so rather than parsing nothing.
-type DocumentReader func(id string) ([]byte, error)
+// for its document store that answers only for a document that instance was given, and
+// a worker without one says so rather than parsing nothing.
+type DocumentReader func(instance uint64, id string) ([]byte, error)
 
 // HandlerWithDocuments is [Handler] with a document reader, so a source variable that
 // names a document is parsed from the document's bytes.
@@ -85,7 +86,7 @@ func HandlerWithDocuments(store VarStore, lookup ProcessLookup, docs DocumentRea
 		if lookup != nil {
 			if cp := lookup(ei.ProcessDefKey); cp != nil {
 				if node := cp.Node(ei.ElementId); node.Type == compiler.TypeConnectorTask {
-					return rowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey, docs)
+					return rowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey, forInstance(docs, j.ProcessInstanceKey))
 				}
 			}
 		}
@@ -93,8 +94,16 @@ func HandlerWithDocuments(store VarStore, lookup ProcessLookup, docs DocumentRea
 		if err != nil {
 			return nil, fmt.Errorf("csv-import: read variables: %w", err)
 		}
-		return rowsFromVarsWith(vars, docs)
+		return rowsFromVarsWith(vars, forInstance(docs, j.ProcessInstanceKey))
 	}
+}
+
+// forInstance binds a reader to the job's instance, so the parsing below asks by id only.
+func forInstance(docs DocumentReader, instance uint64) func(string) ([]byte, error) {
+	if docs == nil {
+		return nil
+	}
+	return func(id string) ([]byte, error) { return docs(instance, id) }
 }
 
 // rowsFromConnector runs a CSV-to-JSON task (ADR-0139) in process. It is
@@ -102,7 +111,7 @@ func HandlerWithDocuments(store VarStore, lookup ProcessLookup, docs DocumentRea
 // [Run] them — so the in-process path and an out-of-process one cannot disagree
 // about defaults, validation, or what a headerless file's column list means
 // (ADR-0168).
-func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs DocumentReader) ([]model.VariableValue, error) {
+func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs func(string) ([]byte, error)) ([]model.VariableValue, error) {
 	j, err := ResolveWithDocuments(store, cp, detail, elementInstanceKey, docs)
 	if err != nil {
 		return nil, err
@@ -134,7 +143,7 @@ func rowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue, e
 
 // rowsFromVarsWith is rowsFromVars with a document reader: csvText may hold the file's
 // text, as it always could, or a reference to the uploaded file.
-func rowsFromVarsWith(vars map[string]model.VariableValue, docs DocumentReader) ([]model.VariableValue, error) {
+func rowsFromVarsWith(vars map[string]model.VariableValue, docs func(string) ([]byte, error)) ([]model.VariableValue, error) {
 	src, ok := vars[csvSourceVar]
 	if !ok {
 		return nil, fmt.Errorf("csv-import: variable %q is missing or not a non-empty string", csvSourceVar)
@@ -208,7 +217,7 @@ func documentID(v model.VariableValue) string {
 // sourceText is a reading task's input: the variable's text, or the bytes of the
 // document it names. Anything else — a missing reader, an empty file, a value of
 // another kind — is an error naming the variable, never an empty batch.
-func sourceText(src model.VariableValue, name string, docs DocumentReader) (string, error) {
+func sourceText(src model.VariableValue, name string, docs func(string) ([]byte, error)) (string, error) {
 	if id := documentID(src); id != "" {
 		if docs == nil {
 			return "", fmt.Errorf("csv-import: source variable %q names document %s, and this worker cannot read documents", name, id)

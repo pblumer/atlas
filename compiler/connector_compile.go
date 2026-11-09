@@ -2950,6 +2950,9 @@ var s3Ops = map[string]s3Op{
 	"delete-object": {needsBucket: true, needsKey: true},
 	"presign-get":   {needsBucket: true, needsKey: true, takesExpiry: true, needsResult: true, takesResult: true},
 	"presign-put":   {needsBucket: true, needsKey: true, takesExpiry: true, takesContentType: true, needsResult: true, takesResult: true},
+	// Between a bucket and the document store (ADR-draft-a-file-is-a-document-not-a-variable).
+	"put-document": {needsBucket: true, needsKey: true, needsContent: true, takesMetadata: true, takesResult: true},
+	"get-document": {needsBucket: true, needsKey: true, needsResult: true, takesResult: true},
 }
 
 // s3OpNames lists the operations, sorted, for the messages that have to say what was

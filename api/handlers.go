@@ -3321,9 +3321,14 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
-	// its duration is the stall ADR-0157 step 6 removes.
+	// its duration is the stall ADR-0157 step 6 removes. A document the change names
+	// is bound once it is durable, before a worker can be asked to read it.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !scopeBad && scanErr == nil {
+				s.bindDocuments(docIDs, key)
+			}
+		})
 	}
 	switch {
 	case scanErr != nil:
@@ -3335,7 +3340,6 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
 	default:
-		s.bindDocuments(docIDs, key)
 		httpapi.JSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
 	}
 }
@@ -5768,7 +5772,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !notHolder && !unauthorized && badReport == nil {
+				s.bindDocuments(docIDs, jobInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -5787,7 +5795,6 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			"this job belongs to a governed Worker and no permit was recorded for the lease it is held under: "+
 				"authorize it (POST /api/v1/jobs/{key}/authorize) before acting, then complete it")
 	default:
-		s.bindDocuments(docIDs, jobInstance)
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
 }
@@ -6039,7 +6046,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found {
+				s.bindDocuments(docIDs, taskInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -6047,7 +6058,6 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
-		s.bindDocuments(docIDs, taskInstance)
 		resp := map[string]any{"taskKey": key}
 		// A step of a wizard answers with where the sitting now stands, so the person
 		// is carried to the next screen rather than back to the inbox (ADR-0449).

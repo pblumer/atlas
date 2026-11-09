@@ -253,7 +253,7 @@ func TestCSVRowsFromADocument(t *testing.T) {
 	}
 
 	for name, tc := range map[string]struct {
-		docs DocumentReader
+		docs func(string) ([]byte, error)
 		want string
 	}{
 		"no reader":  {nil, "cannot read documents"},
