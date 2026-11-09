@@ -505,6 +505,14 @@ func (c *HTTPClient) presignObject(req Request, method string) (any, error) {
 // gigabyte would otherwise be allowed to put a gigabyte in this process's memory before
 // anything refused it.
 func (c *HTTPClient) call(ctx context.Context, method, rawURL string, header http.Header, body []byte, req Request) (*http.Response, []byte, error) {
+	return c.callUpTo(ctx, method, rawURL, header, body, req, limits.Default().Variable)
+}
+
+// callUpTo is call with the response body read up to maxRead bytes rather than a
+// variable's budget — the bound a document read needs (documents.go). A body over
+// maxRead is read one byte past it, so the caller can refuse it instead of keeping a
+// truncated one.
+func (c *HTTPClient) callUpTo(ctx context.Context, method, rawURL string, header http.Header, body []byte, req Request, maxRead int64) (*http.Response, []byte, error) {
 	if strings.TrimSpace(c.conn.AccessKeyID) == "" || strings.TrimSpace(c.conn.SecretAccessKey) == "" {
 		return nil, nil, fmt.Errorf("s3: this Worker has no access key (set credentialsRef to a vault bundle {accessKeyId, secretAccessKey, region})")
 	}
@@ -528,10 +536,10 @@ func (c *HTTPClient) call(ctx context.Context, method, rawURL string, header htt
 	}
 	defer resp.Body.Close()
 	// One byte past the cap, so an over-large body is recognised as over-large rather than
-	// truncated into a smaller one that still parses. The number is the process variable's
-	// own budget, read from the registry here rather than kept as a constant of this
-	// package — see [MaxObjectBytes].
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Variable+1))
+	// truncated into a smaller one that still parses. For an operation the number is the
+	// process variable's own budget, read from the registry rather than kept as a constant
+	// of this package — see [MaxObjectBytes]; a document read passes limits.Document.
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxRead+1))
 	if err != nil {
 		return nil, nil, fmt.Errorf("s3: read %s response: %w", req.Operation, err)
 	}

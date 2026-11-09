@@ -286,7 +286,7 @@ export const WORKER_TYPE_DOCS = {
 
   csv: {
     anchor: "runbook-csv", title: "workerDoc.csv.title",
-    checked: "2026-09",
+    checked: "2026-11",
     needs: "workerDoc.csv.needs",
     steps: [
       "workerDoc.csv.step1",

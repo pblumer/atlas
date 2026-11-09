@@ -630,6 +630,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0540](0540-sharepoint-server-worker.md) | SharePoint Server is a Worker Type of its own | Accepted | Landed |
 | [0541](0541-the-application-holds-its-deployments.md) | An application's deployed processes are listed in the application, not on the Modeler home | Accepted | Landed |
 | [0542](0542-variables-by-provenance.md) | A selected element's variables are shown by how it came by them | Accepted | Landed |
+| [0543](0543-a-file-is-a-document-not-a-variable.md) | A file is a document, and a variable holds a reference to it | Accepted | Landed |
 
 ## The two states of a record
 

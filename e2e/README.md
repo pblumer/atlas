@@ -67,7 +67,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   single-instance view and in the replay's Variables tab. The harness cuts values the way
   `?values=preview` does, so the spec also holds that the overview asks for previews, that
   opening a cut value reads the instance whole by its key, and that the single-instance
-  view copies whole values.
+  view copies whole values. A variable that names a document
+  (ADR-0543) is a download link on the card, in the
+  single view and in the replay. `tasks-logo-upload.spec.mjs` holds that a file field
+  without a catalogue uploads its file as a document first and completes with the
+  reference under its own key, and that a failed upload leaves the task open.
 
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):

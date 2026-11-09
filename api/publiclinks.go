@@ -297,6 +297,12 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A visitor on a public link is nobody the document store knows, so nothing they
+	// could name is theirs to use (ADR-0543).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// The public form is the path a portal's personal data actually arrives on, so it
 	// has to seal (ADR-0314) — and its definition is only known once the token is
 	// resolved, which the loop owns. Hence a resolution visit of its own before the

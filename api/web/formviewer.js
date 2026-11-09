@@ -350,7 +350,9 @@ const FORM_FIELD_TYPES = {
   checkbox: "boolean",
   checklist: "array",
   taglist: "array",
-  filepicker: "array",
+  // A file field writes the reference to the uploaded document, an object
+  // (ADR-0543).
+  filepicker: "object",
 };
 
 // formFieldTypes maps each key formFieldKeys returns to that variable's type, for the

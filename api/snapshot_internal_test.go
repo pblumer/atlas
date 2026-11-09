@@ -345,3 +345,35 @@ func TestNewestVerifiedCheckpointFallsPastAllCorrupt(t *testing.T) {
 		t.Fatalf("newestVerifiedCheckpoint = %q, want none when nothing verifies", got)
 	}
 }
+
+// The document store is in a snapshot only when it is asked for
+// (ADR-0543): it can dwarf everything else, and an
+// installation keeping its documents in a bucket has a backup of its own for them.
+func TestSnapshotCarriesDocumentsOnlyWhenAsked(t *testing.T) {
+	fsys := fstest.MapFS{
+		"wal/00000001.seg":          {Data: []byte("log")},
+		"documents/meta/doc_x.json": {Data: []byte("{}")},
+	}
+	names := func(extra ...string) map[string]bool {
+		var buf bytes.Buffer
+		if err := writeFullBackup(tar.NewWriter(&buf), fsys, "", extra...); err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]bool{}
+		tr := tar.NewReader(&buf)
+		for {
+			h, err := tr.Next()
+			if err != nil {
+				break
+			}
+			got[h.Name] = true
+		}
+		return got
+	}
+	if got := names(); got["documents/meta/doc_x.json"] || !got["wal/00000001.seg"] {
+		t.Fatalf("default snapshot = %v, want the log and no documents", got)
+	}
+	if got := names(optInBackupDirs()...); !got["documents/meta/doc_x.json"] {
+		t.Fatalf("snapshot asked for documents = %v", got)
+	}
+}
