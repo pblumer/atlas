@@ -82,3 +82,23 @@ func TestCapabilityClaimsDoNotChangeWorkerCompatibility(t *testing.T) {
 		t.Fatalf("CompatibleWith() = %v, %v; capability metadata must not affect compatibility", got, err)
 	}
 }
+
+// TestValidateCapabilityClaimsIsTheManifestRule pins that the exported check a
+// built-in Worker Type's operation table is held to is the one a manifest is
+// admitted by, not a second copy that could drift from it (ADR-0480).
+func TestValidateCapabilityClaimsIsTheManifestRule(t *testing.T) {
+	ok := []CapabilityClaim{{ID: "io.atlas.collaboration.channel.create", Version: "0.1.0", Profile: "microsoft-teams"}}
+	if err := ValidateCapabilityClaims("create-channel", ok); err != nil {
+		t.Fatalf("ValidateCapabilityClaims(valid) = %v", err)
+	}
+	bad := []CapabilityClaim{{ID: "Collaboration Channel", Version: "0.1.0"}}
+	err := ValidateCapabilityClaims("create-channel", bad)
+	if err == nil || !strings.Contains(err.Error(), `"create-channel"`) {
+		t.Fatalf("ValidateCapabilityClaims(invalid) = %v, want an error naming the operation", err)
+	}
+	m := validManifest()
+	m.Spec.Operations[0].Capabilities = bad
+	if merr := m.Validate(); merr == nil || merr.Error() != strings.Replace(err.Error(), `"create-channel"`, `"`+m.Spec.Operations[0].ID+`"`, 1) {
+		t.Fatalf("manifest refusal %v differs from ValidateCapabilityClaims' %v", merr, err)
+	}
+}

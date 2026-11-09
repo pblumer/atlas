@@ -98,6 +98,31 @@ type Op struct {
 	Async bool
 	// Describes the operation for an error message.
 	Label string
+	// Capabilities are the technical capabilities this operation declares (ADR-0480):
+	// what kind of step it is, under a provider-neutral identifier, with the profile
+	// naming the provider whose behaviour is stated. The row is where the claim lives,
+	// so no second operation list can drift from this one; the server projects it as a
+	// candidate claim until evidence verifies it (ADR-0483). An operation without
+	// claims is unknown, not unsupported.
+	Capabilities []CapabilityClaim
+}
+
+// CapabilityClaim is one technical capability an operation declares: the contract's
+// identifier, its exact version and the provider profile. It mirrors
+// workertype.CapabilityClaim field for field rather than importing it, so the worker
+// binary does not take on the contract validator's dependencies; the server's tests
+// hold every row to workertype's rule.
+type CapabilityClaim struct {
+	ID      string
+	Version string
+	Profile string
+}
+
+// teamsClaim is a claim about Microsoft Teams' behaviour under the neutral
+// collaboration vocabulary. No contract with these identifiers is published yet,
+// which the 0.x version says.
+func teamsClaim(id string) []CapabilityClaim {
+	return []CapabilityClaim{{ID: id, Version: "0.1.0", Profile: "microsoft-teams"}}
 }
 
 // needsResult reports whether the operation's answer has to land somewhere: a read's
@@ -148,11 +173,15 @@ var Ops = map[string]Op{
 	// carries the team throughout, so no separate team-id field is authored. Removing a
 	// team member is remove-group-member — a team member is a member of its group — so
 	// there is deliberately no remove-team-member that would need a membership id.
-	"create-team":     {Method: "POST", NeedsGroup: true, Label: "create a team"},
-	"add-team-member": {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team member"},
-	"add-team-owner":  {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team owner"},
-	"create-channel":  {Method: "POST", NeedsGroup: true, NeedsAttributes: true, Label: "create a channel"},
-	"archive-team":    {Method: "POST", NeedsGroup: true, Label: "archive a team"},
+	// Their capability claims use the neutral collaboration vocabulary — a Team is a
+	// collaboration space, its channels are channels — with the microsoft-teams
+	// profile, so they state Teams' behaviour without equating it with another
+	// provider's (ADR-0480, ADR-0483).
+	"create-team":     {Method: "POST", NeedsGroup: true, Label: "create a team", Capabilities: teamsClaim("io.atlas.collaboration.space.create")},
+	"add-team-member": {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team member", Capabilities: teamsClaim("io.atlas.collaboration.space.member.add")},
+	"add-team-owner":  {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team owner", Capabilities: teamsClaim("io.atlas.collaboration.space.owner.add")},
+	"create-channel":  {Method: "POST", NeedsGroup: true, NeedsAttributes: true, Label: "create a channel", Capabilities: teamsClaim("io.atlas.collaboration.channel.create")},
+	"archive-team":    {Method: "POST", NeedsGroup: true, Label: "archive a team", Capabilities: teamsClaim("io.atlas.collaboration.space.archive")},
 	// assign-license and assign-role author their body through the attributes variable:
 	// {addLicenses,removeLicenses} for a licence, and the role assignment's
 	// {roleDefinitionId,directoryScopeId} for a role — into which the worker merges
