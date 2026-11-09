@@ -491,6 +491,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   hit-testing answers. Only a browser knows any of this geometry: the card's height comes
   from its content through the CSS that lays it out.
 
+- **`variables-sections.spec.mjs`** ([ADR-0542](../docs/adr/0542-variables-by-provenance.md)):
+  the **Variables tab of a selected element**, on one round of a multi-instance task inside a
+  subprocess, beside a second subprocess (`variables-sections-harness.html`). The round's
+  variables must fall into *Input* (its counter and item, nothing else), *Output* (what it
+  wrote — including its answer, kept in the round's own scope — a rewritten value saying
+  what it was, a new one marked new) and a folded
+  *Environment*, grouped body → subprocess → process → constants, without the variable of the
+  subprocess running beside it, and with the body's collection saying that it reads
+  unfilled until the loop is done. A round still running must say it has no output yet; a name
+  the filter finds in the folded environment must show; sorting the table must keep every row
+  in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
+  nothing selected the tab must stay one list whose scope chip names the kind of scope.
+
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
   its process id and a form under the id a user task binds to, so saving onto an id

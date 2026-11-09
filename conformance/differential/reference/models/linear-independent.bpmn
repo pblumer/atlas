@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CON4: independent translation of conformance/models/linear-independent.bpmn.
+     Same BPMN element IDs; only the FEEL task scripts use reference JavaScript. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="d_linear_independent" targetNamespace="http://atlas/conformance/reference">
+  <process id="linear-independent" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="set_x" scriptFormat="javascript">
+      <script>environment.variables.x = 1; next();</script>
+    </scriptTask>
+    <scriptTask id="set_y" scriptFormat="javascript">
+      <script>environment.variables.y = 2; next();</script>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="set_x"/>
+    <sequenceFlow id="f2" sourceRef="set_x" targetRef="set_y"/>
+    <sequenceFlow id="f3" sourceRef="set_y" targetRef="end"/>
+  </process>
+</definitions>

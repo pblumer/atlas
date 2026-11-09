@@ -1949,6 +1949,43 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Whether one account (?userId=) or one group (?groupId=) would be offered a process for a self-service start now, and why not (ADR-0516): granted and matchedBy (user, group:<id>, from the directory's current membership), accountIssues (disabled, missing-user-role), and blockers on the process's newest version (application-missing, application-protected, not-deployed, newest-version-in-other-application, not-executable, inactive, trigger-only, constants-missing). Writes nothing. Admin only", tag: "Applications", role: RoleAdmin,
 			resp: jsonBody("The preview", tObject())}},
 
+		// Published process interfaces (ADR-0373): the small, versioned contract a
+		// process offers another domain, derived from a deployed definition and
+		// published as an act, with the right to read it (view) and to deliver to it
+		// (send) granted apart. A consumer reads the contract and never the elements
+		// behind it; the publishing application's members read the binding too.
+		{"GET", "/api/v1/published-interfaces", s.pubInterfaceSvc.HandleList, apiOp{
+			summary: "The published process interfaces the caller may see, by id — and only those: one the caller may not view is not listed (ADR-0373). Each with its latest contract version, whether that version is deprecated and available (unavailableReasons: definition-missing, definition-inactive, definition-in-other-application), its entry point names, public, and maySend. processId and applicationId only for the publishing application's members", tag: "Processes", role: roleAny,
+			resp: jsonBody("Published interfaces", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/published-interfaces/{id}", s.pubInterfaceSvc.HandleGet, apiOp{
+			summary: "One published interface with every contract version (ADR-0373): each version's contract — entry points (name, kind, starts, correlationKey, payload), returns (errors, escalations, reply messages) and terminal outcomes — whether it is deprecated, and whether it is available. Visible to anybody when public, to the view grant's audience and to the publishing application's members; 404 otherwise, as for one that does not exist. Only the members read each version's binding (definition and element ids), and only the application owner reads the grants", tag: "Processes", role: roleAny,
+			resp: jsonBody("The interface", tObject())}},
+		{"GET", "/api/v1/published-interfaces/{id}/versions/{version}", s.pubInterfaceSvc.HandleGetVersion, apiOp{
+			summary: "One contract version of a published interface (ADR-0373), visible as the interface is. A version is immutable; its binding may move to a newer definition that realizes the same contract", tag: "Processes", role: roleAny,
+			resp: jsonBody("The contract version", tObject())}},
+		{"GET", "/api/v1/published-interfaces/{id}/history", s.pubInterfaceSvc.HandleHistory, apiOp{
+			summary: "The audit of a published interface, newest first: every publish, rebind, deprecation and grant change with its revision, time and actor, and for a grant change the whole of both audiences it left (ADR-0373, ADR-0184). The publishing application owner's to read", tag: "Processes", role: RoleModeler,
+			resp: jsonBody("Audited changes", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/processes/{key}/interface-candidates", s.pubInterfaceSvc.HandleCandidates, apiOp{
+			summary: "What one deployed definition offers for publication as an interface (ADR-0373): every element a message can reach (message start, intermediate catch, receive task, event subprocess, message boundary) with its kind, whether it starts an instance, its message name, correlation key and the payload the model states (an information-model class, the names its output mappings read, or untyped); every root-scope end event as a terminal outcome; the error and escalation codes that can leave an instance uncaught; and the messages it throws. Also the interfaces this process already publishes. For the application's members", tag: "Processes", role: roleAny,
+			resp: jsonBody("Candidates", tObject())}},
+		{"POST", "/api/v1/published-interfaces/{id}/versions", s.pubInterfaceSvc.HandlePublish, apiOp{
+			summary: "Publish a new contract version of an interface, creating it on its first (ADR-0373). The body names the deployed definition (definitionKey), which of its elements are entry points and under what name ({name, elementId}), what every root-scope end event is called ({name, elementIds} — all of them, several may share one outcome of one kind), and which thrown messages are replies; kind, correlation key, payload, errors and escalations are derived, never typed. expectedRevision is required (0 for a new interface). The id is a lower-case slug fixed to the process. A contract equal to the newest version's is refused with 409 — rebind it instead. A commitment is refused: nothing measures one yet. Needs an editor's role on the definition's application and authentication; problems are answered as a list", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The selection", schemaObj(map[string]any{"definitionKey": tInteger(), "entryPoints": tArray(), "outcomes": tArray(), "replies": tStrings(), "expectedRevision": tInteger()}, "definitionKey", "entryPoints", "expectedRevision")),
+			resp: jsonBody("The interface as it now stands, and the version published", tObject())}},
+		{"PUT", "/api/v1/published-interfaces/{id}/versions/{version}/binding", s.pubInterfaceSvc.HandleRebind, apiOp{
+			summary: "Rebind one contract version to another deployed definition of the same process and application — the publisher's refactoring behind an unchanged contract (ADR-0373). The element mapping defaults to the current one; entryPoints and outcomes may give it anew where an element was renamed. The definition must realize exactly the version's contract; one that does not is refused with 409 and what differs, which is a new version. expectedRevision is required. Needs an editor's role", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The definition and, optionally, the new element mapping", schemaObj(map[string]any{"definitionKey": tInteger(), "entryPoints": tArray(), "outcomes": tArray(), "expectedRevision": tInteger()}, "definitionKey", "expectedRevision")),
+			resp: jsonBody("The interface as it now stands", tObject())}},
+		{"POST", "/api/v1/published-interfaces/{id}/versions/{version}/deprecation", s.pubInterfaceSvc.HandleDeprecate, apiOp{
+			summary: "Deprecate one contract version, with an optional note saying what to move to (ADR-0373, the vocabulary of ADR-0130). The version stays readable and deliverable; deprecating is not undone, and deprecating again answers 409. expectedRevision is required. Needs an editor's role", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The note", schemaObj(map[string]any{"note": tString(), "expectedRevision": tInteger()}, "expectedRevision")),
+			resp: jsonBody("The interface as it now stands", tObject())}},
+		{"PUT", "/api/v1/published-interfaces/{id}/grants", s.pubInterfaceSvc.HandleSetGrants, apiOp{
+			summary: "Wholly replace who may view and who may send to a published interface (ADR-0373): public (viewable without a grant; never implies send), view and send, each {userIds, groupIds} of this server's directory. The rights are separate: seeing a contract lets nobody deliver to it. Every id must exist; expectedRevision is required. Audited with both audiences. The application owner's act, from their own signed-in session. The send grant is what the peer endpoint of ADR-0372 will check; until it exists, it lets nobody deliver anything", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The grants", schemaObj(map[string]any{"public": tBool(), "view": tObject(), "send": tObject(), "expectedRevision": tInteger()}, "expectedRevision")),
+			resp: jsonBody("The interface as it now stands", tObject())}},
+
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
 			summary: "Receive a published application bundle from a peer atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,
 			req: jsonBody("Bundle", schemaObj(map[string]any{
