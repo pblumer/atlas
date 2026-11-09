@@ -164,6 +164,16 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **An installed Worker Type works only its own job types.** An artifact installed with
+  `POST /api/v1/worker-types/installed` used to be launched with the server's internal
+  worker credential, which reaches every job type. Its instance now gets a credential of
+  its own, held in memory, that leases, completes, fails, throws on and answers queries
+  only for the job types its manifest declares and only as its own Worker Instance id;
+  anything else is refused with 403 and the reason, and the outbox and mock-system routes
+  of the built-in Worker Types are out of its reach. The credential ends when the release
+  is removed and is replaced at every server start. Built-in supervised workers and
+  external workers with API tokens are unchanged
+  (ADR-draft-installed-worker-instances-hold-their-own-credential).
 - **Every process, decision and form belongs to an application.** Nothing new is created,
   deployed or moved outside one (ADR-0544): a draft, form,
   decision draft or decision reference without a `projectId`, a decision deployment without one,

@@ -80,28 +80,37 @@ func (s *Server) superviseInstalled(quit <-chan struct{}) {
 
 // superviseRelease adds one installed release to the supervisor.
 func (s *Server) superviseRelease(inst install.Installed) {
-	id := installedSupervisorID(inst.ID, inst.Version)
 	store, typeID, version := s.installedTypes, inst.ID, inst.Version
 	spec := SuperviseSpec{
-		ID: id, Kinds: append([]string(nil), inst.JobTypes...),
+		ID: installedSupervisorID(inst.ID, inst.Version), Kinds: append([]string(nil), inst.JobTypes...),
 		Executable: inst.Path,
 		Verify: func() error {
 			_, err := store.Verified(typeID, version)
 			return err
 		},
 	}
-	env := func() []string {
-		out := []string{
-			workersdk.EnvServer + "=" + s.superviseURLOrDefault(),
-			workersdk.EnvWorkerID + "=" + id,
-			workersdk.EnvTypeID + "=" + inst.ID,
-			workersdk.EnvTypeVersion + "=" + inst.Version,
-			workersdk.EnvTypeDigest + "=" + inst.Digest,
-		}
-		out = append(out, s.installedWorkerConfigEnv(inst)...)
-		return append(out, s.workerTokenEnv()...)
+	s.supervisor.addLive(spec, nil, func() []string { return s.installedLaunchEnv(inst) })
+}
+
+// installedLaunchEnv is the environment an installed release's instance is spawned
+// with: the launch contract, its Workers' configuration, and its own credential —
+// never this server's internal token, the broker key or an operator's ATLAS_TOKEN,
+// which reach every job type
+// (ADR-draft-installed-worker-instances-hold-their-own-credential).
+func (s *Server) installedLaunchEnv(inst install.Installed) []string {
+	id := installedSupervisorID(inst.ID, inst.Version)
+	out := []string{
+		workersdk.EnvServer + "=" + s.superviseURLOrDefault(),
+		workersdk.EnvWorkerID + "=" + id,
+		workersdk.EnvTypeID + "=" + inst.ID,
+		workersdk.EnvTypeVersion + "=" + inst.Version,
+		workersdk.EnvTypeDigest + "=" + inst.Digest,
 	}
-	s.supervisor.addLive(spec, nil, env)
+	out = append(out, s.installedWorkerConfigEnv(inst)...)
+	if tok := s.instanceToken(id, inst.JobTypes); tok != "" {
+		out = append(out, workersdk.EnvToken+"="+tok)
+	}
+	return out
 }
 
 // superviseURLOrDefault is where a launched instance reaches this server.
@@ -236,6 +245,9 @@ func (s *Server) handleRemoveInstalledWorkerType(w http.ResponseWriter, r *http.
 	if s.supervisor != nil {
 		s.supervisor.remove(installedSupervisorID(id, version))
 	}
+	// After the process has exited, so a report it sent while shutting down still
+	// lands; from here on its secret is refused as unknown.
+	s.instanceCreds.revoke(installedSupervisorID(id, version))
 	if err := s.installedTypes.Remove(id, version); err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, err.Error())
 		return

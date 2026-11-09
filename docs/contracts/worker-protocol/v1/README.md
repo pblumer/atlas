@@ -251,11 +251,24 @@ else of the server's. On top of that it sets:
 |---|---|
 | `ATLAS_SERVER_URL` | The server to work for |
 | `ATLAS_WORKER_ID` | The instance's id, `workertype:<id>@<version>` |
-| `ATLAS_TOKEN` | The bearer credential to authenticate with |
+| `ATLAS_TOKEN` | The instance's own bearer credential, when the server requires one (below) |
 | `ATLAS_WORKER_TYPE_ID`, `ATLAS_WORKER_TYPE_VERSION`, `ATLAS_WORKER_TYPE_DIGEST` | The release the supervisor verified, to report in the handshake |
 | `ATLAS_WORKER_CONFIG` | The configured Workers this instance serves, as `{"workers":[{"name":"…","config":{…}}]}`. Each configuration has its secrets resolved from the vault and has been checked against the manifest's `spec.configuration` schema. Absent when nothing is configured. |
 
 **Configuration.** A manifest declares its configuration contract inline as `spec.configuration`, a JSON Schema of `"type": "object"`. A top-level property marked `"writeOnly": true` is a secret. An administrator configures a Worker with `PUT /api/v1/worker-types/installed/{id}/workers/{name}`, giving `config` for the settings and `secrets` that map each secret property to the vault entry holding it. A secret value is never stored in the Worker and never shown by the API; only the launched instance receives it. When a Worker changes, the type's instances restart with the new configuration.
+
+**Credential.** The token is minted for this release when the supervisor registers it,
+kept in the server's memory only, and confined to this protocol: leasing, completing,
+failing and throwing on jobs, and polling and answering queries. It serves only the job
+types the manifest declares in `spec.jobTypes`, and only as `ATLAS_WORKER_ID`, on a lease
+the instance holds. Anything else is refused with `403` and the reason: a poll for another
+job type, a report on a job of another type, a report or poll naming another worker id or
+none, and every other route. It stays the same across restarts of the instance, is
+refused (`401`) once the release is removed, and is replaced by a new one when the server
+restarts. It is never the server's internal token nor an operator's `ATLAS_TOKEN`, and an
+installed instance is never brokered a delegated credential
+([ADR-draft-installed-worker-instances-hold-their-own-credential](../../../adr/draft-installed-worker-instances-hold-their-own-credential.md)).
+Without authentication on the server there is no token and nothing to confine.
 
 `workersdk.LaunchOptions(os.Getenv)` reads these, and `workersdk.LaunchConfig(os.Getenv)` reads the configured Workers. The instance stops when the server stops
 or when the release is removed. The smallest example is

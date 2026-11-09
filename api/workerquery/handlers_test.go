@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
@@ -189,5 +190,36 @@ func TestTheWorkerAPINormalizesWhatItPassesOn(t *testing.T) {
 	var le *lookup.Error
 	if !errors.As(a.err, &le) || le.Code != lookup.CodeThrottled || le.RetryAfter != 0 {
 		t.Fatalf("asker got %+v, want provider_throttled without a wait", a)
+	}
+}
+
+// An installed Worker Type's instance polls and answers only as itself, and polls only
+// its own job types (ADR-draft-installed-worker-instances-hold-their-own-credential).
+func TestTheWorkerAPIHoldsAnInstalledInstanceToItsBinding(t *testing.T) {
+	s := NewService(testBroker(newClock()), 1<<20)
+	bound := &httpapi.Principal{Instance: &httpapi.InstanceBinding{Worker: "workertype:x@1", JobTypes: []string{"com.x.a"}}}
+	as := func(path, body string) *httptest.ResponseRecorder {
+		mux := http.NewServeMux()
+		mux.HandleFunc("POST /api/v1/worker-queries/activate", s.HandleActivate)
+		mux.HandleFunc("POST /api/v1/worker-queries/{id}/answer", s.HandleAnswer)
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		r = r.WithContext(httpapi.WithPrincipal(r.Context(), bound))
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, r)
+		return rec
+	}
+	for _, tc := range []struct {
+		path, body string
+		want       int
+	}{
+		{"/api/v1/worker-queries/activate", `{"type":"com.y.b","worker":"workertype:x@1","connectors":["c"]}`, http.StatusForbidden},
+		{"/api/v1/worker-queries/activate", `{"type":"com.x.a","worker":"other","connectors":["c"]}`, http.StatusForbidden},
+		{"/api/v1/worker-queries/activate", `{"type":"com.x.a","worker":"workertype:x@1","connectors":["c"]}`, http.StatusOK},
+		{"/api/v1/worker-queries/q/answer", `{"worker":"other","leaseToken":"t","error":{"code":"provider_unavailable"}}`, http.StatusForbidden},
+		{"/api/v1/worker-queries/q/answer", `{"worker":"workertype:x@1","leaseToken":"t","error":{"code":"provider_unavailable"}}`, http.StatusNotFound},
+	} {
+		if rec := as(tc.path, tc.body); rec.Code != tc.want {
+			t.Errorf("%s %s = %d %s, want %d", tc.path, tc.body, rec.Code, rec.Body, tc.want)
+		}
 	}
 }

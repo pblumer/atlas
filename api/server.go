@@ -371,9 +371,12 @@ type Server struct {
 	// them. It answers the question the journal beside it cannot — not "is this
 	// record true" but "is this right still needed", which only a person can say.
 	recertifications *recertifyStore
-	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
-	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
+	apiTokens        *apiTokenIndex // in-memory hash->token index, same discipline as the deploy one
+	// instanceCreds are the secrets installed Worker Types' instances are launched
+	// with, in memory only (instancecredential.go).
+	instanceCreds *instanceCredentials
+	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions   map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -1888,6 +1891,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
 		apiTokens:         newAPITokenIndex(),
+		instanceCreds:     newInstanceCredentials(),
 		oauthClientStore:  oauthClientStore,
 		oauthClients:      newOAuthClientIndex(),
 		oauthGrantStore:   oauthGrantStore,
