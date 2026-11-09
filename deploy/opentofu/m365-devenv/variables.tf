@@ -405,3 +405,17 @@ variable "exchange_iso_bytes" {
   type        = number
   default     = 6402453504
 }
+
+# --- SharePoint Server (optional, sharepoint-server.tf) ----------------------
+
+variable "enable_sharepoint_server" {
+  description = "Build a SharePoint Server Subscription Edition farm with SQL Server Developer on one VM in the test domain. Needs enable_ad_dc and a non-empty ad_auto_shutdown_time, which the VM shares. Costs a Windows VM of sharepoint_server_vm_size while it runs; the unattended installation runs for hours after the apply (scripts/wait-sharepoint.sh). Runs 180 days without a product key."
+  type        = bool
+  default     = false
+}
+
+variable "sharepoint_server_vm_size" {
+  description = "VM size of the SharePoint server. Microsoft's minimum for a single-server farm beside SQL Server is 4 cores and 16 GB."
+  type        = string
+  default     = "Standard_D4s_v5"
+}

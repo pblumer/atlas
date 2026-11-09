@@ -182,6 +182,7 @@ variables {
   atlas_tls                 = "internal"
   sharepoint_read_all_sites = false
   enable_exchange_onprem    = false
+  enable_sharepoint_server  = false
   enable_ad_dc              = false
   ad_allowed_cidrs          = []
   mail_sender               = ""
@@ -345,6 +346,123 @@ run "exchange_server_joins_the_test_domain" {
   assert {
     condition     = !strcontains(azurerm_windows_virtual_machine.exchange[0].custom_data, base64encode(random_password.ad["admin"].result))
     error_message = "The setup script carries no secret; those go in the extension's protected settings."
+  }
+}
+
+run "sharepoint_needs_the_domain_controller" {
+  command = plan
+
+  variables {
+    enable_sharepoint_server = true
+  }
+
+  expect_failures = [terraform_data.sharepoint_guard]
+}
+
+run "sharepoint_needs_a_shutdown_time" {
+  command = plan
+
+  variables {
+    enable_ad_dc             = true
+    ad_allowed_cidrs         = ["203.0.113.7/32"]
+    enable_sharepoint_server = true
+    ad_auto_shutdown_time    = ""
+  }
+
+  expect_failures = [terraform_data.sharepoint_guard]
+}
+
+run "sharepoint_is_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_windows_virtual_machine.sharepoint) == 0 && !output.sharepoint_server.enabled
+    error_message = "No SharePoint server unless enable_sharepoint_server = true."
+  }
+}
+
+run "sharepoint_server_joins_the_test_domain" {
+  command = apply
+
+  variables {
+    enable_ad_dc             = true
+    ad_allowed_cidrs         = ["203.0.113.7/32"]
+    enable_sharepoint_server = true
+  }
+
+  assert {
+    condition     = azurerm_windows_virtual_machine.sharepoint[0].name == "atlas-test-ab12-sp" && azurerm_windows_virtual_machine.sharepoint[0].computer_name == "sp01"
+    error_message = "The VM is <env>-sp and the computer sp01; the worker depends on that name."
+  }
+  assert {
+    condition = (azurerm_windows_virtual_machine.sharepoint[0].source_image_reference[0].publisher == "MicrosoftSharePoint"
+      && azurerm_windows_virtual_machine.sharepoint[0].source_image_reference[0].offer == "MicrosoftSharePointServer"
+    && azurerm_windows_virtual_machine.sharepoint[0].source_image_reference[0].sku == "spse")
+    error_message = "The server is built from the SharePoint Server Subscription Edition image."
+  }
+  assert {
+    condition     = azurerm_windows_virtual_machine.sharepoint[0].size == "Standard_D4s_v5"
+    error_message = "A single-server farm beside SQL Server needs 4 cores and 16 GB."
+  }
+  assert {
+    condition     = tolist(azurerm_network_interface.sharepoint[0].dns_servers) == tolist(["10.42.0.10"])
+    error_message = "The SharePoint server resolves through the domain controller, or it cannot join the domain."
+  }
+  assert {
+    condition     = length(azurerm_network_security_group.sharepoint[0].security_rule) == 0
+    error_message = "Without ad_allow_rdp nothing reaches the SharePoint server from the Internet."
+  }
+  assert {
+    condition     = output.sharepoint_server.enabled && output.sharepoint_server.vm == "atlas-test-ab12-sp" && output.sharepoint_server.web_application_url == "http://sp01.atlastest.internal"
+    error_message = "The output names the VM and the web application the worker reaches."
+  }
+  assert {
+    condition     = !strcontains(azurerm_windows_virtual_machine.sharepoint[0].custom_data, base64encode(random_password.ad["admin"].result))
+    error_message = "The setup script carries no secret; those go in the extension's protected settings."
+  }
+  assert {
+    condition     = strcontains(base64decode(local.sharepoint_setup_config), "OU=AtlasTest,DC=atlastest,DC=internal")
+    error_message = "The farm and service accounts belong in OU=AtlasTest."
+  }
+}
+
+run "every_vm_shuts_down_at_night" {
+  command = apply
+
+  variables {
+    enable_ad_dc                = true
+    ad_allowed_cidrs            = ["203.0.113.7/32"]
+    enable_exchange_onprem      = true
+    enable_sharepoint_server    = true
+    atlas_auto_shutdown_time    = "2200"
+    ad_auto_shutdown_time       = "2200"
+    exchange_auto_shutdown_time = "2200"
+  }
+
+  # Read from the files, so a VM added later without a schedule fails here as well.
+  assert {
+    condition = (
+      length(flatten([for f in fileset(path.module, "*.tf") : regexall("(?m)^resource \"azurerm_(windows|linux)_virtual_machine\"", file("${path.module}/${f}"))]))
+      == length(flatten([for f in fileset(path.module, "*.tf") : regexall("(?m)^resource \"azurerm_dev_test_global_vm_shutdown_schedule\"", file("${path.module}/${f}"))]))
+    )
+    error_message = "Every VM resource of this environment needs an azurerm_dev_test_global_vm_shutdown_schedule."
+  }
+  assert {
+    condition = (length(azurerm_linux_virtual_machine.atlas) == 1 && length(azurerm_dev_test_global_vm_shutdown_schedule.atlas) == 1
+      && length(azurerm_windows_virtual_machine.ad) == 1 && length(azurerm_dev_test_global_vm_shutdown_schedule.ad) == 1
+      && length(azurerm_windows_virtual_machine.exchange) == 1 && length(azurerm_dev_test_global_vm_shutdown_schedule.exchange) == 1
+    && length(azurerm_windows_virtual_machine.sharepoint) == 1 && length(azurerm_dev_test_global_vm_shutdown_schedule.sharepoint) == 1)
+    error_message = "With every server built, each one has its shutdown schedule."
+  }
+  assert {
+    condition     = azurerm_dev_test_global_vm_shutdown_schedule.sharepoint[0].virtual_machine_id == azurerm_windows_virtual_machine.sharepoint[0].id
+    error_message = "The schedule must belong to the SharePoint VM."
+  }
+  assert {
+    condition = (azurerm_dev_test_global_vm_shutdown_schedule.sharepoint[0].enabled
+      && azurerm_dev_test_global_vm_shutdown_schedule.sharepoint[0].daily_recurrence_time == azurerm_dev_test_global_vm_shutdown_schedule.ad[0].daily_recurrence_time
+    && azurerm_dev_test_global_vm_shutdown_schedule.sharepoint[0].timezone == azurerm_dev_test_global_vm_shutdown_schedule.ad[0].timezone)
+    error_message = "The SharePoint server stops at the time, and in the time zone, of the others."
   }
 }
 
