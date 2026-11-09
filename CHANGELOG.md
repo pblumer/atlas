@@ -20,6 +20,14 @@ _Changed_ / _Removed_ for each version.
   quota. The worker runs on a server of the farm and starts fixed PowerShell for each job, so no model authors a
   cmdlet and no credential reaches Atlas; refusals a process can act on are BPMN errors. The example
   `m365-dienste` adds the product «Teamwebsite» to the on-premises catalogue when a SharePoint Server is built.
+- **The M365 test environment can build a SharePoint Server Subscription Edition farm.** `deploy/opentofu/m365-devenv` gains
+  `enable_sharepoint_server` (off by default): a VM `sp01` joined to the test forest, built from
+  Microsoft's SharePoint image, with SQL Server Developer on the same machine, a single-server
+  farm, a web application at `http://sp01.<domain>` and a root site collection, set up unattended
+  by `scripts/sharepoint-setup.ps1` and followed by `scripts/wait-sharepoint.sh`. It shuts down
+  every night with the domain controller, and a test now fails for any VM of the environment
+  without a shutdown schedule. SharePoint runs as a 180-day evaluation; apply it to a running
+  environment only with the `-target` list in the README.
 - **The atlas hub preview shows the application's architecture sketch and its process diagrams.**
   Before a release is installed, the server derives its architecture sketch from the process
   models of the verified package (ADR-0539): the messages its

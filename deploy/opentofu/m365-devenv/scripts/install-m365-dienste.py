@@ -364,19 +364,29 @@ MODELS = ["m365-lizenzprofil", "m365-namensregel", "m365-postfachkontingent", "m
 
 
 def gap_decisions(plan):
-    """The query that settles the capability map's gaps of a planned source import: every
+    """The query that settles a planned source import. Changed artifacts take the package's version; every
     gap the package proposes a record for is adopted, and each is named in the log. A gap
     without a proposal stops the installer — mapping it onto another key is a person's
     decision, made in the Console."""
+    query = {}
+    # An artifact of this package that differs from the server's: the package is what this
+    # installer installs, so it wins, and each one is named in the log. Without a decision
+    # the server refuses the whole import with 409.
+    changed = [a["ref"] for a in plan.get("artifacts", []) if a.get("status") == "changed"]
+    for ref in changed:
+        log(f"overwriting with the package's version: {ref}")
+    if changed:
+        query["overwrite"] = ",".join(changed)
     gaps = [a for a in plan.get("artifacts", []) if a.get("status") == "gap"]
     if not gaps:
-        return ""
+        return "?" + urllib.parse.urlencode(query) if query else ""
     bare = [a["ref"] for a in gaps if not a.get("proposed")]
     if bare:
         sys.exit(f"the capability map lacks {', '.join(bare)} and the package proposes nothing for it: decide in the Console")
     for a in gaps:
         log(f"capability map: adopting the package's proposal {a['ref']} ({a.get('name', '')})")
-    return "?" + urllib.parse.urlencode({"adopt": ",".join(a["ref"] for a in gaps)})
+    query["adopt"] = ",".join(a["ref"] for a in gaps)
+    return "?" + urllib.parse.urlencode(query)
 
 
 def sharepoint_enabled(tofu_dir):

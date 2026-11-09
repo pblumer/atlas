@@ -58,3 +58,8 @@ atlas_allowed_cidrs   = ["203.0.113.7/32"] # your own public IP (HTTPS and SSH)
 # ad_allowed_cidrs      = []                     # only for workers OUTSIDE the server built here
 # ad_allow_rdp          = false
 # ad_auto_shutdown_time = "1900"                 # UTC, "" disables
+
+# SharePoint Server SE on one VM with SQL Server Developer (needs enable_ad_dc and
+# ad_auto_shutdown_time). Only ever with -target on a running environment: README.
+# enable_sharepoint_server = true
+# sharepoint_server_vm_size = "Standard_D4s_v5"
