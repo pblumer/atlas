@@ -114,6 +114,11 @@ A task user notices nothing new: the self-service routes and the Start view
 
 ## Acceptance criteria
 
+The boxes below are ticked against the Go tests and the Playwright specs, which mock the
+API. The owner decided on 2026-11-09 that MFE1A stays **active** until one run of the
+first criterion against a real server with sign-in (a browser, an administrator's own
+session, a real group and person) is recorded on #1639.
+
 - [x] An administrator grants a group and a person a process from the Console page,
       sees it as offered, checks a member with "Check a person", revokes it, and
       reads all three changes in the history — without typing an id or revision.
