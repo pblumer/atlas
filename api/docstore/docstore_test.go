@@ -369,3 +369,82 @@ func TestBucketBackend(t *testing.T) {
 		t.Fatalf("missing object: %v, want ErrUnavailable", err)
 	}
 }
+
+// testCipher is a reversible stand-in for the vault: it XORs with a per-subject byte and
+// can forget a subject.
+type testCipher struct{ gone map[string]bool }
+
+var errTestErased = errors.New("erased")
+
+func (c *testCipher) SealBytes(subject, name string, plain []byte) ([]byte, error) {
+	out := append([]byte(subject+"|"+name+"|"), plain...)
+	for i := range out {
+		out[i] ^= 0x5a
+	}
+	return out, nil
+}
+func (c *testCipher) OpenBytes(subject, name string, sealed []byte) ([]byte, error) {
+	if c.gone[subject] {
+		return nil, errTestErased
+	}
+	plain := make([]byte, len(sealed))
+	for i := range sealed {
+		plain[i] = sealed[i] ^ 0x5a
+	}
+	prefix := subject + "|" + name + "|"
+	if !strings.HasPrefix(string(plain), prefix) {
+		return nil, errors.New("wrong name")
+	}
+	return plain[len(prefix):], nil
+}
+func (c *testCipher) Erased(err error) bool               { return errors.Is(err, errTestErased) }
+func (c *testCipher) HasKey(subject string) (bool, error) { return !c.gone[subject], nil }
+
+// A document a personal variable names is enciphered under its subject's key: the plain
+// bytes leave the store, the content reads back the same, and once the subject is erased
+// the document is unreadable and the next sweep removes it (ADR-0314).
+func TestSealedDocuments(t *testing.T) {
+	c := &testCipher{gone: map[string]bool{}}
+	s, dir := openTest(t, Options{Cipher: c})
+	ctx := context.Background()
+	rec, _ := s.Put(ctx, "personal.csv", "", "", strings.NewReader(csv))
+	_ = s.Bind(rec.ID, 7)
+	if err := s.Seal(ctx, rec.ID, "usr_anna"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Seal(ctx, rec.ID, "usr_anna"); err != nil {
+		t.Fatalf("sealing again for the same subject: %v", err)
+	}
+	if err := s.Seal(ctx, rec.ID, "usr_bert"); err == nil {
+		t.Fatal("a document was sealed for a second subject")
+	}
+	got, _ := s.Get(rec.ID)
+	if got.Subject != "usr_anna" || got.Blob == "" || got.SHA256 != rec.SHA256 {
+		t.Fatalf("record = %+v", got)
+	}
+	if body := readAll(t, s, got); body != csv {
+		t.Fatalf("opened = %q", body)
+	}
+	// The plain bytes go with the next sweep; only ciphertext stays on disk.
+	if _, err := s.Sweep(ctx, time.Hour, func(uint64) (bool, error) { return true, nil }); err != nil {
+		t.Fatal(err)
+	}
+	blobs, _ := os.ReadDir(filepath.Join(dir, "blobs"))
+	for _, b := range blobs {
+		data, _ := os.ReadFile(filepath.Join(dir, "blobs", b.Name()))
+		if strings.Contains(string(data), "personalnummer") {
+			t.Fatalf("plain bytes of a personal document are still on disk in %s", b.Name())
+		}
+	}
+	c.gone["usr_anna"] = true
+	if _, err := s.OpenBytes(ctx, got); !errors.Is(err, ErrErased) {
+		t.Fatalf("after erasure = %v, want ErrErased", err)
+	}
+	res, err := s.Sweep(ctx, time.Hour, func(uint64) (bool, error) { return true, nil })
+	if err != nil || res.Erased != 1 {
+		t.Fatalf("sweep after erasure = %+v, %v", res, err)
+	}
+	if _, err := s.Get(rec.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an erased subject's document survived the sweep: %v", err)
+	}
+}

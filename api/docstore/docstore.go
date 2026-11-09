@@ -35,6 +35,7 @@
 package docstore
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -97,7 +98,40 @@ type Record struct {
 	// BoundTo are the root process instances the document entered, ascending. Empty
 	// means pending.
 	BoundTo []uint64 `json:"boundTo,omitempty"`
+	// Subject is the data subject whose key enciphers the bytes, when a variable the
+	// process declares personal named the document (ADR-0314); "" when the bytes are
+	// plain. Blob is then the SHA-256 of the ciphertext, the key the backend holds it
+	// under — SHA256 stays the content's hash, which is what the reference states.
+	Subject string `json:"subject,omitempty"`
+	Blob    string `json:"blob,omitempty"`
 }
+
+// blobKey is where a record's bytes are in its backend.
+func (r Record) blobKey() string {
+	if r.Blob != "" {
+		return r.Blob
+	}
+	return r.SHA256
+}
+
+// Cipher enciphers a document under a data subject's key and opens it again — the
+// vault's SealBytes and OpenBytes. Opening an erased subject's document answers an
+// error for which Erased is true.
+type Cipher interface {
+	SealBytes(subject, name string, plain []byte) ([]byte, error)
+	OpenBytes(subject, name string, sealed []byte) ([]byte, error)
+	Erased(err error) bool
+	// HasKey reports whether a subject's key still exists, so a sweep can remove the
+	// documents an erasure made unreadable.
+	HasKey(subject string) (bool, error)
+}
+
+// ErrErased is OpenBytes's answer for a document whose data subject was erased: its
+// bytes are permanently unreadable, which is the erasure working.
+var ErrErased = errors.New("the document belonged to a data subject who was erased; it is permanently unreadable")
+
+// cipherName binds a document's ciphertext to its id.
+func cipherName(id string) string { return "document:" + id }
 
 // Pending reports whether no instance holds the document yet.
 func (r Record) Pending() bool { return len(r.BoundTo) == 0 }
@@ -137,6 +171,7 @@ type Store struct {
 	def      Backend
 	backends map[string]Backend
 	now      func() time.Time
+	cipher   Cipher
 
 	// mu serialises every change to a record and every decision to delete bytes, so
 	// a sweep cannot delete the bytes an upload of the same content is about to name.
@@ -156,6 +191,8 @@ type Options struct {
 	Others []Backend
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
+	// Cipher enciphers the documents of personal variables; nil leaves Seal refusing.
+	Cipher Cipher
 }
 
 // Open opens (creating) the store under dir.
@@ -167,6 +204,7 @@ func Open(dir string, o Options) (*Store, error) {
 		maxBytes: o.MaxBytes,
 		now:      o.Now,
 		backends: map[string]Backend{},
+		cipher:   o.Cipher,
 	}
 	if s.maxBytes <= 0 {
 		s.maxBytes = limits.Default().Document
@@ -289,11 +327,101 @@ func (s *Store) OpenBytes(ctx context.Context, rec Record) (io.ReadCloser, error
 	if !ok {
 		return nil, fmt.Errorf("%w: backend %q is not configured", ErrUnavailable, rec.Backend)
 	}
-	rc, err := b.Open(ctx, rec.SHA256)
+	rc, err := b.Open(ctx, rec.blobKey())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrUnavailable
 	}
-	return rc, err
+	if err != nil || rec.Subject == "" {
+		return rc, err
+	}
+	// Enciphered: read the ciphertext whole (it is at most the document budget plus the
+	// AEAD's overhead) and open it under the subject's key.
+	defer rc.Close()
+	if s.cipher == nil {
+		return nil, fmt.Errorf("%w: it is enciphered and this store holds no key", ErrUnavailable)
+	}
+	sealed, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := s.cipher.OpenBytes(rec.Subject, cipherName(rec.ID), sealed)
+	if err != nil {
+		if s.cipher.Erased(err) {
+			return nil, ErrErased
+		}
+		return nil, err
+	}
+	return io.NopCloser(bytes.NewReader(plain)), nil
+}
+
+// Seal enciphers a document's bytes under a data subject's key: a variable the process
+// declares personal names it (ADR-0314, ADR-draft-a-file-is-a-document-not-a-variable).
+// The plain bytes stay where they were until a sweep finds no record naming them — at
+// once, unless another document holds the same content. Sealing a document already
+// sealed for the same subject changes nothing; for another subject it is refused, since
+// one key cannot be erased for two people.
+func (s *Store) Seal(ctx context.Context, id, subject string) error {
+	if s.cipher == nil {
+		return errors.New("docstore: personal documents need the vault, and this store has none")
+	}
+	if subject == "" {
+		return errors.New("docstore: seal: no data subject")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	if rec.Subject == subject {
+		return nil
+	}
+	if rec.Subject != "" {
+		return fmt.Errorf("docstore: document %s is already personal data of another subject", id)
+	}
+	b, ok := s.backends[rec.Backend]
+	if !ok {
+		return fmt.Errorf("%w: backend %q is not configured", ErrUnavailable, rec.Backend)
+	}
+	rc, err := b.Open(ctx, rec.blobKey())
+	if errors.Is(err, os.ErrNotExist) {
+		return ErrUnavailable
+	}
+	if err != nil {
+		return err
+	}
+	plain, err := io.ReadAll(rc)
+	_ = rc.Close()
+	if err != nil {
+		return err
+	}
+	sealed, err := s.cipher.SealBytes(subject, cipherName(id), plain)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(s.tmpDir, "seal-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	_, err = tmp.Write(sealed)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(sealed)
+	key := hex.EncodeToString(sum[:])
+	if err := b.Put(ctx, key, tmpPath, int64(len(sealed)), "application/octet-stream"); err != nil {
+		return err
+	}
+	rec.Subject, rec.Blob = subject, key
+	return s.write(rec)
 }
 
 // Available reports whether a document's bytes are where its record says. A backend
@@ -308,7 +436,7 @@ func (s *Store) Available(ctx context.Context, rec Record) (bool, error) {
 	if h, ok := b.(interface {
 		Has(ctx context.Context, hash string) (bool, error)
 	}); ok {
-		return h.Has(ctx, rec.SHA256)
+		return h.Has(ctx, rec.blobKey())
 	}
 	return true, nil
 }
@@ -336,6 +464,7 @@ func (s *Store) Bind(id string, root uint64) error {
 type SweepResult struct {
 	Expired  int // pending documents past their time to live
 	Released int // bound documents whose instances are all gone
+	Erased   int // personal documents whose data subject was erased
 	Blobs    int // byte blobs no record named any more
 }
 
@@ -354,8 +483,19 @@ func (s *Store) Sweep(ctx context.Context, pendingTTL time.Duration, exists func
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
-		remove := false
-		if rec.Pending() {
+		remove, erased := false, false
+		if rec.Subject != "" && s.cipher != nil {
+			// An erased subject's document can never be read again; keeping its
+			// ciphertext only costs the disk.
+			has, err := s.cipher.HasKey(rec.Subject)
+			if err != nil {
+				return res, err
+			}
+			erased = !has
+		}
+		if erased {
+			remove = true
+		} else if rec.Pending() {
 			remove = rec.CreatedAt < cutoff
 		} else {
 			alive := false
@@ -375,6 +515,9 @@ func (s *Store) Sweep(ctx context.Context, pendingTTL time.Duration, exists func
 			continue
 		}
 		removed, err := s.removeIf(rec.ID, func(cur Record) bool {
+			if erased {
+				return cur.Subject == rec.Subject
+			}
 			// Re-checked under the lock: a bind between the listing and now keeps it.
 			if rec.Pending() {
 				return cur.Pending()
@@ -385,7 +528,9 @@ func (s *Store) Sweep(ctx context.Context, pendingTTL time.Duration, exists func
 			return res, err
 		}
 		if removed {
-			if rec.Pending() {
+			if erased {
+				res.Erased++
+			} else if rec.Pending() {
 				res.Expired++
 			} else {
 				res.Released++
@@ -430,7 +575,7 @@ func (s *Store) collectBlobs(ctx context.Context) (int, error) {
 	}
 	named := map[string]bool{}
 	for _, r := range recs {
-		named[r.Backend+"/"+r.SHA256] = true
+		named[r.Backend+"/"+r.blobKey()] = true
 	}
 	n := 0
 	for name, b := range s.backends {
@@ -534,7 +679,7 @@ func (s *Store) All() ([]Record, error) {
 // write stores rec durably. Called under mu.
 func (s *Store) write(rec Record) error {
 	if _, listing := s.backends[rec.Backend].(interface{ Hashes() ([]string, error) }); !listing {
-		if err := s.noteWritten(rec.Backend, rec.SHA256); err != nil {
+		if err := s.noteWritten(rec.Backend, rec.blobKey()); err != nil {
 			return err
 		}
 	}

@@ -20,6 +20,7 @@ import (
 
 	"github.com/pblumer/atlas/api/docstore"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
@@ -127,6 +128,9 @@ func (s *Server) openDocuments() (*docstore.Store, error) {
 		return nil, err
 	}
 	o := docstore.Options{MaxBytes: s.budgets().Document}
+	if s.vault != nil {
+		o.Cipher = vaultCipher{s.vault}
+	}
 	bucketOf := func() (docstore.Backend, error) {
 		return docstore.NewBucket(serverObjects{s}, cfg.s3Worker, cfg.s3Bucket, cfg.s3Prefix, s3.ErrNoSuchDocument)
 	}
@@ -203,6 +207,8 @@ type documentMeta struct {
 	CreatedAt int64          `json:"createdAt"`
 	Backend   string         `json:"backend"`
 	Available bool           `json:"available"`
+	// Personal says the bytes are enciphered under a data subject's key (ADR-0314).
+	Personal bool `json:"personal,omitempty"`
 }
 
 // readableDocument resolves the {id} of a request to a record the caller may read, or
@@ -247,7 +253,7 @@ func (s *Server) handleDocumentMeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, documentMeta{Reference: rec.Ref(), State: state, CreatedAt: rec.CreatedAt,
-		Backend: rec.Backend, Available: available})
+		Backend: rec.Backend, Available: available, Personal: rec.Subject != ""})
 }
 
 // handleDownloadDocument streams a document's bytes under the type its first bytes
@@ -260,6 +266,10 @@ func (s *Server) handleDownloadDocument(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	rc, err := docs.OpenBytes(r.Context(), rec)
+	if errors.Is(err, docstore.ErrErased) {
+		httpapi.Error(w, http.StatusGone, "the document is personal data of a data subject who was erased; it is permanently unreadable")
+		return
+	}
 	if errors.Is(err, docstore.ErrUnavailable) {
 		// The reference survived and the bytes did not — a restore from a snapshot taken
 		// without documents. Gone, not missing: asking again will not help.
@@ -599,7 +609,8 @@ func (s *Server) sweepDocuments() {
 	}
 	if res != (docstore.SweepResult{}) {
 		logging.Info(logging.DocumentsSwept, "removed documents nobody can reach any more",
-			slog.Int("expired", res.Expired), slog.Int("released", res.Released), slog.Int("blobs", res.Blobs))
+			slog.Int("expired", res.Expired), slog.Int("released", res.Released),
+			slog.Int("erased", res.Erased), slog.Int("blobs", res.Blobs))
 	}
 }
 
@@ -704,4 +715,43 @@ func boundTo(rec docstore.Record, root uint64) bool {
 		}
 	}
 	return false
+}
+
+// --- personal documents ------------------------------------------------------------
+
+// vaultCipher enciphers personal documents under the data subject's key in the vault
+// (ADR-0314): the same key every personal value of that subject is sealed with, so one
+// erasure makes both unreadable.
+type vaultCipher struct{ v *vault.Vault }
+
+func (c vaultCipher) SealBytes(subject, name string, plain []byte) ([]byte, error) {
+	return c.v.SealBytes(subject, name, plain)
+}
+
+func (c vaultCipher) OpenBytes(subject, name string, sealed []byte) ([]byte, error) {
+	return c.v.OpenBytes(subject, name, sealed)
+}
+
+func (c vaultCipher) Erased(err error) bool { return errors.Is(err, vault.ErrErased) }
+
+func (c vaultCipher) HasKey(subject string) (bool, error) { return c.v.HasDataKey(subject) }
+
+// sealDocuments enciphers the documents a personal variable names under the subject's
+// key. It runs where personal values are sealed, off the run loop and before the command
+// that carries them; a document that does not exist is left for the reference check to
+// refuse.
+func (s *Server) sealDocuments(subject string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	docs, err := s.documents()
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := docs.Seal(context.Background(), id, subject); err != nil && !errors.Is(err, docstore.ErrNotFound) {
+			return err
+		}
+	}
+	return nil
 }

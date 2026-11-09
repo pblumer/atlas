@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -116,5 +118,81 @@ func TestValidateDocumentBackend(t *testing.T) {
 		if err := ValidateDocumentBackend(tc.backend, tc.worker, tc.bucket); (err == nil) != tc.ok {
 			t.Errorf("ValidateDocumentBackend(%q,%q,%q) = %v", tc.backend, tc.worker, tc.bucket, err)
 		}
+	}
+}
+
+const personalDocBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="personaldoc" isExecutable="true" atlas:personal="ausweis" atlas:dataSubject="kunde">
+    <startEvent id="s"/>
+    <userTask id="wait"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="wait"/>
+    <sequenceFlow id="f2" sourceRef="wait" targetRef="e"/>
+  </process>
+</definitions>`
+
+// A document a personal variable names is personal data: its bytes are enciphered under
+// the data subject's key, it reads back the same while the subject exists, and an erasure
+// makes it unreadable and the sweep removes it (ADR-0314,
+// ADR-draft-a-file-is-a-document-not-a-variable).
+func TestAPersonalDocumentIsErasedWithItsSubject(t *testing.T) {
+	srv, _ := newOffLoopServer(t)
+	if srv.vault == nil {
+		t.Skip("this server runs without a vault")
+	}
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+	call := func(method, path, ct, body string) (int, []byte) {
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var buf strings.Builder
+		_, _ = io.Copy(&buf, res.Body)
+		return res.StatusCode, []byte(buf.String())
+	}
+	const content = "Ausweis von Anna Meier"
+	_, ref := call("POST", "/api/v1/documents?name=ausweis.txt", "text/plain", content)
+	var dep struct{ Key uint64 }
+	_, out := call("POST", "/api/v1/deployments", "application/xml", personalDocBPMN)
+	_ = json.Unmarshal(out, &dep)
+	if code, out := call("POST", fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "application/json",
+		`{"variables":{"kunde":"K-1","ausweis":`+string(ref)+`}}`); code != http.StatusOK {
+		t.Fatalf("start: %d %s", code, out)
+	}
+	var r struct {
+		ID string `json:"$document"`
+	}
+	_ = json.Unmarshal(ref, &r)
+	docs, _ := srv.documents()
+	rec, _ := docs.Get(r.ID)
+	if rec.Subject != "K-1" || rec.Blob == "" {
+		t.Fatalf("record = %+v, want it enciphered for K-1", rec)
+	}
+	if code, body := call("GET", "/api/v1/documents/"+r.ID, "", ""); code != http.StatusOK || string(body) != content {
+		t.Fatalf("download before erasure: %d %q", code, body)
+	}
+	srv.sweepDocuments() // drops the plain bytes
+	blobs, _ := os.ReadDir(filepath.Join(srv.dataDir, documentsDir, "blobs"))
+	for _, b := range blobs {
+		data, _ := os.ReadFile(filepath.Join(srv.dataDir, documentsDir, "blobs", b.Name()))
+		if strings.Contains(string(data), "Anna") {
+			t.Fatal("the plain bytes of a personal document are still on disk")
+		}
+	}
+	if code, out := call("DELETE", "/api/v1/personal-data/K-1", "", ""); code != http.StatusOK {
+		t.Fatalf("erase: %d %s", code, out)
+	}
+	if code, body := call("GET", "/api/v1/documents/"+r.ID, "", ""); code != http.StatusGone || !strings.Contains(string(body), "erased") {
+		t.Fatalf("download after erasure: %d %s", code, body)
+	}
+	srv.sweepDocuments()
+	if _, err := docs.Get(r.ID); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("the erased subject's document survived the sweep: %v", err)
 	}
 }
