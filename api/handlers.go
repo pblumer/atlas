@@ -1122,6 +1122,20 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 			}
 		}
 	}
+	// Without a draft to inherit from, a new version files where the process's
+	// earlier versions are: redeploying a definition through the API must not need
+	// to be told an application its history already names
+	// (ADR-0544).
+	if !hasProjectParam && projectID == "" {
+		var readErr error
+		s.do(func() { projectID, readErr = s.deployedApplicationOf(pid) })
+		if readErr != nil {
+			return deployResp{}, refusedWith(http.StatusInternalServerError, "read project: "+readErr.Error())
+		}
+	}
+	if code, msg := s.unfiledRefusal(projectID, "a deployed process"); code != 0 {
+		return deployResp{}, refusedWith(code, msg)
+	}
 	// Filing a definition into a project is a write on that project, so it needs
 	// editor there — the check the project deploy path has always made, and the
 	// axis a role-per-route table cannot express (ADR-0071,
@@ -2496,6 +2510,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		type scopeSpan struct {
 			scopeKey uint64
 			label    string
+			kind     string // what the scope is: see variableView.ScopeKind
 			endPos   uint64
 		}
 		// A loop body is a scope too. Its rounds do not each get their own copy of the
@@ -2527,7 +2542,14 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				continue
 			}
 			if rr.v.Action == 1 { // the scope opened
-				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: ver.elementID(rr.pos, rr.v.ElementID), endPos: noEnd}
+				kind := scopeKindSubprocess
+				if isLoopBody {
+					kind = scopeKindMultiInstanceBody
+					if ver.isStandardLoop(rr.pos, rr.v.ElementID) {
+						kind = scopeKindLoopBody
+					}
+				}
+				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: ver.elementID(rr.pos, rr.v.ElementID), kind: kind, endPos: noEnd}
 				subScopes[rr.v.ElementInstanceKey] = sp
 				subScopeList = append(subScopeList, sp)
 			} else if sp := subScopes[rr.v.ElementInstanceKey]; sp != nil { // it completed/terminated
@@ -2554,6 +2576,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Actor = actorByPos[pos]
+				view.Constant = constantKind(ver.cp(pos), v.Name)
 				changes = append(changes, varChange{pos: pos, endPos: noEnd, producer: v.ProducerKey, view: view})
 				return nil
 			})
@@ -2565,6 +2588,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
+				view.ScopeKind = sp.kind
 				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view})
 				return nil
@@ -2703,6 +2727,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// which is the loop's result and not an input to any one round — and an element
 		// that declares neither mappings nor a loop is never scanned at all.
 		inputsByEIK := map[uint64][]variableView{}
+		// What an element instance wrote into that same scope of its own. A round of a
+		// multi-instance keeps its result there until the body collects it (ADR-0077), and
+		// none of the folds above reads the scope, so without this every round reported
+		// writing nothing. Only the element's own writes count (its producer key): an
+		// operator's correction of a local is not the element's output. A loop body and a
+		// subprocess are left out — their scopes are folded above and attributed there.
+		localWritesByEIK := map[uint64][]variableView{}
 		iterationByEIK := map[uint64]int{}
 		for actPos, v := range activations {
 			acp := ver.cp(actPos)
@@ -2725,9 +2756,18 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			if len(targets) == 0 {
 				continue
 			}
+			_, isBody := loopBodyTokens[v.TokenID]
+			ownScope := !isBody && !ver.isType(actPos, v.ElementID, compiler.TypeSubProcess)
 			byName := map[string]variableView{}
+			written := map[string]variableView{}
 			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
 				if _, ok := targets[vv.Name]; !ok {
+					if ownScope && vv.ProducerKey == v.ElementInstanceKey {
+						view := toVariableView(vv)
+						view.Scope = ver.elementID(actPos, v.ElementID)
+						view.ScopeKind = scopeKindLocal
+						written[vv.Name] = view // the last value it wrote
+					}
 					return nil
 				}
 				view := toVariableView(vv)
@@ -2743,6 +2783,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 			inputsByEIK[v.ElementInstanceKey] = list
+			if len(written) > 0 {
+				own := make([]variableView, 0, len(written))
+				for _, view := range written {
+					own = append(own, view)
+				}
+				localWritesByEIK[v.ElementInstanceKey] = own
+			}
 			// The counter is also this step's identity — which round of the loop it is — so
 			// the history can tell repeated activations of one task apart without the
 			// operator reading variable lists. Surfaced as a number of its own rather than
@@ -2760,7 +2807,10 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// for the same (scope, name) — a subprocess-local shadows nothing here, it is a
 		// distinct entry keyed by its scope. A local is only surfaced while its
 		// subprocess is live (endPos), since its drop is not snapshotted (ADR-0074).
-		type varKey struct{ scope, name string }
+		// The scope kind is part of the key: a multi-instance subprocess's body and each of
+		// its iterations are two scopes under one element id, and a variable of the same
+		// name in each is two variables, not one overwriting the other.
+		type varKey struct{ scope, kind, name string }
 		type varEntry struct {
 			view   variableView
 			endPos uint64
@@ -2770,7 +2820,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		for _, sr := range stepRows {
 			for ci < len(changes) && changes[ci].pos <= sr.pos {
 				c := changes[ci]
-				running[varKey{c.view.Scope, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				running[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
 				ci++
 			}
 			vars := make([]variableView, 0, len(running))
@@ -2782,6 +2832,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			sort.Slice(vars, func(i, j int) bool {
 				if vars[i].Scope != vars[j].Scope {
 					return vars[i].Scope < vars[j].Scope // process (root) scope first
+				}
+				if vars[i].ScopeKind != vars[j].ScopeKind {
+					return vars[i].ScopeKind < vars[j].ScopeKind
 				}
 				return vars[i].Name < vars[j].Name
 			})
@@ -2927,7 +2980,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		for _, r := range refs {
 			for ai < len(changes) && changes[ai].pos <= r.pos {
 				c := changes[ai]
-				after[varKey{c.view.Scope, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				after[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
 				ai++
 			}
 			vars := make([]variableView, 0, len(after))
@@ -2939,6 +2992,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			sort.Slice(vars, func(i, j int) bool {
 				if vars[i].Scope != vars[j].Scope {
 					return vars[i].Scope < vars[j].Scope
+				}
+				if vars[i].ScopeKind != vars[j].ScopeKind {
+					return vars[i].ScopeKind < vars[j].ScopeKind
 				}
 				return vars[i].Name < vars[j].Name
 			})
@@ -2965,21 +3021,26 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				w = map[varKey]variableView{}
 				byProducer[c.producer] = w
 			}
-			w[varKey{c.view.Scope, c.view.Name}] = c.view
+			w[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = c.view
 		}
 		resp.VariableAttribution = len(byProducer) > 0
 		for i := range resp.Steps {
 			w := byProducer[resp.Steps[i].ElementInstanceKey]
-			if len(w) == 0 {
+			own := localWritesByEIK[resp.Steps[i].ElementInstanceKey]
+			if len(w) == 0 && len(own) == 0 {
 				continue
 			}
-			vars := make([]variableView, 0, len(w))
+			vars := make([]variableView, 0, len(w)+len(own))
 			for _, view := range w {
 				vars = append(vars, view)
 			}
+			vars = append(vars, own...)
 			sort.Slice(vars, func(a, b int) bool {
 				if vars[a].Scope != vars[b].Scope {
 					return vars[a].Scope < vars[b].Scope
+				}
+				if vars[a].ScopeKind != vars[b].ScopeKind {
+					return vars[a].ScopeKind < vars[b].ScopeKind
 				}
 				return vars[a].Name < vars[b].Name
 			})
@@ -3089,6 +3150,15 @@ type variableView struct {
 	// Scope labels a subprocess-local variable with the id of the embedded
 	// subprocess it lives in; empty for a process (root) scope variable (ADR-0074).
 	Scope string `json:"scope,omitempty"`
+	// ScopeKind says what the scope Scope names is: "subprocess", "multiInstanceBody" or
+	// "loopBody". A label alone cannot tell them apart — a multi-instance body and each of
+	// its iterations carry the same element id — and the replay groups what a selected
+	// element can reach by the scope it reaches it through. Empty at the process scope.
+	ScopeKind string `json:"scopeKind,omitempty"`
+	// Constant marks a process-scope variable the model's constants occupy (ADR-0454,
+	// ADR-0456): "process" for a process constant's own variable, "application" or
+	// "server" for the namespace the installation fills. Empty for every other variable.
+	Constant string `json:"constant,omitempty"`
 	// Actor names the operator who last set this value via an external override
 	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
 	// value was written by the model itself or the override carried no identity (auth
@@ -3263,6 +3333,13 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
 		return
 	}
+	// An operator may point a variable at a document they may read; it is bound to this
+	// instance once the change is durable (ADR-0543).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	scopeKey := payload.ScopeKey
 	// A declared personal value is enciphered here, before it becomes a command, exactly
 	// as it would be on the way in from a form or a worker (ADR-0314). An operator
@@ -3315,9 +3392,14 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
-	// its duration is the stall ADR-0157 step 6 removes.
+	// its duration is the stall ADR-0157 step 6 removes. A document the change names
+	// is bound once it is durable, before a worker can be asked to read it.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !scopeBad && scanErr == nil {
+				s.bindDocuments(docIDs, key)
+			}
+		})
 	}
 	switch {
 	case scanErr != nil:
@@ -4363,6 +4445,13 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Which instance a message reaches is decided by correlation, possibly long after
+	// this request, so a document it named could not be bound to it
+	// (ADR-0543).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	var (
@@ -5562,6 +5651,11 @@ func toolCallsFromReport(jv *model.JobValue, reps []toolCallReport) ([]model.Too
 		if err != nil {
 			return nil, fmt.Errorf("tool call %q: %v", rep.Tool, err)
 		}
+		// A tool's arguments are a model's, handed to a tool; a document reference among
+		// them would name a file nothing binds to anything.
+		if code, msg := refuseDocumentRefs(args); code != 0 {
+			return nil, fmt.Errorf("tool call %q: %s", rep.Tool, msg)
+		}
 		out = append(out, model.ToolCall{
 			Tool:      strings.TrimSpace(rep.Tool),
 			CallId:    strings.TrimSpace(rep.CallId),
@@ -5588,6 +5682,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// A worker's result may name a document; the worker (or operator) must be one who
+	// may use it, and it is bound to the job's instance once the completion is durable
+	// (ADR-0543).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	// A worker result landing a job's output is one of the two edges ADR-0314 enciphers
@@ -5672,6 +5774,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		unauthorized bool
 		badReport    error
 		runErr       error
+		jobInstance  uint64
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -5679,6 +5782,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		jobInstance = jv.ProcessInstanceKey
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
@@ -5739,7 +5843,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !notHolder && !unauthorized && badReport == nil {
+				s.bindDocuments(docIDs, jobInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -5948,6 +6056,16 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A file field's answer is a reference to the document its browser uploaded; the
+	// person completing must be one who may use it, and it is bound to the task's
+	// instance once the completion is durable
+	// (ADR-0543). Before sealing, which would hide
+	// a reference inside a personal value.
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// The form's answer is the other half of the in edge: a submitted personal value is
 	// enciphered before it becomes a command (ADR-0314).
 	if err := s.encipherJobVars(key, vars); err != nil {
@@ -5978,6 +6096,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		// read before the completion, because a completed task's element instance is
 		// gone, and with it the way up to the sitting.
 		sitting, sittingPI uint64
+		taskInstance       uint64
 	)
 	s.do(func() {
 		// A job that can't be read — absent, already completed, or unreadable — is
@@ -5988,6 +6107,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		taskInstance = jv.ProcessInstanceKey
 		// A sitting that cannot be read is no reason to refuse the answer: the
 		// completion goes ahead, and the next screen is found in the inbox instead.
 		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
@@ -5997,7 +6117,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found {
+				s.bindDocuments(docIDs, taskInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -6293,6 +6417,20 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if hasProjectParam {
 		destProjectID = projectID
 	}
+	// A new draft is filed under an application, and a filed one stays in one
+	// (ADR-0544). A draft written before the rule
+	// may still be saved where it is, so its author can finish it and adopt it.
+	if !continuing {
+		if code, msg := s.unfiledRefusal(destProjectID, "a draft"); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	} else if base.ProjectID != "" {
+		if code, msg := s.unfileRefusal(destProjectID); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	if destProjectID != "" && (hasProjectParam || !continuing) {
 		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
@@ -6464,6 +6602,10 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	// Moving a draft needs editor on both ends (ADR-0071): the project it leaves
 	// and, when non-empty, the project it joins (which must exist).
 	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if code, msg := s.unfileRefusal(payload.ProjectID); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}
@@ -6986,6 +7128,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"inputs": j.Inputs, "resultVariable": j.Result,
 		}}
 	case compiler.CsvImportJobTypeIndex:
+		// A source that names a document is not read here: this runs on the run loop,
+		// and reading a document is file or network I/O. The payload carries the
+		// document's id instead, and the Worker Instance reads it under the job's lease
+		// (POST /api/v1/jobs/{key}/documents/{id},
+		// ADR-0543).
 		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease
@@ -6993,7 +7140,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
-			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
+			"source": j.Source, "sourceDocument": j.SourceDocument, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
 		}}

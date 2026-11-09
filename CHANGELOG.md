@@ -49,6 +49,51 @@ A server that finds `atlas-workers` beside its own binary starts its supervised 
 it; `ATLAS_WORKERS_BINARY=self` keeps the earlier behaviour.
 
 ### Added
+- **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
+  lists the deployed processes, diagrams, forms, decisions, decision drafts and deployed decisions
+  that belong to no application — no tag, or an application that no longer exists — and
+  `POST /api/v1/applications/{id}/adopt` files a chosen set of them under one application in one
+  request: every version of a process moves, and a decision's unfiled drafts move with it. Nothing
+  moves unless everything named can, and what already belongs to an application is refused rather
+  than taken from it. The Modeler's "Not assigned" page offers it as "Assign to an application…";
+  the MCP tools are `atlas_list_unassigned` and `atlas_adopt_artifacts`
+  (ADR-0544).
+- **A file a process receives is a document, not a variable.** A file picked in a task form is
+  uploaded to a document store and the task is completed with a reference under the field's own
+  key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
+  outside the log, the state and the per-step history, up to `limits.Document` (35 MiB), and no
+  longer read as text into `csvText` whatever the field was called. `POST /api/v1/documents`
+  uploads, `GET /api/v1/documents/{id}` downloads, and `GET /api/v1/documents/{id}/meta` reads the
+  reference and its state. An upload is its uploader's until a variable naming it enters an
+  instance; then whoever may read that instance may read it. Every route that lets variables in
+  refuses a reference the caller may not use, and the routes that cannot bind one (messages,
+  public links, order actions) refuse references outright. Unused uploads are removed after
+  `--document-pending-ttl` (24 h by default), and a document is removed once history retention
+  removed every instance it entered. Documents live in the data directory by default, or in an S3
+  bucket with `--documents-backend=s3 --documents-s3-worker --documents-s3-bucket`. A full
+  snapshot carries them only with `?documents=true`. The CSV import reads a referenced file from
+  the store, in process and on a Worker Instance, which reads it under its job's lease through
+  `POST /api/v1/jobs/{key}/documents/{id}` (`workersdk.ReadDocument`, `UploadDocument`). S3 tasks
+  gain `put-document` and `get-document`, mail tasks `store-attachment`. The MCP tools
+  `atlas_document_meta`, `atlas_read_document` and `atlas_upload_document` reach the store. A
+  document a personal variable names is enciphered under the data subject's key and becomes
+  unreadable with an erasure. Operations and the replay show a reference as a download link
+  (ADR-0543).
+- **A process can publish an interface, not its model.** A deployed definition's message
+  entry points can be published as a small, versioned contract another domain binds to
+  (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition
+  offers — every element a message reaches (message start, intermediate catch, receive task,
+  event subprocess, message boundary) with its kind, correlation key and the payload the model
+  states, every root-scope end, and the error and escalation codes that can leave an instance —
+  and `POST /api/v1/published-interfaces/{id}/versions` publishes a selection of them under
+  contract-level names. A version is immutable; `PUT …/versions/{version}/binding` moves it to a
+  newer definition that realizes the same contract, so renaming an element no longer breaks a
+  consumer, and `POST …/deprecation` marks it deprecated. View and send are granted apart by the
+  application owner (`PUT …/grants`, audited); a consumer holding view reads the contract and
+  never the element ids, message names or process behind it, and `public` never implies send.
+  `GET /api/v1/published-interfaces` lists only what the caller may see. Three MCP tools read
+  them. Not yet: a commitment is refused because nothing measures one, and the send grant waits
+  for the peer endpoint of ADR-0372.
 - **The Instances overview can group its processes by application.** A switch above the list
   offers "Liste" and "Nach Applikation". The list stays the default and unchanged; grouped, each
   application folds away under a heading that sums its processes' running, stuck and finished
@@ -155,6 +200,34 @@ it; `ATLAS_WORKERS_BINARY=self` keeps the earlier behaviour.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **Every process, decision and form belongs to an application.** Nothing new is created,
+  deployed or moved outside one (ADR-0544): a draft, form,
+  decision draft or decision reference without a `projectId`, a decision deployment without one,
+  and a MIM import without one are refused with 400. `POST /api/v1/deployments` files a model
+  under the application of its draft, else of the process's earlier versions, and refuses one with
+  neither. An empty `projectId` on a move — a draft, a deployed process, a decision reference — is
+  refused, a form saved without one keeps the application it is in, and deleting an application
+  that still holds anything is refused with 409 until it is moved or deleted with `?purge=true`.
+  What already belongs to no application keeps running and can still be edited; it is listed
+  under "Not assigned" until it is assigned. In the Modeler, "Create new" asks which application
+  a new process, form, decision or import goes into. MCP: `atlas_save_draft`, `atlas_save_form`,
+  `atlas_register_decision` and `atlas_deploy_decision` require `projectId`, and `atlas_deploy`
+  takes one. A script that deploys or saves without naming an application has to name one now.
+- **The replay's Variables tab sorts a selected element's variables by how it came by them.**
+  Instead of one list with an Input/Output switch that meant before/after, the tab shows three
+  sections: *Input* (the element's own scope — input mappings, a round's loop counter and item),
+  *Output* (what the element itself wrote, with the value it replaced or marked new, and
+  "still running" while there is no output yet) and *Environment* (everything else it could
+  reach, grouped by scope innermost first: its loop body, each enclosing subprocess, the
+  process and the process's constants). The Environment is folded until the reader opens it,
+  remembered per browser, and a name the filter finds in it is shown while folded; variables
+  of a subprocess running beside the element are left out, being out of its reach. Input and
+  Output now mean what the diagram's in/out card means. With nothing selected the tab stays one
+  list, and its scope chip names the kind of scope beside the element id. The instance timeline
+  gains `scopeKind` (`subprocess`, `multiInstanceBody`, `loopBody`) and `constant` (`process`,
+  `application`, `server`) on its variables, and no longer lets a multi-instance subprocess's
+  body and one of its iterations overwrite each other's same-named variables
+  ([ADR-0542](docs/adr/0542-variables-by-provenance.md)).
 - **An application lists what it has deployed; the Modeler home lists applications.** The
   Modeler home's *Deployed* list is gone: the same processes were also listed in each
   application's *Deployments* tab and under *Operations › Instances*, and pausing or deleting
@@ -197,6 +270,14 @@ it; `ATLAS_WORKERS_BINARY=self` keeps the earlier behaviour.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A round of a multi-instance names what it produced.** The replay's Output of one round —
+  and the diagram's in/out card — now lists what the round wrote into its own scope, such as a
+  script's result variable or a person's answer on the form, where it said "wrote nothing" for
+  every round. The timeline adds those values to the round's `writes` with `scopeKind`
+  `local`; an operator's correction of a local is not included. The body's output collection
+  still reads unfilled until the loop finishes, because its per-round element writes are not
+  part of the history (ADR-0296); the Environment now says so on the collection
+  ([ADR-0542](docs/adr/0542-variables-by-provenance.md)).
 - **A wide decision table fits its hover card.** The card that shows which rule fired —
   in Operations → Decisions, the live view and the instance replay — held every cell to one
   line inside a 480 px card, so a table with a long list of literals or a long input

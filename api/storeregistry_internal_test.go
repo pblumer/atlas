@@ -121,6 +121,14 @@ func TestFullBackupCoversEverythingButTheRebuildable(t *testing.T) {
 			if covered[e.name] {
 				t.Errorf("%s is carried by its own mechanism and must not also be walked whole", e.name)
 			}
+		case e.optIn:
+			// Carried only when the snapshot is asked for it, and always restorable.
+			if covered[e.name] {
+				t.Errorf("%s is opt-in and must not be in a snapshot nobody asked it for", e.name)
+			}
+			if !allowedFullEntry(e.name) {
+				t.Errorf("%s is opt-in, and a restore must still accept it when an archive carries it", e.name)
+			}
 		default:
 			if !covered[e.name] {
 				t.Errorf("%s is not rebuildable from anything else in the archive, so a full "+

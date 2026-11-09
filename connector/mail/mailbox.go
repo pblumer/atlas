@@ -45,12 +45,17 @@ const (
 	OpForward          = "forward"
 	OpGetAttachment    = "get-attachment"
 	OpExportAttachment = "export-attachment"
+	// OpStoreAttachment puts an attachment into Atlas's own document store and answers
+	// the reference a variable holds: get-attachment's purpose without its 1 MiB
+	// variable budget, and export-attachment's size without an S3 Worker
+	// (ADR-0543).
+	OpStoreAttachment = "store-attachment"
 )
 
 // Operations lists every operation a mail task may name, send first.
 func Operations() []string {
 	return []string{OpSend, OpList, OpGet, OpMove, OpMarkRead, OpMarkUnread, OpDelete, OpReply,
-		OpForward, OpGetAttachment, OpExportAttachment}
+		OpForward, OpGetAttachment, OpExportAttachment, OpStoreAttachment}
 }
 
 // ReadsMailbox reports whether an operation reads the mailbox without changing it.
@@ -62,7 +67,12 @@ func Operations() []string {
 // that asked for it. forward and export-attachment write *from* the mailbox — one to
 // whoever the model names, the other into somebody else's store — which is what the
 // editor role is asked for, as it is for a reply.
-func ReadsMailbox(op string) bool { return op == OpList || op == OpGet || op == OpGetAttachment }
+//
+// store-attachment reads too: the document lands with the process that asked, by
+// reference instead of in a variable.
+func ReadsMailbox(op string) bool {
+	return op == OpList || op == OpGet || op == OpGetAttachment || op == OpStoreAttachment
+}
 
 // ChangesMailbox — see [ReadsMailbox].
 func ChangesMailbox(op string) bool {
@@ -76,7 +86,7 @@ func ChangesMailbox(op string) bool {
 // HandsOnDocuments reports whether an operation carries attachment content out of the
 // mailbox, and so inspects it first.
 func HandsOnDocuments(op string) bool {
-	return op == OpForward || op == OpGetAttachment || op == OpExportAttachment
+	return op == OpForward || op == OpGetAttachment || op == OpExportAttachment || op == OpStoreAttachment
 }
 
 // DefaultFolder is the folder a watch or a list reads when it names none. Every

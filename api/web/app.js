@@ -42,6 +42,7 @@ import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 import { compareVersionsFlow } from "./version-comparison.js";
 import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
+import { openAdoptDialog } from "./adoptdialog.js";
 import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
@@ -137,22 +138,39 @@ export async function api(method, path, body, isXML) {
 // upload mislabelled by a browser is refused there, not here.
 //
 // The failure shape is api()'s, so a caller reports an upload the way it reports
-// everything else.
+// everything else. It answers the decoded body, or null for none — a document upload
+// answers the reference it stored.
 export async function apiBytes(method, path, file) {
   const res = await fetch(path, {
     method,
     body: file,
     headers: { "Content-Type": file.type || "application/octet-stream" },
   });
+  const text = await res.text();
+  let data = text;
+  try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
   if (!res.ok) {
-    const text = await res.text();
-    let data = text;
-    try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
     const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
   }
+  return data;
+}
+
+// fileFieldKeys lists the keys of a form schema's file pickers, in the order form-js
+// renders them, which is the order of the file inputs on the page.
+function fileFieldKeys(schema) {
+  const keys = [];
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "filepicker" && c.key) keys.push(c.key);
+      if (Array.isArray(c.components)) walk(c.components);
+    }
+  };
+  walk(schema && schema.components);
+  return keys;
 }
 
 export function toast(msg, kind) {
@@ -2520,6 +2538,7 @@ async function viewConsoleBackup() {
       authentication is enabled.</p>
       <div class="row" style="gap:12px; align-items:center; margin-top:8px">
         <a class="btn" href="/api/v1/backup/full" download>Download full snapshot (.tar.gz)</a>
+        <a class="btn neutral" href="/api/v1/backup/full?documents=true" download title="${esc(tr("backup.full.withDocumentsTitle"))}">${esc(tr("backup.full.withDocuments"))}</a>
       </div>
 
       <h3 style="margin:22px 0 6px">Restore full snapshot</h3>
@@ -4055,8 +4074,10 @@ async function viewModelerHome() {
   };
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
-    if (act === "import") importArtifact("", renderProjects);
-    if (act === "import-mim") importMIM("", renderProjects);
+    // An import files what it brings under an application, so it asks which first
+    // (ADR-0544).
+    if (act === "import") pickApplication(tr("application.pick.titleImport")).then((pid) => { if (pid) importArtifact(pid, renderProjects); });
+    if (act === "import-mim") pickApplication(tr("application.pick.titleImport")).then((pid) => { if (pid) importMIM(pid, renderProjects); });
     if (act === "import-source") importApplicationSource(renderProjects);
     if (act === "browse-atlas-hub") openBlueprintMarketplace({ call: packageCall, reload: renderProjects, notify: toast });
   });
@@ -4122,10 +4143,10 @@ async function viewProjectDetail(id, pane = "artifacts") {
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [{
       label: tr("application.row.moveTo"), icon: "&#128450;",
-      items: [
-        { label: tr("application.notAssigned"), icon: currentPid ? "" : "•", act, data: { pid: "", key } },
-        ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
-      ],
+      // Not assigned is no destination: everything belongs to an application
+      // (ADR-0544).
+      items: projects.filter((p) => !p.protected && roleRank(p.myRole) >= 2)
+        .map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
     }];
 
     // star is the favourite mark for a stored diagram (diagram-shortcuts.js), empty for
@@ -4228,7 +4249,10 @@ async function viewProjectDetail(id, pane = "artifacts") {
       fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
-    const createItems = [
+    // Nothing new is created outside an application
+    // (ADR-0544): Not assigned offers to file
+    // what is already there instead.
+    const createItems = ungrouped ? [] : [
       { header: tr("create.blank") },
       { label: tr("create.bpmn"), icon: "⚙", href: newDiagramHref },
       { label: tr("create.dmn"), icon: "▦", act: "newdec" },
@@ -4252,7 +4276,8 @@ async function viewProjectDetail(id, pane = "artifacts") {
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
           ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy" title="${esc(tr("application.publishTitle"))}">${esc(tr("application.publish"))}</button>` : ""}
-          ${canWrite ? dropdown(tr("create.button"), "btn neutral", createItems) : ""}
+          ${ungrouped ? `<button class="btn" id="pd-adopt" title="${esc(tr("adopt.buttonTitle"))}">${esc(tr("adopt.button"))}</button>` : ""}
+          ${canWrite && createItems.length ? dropdown(tr("create.button"), "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
@@ -4262,12 +4287,13 @@ async function viewProjectDetail(id, pane = "artifacts") {
         ${ungrouped ? "" : `<button data-pane="constants" title="${esc(tr("application.tab.constantsTitle"))}">${esc(tr("application.tab.constants"))}</button>`}
       </div>
       <div id="pane-artifacts">
+        ${ungrouped ? `<p class="muted" style="padding:2px 2px 12px">${esc(tr("adopt.intro"))}</p>` : ""}
         <div class="card" style="padding:0">
           <table data-dt-key="project-artifacts">
             <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("application.th.type"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
             <tbody id="pd-rows">${bodyRows ||
-              `<tr><td colspan="4" class="empty">${canWrite
-                ? tr("application.empty.canWrite", { create: esc(tr("create.button")) })
+              `<tr><td colspan="4" class="empty">${ungrouped ? esc(tr("adopt.nothing"))
+                : canWrite ? tr("application.empty.canWrite", { create: esc(tr("create.button")) })
                 : esc(tr("application.empty.readOnly"))}</td></tr>`}</tbody>
           </table>
         </div>
@@ -4331,7 +4357,7 @@ async function viewProjectDetail(id, pane = "artifacts") {
         case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
-        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
+        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render, ungrouped ? "" : id); break;
         case "delmodel": deleteStoredModel(b.dataset.handle, render); break;
         case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
@@ -4341,6 +4367,8 @@ async function viewProjectDetail(id, pane = "artifacts") {
     });
     const deployBtn = document.getElementById("pd-deploy");
     if (deployBtn) deployBtn.addEventListener("click", () => publishApplication(id, render));
+    const adoptBtn = document.getElementById("pd-adopt");
+    if (adoptBtn) adoptBtn.addEventListener("click", () => adoptUnassigned(projects, render));
   };
   await render();
 }
@@ -5263,7 +5291,7 @@ function openShareModal(proj, users, degraded, reload) {
   renderBody();
 }
 
-// moveDraft reassigns a draft to a project (or to Ungrouped when projectId is "").
+// moveDraft reassigns a draft to another application.
 async function moveDraft(processId, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/drafts/${encodeURIComponent(processId)}`, { projectId });
@@ -6657,7 +6685,43 @@ function editDmnRef(ref) {
   location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
 }
 
-// moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
+// pickApplication asks which application something new goes into: every process,
+// decision and form belongs to one (ADR-0544).
+// Resolves to the application's id, or "" when the dialog is cancelled or there is
+// none the caller may write to.
+async function pickApplication(title) {
+  let apps = [];
+  try { apps = (await api("GET", "/api/v1/applications")) || []; } catch (e) { toast(e.message, "err"); return ""; }
+  const writable = apps.filter((p) => !p.protected && roleRank(p.myRole) >= 2)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!writable.length) { toast(tr("application.pick.none"), "err"); return ""; }
+  const picked = await openPickModal({
+    title, label: tr("application.pick.label"), hint: tr("application.pick.hint"), okLabel: tr("application.pick.ok"),
+    options: writable.map((p) => ({ value: p.id, label: p.name })),
+  });
+  return picked ? picked.option.value : "";
+}
+
+// routeIntoApplication sends a "new …" address that names no application to the same
+// address inside the one the author picks, or back to the Modeler home. prefix is the
+// part of path the application goes after.
+async function routeIntoApplication(path, prefix, title) {
+  const pid = await pickApplication(title);
+  const next = pid ? path.replace(prefix, `${prefix}/p/${encodeURIComponent(pid)}`) : "#/modeler";
+  location.replace(location.pathname + location.search + next);
+}
+
+// adoptUnassigned files what belongs to no application under one, many at once
+// (ADR-0544).
+async function adoptUnassigned(projects, reload) {
+  let unassigned;
+  try { unassigned = await api("GET", "/api/v1/unassigned"); } catch (e) { toast(e.message, "err"); return; }
+  const apps = (projects || []).filter((p) => !p.protected && roleRank(p.myRole) >= 2)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (await openAdoptDialog({ api, apps, unassigned, toast })) await reload();
+}
+
+// moveDmnRef reassigns a DMN reference to another application.
 async function moveDmnRef(id, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(id)}`, { projectId });
@@ -6670,11 +6734,15 @@ async function moveDmnRef(id, projectId, reload) {
 // (ADR-0330). It re-uses the existing
 // handle rather than re-uploading, so the model is *recovered* rather than copied —
 // a re-upload would file a second model under a suffixed handle (ADR-0222).
-async function referenceStoredModel(handle, suggested, reload) {
+async function referenceStoredModel(handle, suggested, reload, projectId = "") {
+  // The reference is filed under an application like everything else
+  // (ADR-0544); from Not assigned, it asks which.
+  const pid = projectId || await pickApplication(tr("application.pick.titleDecision"));
+  if (!pid) return;
   const name = (window.prompt(tr("artifact.ref.namePrompt"), suggested || handle) || "").trim();
   if (!name) return;
   try {
-    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: pid });
     toast(tr("artifact.ref.added", { name }), "ok");
   } catch (e) { toast(tr("artifact.ref.addFailed", { error: e.message }), "err"); return; }
   await reload();
@@ -10029,11 +10097,28 @@ async function viewTasks(preselectKey) {
           return;
         }
       } else if (picked) {
-        // The other answer, unchanged: read the file as text and submit it as the
-        // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
-        // that upload a normal user-task step rather than a side-channel endpoint.
-        try { data.csvText = await picked.text(); }
-        catch (err) { toast(tr("tasks.complete.fileUnreadable", { error: err.message }), "err"); return; }
+        // Every other file becomes a document (ADR-0543):
+        // it is uploaded to the document store first, and the task is completed with the
+        // reference under the field's own key. The file itself never enters a variable —
+        // it used to be read as text into `csvText`, whatever the field was called, and
+        // every step afterwards rewrote it into the log. The CSV upload form names its
+        // field `csvText`, so the reference lands where the CSV import reads it.
+        //
+        // Before the completion and not after, as for the logo: a task completed while
+        // its file did not arrive is a process that believes it has one.
+        const keys = fileFieldKeys(state.mountedSchema);
+        const inputs = [...document.querySelectorAll("#task-form input[type=file]")];
+        try {
+          for (let i = 0; i < inputs.length; i++) {
+            const file = inputs[i].files && inputs[i].files[0];
+            const key = keys[i];
+            if (!file || !key) continue;
+            data[key] = await apiBytes("POST", "/api/v1/documents?name=" + encodeURIComponent(file.name || "document"), file);
+          }
+        } catch (err) {
+          toast(tr("tasks.complete.uploadFailed", { error: err.message }), "err");
+          return;
+        }
       }
       payload = { variables: data };
     }
@@ -10259,6 +10344,7 @@ async function viewTasks(preselectKey) {
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      state.mountedSchema = def.schema;
       state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
@@ -12795,7 +12881,16 @@ async function route() {
     const pd = path.match(/^#\/modeler\/p\/([^/]+)(?:\/(artifacts|deployments|constants))?$/);
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]), pd[2] || "artifacts");
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
+    // A new diagram, form or decision is created inside an application, so an address
+    // that names none asks for one first (ADR-0544).
+    if (dnew && !dnew[1]) return await routeIntoApplication(path, "#/modeler/new", tr("application.pick.titleDiagram"));
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
+    if (/^#\/modeler\/form\/new(?!\/p\/)/.test(path)) {
+      return await routeIntoApplication(path, "#/modeler/form/new", tr("application.pick.titleForm"));
+    }
+    if (/^#\/modeler\/dmn\/new(?!\/p\/)/.test(path)) {
+      return await routeIntoApplication(path, "#/modeler/dmn/new", tr("application.pick.titleDecision"));
+    }
     // A form editor reached from a step in a diagram carries the way back as a
     // /from/{draft}/{element} tail (ADR-0465). It is
     // taken off before the form routes below are matched, so each keeps the shape it

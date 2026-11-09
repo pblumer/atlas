@@ -1,7 +1,7 @@
 # ADR-0373: A process publishes an interface, not its model
 
-- **Status:** Accepted
-- **Implementation:** Not started
+- **Status:** Accepted (amended 2026-11-09 — what the first slice decided where this record was silent, and what it leaves for later; see the amendment note below)
+- **Implementation:** Partial
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
 - **Open question:** whether the publisher grants access per consumer, or whether a
@@ -10,6 +10,79 @@
   per-publisher grant chosen below is the only one buildable today — not necessarily
   the one an estate of twenty domains will want.
 - **Question checked:** 2026-09
+
+> **Amendment (2026-11-09): the first slice, and what it decided where this record was
+> silent.** The slice builds the descriptor, its derivation, its versions and its two
+> grants as the service package `api/pubinterface` on a sidecar store
+> (`published-interfaces`, classed as a credential under ADR-0282, because a send grant is
+> a standing permission a portable export must never confer). It does not build the
+> commitment, and it cannot build the send check on a route that does not exist yet.
+> Building it met these questions:
+>
+> - **The contract and its binding are two halves of a version.** The record says a
+>   contract version is immutable *and* that renaming an element changes the mapping and
+>   not the contract. Both hold only if the mapping is not part of the immutable thing. So a
+>   version holds an immutable **contract** (entry point names, kind, starts or continues,
+>   correlation key, payload; returns; outcomes) and a mutable **binding** (the definition
+>   key and, per name, the element ids and the internal message name). A version is
+>   **rebound** to a newer definition of the same process only when that definition
+>   realizes an equal contract; anything else is refused with what differs, and is a new
+>   version. Publishing a contract equal to the newest version's is refused too — that is
+>   a rebinding.
+> - **Five kinds, not four.** A message boundary event is an element a message reaches
+>   exactly as a receive task is, so leaving it out would publish an incomplete contract.
+>   It is derived as kind `boundary`, beside the four the record names.
+> - **What "derived payload" means.** In this order: a data object the element writes,
+>   typed against the information model (ADR-0230), gives the class; otherwise the names
+>   the element's output mappings read (ADR-0068) give a field list — which may include
+>   variables the instance already holds, because the model does not say which, and the
+>   descriptor does not guess; otherwise the payload is `untyped`. An intermediate catch
+>   carries no output mappings in this engine, so it is always one of the first or the
+>   last. Nothing is typed by the publisher.
+> - **Returns are what can leave an instance.** Error and escalation codes are those an
+>   error end or escalation throw raises and no enclosing boundary or event subprocess
+>   catches, by code or catch-all. A code-less one is not listed, and neither is an error a
+>   worker throws or a called process raises: none of those can be read from this
+>   definition. Reply messages are not derived wholesale — a message thrown to another
+>   process of the same domain is no part of a contract — the publisher names which thrown
+>   messages are replies, and only thrown ones can be named.
+> - **Every terminal outcome is named, or none is published.** A contract listing some
+>   root-scope end events would tell a consumer an instance cannot end at the others.
+>   Several end events may share one outcome, if they share its kind.
+> - **Who sees what.** A consumer holding **view** reads the contract and never the
+>   binding: element ids, message names and the process id are the publisher's internal
+>   organisation, which is this record's argument against Option 1. The publishing
+>   application's own members (ADR-0071) see the interface whatever its grants and read the
+>   binding; its owner reads the grants and the audit, as ADR-0184 has it for a project.
+>   **Send does not imply view**: the rights are independent in both directions.
+> - **Grants are per interface, not per version,** and are the application owner's act
+>   from their own signed-in session, as sharing the application is. Each grant names
+>   user and group ids that must exist; every change is one immutable audit entry holding
+>   both whole audiences, in the interface's own document.
+> - **Deprecation is not undone**, and deactivating the definition (ADR-0119), deleting it
+>   or moving it to another application answers the version as unavailable with a reason,
+>   while its contract stays readable.
+>
+> **Not in this slice, and why:**
+>
+> - **The commitment.** A publish that states one is refused by name. Nothing measures
+>   acceptance → correlation yet, and a stated promise nobody measures reads as kept — the
+>   failure the commitment section exists to prevent. It needs the breach to be an engine
+>   fact (opened on recovery from `expiresAt`, rate-limited under ADR-0337), which is
+>   engine work for its own slice.
+> - **The send check on `POST /api/v1/peer/messages`.** That route is ADR-0372's and is
+>   not built. `Store.MaySend` answers the binding for a principal holding the send grant,
+>   for that route to call; until it exists, a send grant lets nobody deliver anything,
+>   and the grant route says so.
+> - **Telling a consumer at deploy that its bound version is deprecated** arrives with the
+>   binding a consumer's model makes, ADR-0371.
+>
+> **Scale-out.** The store is design-time configuration owned by the API run loop, never
+> engine state, and touches no partition. An interface is addressed by its id and names
+> definition keys, both of which a cluster's control plane would own as it owns
+> deployments; nothing here routes by instance key or assumes one node for delivery, which
+> stays ADR-0372's.
+
 
 ## Context and problem statement
 

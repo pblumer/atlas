@@ -123,3 +123,35 @@ export function variableShape(v) {
   } catch { /* not a structure */ }
   return null;
 }
+
+// A variable that names a document (ADR-0543) holds
+// a small JSON object, {"$document": "doc_…", name, contentType, size, sha256}, and the
+// file itself is in the document store. documentRef reads one, or answers null for any
+// other value. It is never cut by a preview: a reference is far below the 512 bytes a
+// listing keeps.
+const DOC_ID = /^doc_[a-z2-7]{26}$/;
+export function documentRef(v) {
+  if (!v || v.kind !== "json" || v.truncated) return null;
+  let parsed;
+  try { parsed = JSON.parse(v.value); } catch { return null; }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const id = parsed.$document;
+  if (typeof id !== "string" || !DOC_ID.test(id)) return null;
+  return {
+    id,
+    name: typeof parsed.name === "string" && parsed.name ? parsed.name : id,
+    contentType: typeof parsed.contentType === "string" ? parsed.contentType : "",
+    size: Number(parsed.size) || 0,
+  };
+}
+
+// documentHref is where a document is downloaded from. The server decides whether the
+// person asking may read it; the link carries no permission of its own.
+export function documentHref(id) {
+  return `/api/v1/documents/${encodeURIComponent(id)}`;
+}
+
+// documentSizeText says how big a referenced document is.
+export function documentSizeText(ref) {
+  return ref && ref.size ? fmtBytes(ref.size) : "";
+}

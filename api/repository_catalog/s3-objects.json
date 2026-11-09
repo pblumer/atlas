@@ -1,6 +1,6 @@
 {
   "id": "atlas.s3-objects",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "connector",
   "title": "S3 object storage",
   "author": "Atlas core",
@@ -23,14 +23,16 @@
           { "name": "Copy object", "value": "copy-object" },
           { "name": "Delete object", "value": "delete-object" },
           { "name": "Link to download", "value": "presign-get" },
-          { "name": "Link to upload", "value": "presign-put" }
+          { "name": "Link to upload", "value": "presign-put" },
+          { "name": "Put document from the document store", "value": "put-document" },
+          { "name": "Take object into the document store", "value": "get-document" }
         ] },
       { "label": "Bucket", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:bucket" },
         "description": "The bucket this task acts in — one name, never a path. A value with a slash or a colon in it is refused, because it would address a different bucket or a different host." },
       { "label": "Key (everything but List objects)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:key" },
         "description": "The object's whole path inside the bucket, without a leading slash. Often a FEEL expression built from the case, e.g. =\"faelle/\" + vorgang.nummer + \"/antrag.pdf\". A retry re-runs the task with the same variables, so a key built from a timestamp writes a second object instead of overwriting the first." },
-      { "label": "Content (Put object)", "type": "Text", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:content" },
-        "description": "What to store. It travels through a process variable, so it is capped at 1 MiB — for anything larger use Link to upload and let the browser that has the document send it straight to the store." },
+      { "label": "Content (Put object / Put document)", "type": "Text", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:content" },
+        "description": "What to store. On Put object it travels through a process variable, so it is capped at 1 MiB. On Put document it is a variable holding a document reference, e.g. =antrag — the file a form uploaded — and the document goes from Atlas's document store to the bucket, up to 35 MiB, without passing through a variable." },
       { "label": "Content is (Put/Read object)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:encoding" },
         "choices": [
           { "name": "Text — the characters as they are", "value": "" },
@@ -54,7 +56,7 @@
       { "label": "Valid for, seconds (the two links)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:expiresIn" },
         "description": "How long the link works. Empty uses one hour; seven days is the most the signature allows. Keep it short: the URL is a key to that one object for anyone who has it, and it is stored in the instance's variables like any other value." },
       { "label": "Result variable (everything but Delete object)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
-        "description": "Receives what the store returned. A listing answers with objects, prefixes, truncated and nextStartAfter; a read with content, contentType and size; a check with exists; a link with url and expiresAt. FEEL lists are 1-based, so the first key is =seite.objects[1].key. Delete answers with nothing a process needs, and the compiler refuses a result variable on it." }
+        "description": "Receives what the store returned. A listing answers with objects, prefixes, truncated and nextStartAfter; a read with content, contentType and size; a check with exists; a link with url and expiresAt; Take object into the document store with a document reference. FEEL lists are 1-based, so the first key is =seite.objects[1].key. Delete answers with nothing a process needs, and the compiler refuses a result variable on it." }
     ]
   }
 }

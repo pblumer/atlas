@@ -133,6 +133,9 @@ api/        HTTP API, web UI, command submission and queries
               whose stages they perform, with the realisation edge resolved at read
               time and the gap report computed against what this server runs
               (ADR-0305)
+  pubinterface/ A process's published interface: the contract derived from a deployed
+              definition, its versions and bindings, and the view and send grants
+              (ADR-0373)
   formlookup/ A task form's remote data sources: the directory field's schema, the
               provider registry, the task-bound lookup route and the check before
               completion (ADR-0473)

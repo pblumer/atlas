@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas variables-sections e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`, for
+         the Variables tab of a selected element: what it was handed (Input), what it wrote
+         (Output) and what it could reach (Environment), grouped by the scope that holds a
+         value. The task is one round of a multi-instance inside a subprocess, beside a
+         second subprocess whose variables are out of its reach. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+      import { enhanceTable } from "/table.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_sections" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="bestellung" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:parallelGateway id="Fork_1"><bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing><bpmn:outgoing>f_2</bpmn:outgoing></bpmn:parallelGateway>
+    <bpmn:subProcess id="Pruefung_1" name="Prüfung"><bpmn:incoming>f_1</bpmn:incoming>
+      <bpmn:userTask id="Bewerten_1" name="Position bewerten">
+        <bpmn:multiInstanceLoopCharacteristics isSequential="true"/>
+      </bpmn:userTask>
+    </bpmn:subProcess>
+    <bpmn:subProcess id="Andere_1" name="Anderes"><bpmn:incoming>f_2</bpmn:incoming></bpmn:subProcess>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Fork_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Fork_1" targetRef="Pruefung_1"/>
+    <bpmn:sequenceFlow id="f_2" sourceRef="Fork_1" targetRef="Andere_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="bestellung">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="100" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Fork_1_di" bpmnElement="Fork_1"><dc:Bounds x="170" y="135" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Pruefung_1_di" bpmnElement="Pruefung_1" isExpanded="true"><dc:Bounds x="260" y="60" width="220" height="140"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Bewerten_1_di" bpmnElement="Bewerten_1"><dc:Bounds x="320" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Andere_1_di" bpmnElement="Andere_1"><dc:Bounds x="260" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="136" y="160"/><di:waypoint x="170" y="160"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="220" y="160"/><di:waypoint x="260" y="160"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_2_di" bpmnElement="f_2"><di:waypoint x="195" y="185"/><di:waypoint x="195" y="270"/><di:waypoint x="260" y="270"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const positionen = JSON.stringify([{ artikel: "Notebook", menge: 2 }, { artikel: "Maus", menge: 5 }]);
+      const pos = JSON.stringify({ artikel: "Notebook", menge: 2 });
+      // What the first round could see on entry: the process's variables and constants, its
+      // subprocess's local, the body's output collection — and a variable of the subprocess
+      // running beside it, which is in the same snapshot and in nobody's reach from here.
+      const entry = [
+        { name: "positionen", value: positionen, kind: "json" },
+        { name: "szenario", value: "manuell", kind: "string" },
+        { name: "MAX_POSITIONEN", value: "20", kind: "number", constant: "process" },
+        { name: "server", value: JSON.stringify({ environment: "test" }), kind: "json", constant: "server" },
+        { name: "limite", value: "1000", kind: "number", scope: "Pruefung_1", scopeKind: "subprocess" },
+        { name: "bewertungen", value: "[null,null]", kind: "json", scope: "Bewerten_1", scopeKind: "multiInstanceBody" },
+        { name: "fremd", value: "x", kind: "string", scope: "Andere_1", scopeKind: "subprocess" },
+      ];
+      // Once the round finished: it kept its answer in its own scope and rewrote a process
+      // variable it found, another path wrote a note meanwhile — and the body's collection
+      // still reads unfilled, because its per-round element writes are not in the history
+      // (ADR-0296); the server folds it filled only once the loop has finished.
+      const after = [
+        ...entry.map((v) => v.name === "szenario" ? { ...v, value: "geprueft" } : v),
+        { name: "notiz", value: "von Hand", kind: "string" },
+      ];
+      const writes = [
+        { name: "szenario", value: "geprueft", kind: "string" },
+        { name: "bewertung", value: "gut", kind: "string", scope: "Bewerten_1", scopeKind: "local" },
+      ];
+
+      const steps = [
+        { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1", variables: [] },
+        { elementId: "Pruefung_1", elementInstanceKey: "1001", type: "bpmn:subProcess", position: 2, tokenId: "2", variables: entry.slice(0, 4) },
+        { elementId: "Bewerten_1", elementInstanceKey: "1002", type: "bpmn:userTask", position: 3, tokenId: "3", variables: entry.slice(0, 5) },
+        {
+          elementId: "Bewerten_1", elementInstanceKey: "1003", type: "bpmn:userTask", position: 4, tokenId: "4", parentTokenId: "3",
+          iteration: 1, variables: entry, variablesAfter: after, writes,
+          inputs: [{ name: "loopCounter", value: "1", kind: "number" }, { name: "pos", value: pos, kind: "json" }],
+        },
+        // The second round is still open: nothing it wrote can be named yet.
+        {
+          elementId: "Bewerten_1", elementInstanceKey: "1004", type: "bpmn:userTask", position: 5, tokenId: "5", parentTokenId: "3",
+          iteration: 2, variables: after,
+          inputs: [{ name: "loopCounter", value: "2", kind: "number" }, { name: "pos", value: JSON.stringify({ artikel: "Maus", menge: 5 }), kind: "json" }],
+        },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: s.elementInstanceKey === "1004" ? undefined : ns(T + i * 1000 + 500) }));
+
+      const frames = steps.map((s) => ({
+        position: s.position, at: s.at,
+        tokens: [{ elementId: s.elementId, tokenId: s.tokenId, elementInstanceKey: s.elementInstanceKey, state: "active" }],
+      }));
+
+      const TIMELINE = { processDefKey: "7", processId: "bestellung", version: 1, state: "active", variableAttribution: true, steps, frames };
+
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
+        return {};
+      };
+
+      // As app.js does once a route has mounted (enhanceViewTables): the section headings
+      // and the shared sort/filter helper have to agree about the rows.
+      window.__mount = async () => {
+        await mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+        for (const t of view.querySelectorAll("table:not(.no-enhance)")) enhanceTable(t);
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

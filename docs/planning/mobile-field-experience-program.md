@@ -93,6 +93,10 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 - Vertical example: safety inspection with validation and confirmation; completion uses the existing HTTP API and only displays confirmed success after durability.
 - **Exit:** device-size and E2E tests for claim, data validation, submit, back navigation, expired session and server refusal; no unsupported form-js features claimed.
 
+### MFE1A — Start-grant administration in the Console (planned)
+
+**Planned 2026-11-09 by the programme owner** ([plan](mfe1a-start-grant-administration.md), [issue #1639](https://github.com/pblumer/atlas/issues/1639)). Administrators manage ADR-0516's start grants on a Console administration page — application, processes, audience picked by name, check one person or group, revoke, history — instead of HTTP requests with ids and revisions. Administrators also see a read-only hint per process in the application's Deployments tab. The only server change is an additive `blockers` field on the two grant reads; no new route and no new authority. No new ADR. Stays planned until the owner starts it (WIP exception covers MFE0/MFE1/MFE2 only).
+
 ### MFE2 — Mobile incident triage
 
 **Implementation in progress (2026-11-01):** The MFE owner approved read-only UI implementation in parallel with MFE0 device acceptance and MFE1 scoped-start security design (explicit three-slice WIP exception). [PR #1477](https://github.com/pblumer/atlas/pull/1477) merged only the implementation contract; [draft PR #1479](https://github.com/pblumer/atlas/pull/1479) implements an adaptive cause-first view, scoped `limit=10` detail and negative authorization tests for mobile devices. Desktop Operations remains unchanged. No server permission expansion, alarm acknowledgement, repair, retry or engine persistence work is part of MFE2. CI and physical-device acceptance (#1451) remain open.

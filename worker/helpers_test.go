@@ -26,6 +26,19 @@ func post(t *testing.T, ts *httptest.Server, path, body, contentType string) []b
 	return out
 }
 
+// deployInApp deploys model into a fresh application: every process belongs to one
+// (ADR-0544).
+func deployInApp(t *testing.T, ts *httptest.Server, model string) {
+	t.Helper()
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(post(t, ts, "/api/v1/applications", `{"name":"Worker"}`, "application/json"), &app); err != nil || app.ID == "" {
+		t.Fatalf("create application: %v", err)
+	}
+	post(t, ts, "/api/v1/deployments?projectId="+app.ID, model, "application/xml")
+}
+
 func get(t *testing.T, ts *httptest.Server, path string) []byte {
 	t.Helper()
 	resp, err := http.Get(ts.URL + path)
