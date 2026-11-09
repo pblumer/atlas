@@ -64,7 +64,7 @@ test("falls back to the process ID when there is no name", async ({ page }) => {
 });
 
 // Pausing automatic starts (ADR-0119) is offered where an operator watches the process
-// (ADR-draft-the-application-holds-its-deployments): the heading says when the version is
+// (ADR-0541): the heading says when the version is
 // paused, and the newest version carries the switch for an operator.
 test("an operator pauses and resumes the newest version from the heading", async ({ page }) => {
   const { errors } = await open(page, 1440, "Identitäts-Lebenszyklus");

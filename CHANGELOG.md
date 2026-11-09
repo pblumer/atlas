@@ -125,7 +125,7 @@ _Changed_ / _Removed_ for each version.
   starts, or delete it. *Not assigned* gains a Deployments tab of its own, so the home page names
   it once. The Operations live view says when a definition is paused and gives an operator the
   pause switch on the newest version. `GET /api/v1/applications/{id}/deployments` now carries
-  each definition's `frozenDecisions`. ADR-draft-the-application-holds-its-deployments.
+  each definition's `frozenDecisions`. ADR-0541.
 - **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
   the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
   "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact

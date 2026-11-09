@@ -208,7 +208,7 @@ type applicationDefinition struct {
 	// FrozenDecisions are the decisions this definition was frozen on at deploy
 	// (ADR-0319, ADR-0423), absent for every definition that follows latest. This
 	// view is where the owner redeploys, pauses or deletes a process
-	// (ADR-draft-the-application-holds-its-deployments), so it carries the mark the
+	// (ADR-0541), so it carries the mark the
 	// process listing does.
 	FrozenDecisions []frozenDecisionResp `json:"frozenDecisions,omitempty"`
 }

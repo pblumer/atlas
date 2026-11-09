@@ -8535,7 +8535,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 }
 
 /* An application's Deployments tab: a process's older versions fold under its version
-   chip, one line each (ADR-draft-the-application-holds-its-deployments). */
+   chip, one line each (ADR-0541). */
 details.dep-versions { margin-top: 4px; font-size: 12px; }
 details.dep-versions ul { margin: 4px 0 0; padding-left: 16px; }
 details.dep-versions li { margin: 2px 0; white-space: nowrap; }

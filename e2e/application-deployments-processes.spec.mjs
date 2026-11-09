@@ -1,7 +1,7 @@
 // An application's Deployments tab lists one row per deployed process, with the older
 // versions folded under it, and carries what is done to a process: open it, see its
 // instances, pause or resume its automatic starts, delete it
-// (api/web/app.js renderAppDeployments, ADR-draft-the-application-holds-its-deployments).
+// (api/web/app.js renderAppDeployments, ADR-0541).
 // "Not assigned" has the same tab, built from the process listing.
 import { test, expect } from "@playwright/test";
 

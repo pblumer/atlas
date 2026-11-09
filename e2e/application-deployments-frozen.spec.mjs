@@ -2,7 +2,7 @@
 // at deploy time (api/web/app.js, api/web/frozen-decisions.js, ADR-0423).
 //
 // That tab is where an owner opens and redeploys a process
-// (ADR-draft-the-application-holds-its-deployments), and redeploying is what makes a
+// (ADR-0541), and redeploying is what makes a
 // frozen definition follow each new decision version — so the mark belongs on its
 // row, and on no row whose definition follows latest.
 import { test, expect } from "@playwright/test";

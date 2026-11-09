@@ -3937,7 +3937,7 @@ function wireSections(root) {
 // how many processes each has deployed. What is deployed, and what is done to it —
 // pause, delete, open — lives in the application's Deployments tab, the one place a
 // deployed process is listed in the Modeler
-// (ADR-draft-the-application-holds-its-deployments). The table folds under its
+// (ADR-0541). The table folds under its
 // heading like every other list (ADR-0505). "Create new" is a single dropdown.
 async function viewModelerHome() {
   view.innerHTML = `
@@ -4494,7 +4494,7 @@ async function renderHeldConstants(host, o) {
 // groupDeployedProcesses folds an application's deployed definitions into one entry per
 // process: its newest version, the older ones newest first, and the instances all of
 // them hold. A process is what somebody pauses, deletes or opens; its versions are
-// detail under it (ADR-draft-the-application-holds-its-deployments). A count that is
+// detail under it (ADR-0541). A count that is
 // not known (null) keeps the sum unknown rather than reading as nought.
 function groupDeployedProcesses(definitions) {
   const byId = new Map();
@@ -4553,7 +4553,7 @@ async function ungroupedDeployments() {
 // version, its deployed processes with their versions, instance counts and the
 // actions on them, and its release history (ADR-0128). It is the one place a
 // deployed process is paused, deleted or opened from its application
-// (ADR-draft-the-application-holds-its-deployments). "ungrouped" is the processes filed
+// (ADR-0541). "ungrouped" is the processes filed
 // under no application: no releases, no targets.
 async function renderAppDeployments(id, { canWrite = false } = {}) {
   const host = document.getElementById("pd-deployments");

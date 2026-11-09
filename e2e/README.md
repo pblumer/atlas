@@ -105,7 +105,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   instances, keeps it disarmed; Escape cancels.
 - **`modeler-home-applications.spec.mjs`**, **`application-deployments-processes.spec.mjs`** and
   **`application-deployments-frozen.spec.mjs`**
-  ([ADR-draft-the-application-holds-its-deployments](../docs/adr/draft-the-application-holds-its-deployments.md)):
+  ([ADR-0541](../docs/adr/0541-the-application-holds-its-deployments.md)):
   the Modeler home is one folding table of applications with no deployed list of its own, and
   its *Deployed* column counts each application's processes and paused ones and opens its
   Deployments tab; that tab lists one row per process with the older versions folded under it,

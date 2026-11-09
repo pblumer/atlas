@@ -146,7 +146,7 @@ func TestAVersionListingTellsAFrozenHolderFromAChosenOne(t *testing.T) {
 
 // TestAnApplicationsDeploymentsMarkAFrozenDefinition: the Deployments tab of an
 // application is where its owner pauses, deletes and redeploys a process now that the
-// Modeler home no longer lists deployed processes (ADR-draft-the-application-holds-its-deployments),
+// Modeler home no longer lists deployed processes (ADR-0541),
 // so the mark that says a definition evaluates a frozen decision rides that view too —
 // on the frozen definition and on no other.
 func TestAnApplicationsDeploymentsMarkAFrozenDefinition(t *testing.T) {

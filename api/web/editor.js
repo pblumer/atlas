@@ -12912,7 +12912,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance, mayUs
 
   // Pausing automatic starts (ADR-0119) is an operator's intervention on a running
   // process, so it is offered where the operator watches it, beside the Modeler's
-  // Deployments tab (ADR-draft-the-application-holds-its-deployments). Only the newest
+  // Deployments tab (ADR-0541). Only the newest
   // version starts anything by itself, so only it gets the switch; an older version
   // that was paused still says so.
   {
