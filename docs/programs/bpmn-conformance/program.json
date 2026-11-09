@@ -1,0 +1,119 @@
+{
+  "id": "bpmn-conformance",
+  "name": "BPMN 2.x Conformance",
+  "summary": "Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-08",
+  "plan": "../../planning/bpmn-conformance-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
+  "next_action": "Review CON0 normative exclusions and statement-level denominator in issue #1615; verify CON1 Python/Go CI report drift guards and accept PR before marking either slice complete. CON2 fixture implementation remains blocked until CON1 acceptance.",
+  "slices": [
+    {
+      "id": "CON0",
+      "title": "Normative inventory and source-to-evidence audit",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [
+        1615
+      ],
+      "prs": [
+        1618
+      ],
+      "note": "Normative source audit, 13x8 event legality (63 legal), and all 43 revised WCP titles inventoried. Reviewer sign-off on complete SHALL-level denominator and exact §13.1 exclusions remains open; PR #1616 has been superseded by combined PR #1618. Do not mark complete on an inventory count alone.",
+      "evidence": [
+        "../../planning/bpmn-conformance-con0-audit.md",
+        "../../planning/bpmn-conformance-con0-event-matrix.md",
+        "../../planning/bpmn-conformance-con0-workflow-patterns.md"
+      ]
+    },
+    {
+      "id": "CON1",
+      "title": "Machine-readable registry and truthful coverage generator",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "CON0"
+      ],
+      "issues": [
+        1617
+      ],
+      "prs": [
+        1618
+      ],
+      "note": "Owner-requested combined CON0/CON1 implementation against explicitly frozen provisional CON0 candidate IDs: JSON registry, 105 requirements, 104 event cells, 43 WCPs; Python validator, 15 regression tests, generated evidence report, CI gate, legacy report correction. Dependency exception is implementation-only, not acceptance. Await green final CI, normative per-SHALL review and CON0 sign-off.",
+      "evidence": [
+        "../../../conformance/registry/registry.json",
+        "../../../conformance/NORMATIVE_COVERAGE.md",
+        "../../../scripts/conformance_registry.py",
+        "../../../scripts/test_conformance_registry.py"
+      ]
+    },
+    {
+      "id": "CON2",
+      "title": "Supported semantics and negative diagnostic fixtures",
+      "status": "planned",
+      "owner": "pblumer",
+      "depends_on": [
+        "CON1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Add specification-reviewed scenarios for supported variants and exact diagnostic-code negatives for unsupported/invalid combinations."
+    },
+    {
+      "id": "CON3",
+      "title": "Full-state and mid-flight recovery oracles",
+      "status": "planned",
+      "owner": "pblumer",
+      "depends_on": [
+        "CON1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Add deterministic restart-at-wait checkpoints and full persisted-state comparison across jobs, timers, subscriptions, incidents, scopes and compensation."
+    },
+    {
+      "id": "CON4",
+      "title": "Independent differential validation and portable TCK",
+      "status": "planned",
+      "owner": "pblumer",
+      "depends_on": [
+        "CON1",
+        "CON2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Extend reference translations beyond four cases, review expectations independently and run an explicit non-skipping differential CI job."
+    },
+    {
+      "id": "CON5",
+      "title": "Public normative conformance report and documentation reconciliation",
+      "status": "planned",
+      "owner": "pblumer",
+      "depends_on": [
+        "CON1",
+        "CON2",
+        "CON3",
+        "CON4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Render denominator-specific report; align README, roadmap, TCK docs and conformance gallery with evidence-backed claims."
+    },
+    {
+      "id": "CON6",
+      "title": "Close genuine BPMN semantics gaps via ADR-gated slices",
+      "status": "planned",
+      "owner": "pblumer",
+      "depends_on": [
+        "CON0",
+        "CON1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests."
+    }
+  ]
+}

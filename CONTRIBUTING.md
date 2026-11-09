@@ -30,6 +30,23 @@ Atlas's performance and correctness rest on a few load-bearing decisions, captur
 4. **One `applyToState`.** State mutation lives in exactly one function, used identically live and on recovery. Don't fork that logic.
 5. **Compile, don't interpret.** Work that can happen at deploy time (parsing, validation, interning, expression compilation) must not happen on the hot path.
 
+## Mandatory scale-out review
+
+All new features, including new HTTP/MCP services, design-time stores, UI read
+models, Workers and background processing, must be designed so that atlas can
+eventually scale across nodes without rewriting their contracts.
+Review the [scale-out readiness design constraint](docs/architecture/scale-out-readiness.md)
+before implementation and complete the corresponding section of the PR
+template. Document the state owner, routing boundary, durability/failover,
+idempotency, query consistency and standalone migration seam. A reasoned
+`N/A` is acceptable for changes with no scale-out impact.
+
+This is a forward-compatibility gate, not a statement that multi-node execution
+has shipped. [ADR-0175](docs/adr/0175-replicated-partition-cells.md) remains
+**Proposed / Not started**. Escalate incompatible designs or undecided
+cluster semantics to architecture review and an ADR; do not silently add
+hard-to-remove local-only assumptions.
+
 ## Development
 
 Atlas is developed **test-first** — TDD is the default workflow, not an aspiration ([ADR-0018](docs/adr/0018-test-driven-development.md)):

@@ -81,12 +81,12 @@ Bearer` header.
 | `atlas_list_forms` | `projectId?` | saved form definitions |
 | `atlas_get_form` | `id` | a form's schema |
 | `atlas_upload_decision_model` | `handle`, `xml` | stored DMN model |
-| `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
-| `atlas_list_decision_refs` | `projectId?` | registered DMN decision references |
+| `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered rule (decision reference) |
+| `atlas_list_decision_refs` | `projectId?` | registered rules (DMN decision references) |
 | `atlas_list_decisions` | `projectId?` | DMN decisions (with inputs/outputs) from references |
 | `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |
 | `atlas_decision_evaluations` | `id` | one decision's evaluation history across all instances |
-| `atlas_dmnref_graph` | `id` | a decision reference's DRD (nodes and edges) |
+| `atlas_dmnref_graph` | `id` | a rule's (decision reference's) DRD (nodes and edges) |
 | `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
 | `atlas_deploy_project` | `id` | deployed project definitions |
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
@@ -150,7 +150,7 @@ answers a bare instance key with a point read, whatever the population.
 ## Three things can be deleted, and they are not each other
 
 `atlas_delete_project {id}` deletes only the design-time grouping folder. It is
-idempotent. Drafts and decision references remain and become ungrouped.
+idempotent. Drafts and rules (decision references) remain and become ungrouped.
 Deployed definitions and process instances are unaffected. With API
 authentication enabled, the caller must satisfy the project owner rule.
 

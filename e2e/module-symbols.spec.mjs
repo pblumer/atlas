@@ -61,7 +61,7 @@ test("the welcome card shows the rocket, and it loads", async ({ page }) => {
 test("on a phone the welcome card leaves the rocket out", async ({ page }) => {
   await boot(page, { width: 390 });
   await expect(page.locator(".welcome-card img.welcome-art")).toBeHidden();
-  await expect(page.locator(".welcome-card a.btn", { hasText: "Open Modeler" })).toBeVisible();
+  await expect(page.locator(".welcome-card a.btn", { hasText: "Modeler öffnen" })).toBeVisible();
 });
 
 // The top bar says which app one is in by its name and, beside it, its symbol — the

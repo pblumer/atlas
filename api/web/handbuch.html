@@ -10054,16 +10054,16 @@ atlas worker --connector mssql</code></pre>
       <h3 data-l="de">Die Applikation als Liefereinheit</h3>
       <h3 data-l="en">The application as the unit of delivery</h3>
       <p data-l="de">Eine <b>Applikation</b> ist dasselbe wie ein Projekt, nur umbenannt (ADR-0128): sie gruppiert
-        Entwürfe, Formulare und Entscheidungsreferenzen unter einem Namen und einem <b>Schlüssel</b>, den atlas
+        Entwürfe, Formulare und <b>Regeln</b> (Verweise auf eine Entscheidung in einem DMN-Modell) unter einem Namen und einem <b>Schlüssel</b>, den atlas
         einmal aus dem Namen ableitet und bei einer Umbenennung behält. Ausgeliefert wird sie als Ganzes. Beim
-        Publizieren werden ihre BPMN-Entwürfe und die von ihnen gebundenen DMN-Referenzen zusammen deployt –
+        Publizieren werden ihre BPMN-Entwürfe und die von ihnen gebundenen Regeln zusammen deployt –
         alle oder keiner; <b>Formulare gehören zur Applikation, werden aber nicht deployt</b>. In der Konsole legt
         man sie im Modeler unter <i>Neu erstellen › Neue Anwendung</i> an; ihr Detail hat die Reiter
         <i>Artefakte</i> und <i>Deployments</i>.</p>
       <p data-l="en">An <b>application</b> is the same thing as a project, only renamed (ADR-0128): it groups
-        drafts, forms and decision references under one name and one <b>key</b> that atlas derives once from the
-        name and keeps across a rename. It is delivered as a whole. Publishing deploys its BPMN drafts and the DMN
-        references they bind together – all or none; <b>forms belong to the application but are not deployed</b>.
+        drafts, forms and <b>rules</b> (references to a decision in a DMN model) under one name and one <b>key</b> that atlas derives once from the
+        name and keeps across a rename. It is delivered as a whole. Publishing deploys its BPMN drafts and the
+        rules they bind together – all or none; <b>forms belong to the application but are not deployed</b>.
         In the Console you create one in the Modeler under <i>Create new › New application</i>; its detail has the
         <i>Artifacts</i> and <i>Deployments</i> tabs.</p>
 
@@ -10353,7 +10353,7 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/releases/1/
       <h3 data-l="de">Der Quellbaum: die Quelle bewegen, nicht das Deployment</h3>
       <h3 data-l="en">The source tree: moving the source, not the deployment</h3>
       <p data-l="de">Promotion bewegt, <i>was deployt ist</i>. Der <b>Quellbaum</b> bewegt, <i>was ein Mensch
-        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Anwendung exportieren…</i>
+        bearbeitet</i>: Entwürfe, Formulare und Regeln als lesbare Dateien. <i>Anwendung exportieren…</i>
         lädt ein <code>tar.gz</code> mit einem Manifest <code>atlas.json</code> (Format-Version, Schlüssel, Name)
         und je einer Datei unter <code>processes/</code> und <code>forms/</code>; Entscheidungen stehen als Verweis
         im Manifest, DMN-Modelle dieses Servers als Datei. Auf Wunsch kommen die Konstanten-Werte und die Kataloge
@@ -10363,7 +10363,7 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/releases/1/
         listet er zur Entscheidung auf. Ein eingebautes Git gibt es nicht – der Quellbaum ist ein Archiv, das man
         selbst versionieren kann.</p>
       <p data-l="en">Promotion moves <i>what is deployed</i>. The <b>source tree</b> moves <i>what a person
-        edits</i>: drafts, forms and decision references as readable files. <i>Export application…</i> downloads a
+        edits</i>: drafts, forms and rules as readable files. <i>Export application…</i> downloads a
         <code>tar.gz</code> with a manifest <code>atlas.json</code> (format version, key, name) and one file each
         under <code>processes/</code> and <code>forms/</code>; decisions appear as a reference in the manifest, this
         server's DMN models as files. The constant values and the catalogues that sell the application can come along
@@ -11837,7 +11837,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         and offers the forced delete.</p>
       <p data-l="de">Beim Löschen einer Applikation wählst du: Entweder bleibt ihr Inhalt erhalten und erscheint
         unter <i>Nicht zugeordnet</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen
-        samt laufenden Instanzen, Entscheidungs-Deployments, BPMN- und Entscheidungsentwürfe, DMN-Referenzen mit ihren
+        samt laufenden Instanzen, Entscheidungs-Deployments, BPMN- und Entscheidungsentwürfe, Regeln mit ihren
         gespeicherten Modellen, Formulare, Testszenarien, Panorama- und Informationsmodelle
         (<code>DELETE /api/v1/applications/{id}?purge=true</code>, nur für die Besitzerin oder den Besitzer der
         Applikation). Vorher zeigt der Dialog, was <code>GET /api/v1/applications/{id}/deletion-preview</code>
@@ -11847,7 +11847,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         weiterbestehen: Das nächste Deployment würde sonst eine Versionsnummer ein zweites Mal vergeben.</p>
       <p data-l="en">When you delete an application you choose: either its contents are kept and appear under
         <i>Not assigned</i>, or everything it owns on this server is deleted with it – deployed versions together with
-        their running instances, decision deployments, BPMN and decision drafts, DMN references with their stored
+        their running instances, decision deployments, BPMN and decision drafts, rules with their stored
         models, forms, test scenarios, Panorama and information models
         (<code>DELETE /api/v1/applications/{id}?purge=true</code>, for the application's owner only). Before that,
         the dialog shows what <code>GET /api/v1/applications/{id}/deletion-preview</code> reports: what is deleted
@@ -13698,11 +13698,11 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
 
         <li><b data-l="de">Publizieren &ndash; alles auf einmal</b><b data-l="en">Publish &ndash; everything at once</b>
           <p data-l="de">Beim <b>Publizieren</b> pr&uuml;ft atlas die Applikation als Ganzes: l&ouml;st jede
-            DMN-Referenz auf, bindet die Entscheidungen an die Business-Rule-Tasks, kompiliert beide Prozesse. Ein
+            Regel auf, bindet die Entscheidungen an die Business-Rule-Tasks, kompiliert beide Prozesse. Ein
             einziger Fehler &ndash; eine Entscheidung, die kein Modell liefert &ndash; weist den ganzen Bundle-Deploy
             zur&uuml;ck, statt ein halbes Release zu hinterlassen. Danach steht ein <b>Release</b> mit einer
             Versionsnummer und einer Momentaufnahme dessen, was ausgeliefert wurde.</p>
-          <p data-l="en"><b>Publishing</b> validates the application as a whole: every DMN reference is resolved, the
+          <p data-l="en"><b>Publishing</b> validates the application as a whole: every rule is resolved, the
             decisions are bound to the business rule tasks, both processes are compiled. A single failure &ndash; a
             decision no model provides &ndash; refuses the entire bundle deploy instead of leaving half a release
             behind. What you get is a <b>release</b> with a version number and a snapshot of what shipped.</p>

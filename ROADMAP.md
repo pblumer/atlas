@@ -25,6 +25,8 @@ The skeleton that proves the three pillars fit together end to end.
 
 The control-flow basics most real models use.
 
+- 🚧 **BPMN 2.x Conformance (CON) programme — CON0/CON1 implementation in review**: [programme plan](docs/planning/bpmn-conformance-program.md), [source baseline](docs/planning/bpmn-conformance-baseline.md), [normative inventory seed](docs/planning/bpmn-conformance-feature-inventory.md), [implementation runbook](docs/planning/bpmn-conformance-implementation-runbook.md), and [operational manifest](docs/programs/bpmn-conformance/program.json). CON0 audits OMG BPMN 2.0.2 against the implemented compiler/engine and tests; CON1–CON5 deliver truthful cataloguing, executable/negative/recovery/differential evidence and reporting; CON6 addresses separately approved engine gaps. **Current 34 registered features / 9 patterns and "Gaps: None" are registry-local figures, not proof of complete OMG coverage.** The provisional [machine-readable normative candidate register](conformance/registry/registry.json) and [generated separate coverage report](conformance/NORMATIVE_COVERAGE.md) hold 105 candidate rows, a 13×8 event legality matrix and 43 independent WCP identifiers, **without an approved denominator or any OMG conformance claim**. CON0 reviewer sign-off and CON1 CI/PR acceptance are still outstanding.
+
 - ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
   `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
 - ✅ **Script tasks**: evaluate FEEL in-engine (reading input variables) and write
@@ -1334,7 +1336,12 @@ What it takes to run this for real.
 
 ## Milestone 5 — Scale-out 🔲
 
-Beyond a single node.
+Beyond a single node. The target topology is described in
+[ADR-0175](docs/adr/0175-replicated-partition-cells.md)
+(**Proposed / Not started**). Until clustering lands, **all new milestone work
+must pass the [scale-out readiness review](docs/architecture/scale-out-readiness.md)**.
+This is a forward-compatibility design gate, not evidence that multi-node
+execution or HA is available. Existing standalone operation remains supported.
 
 - 🔲 Networked inter-partition message transport (ADR-0006)
 - 🔲 Cross-partition message correlation and call activities

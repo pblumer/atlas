@@ -4094,6 +4094,9 @@ details.fold-sub[open] > summary::before { transform: rotate(90deg); }
   display: inline-flex; align-items: center; gap: 6px; min-width: 60px;
 }
 .artifact-name { display: flex; align-items: center; gap: 10px; }
+/* The notation pill in an application's type column (BPMN, DMN, FORM) has one width,
+   so the plain-language type beside it lines up from row to row. */
+.artifact-type .chip { min-width: 46px; text-align: center; box-sizing: border-box; }
 /* A superseded deployment version: still listed and still addressable, but no
    longer the one that starts instances, so it recedes behind the current row. */
 .muted-row > td { opacity: .62; }

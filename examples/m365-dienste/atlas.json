@@ -114,6 +114,11 @@
       "path": "sharepoint-site.bpmn"
     },
     {
+      "id": "proc_m365_sichtbarkeit_nachfuehren",
+      "name": "Microsoft 365: Sichtbarkeit nachführen",
+      "path": "sichtbarkeit-nachfuehren.bpmn"
+    },
+    {
       "id": "proc_m365_team",
       "name": "Microsoft Teams: Team",
       "path": "team.bpmn"
@@ -414,6 +419,16 @@
       "id": "m365-sharepoint-site-pruefen",
       "name": "m365-sharepoint-site-pruefen",
       "path": "m365-sharepoint-site-pruefen.form.json"
+    },
+    {
+      "id": "m365-sichtbarkeit",
+      "name": "m365-sichtbarkeit",
+      "path": "m365-sichtbarkeit.form.json"
+    },
+    {
+      "id": "m365-sichtbarkeit-nachfuehren",
+      "name": "m365-sichtbarkeit-nachfuehren",
+      "path": "m365-sichtbarkeit-nachfuehren.form.json"
     },
     {
       "id": "m365-team-bestellung",
