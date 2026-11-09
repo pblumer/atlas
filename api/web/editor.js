@@ -14907,7 +14907,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // beside the diagram (its variables) follows it.
 // mountDiagramPreview draws one BPMN model read-only into container: an atlas hub
 // package's model, before anything of it is installed
-// (ADR-draft-blueprint-architecture-preview). The container is expected to carry the
+// (ADR-0539). The container is expected to carry the
 // tp-canvas class, which hides the palette, the context pad and the inline editor, so
 // the model reads as a diagram; nothing drawn here is saved anywhere. The XML is the
 // package's own text, parsed by bpmn-js into shapes whose labels are text, never

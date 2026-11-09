@@ -262,7 +262,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   };
 
   // The sketch and the models are read for the digest this preview reported, so what
-  // they show is the package the person is looking at (ADR-draft-blueprint-architecture-preview).
+  // they show is the package the person is looking at (ADR-0539).
   const pinned = (inspected, tail, extra = "") => route(inspected.blueprintId, inspected.version) + tail +
     "?digest=" + encodeURIComponent(inspected.digest) + extra;
 

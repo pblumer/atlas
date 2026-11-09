@@ -84,7 +84,7 @@ type Snapshot struct {
 	// event feed; part of the application layer, absent before format version 7.
 	Coupling *Coupling `json:"coupling,omitempty"`
 	// Packaged is set on a snapshot derived from a package's process models before any
-	// installation read them (an atlas hub preview, ADR-draft-blueprint-architecture-preview).
+	// installation read them (an atlas hub preview, ADR-0539).
 	// It has no physical, strategy or peer facts, and nothing in it says what an
 	// installation holds: the renderings word every "here" accordingly. A release's
 	// snapshot never sets it.
@@ -311,7 +311,7 @@ type Meta struct {
 	ReleaseID     string
 	Version       int32
 	// Blueprint, when set, says the snapshot was derived from an atlas hub package
-	// before any installation read it (ADR-draft-blueprint-architecture-preview), not
+	// before any installation read it (ADR-0539), not
 	// recorded with a release: ReleaseID and Version are then empty, and the
 	// renderings name the package instead.
 	Blueprint *BlueprintOrigin

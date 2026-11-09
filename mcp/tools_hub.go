@@ -90,7 +90,7 @@ func hubTools() []Tool {
 		{
 			Name: "atlas_hub_release_architecture",
 			Description: "The architecture sketch of an atlas hub release's application before it is installed " +
-				"(ADR-draft-blueprint-architecture-preview), as data: the server derives it from the process " +
+				"(ADR-0539), as data: the server derives it from the process " +
 				"models of the verified package and from nothing else — the messages its processes receive " +
 				"(entryPoints), the workers, job types, decisions and calls they name (dependencies), the data " +
 				"objects and personal data they declare (data), the roles their user tasks name (business) and " +

@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 - **The atlas hub preview shows the application's architecture sketch and its process diagrams.**
   Before a release is installed, the server derives its architecture sketch from the process
-  models of the verified package (ADR-draft-blueprint-architecture-preview): the messages its
+  models of the verified package (ADR-0539): the messages its
   processes receive, the workers, job types, decisions and calls they name, their data objects
   and personal data, the roles of their user tasks and the names they throw and catch — drawn
   by the same code as a release's sketch, marked as a package preview and stamped with the

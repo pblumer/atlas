@@ -1,4 +1,4 @@
-# ADR-DRAFT: An atlas hub release shows its architecture sketch and its process models before it is installed
+# ADR-0539: An atlas hub release shows its architecture sketch and its process models before it is installed
 
 - **Status:** Accepted
 - **Implementation:** Landed

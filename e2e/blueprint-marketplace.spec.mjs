@@ -34,7 +34,7 @@ function tarGz(files) {
   return zlib.gzipSync(Buffer.concat(blocks));
 }
 // The server's own sketch of the package and the models it carries
-// (ADR-draft-blueprint-architecture-preview). The sketch is plain SVG; a model whose
+// (ADR-0539). The sketch is plain SVG; a model whose
 // name is markup must arrive as text.
 const sketchSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80"><title>Architecture sketch — Purchase 1.0.0 (atlas hub)</title><rect width="200" height="80" fill="#b5ffff"/></svg>';
 const purchaseBPMN = `<?xml version="1.0" encoding="UTF-8"?>

@@ -12,7 +12,7 @@ import (
 )
 
 // What an atlas hub release looks like before it is installed
-// (ADR-draft-blueprint-architecture-preview): the architecture sketch of its
+// (ADR-0539): the architecture sketch of its
 // application, derived from the process models its package carries, and the models
 // themselves, for the Console's diagram viewer.
 //

@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/blueprintregistry"
 )
 
-// ADR-draft-blueprint-architecture-preview: an atlas hub release shows, before it is
+// ADR-0539: an atlas hub release shows, before it is
 // installed, the architecture sketch of its application as its package's process
 // models draw it, and the models themselves. These tests pin what the sketch reads
 // from a real package, that it claims nothing about an installation, that every read
