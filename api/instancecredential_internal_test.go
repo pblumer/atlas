@@ -404,3 +404,18 @@ func TestAJobOfAnUnnamedTypeIsNoInstancesWork(t *testing.T) {
 func installedPrincipal() *httpapi.Principal {
 	return instanceCredential{worker: echoInstance, jobTypes: []string{echoJobType}}.principal()
 }
+
+// A Server built without New has no index: it resolves no instance and mints nothing.
+func TestANilIndexHoldsNoCredential(t *testing.T) {
+	var c *instanceCredentials
+	if tok := c.mint(echoInstance, nil); tok != "" {
+		t.Errorf("mint = %q, want none", tok)
+	}
+	c.revoke(echoInstance)
+	if _, ok := c.match("x"); ok {
+		t.Error("a nil index matched a bearer")
+	}
+	if _, ok := c.tokenOf(echoInstance); ok {
+		t.Error("a nil index holds a token")
+	}
+}

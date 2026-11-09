@@ -46,7 +46,8 @@ type instanceCredential struct {
 
 // instanceCredentials indexes the live secrets by their hash, the way the API-token
 // index does, so the secret itself is never a map key and a lookup compares no
-// secret byte by byte.
+// secret byte by byte. A nil index, on a Server built without New, holds nothing and
+// mints nothing.
 type instanceCredentials struct {
 	mu       sync.RWMutex
 	byHash   map[string]instanceCredential
@@ -71,6 +72,9 @@ func hashInstanceToken(tok string) string {
 // secret per spawn would restart it for ever. It returns "" when no random secret
 // could be drawn — the instance is then refused at every poll, never let in.
 func (c *instanceCredentials) mint(worker string, jobTypes []string) string {
+	if c == nil {
+		return ""
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if tok, ok := c.byWorker[worker]; ok {
@@ -90,6 +94,9 @@ func (c *instanceCredentials) mint(worker string, jobTypes []string) string {
 
 // revoke forgets worker's secret; from then on it is refused as unknown.
 func (c *instanceCredentials) revoke(worker string) {
+	if c == nil {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if tok, ok := c.byWorker[worker]; ok {
@@ -100,6 +107,9 @@ func (c *instanceCredentials) revoke(worker string) {
 
 // match resolves a bearer to the credential it is, if it is one.
 func (c *instanceCredentials) match(tok string) (instanceCredential, bool) {
+	if c == nil {
+		return instanceCredential{}, false
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	cred, ok := c.byHash[hashInstanceToken(tok)]
@@ -108,6 +118,9 @@ func (c *instanceCredentials) match(tok string) (instanceCredential, bool) {
 
 // tokenOf reports worker's live secret.
 func (c *instanceCredentials) tokenOf(worker string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	tok, ok := c.byWorker[worker]
