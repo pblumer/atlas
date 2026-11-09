@@ -137,22 +137,39 @@ export async function api(method, path, body, isXML) {
 // upload mislabelled by a browser is refused there, not here.
 //
 // The failure shape is api()'s, so a caller reports an upload the way it reports
-// everything else.
+// everything else. It answers the decoded body, or null for none — a document upload
+// answers the reference it stored.
 export async function apiBytes(method, path, file) {
   const res = await fetch(path, {
     method,
     body: file,
     headers: { "Content-Type": file.type || "application/octet-stream" },
   });
+  const text = await res.text();
+  let data = text;
+  try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
   if (!res.ok) {
-    const text = await res.text();
-    let data = text;
-    try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
     const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
   }
+  return data;
+}
+
+// fileFieldKeys lists the keys of a form schema's file pickers, in the order form-js
+// renders them, which is the order of the file inputs on the page.
+function fileFieldKeys(schema) {
+  const keys = [];
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "filepicker" && c.key) keys.push(c.key);
+      if (Array.isArray(c.components)) walk(c.components);
+    }
+  };
+  walk(schema && schema.components);
+  return keys;
 }
 
 export function toast(msg, kind) {
@@ -2520,6 +2537,7 @@ async function viewConsoleBackup() {
       authentication is enabled.</p>
       <div class="row" style="gap:12px; align-items:center; margin-top:8px">
         <a class="btn" href="/api/v1/backup/full" download>Download full snapshot (.tar.gz)</a>
+        <a class="btn neutral" href="/api/v1/backup/full?documents=true" download title="${esc(tr("backup.full.withDocumentsTitle"))}">${esc(tr("backup.full.withDocuments"))}</a>
       </div>
 
       <h3 style="margin:22px 0 6px">Restore full snapshot</h3>
@@ -10029,11 +10047,28 @@ async function viewTasks(preselectKey) {
           return;
         }
       } else if (picked) {
-        // The other answer, unchanged: read the file as text and submit it as the
-        // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
-        // that upload a normal user-task step rather than a side-channel endpoint.
-        try { data.csvText = await picked.text(); }
-        catch (err) { toast(tr("tasks.complete.fileUnreadable", { error: err.message }), "err"); return; }
+        // Every other file becomes a document (ADR-draft-a-file-is-a-document-not-a-variable):
+        // it is uploaded to the document store first, and the task is completed with the
+        // reference under the field's own key. The file itself never enters a variable —
+        // it used to be read as text into `csvText`, whatever the field was called, and
+        // every step afterwards rewrote it into the log. The CSV upload form names its
+        // field `csvText`, so the reference lands where the CSV import reads it.
+        //
+        // Before the completion and not after, as for the logo: a task completed while
+        // its file did not arrive is a process that believes it has one.
+        const keys = fileFieldKeys(state.mountedSchema);
+        const inputs = [...document.querySelectorAll("#task-form input[type=file]")];
+        try {
+          for (let i = 0; i < inputs.length; i++) {
+            const file = inputs[i].files && inputs[i].files[0];
+            const key = keys[i];
+            if (!file || !key) continue;
+            data[key] = await apiBytes("POST", "/api/v1/documents?name=" + encodeURIComponent(file.name || "document"), file);
+          }
+        } catch (err) {
+          toast(tr("tasks.complete.uploadFailed", { error: err.message }), "err");
+          return;
+        }
       }
       payload = { variables: data };
     }
@@ -10259,6 +10294,7 @@ async function viewTasks(preselectKey) {
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      state.mountedSchema = def.schema;
       state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs

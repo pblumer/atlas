@@ -80,6 +80,12 @@ type storeEntry struct {
 	// a silent one, and shipping all of them would multiply the archive by their
 	// number. Classified, backed up, and not walked.
 	ownMechanism bool
+	// optIn marks a store a whole-instance snapshot carries only when it is asked for.
+	// The document store is the case (ADR-draft-a-file-is-a-document-not-a-variable): it
+	// can be many times the size of everything else, and not every installation needs
+	// its documents back from a snapshot — some keep them in a bucket with its own
+	// backup. A restore still accepts it whenever an archive carries it.
+	optIn bool
 	// why records what is lost with it, for the person reading this list while
 	// deciding whether their restore is complete.
 	why string
@@ -94,6 +100,7 @@ var persistentStores = []storeEntry{
 	{name: "jobtypes", class: classRuntime, why: "the numbers already-stored jobs mean by their type, and the high-water mark that keeps one from being issued twice; re-interning assigns different ones"},
 	{name: "keyspace", class: classRuntime, why: "the highest definition key ever issued; without it a deleted definition's key comes back and the next one inherits its instance history"},
 	{name: "exporter", class: classRuntime, onDemand: true, why: "how far the event export has read, so a restore does not re-export history"},
+	{name: "documents", class: classRuntime, onDemand: true, optIn: true, why: "the files processes received — CSV uploads, PDFs — that variables refer to by reference (ADR-draft-a-file-is-a-document-not-a-variable). A snapshot carries them only when asked to; restored without them, the references stay and say the document is not available"},
 
 	// --- design time -------------------------------------------------------
 	{name: "deployments", class: classDesignTime, why: "the deployed process definitions"},
@@ -185,8 +192,14 @@ func backupDirs() []string {
 // that cannot be rebuilt from the rest.
 func fullBackupDirs() []string {
 	return namesOfClass(func(e storeEntry) bool {
-		return e.class != classEphemeral && !e.isFile && !e.ownMechanism
+		return e.class != classEphemeral && !e.isFile && !e.ownMechanism && !e.optIn
 	})
+}
+
+// optInBackupDirs are the directories a whole-instance snapshot carries only when it is
+// asked to (storeEntry.optIn).
+func optInBackupDirs() []string {
+	return namesOfClass(func(e storeEntry) bool { return e.optIn && !e.isFile })
 }
 
 // fullBackupFiles is the same for the entries that are single files.

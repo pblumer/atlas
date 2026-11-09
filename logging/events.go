@@ -558,6 +558,23 @@ var (
 	CollabParticipantsReaped = newEvent("collab.participants_reaped")
 	PlaygroundSessionsReaped = newEvent("playground.sessions_reaped")
 
+	// DocumentsSwept says the document store removed documents nobody can reach any
+	// more: uploads never used within their time to live, and documents whose every
+	// instance history retention removed
+	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	DocumentsSwept = newEvent("documents.swept")
+	// DocumentSweepFailed says a sweep of the document store stopped part-way; the next
+	// one starts over.
+	DocumentSweepFailed = newEvent("documents.sweep_failed")
+	// DocumentBindFailed says a document a variable names could not be recorded as
+	// belonging to the instance it entered. The command that carried it is already
+	// durable; the document stays readable by its uploader and is removed after its
+	// time to live unless a later write binds it.
+	DocumentBindFailed = newEvent("documents.bind_failed")
+	// DocumentStoreUnavailable says the document store could not be opened — a bad
+	// backend configuration or an unwritable data directory.
+	DocumentStoreUnavailable = newEvent("documents.store_unavailable")
+
 	// PersonalValueUnreadable says a job could not be handed to a worker because one
 	// of the variables it would carry is a personal value whose data subject has been
 	// erased (ADR-0314). The record predicts this — "erasing a subject with a live

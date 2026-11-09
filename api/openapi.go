@@ -220,7 +220,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				})},
 			}))}},
 		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
-			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
+			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store, and the document store unless ?documents=true asks for it (admin-only when auth is on) (ADR-0109, ADR-draft-a-file-is-a-document-not-a-variable)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the whole-instance snapshot"}}},
 		{"POST", "/api/v1/restore/full", s.handleRestoreFull, apiOp{
 			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
@@ -437,6 +437,27 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token); ?values=preview cuts every variable value longer than 512 bytes to its beginning and marks it {truncated, size, lines | shape, count} (values=full, the default, returns them whole). Answers {items, total, totalExact, truncated, nextCursor}: total is exact wherever a maintained counter knows it (one definition's halves, the engine's live total) and a floor otherwise", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tPage())}},
+		// The document store (ADR-draft-a-file-is-a-document-not-a-variable): a file a
+		// process receives is kept here once and a variable holds a reference to it.
+		// Every signed-in identity, because the one uploading is whoever completes a task
+		// with a file field; who may *read* a document is decided per document — its
+		// uploader, or whoever may read an instance it entered (ADR-0275).
+		{"POST", "/api/v1/documents", s.handleUploadDocument, apiOp{
+			summary: "Upload one document — the raw request body is the file, ?name= its file name, Content-Type the type claimed; at most limits.Document (35 MiB by default). Answers the reference a variable holds: {$document, name, contentType (detected), size, sha256}. The document is pending, readable by its uploader only, until a variable naming it enters an instance; unused, it is removed after its time to live (24 h by default)", tag: "Documents", role: roleAny, status: http.StatusCreated,
+			req:  &bodySpec{mediaType: "application/octet-stream", desc: "The file's bytes", schema: map[string]any{"type": "string", "format": "binary"}},
+			resp: jsonBody("Document reference", tObject())}},
+		{"GET", "/api/v1/documents/{id}", s.handleDownloadDocument, apiOp{
+			summary: "Download a document under its detected type — 404 for an id that does not exist or that the caller may not read (its uploader, or whoever may read an instance it entered); 410 when the reference survived and the bytes did not (a restore from a snapshot taken without documents). A type a browser would run as a page is sent as an attachment; ?download=1 asks for one", tag: "Documents", role: roleAny,
+			resp: &bodySpec{mediaType: "application/octet-stream", desc: "The document's bytes", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"POST", "/api/v1/jobs/{key}/documents/{id}", s.handleJobDocument, apiOp{
+			summary: "Read, as the lease-holding worker, a document the job's instance was given — the bytes, under the detected type, with the file name in X-Atlas-Document-Name. Answers only for a document bound to the root of the job's instance and only while the caller holds the job's current lease; 404 for anything else, 410 when the bytes are gone (ADR-draft-a-file-is-a-document-not-a-variable)", tag: "Documents", role: RoleOperator,
+			req: jsonBody("The holding worker id and the lease token its activation returned", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tInteger(),
+			}, "worker", "leaseToken")),
+			resp: &bodySpec{mediaType: "application/octet-stream", desc: "The document's bytes", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"GET", "/api/v1/documents/{id}/meta", s.handleDocumentMeta, apiOp{
+			summary: "A document's reference and state without its bytes — {reference, state (pending|bound), createdAt, backend, available}; the same access rule as the download", tag: "Documents", role: roleAny,
+			resp: jsonBody("Document metadata", tObject())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{

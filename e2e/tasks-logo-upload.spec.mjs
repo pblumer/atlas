@@ -16,6 +16,8 @@
 // what happens when the upload fails.
 import { test, expect } from "@playwright/test";
 
+const DOC_ID = "doc_" + "a".repeat(26);
+
 const listing = (items) => ({ items, total: items.length, totalExact: true, truncated: false });
 
 // Two tasks with a file field. One names a catalogue, one does not — which is the
@@ -67,6 +69,17 @@ function installMock(page, sent, opts = {}) {
       sent.push({ method: req.method(), path, body, contentType: req.headers()["content-type"] });
       if (path.endsWith("/logo") && opts.logoFails) {
         return route.fulfill({ status: 413, json: { error: "the logo exceeds the 524288 byte limit" } });
+      }
+      // The document store answers an upload with the reference a variable holds
+      // (ADR-draft-a-file-is-a-document-not-a-variable).
+      if (path === "/api/v1/documents") {
+        if (opts.documentFails) {
+          return route.fulfill({ status: 413, json: { error: "the document is larger than the 36700160 bytes a document may be" } });
+        }
+        return route.fulfill({ status: 201, json: {
+          $document: DOC_ID, name: url.searchParams.get("name"), contentType: "text/csv; charset=utf-8",
+          size: (req.postData() || "").length, sha256: "0".repeat(64),
+        } });
       }
       return route.fulfill({ status: 204, body: "" });
     }
@@ -165,18 +178,40 @@ test("a failed upload leaves the task open and says why", async ({ page }) => {
   await expect(page.locator("#task-form input[type=file]")).toBeAttached();
 });
 
-test("a task that names no catalogue still uploads a CSV as text", async ({ page }) => {
-  // The other answer, unchanged. Without this the new branch would be a silent
-  // regression of the import ADR-0087 describes.
+test("a task that names no catalogue uploads the file as a document and completes with its reference", async ({ page }) => {
+  // The other answer, changed by ADR-draft-a-file-is-a-document-not-a-variable: the file
+  // is no longer read as text into csvText, where every later step rewrote it into the
+  // log. It is uploaded to the document store, and the field's own key — csvText, in the
+  // CSV import's form — receives the reference.
   installMock(page, page.__sent);
   await openTask(page, 202);
   await pick(page, "zeilen.csv", "text/csv", Buffer.from("a;b\n1;2\n", "utf8"));
   await page.locator("#task-complete").click();
 
   await expect.poll(() => page.__sent.some((r) => r.path.endsWith("/complete"))).toBe(true);
+  const upload = page.__sent.find((r) => r.path === "/api/v1/documents");
+  expect(upload, "the file was not uploaded").toBeTruthy();
+  expect(upload.body).toBe("a;b\n1;2\n");
   const complete = page.__sent.find((r) => r.path.endsWith("/complete"));
-  expect((complete.body || {}).variables.csvText).toBe("a;b\n1;2\n");
+  const csvText = (complete.body || {}).variables.csvText;
+  expect(csvText.$document).toBe(DOC_ID);
+  expect(csvText.name).toBe("zeilen.csv");
+  expect(JSON.stringify(complete.body)).not.toContain("1;2");
   expect(page.__sent.some((r) => r.method === "PUT"), "a CSV was PUT as a logo").toBe(false);
+  // The upload comes first: a task completed while its file did not arrive would be a
+  // process that believes it has one.
+  expect(page.__sent.indexOf(upload)).toBeLessThan(page.__sent.indexOf(complete));
+});
+
+test("a failed document upload leaves the task open and says why", async ({ page }) => {
+  installMock(page, page.__sent, { documentFails: true });
+  await openTask(page, 202);
+  await pick(page, "riesig.csv", "text/csv", Buffer.from("a;b\n1;2\n", "utf8"));
+  await page.locator("#task-complete").click();
+
+  await expect(page.locator("#toast")).toContainText("Datei konnte nicht hochgeladen werden");
+  expect(page.__sent.some((r) => r.path.endsWith("/complete")),
+    "the task was completed although its file did not arrive").toBe(false);
 });
 
 test("switching tasks does not carry the catalogue to the next one", async ({ page }) => {
@@ -204,5 +239,5 @@ test("switching tasks does not carry the catalogue to the next one", async ({ pa
   expect(page.__sent.some((r) => r.method === "PUT"),
     "the previous task's catalogue was still in scope and the CSV was PUT as its logo").toBe(false);
   const complete = page.__sent.find((r) => r.path.endsWith("/complete"));
-  expect((complete.body || {}).variables.csvText).toBe("a;b\n1;2\n");
+  expect((complete.body || {}).variables.csvText.$document).toBe(DOC_ID);
 });

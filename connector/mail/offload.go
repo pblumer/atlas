@@ -133,6 +133,27 @@ type DocumentStore interface {
 	PutDocument(ctx context.Context, worker, bucket, key, contentType, disposition string, data []byte, metadata map[string]string) (map[string]any, error)
 }
 
+// AttachmentStore is Atlas's own document store, where store-attachment puts an
+// attachment (ADR-draft-a-file-is-a-document-not-a-variable). A DocumentStore a caller
+// passes may implement it too; the server's does, and a Worker Instance's reaches the
+// store through its job.
+type AttachmentStore interface {
+	StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error)
+}
+
+// objectStoresHeld reports whether docs reaches an S3 Worker at all. A store that says
+// it does not — a Worker Instance holding Atlas's document store but no S3 Worker — is
+// told apart from one that says nothing, which holds S3 Workers by construction.
+func objectStoresHeld(docs DocumentStore) bool {
+	if docs == nil {
+		return false
+	}
+	if h, ok := docs.(interface{ HoldsObjectStores() bool }); ok {
+		return h.HoldsObjectStores()
+	}
+	return true
+}
+
 // Directory resolves a recipient that is not a mail address — a person or a group
 // this installation knows — to the addresses it should reach.
 //
@@ -420,7 +441,7 @@ func runDocuments(ctx context.Context, mb Mailbox, j Job, in inspector, docs Doc
 	if j.Attachment == "" {
 		return nil, fmt.Errorf("mail: %s: the task's attachmentId resolved to nothing", j.Operation)
 	}
-	if j.Operation == OpExportAttachment && docs == nil {
+	if j.Operation == OpExportAttachment && !objectStoresHeld(docs) {
 		// Before the mailbox is read: a Worker Instance that cannot reach the store
 		// should not first pull a document across the network to throw it away.
 		return nil, fmt.Errorf("mail: export-attachment: this Worker Instance holds no S3 Worker, so it cannot reach %q "+
@@ -439,6 +460,8 @@ func runDocuments(ctx context.Context, mb Mailbox, j Job, in inspector, docs Doc
 		return attachmentContent(d, v)
 	case OpExportAttachment:
 		return exportAttachment(ctx, j, d, v, docs)
+	case OpStoreAttachment:
+		return storeAttachment(ctx, d, v, docs)
 	}
 	return nil, fmt.Errorf("mail: unknown operation %q", j.Operation)
 }
@@ -584,4 +607,22 @@ func lookUp(rcpts []string, dir Directory) ([]string, error) {
 		out = append(out, found...)
 	}
 	return out, nil
+}
+
+// storeAttachment puts an inspected attachment into Atlas's document store and answers
+// its reference, with what inspection found beside it. The stored type is the detected
+// one, as everywhere a document leaves the mailbox; the sender's claim is kept as
+// declaredType.
+func storeAttachment(ctx context.Context, d Document, v Verdict, docs DocumentStore) (any, error) {
+	st, ok := docs.(AttachmentStore)
+	if !ok || docs == nil {
+		return nil, fmt.Errorf("mail: store-attachment: this worker has no access to Atlas's document store")
+	}
+	ref, err := st.StoreDocument(ctx, d.Name, v.DetectedType, d.Data)
+	if err != nil {
+		return nil, fmt.Errorf("mail: store-attachment: %w", err)
+	}
+	ref["declaredType"] = d.ContentType
+	ref["inspection"] = v.Fields()
+	return ref, nil
 }

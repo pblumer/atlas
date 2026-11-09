@@ -107,7 +107,13 @@ func (s *Server) handleBackupFull(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fullBackupFilename()))
 	// Pick the checkpoint before reading the WAL, so the WAL copy is a superset of the
 	// segments that checkpoint's suffix needs (see the package comment above).
-	if err := streamFullBackup(w, os.DirFS(s.dataDir), newestVerifiedCheckpoint(s.dataDir)); err != nil {
+	// ?documents=true adds the document store, which a snapshot leaves out unless asked:
+	// it can dwarf everything else (storeEntry.optIn).
+	var extra []string
+	if v := r.URL.Query().Get("documents"); v == "true" || v == "1" {
+		extra = optInBackupDirs()
+	}
+	if err := streamFullBackup(w, os.DirFS(s.dataDir), newestVerifiedCheckpoint(s.dataDir), extra...); err != nil {
 		logging.Error(logging.FullBackupStreamFailed, "whole-instance snapshot stream failed after the header was sent",
 			slog.String("error", err.Error()))
 	}
@@ -116,10 +122,11 @@ func (s *Server) handleBackupFull(w http.ResponseWriter, r *http.Request) {
 // streamFullBackup writes the gzip-tar of the whole-instance snapshot in fsys to w.
 // checkpointDir, when non-empty, is the archive-relative directory of the one
 // checkpoint to carry along (ADR-0131).
-func streamFullBackup(w io.Writer, fsys fs.FS, checkpointDir string) error {
+// extra are opt-in directories (optInBackupDirs) the caller asked for.
+func streamFullBackup(w io.Writer, fsys fs.FS, checkpointDir string, extra ...string) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
-	if err := writeFullBackup(tw, fsys, checkpointDir); err != nil {
+	if err := writeFullBackup(tw, fsys, checkpointDir, extra...); err != nil {
 		return err
 	}
 	return errors.Join(tw.Close(), gz.Close())
@@ -127,13 +134,13 @@ func streamFullBackup(w io.Writer, fsys fs.FS, checkpointDir string) error {
 
 // writeFullBackup copies the snapshot's checkpoint (when there is one), its directories
 // (WAL leads) and its top-level files into tw.
-func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
+func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string, extra ...string) error {
 	if checkpointDir != "" {
 		if err := walkDirInto(tw, fsys, checkpointDir, nil); err != nil {
 			return err
 		}
 	}
-	for _, name := range fullBackupDirs() {
+	for _, name := range append(fullBackupDirs(), extra...) {
 		if err := walkDirInto(tw, fsys, name, nil); err != nil {
 			return err
 		}
@@ -309,7 +316,7 @@ func allowedFullEntry(top string) bool {
 	if top == checkpoint.DirBase {
 		return true // the recovery checkpoint that covers a compacted prefix (ADR-0131)
 	}
-	for _, d := range fullBackupDirs() {
+	for _, d := range append(fullBackupDirs(), optInBackupDirs()...) {
 		if d == top {
 			return true
 		}

@@ -115,9 +115,23 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // failures a job can carry here, and reporting it ahead of anything the operation itself
 // might be missing keeps the message an operator sees pointed at the fix (ADR-0158).
 func Run(ctx context.Context, j Job, reg *Registry) (any, error) {
+	return RunWith(ctx, j, reg, nil)
+}
+
+// RunWith is [Run] with Atlas's document store within reach, which the two document
+// operations need: put-document reads the document it puts, get-document stores the
+// object it takes. Without one, those two fail saying so; every other operation is
+// unaffected.
+func RunWith(ctx context.Context, j Job, reg *Registry, docs DocumentStore) (any, error) {
 	client, ok := reg.Client(j.Connector)
 	if !ok {
 		return nil, reg.Unresolved("s3", j.Connector)
+	}
+	switch j.Operation {
+	case "put-document":
+		return putFromStore(ctx, j, client, docs)
+	case "get-document":
+		return getIntoStore(ctx, j, client, docs)
 	}
 	return client.Do(ctx, Request{
 		Operation:    j.Operation,

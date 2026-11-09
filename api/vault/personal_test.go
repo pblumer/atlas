@@ -448,3 +448,37 @@ func TestConnectionCredentialsAreReservedAndUnlisted(t *testing.T) {
 		t.Fatalf("listing shows %+v", list)
 	}
 }
+
+// A document a personal variable names is enciphered whole under the subject's key, bound
+// to the document's id, and becomes unreadable with the key
+// (ADR-draft-a-file-is-a-document-not-a-variable).
+func TestSealBytesRoundTripAndErasure(t *testing.T) {
+	v := newTestVault(t)
+	plain := []byte("personalnummer;name\nP-1;Anna\n")
+	sealed, err := v.SealBytes("usr_anna", "document:doc_a", plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(sealed), "Anna") {
+		t.Fatal("the sealed bytes carry the plaintext")
+	}
+	got, err := v.OpenBytes("usr_anna", "document:doc_a", sealed)
+	if err != nil || string(got) != string(plain) {
+		t.Fatalf("open = %q, %v", got, err)
+	}
+	if _, err := v.OpenBytes("usr_anna", "document:doc_b", sealed); err == nil {
+		t.Fatal("the ciphertext opened under another document's name")
+	}
+	if _, err := v.OpenBytes("usr_anna", "document:doc_a", sealed[:4]); err == nil || !strings.Contains(err.Error(), "too short") {
+		t.Fatalf("a truncated ciphertext = %v", err)
+	}
+	if _, err := v.SealBytes("", "document:doc_a", plain); err == nil {
+		t.Fatal("a seal with no data subject succeeded")
+	}
+	if err := v.Erase("usr_anna"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.OpenBytes("usr_anna", "document:doc_a", sealed); !errors.Is(err, ErrErased) {
+		t.Fatalf("after erasure = %v, want ErrErased", err)
+	}
+}

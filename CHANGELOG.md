@@ -13,6 +13,27 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A file a process receives is a document, not a variable.** A file picked in a task form is
+  uploaded to a document store and the task is completed with a reference under the field's own
+  key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
+  outside the log, the state and the per-step history, up to `limits.Document` (35 MiB), and no
+  longer read as text into `csvText` whatever the field was called. `POST /api/v1/documents`
+  uploads, `GET /api/v1/documents/{id}` downloads, and `GET /api/v1/documents/{id}/meta` reads the
+  reference and its state. An upload is its uploader's until a variable naming it enters an
+  instance; then whoever may read that instance may read it. Every route that lets variables in
+  refuses a reference the caller may not use, and the routes that cannot bind one (messages,
+  public links, order actions) refuse references outright. Unused uploads are removed after
+  `--document-pending-ttl` (24 h by default), and a document is removed once history retention
+  removed every instance it entered. Documents live in the data directory by default, or in an S3
+  bucket with `--documents-backend=s3 --documents-s3-worker --documents-s3-bucket`. A full
+  snapshot carries them only with `?documents=true`. The CSV import reads a referenced file from
+  the store, in process and on a Worker Instance, which reads it under its job's lease through
+  `POST /api/v1/jobs/{key}/documents/{id}` (`workersdk.ReadDocument`, `UploadDocument`). S3 tasks
+  gain `put-document` and `get-document`, mail tasks `store-attachment`. The MCP tools
+  `atlas_document_meta`, `atlas_read_document` and `atlas_upload_document` reach the store. A
+  document a personal variable names is enciphered under the data subject's key and becomes
+  unreadable with an erasure. Operations and the replay show a reference as a download link
+  (ADR-draft-a-file-is-a-document-not-a-variable).
 - **A process can publish an interface, not its model.** A deployed definition's message
   entry points can be published as a small, versioned contract another domain binds to
   (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition
