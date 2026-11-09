@@ -2275,6 +2275,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    deployed (ADR-0251). Quiet on purpose: it is a caveat about
    the picture, not a state of the process. */
 .live-layout-note { margin-left: 8px; font-size: 11px; }
+/* The paused mark and the pause switch of the newest version (ADR-0119). */
+.live-active { margin-left: 8px; display: inline-flex; align-items: center; gap: 6px; }
+.live-active:empty { display: none; }
 /* The other versions of a live view's process that still run instances, so an operator
    sees where work is left without opening every version in the picker. */
 .live-other-versions { font-size: 12px; }
@@ -8520,3 +8523,9 @@ button.im-problem:hover { background: var(--accent-soft); }
   .hub-stop[data-state="active"] .hub-dot, .hub-stop[data-state="active"]::after { animation: none; }
   .hub-stop[data-state="active"]::after { display: none; }
 }
+
+/* An application's Deployments tab: a process's older versions fold under its version
+   chip, one line each (ADR-draft-the-application-holds-its-deployments). */
+details.dep-versions { margin-top: 4px; font-size: 12px; }
+details.dep-versions ul { margin: 4px 0 0; padding-left: 16px; }
+details.dep-versions li { margin: 2px 0; white-space: nowrap; }

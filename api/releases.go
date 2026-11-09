@@ -205,6 +205,12 @@ type applicationDefinition struct {
 	Running      int    `json:"running"`
 	Finished     int    `json:"finished"`
 	LastActivity int64  `json:"lastActivity,omitempty"`
+	// FrozenDecisions are the decisions this definition was frozen on at deploy
+	// (ADR-0319, ADR-0423), absent for every definition that follows latest. This
+	// view is where the owner redeploys, pauses or deletes a process
+	// (ADR-draft-the-application-holds-its-deployments), so it carries the mark the
+	// process listing does.
+	FrozenDecisions []frozenDecisionResp `json:"frozenDecisions,omitempty"`
 }
 
 // handleApplicationDeployments reports what this application currently has deployed
@@ -249,6 +255,7 @@ func (s *Server) handleApplicationDeployments(w http.ResponseWriter, r *http.Req
 				DeployedAt: d.DeployedAt, Active: !d.inactive,
 				Current: d.Version == newest[d.ProcessID],
 				Running: active, Finished: completed, LastActivity: lastAct,
+				FrozenDecisions: s.frozenDecisionsOf(d),
 			})
 			out.Running += active
 			out.Finished += completed
