@@ -3,8 +3,10 @@ package blueprintregistry
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"net"
 	"net/http"
@@ -294,4 +296,151 @@ func TestVerifyWithAnyPrefersTheKeyThatMatched(t *testing.T) {
 			t.Fatalf("keys %v: %v", keys, err)
 		}
 	}
+}
+
+// stoppedAt is "stage:cause" for the station an untraced load or download
+// stopped at, as the error it returned names it.
+func stoppedAt(t *testing.T, err error) string {
+	t.Helper()
+	if err == nil {
+		t.Fatal("the load succeeded")
+	}
+	step, ok := Stopped(err)
+	if !ok {
+		t.Fatalf("the error names no station: %v", err)
+	}
+	if step.OK || step.Err == nil {
+		t.Fatalf("the station carries no failure for the operator: %+v", step)
+	}
+	return step.Stage + ":" + step.Cause
+}
+
+// TestUntracedLoadNamesTheStationItStoppedAt: LoadIndex — what the list, the
+// preview, the package and the import route call — returns an error that names
+// the station and the cause, the same a traced load reports, so those routes can
+// say where the way ended without a second load.
+func TestUntracedLoadNamesTheStationItStoppedAt(t *testing.T) {
+	healthy := tlsRegistry(t, nil)
+
+	t.Run("the name is unknown to the resolver", func(t *testing.T) {
+		rig := newTraceRig(t, healthy, true)
+		rig.client.lookup = func(context.Context, string) ([]net.IPAddr, error) {
+			return nil, &net.DNSError{Err: "no such host", Name: traceHost, IsNotFound: true}
+		}
+		_, err := rig.client.LoadIndex(context.Background())
+		if got := stoppedAt(t, err); got != "resolve:dns_not_found" {
+			t.Fatalf("stopped at %s", got)
+		}
+		if step, _ := Stopped(err); step.Host != traceHost {
+			t.Fatalf("the name is not named: %+v", step)
+		}
+	})
+
+	t.Run("a firewall drops the connection", func(t *testing.T) {
+		rig := newTraceRig(t, healthy, true)
+		rig.client.dial = func(context.Context, string, string) (net.Conn, error) {
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: timeoutError{}}
+		}
+		_, err := rig.client.LoadIndex(context.Background())
+		if got := stoppedAt(t, err); got != "connect:timeout" {
+			t.Fatalf("stopped at %s", got)
+		}
+	})
+
+	t.Run("a TLS inspection presents its own certificate", func(t *testing.T) {
+		_, err := newTraceRig(t, healthy, false).client.LoadIndex(context.Background())
+		if got := stoppedAt(t, err); got != "tls:unknown_authority" {
+			t.Fatalf("stopped at %s", got)
+		}
+		if step, _ := Stopped(err); !strings.Contains(step.Issuer, "Acme Co") {
+			t.Fatalf("the certificate's issuer is not named: %+v", step)
+		}
+	})
+
+	t.Run("no pinned key made the signature", func(t *testing.T) {
+		other := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)).Public().(ed25519.PublicKey)
+		_, err := newTraceRig(t, healthy, true, other).client.LoadIndex(context.Background())
+		if got := stoppedAt(t, err); got != "signature:no_pinned_key" {
+			t.Fatalf("stopped at %s", got)
+		}
+		// The error still is the error: callers that test for it keep working.
+		if !errors.Is(err, ErrSignatureMismatch) {
+			t.Fatalf("the cause is no longer unwrapped: %v", err)
+		}
+	})
+
+	t.Run("a healthy registry names nothing", func(t *testing.T) {
+		if _, err := newTraceRig(t, healthy, true).client.LoadIndex(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// TestFetchNamesWhereThePackageDownloadStopped: a release's package is a station
+// of its own, after the index. A package the registry does not serve names its
+// HTTP status; one whose bytes are not those the signed index states — fewer,
+// more, or other — is a package that differs from the index, not a network fault.
+func TestFetchNamesWhereThePackageDownloadStopped(t *testing.T) {
+	pkg := []byte("trusted package bytes")
+	sum := sha256.Sum256(pkg)
+	index := mutateTestIndex(t, func(root map[string]any) {
+		artifact := releaseFields(root)["artifact"].(map[string]any)
+		artifact["path"] = "packages/purchase-approval-1.0.0.tar.gz"
+		artifact["digest"] = "sha256:" + hex.EncodeToString(sum[:])
+		artifact["sizeBytes"] = len(pkg)
+	})
+	sig, key := signIndex(index)
+	serve := func(body []byte, status int) *traceRig {
+		srv := tlsRegistry(t, func(w http.ResponseWriter, r *http.Request) bool {
+			switch r.URL.Path {
+			case "/hub/index.json":
+				_, _ = w.Write(index)
+			case "/hub/index.json.sig":
+				_, _ = w.Write(sig)
+			case "/hub/packages/purchase-approval-1.0.0.tar.gz":
+				w.WriteHeader(status)
+				_, _ = w.Write(body)
+			default:
+				http.NotFound(w, r)
+			}
+			return true
+		})
+		return newTraceRig(t, srv, true, key)
+	}
+	fetch := func(rig *traceRig) error {
+		_, _, err := rig.client.Fetch(context.Background(), "org.example.purchase-approval", "1.0.0")
+		return err
+	}
+
+	if err := fetch(serve(pkg, http.StatusOK)); err != nil {
+		t.Fatalf("the pinned package: %v", err)
+	}
+	t.Run("the registry does not serve the package", func(t *testing.T) {
+		err := fetch(serve([]byte("gone"), http.StatusNotFound))
+		if got := stoppedAt(t, err); got != "package:http_status" {
+			t.Fatalf("stopped at %s", got)
+		}
+		if step, _ := Stopped(err); step.Status != http.StatusNotFound {
+			t.Fatalf("the status is not named: %+v", step)
+		}
+	})
+	for name, body := range map[string][]byte{
+		"other bytes of the same size": []byte("forged package bytes!"),
+		"fewer bytes":                  []byte("short"),
+		"more bytes":                   append(append([]byte(nil), pkg...), " and more"...),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := stoppedAt(t, fetch(serve(body, http.StatusOK))); got != "package:package_mismatch" {
+				t.Fatalf("stopped at %s", got)
+			}
+		})
+	}
+	t.Run("the index itself is refused", func(t *testing.T) {
+		rig := serve(pkg, http.StatusOK)
+		other := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)).Public().(ed25519.PublicKey)
+		rig.client.publicKeys = []ed25519.PublicKey{other}
+		if got := stoppedAt(t, fetch(rig)); got != "signature:no_pinned_key" {
+			t.Fatalf("stopped at %s", got)
+		}
+	})
 }

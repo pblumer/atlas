@@ -137,6 +137,15 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 - **What a caller is shown.** The cause and the facts above are shown to anybody who may list the hub: the registry URL is the operator's, not the caller's, so nothing here turns the server into a probe of a target the caller chooses. The error text a station stopped at can name this network's resolver or addresses, and is sent to administrators only. Every failure is also logged for the operator as `hub.registry_unavailable`.
 - **Unchanged.** The client still ignores `HTTPS_PROXY`, follows no redirect, dials only vetted public addresses on 443 and trusts the operating system's roots. The connection route makes those rules visible; it does not relax any of them.
 
+## Amendment 2026-11-09 (f): a refused request names the station too
+
+**Context.** Amendment (e) gave the connection route its stations, but the routes a person and an agent use next — the listing, the preview, the package and the import — still answered a registry failure with one sentence. A person who opened a release after the registry had become unreachable read "trusted Blueprint registry is unavailable or invalid" in the Console and nothing more; an agent over MCP read the same.
+
+**Decision.** Every load and download of the pinned client keeps the station it stopped at, traced or not, and returns it in its error (`blueprintregistry.StopError`, read with `Stopped`). The routes answer such a failure with 502 and the error envelope extended: `error` is the former sentence followed by `(stopped at <stage>: <cause>)`, `station` is the stopped station as the connection route sends it — stage, cause, the facts it established — and `registryHost` is the configured host. The Console's hub dialog explains it from the same vocabulary as the route and offers to check the whole way again. A release's download is a station of its own after the index, `package`, with one cause of its own: `package_mismatch`, bytes other than the size and SHA-256 the signed index states.
+
+- **What a caller is shown.** Exactly what amendment (e) shows on the connection route, to the same role (modeler): the station, its cause and facts. The error text is sent to administrators only, and every failure is still logged as `hub.registry_unavailable`. An error that names no station keeps the plain sentence.
+- **Unchanged.** The routes, their roles and their refusals; nothing about how the client connects or what it trusts.
+
 ## Links
 
 - [ADR-0128](0128-process-applications.md)

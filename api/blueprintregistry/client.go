@@ -93,9 +93,13 @@ func NewPublicClient(indexURL string, publicKeys ...ed25519.PublicKey) (*PublicC
 const dialTimeout = 5 * time.Second
 
 // LoadIndex fetches signed metadata and refuses to expose any release until
-// the Ed25519 signature and the strict manifest checks both succeed.
+// the Ed25519 signature and the strict manifest checks both succeed. A load that
+// fails at a station returns a *StopError naming it (Stopped), as a traced load
+// would have reported it last.
 func (c *PublicClient) LoadIndex(ctx context.Context) (Index, error) {
-	return c.loadIndex(ctx, nil)
+	tr := newTracer(nil)
+	defer tr.close()
+	return c.loadIndex(ctx, tr)
 }
 
 // LoadIndexTraced is LoadIndex reporting each station of the way as it is passed
@@ -110,15 +114,16 @@ func (c *PublicClient) LoadIndexTraced(ctx context.Context, report func(Step)) (
 	return c.loadIndex(ctx, tr)
 }
 
-func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (Index, error) {
+func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (_ Index, err error) {
 	if c == nil || c.httpClient == nil || c.indexURL == nil {
 		return Index{}, errors.New("registry client is not configured")
 	}
+	defer func() { err = tr.wrap(err) }()
 	// Only the index request is traced station by station; the signature request
 	// takes the same way again and is reported as one station of its own.
 	raw, err := c.readBounded(withTracer(ctx, tr), c.indexURL, MaxIndexBytes)
 	if err != nil {
-		tr.failIndex(err)
+		tr.failRequest(StageIndex, err)
 		return Index{}, fmt.Errorf("load registry index: %w", err)
 	}
 	tr.passIndex(len(raw))
@@ -164,7 +169,9 @@ func (c *PublicClient) Download(ctx context.Context, blueprintID, version string
 
 // Fetch obtains a release descriptor and archive bytes from one verified
 // signed-index snapshot. The descriptor always matches the downloaded bytes,
-// even if the registry index changes between separate HTTP requests.
+// even if the registry index changes between separate HTTP requests. A fetch
+// that fails at a station — of the index load, or the package's own
+// (StagePackage) — returns a *StopError naming it.
 func (c *PublicClient) Fetch(ctx context.Context, blueprintID, version string) (Release, []byte, error) {
 	index, err := c.LoadIndex(ctx)
 	if err != nil {
@@ -179,12 +186,18 @@ func (c *PublicClient) Fetch(ctx context.Context, blueprintID, version string) (
 		if err := validateDerivedArtifactURL(c.indexURL, &location); err != nil {
 			return Release{}, nil, err
 		}
-		data, err := c.readBounded(ctx, &location, release.Artifact.SizeBytes)
+		// The download takes the way again, so it may stop at a network station
+		// as well as at the package's own.
+		tr := newTracer(nil)
+		defer tr.close()
+		data, err := c.readBounded(withTracer(ctx, tr), &location, release.Artifact.SizeBytes)
 		if err != nil {
-			return Release{}, nil, fmt.Errorf("download signed registry release: %w", err)
+			tr.failRequest(StagePackage, err)
+			return Release{}, nil, tr.wrap(fmt.Errorf("download signed registry release: %w", err))
 		}
 		if err := VerifyArchive(release, data); err != nil {
-			return Release{}, nil, fmt.Errorf("verify signed registry release: %w", err)
+			tr.fail(Step{Stage: StagePackage, Cause: CausePackageMismatch, Err: err})
+			return Release{}, nil, tr.wrap(fmt.Errorf("verify signed registry release: %w", err))
 		}
 		return release, data, nil
 	}
