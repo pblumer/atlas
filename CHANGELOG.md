@@ -13,6 +13,21 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A process can publish an interface, not its model.** A deployed definition's message
+  entry points can be published as a small, versioned contract another domain binds to
+  (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition
+  offers — every element a message reaches (message start, intermediate catch, receive task,
+  event subprocess, message boundary) with its kind, correlation key and the payload the model
+  states, every root-scope end, and the error and escalation codes that can leave an instance —
+  and `POST /api/v1/published-interfaces/{id}/versions` publishes a selection of them under
+  contract-level names. A version is immutable; `PUT …/versions/{version}/binding` moves it to a
+  newer definition that realizes the same contract, so renaming an element no longer breaks a
+  consumer, and `POST …/deprecation` marks it deprecated. View and send are granted apart by the
+  application owner (`PUT …/grants`, audited); a consumer holding view reads the contract and
+  never the element ids, message names or process behind it, and `public` never implies send.
+  `GET /api/v1/published-interfaces` lists only what the caller may see. Three MCP tools read
+  them. Not yet: a commitment is refused because nothing measures one, and the send grant waits
+  for the peer endpoint of ADR-0372.
 - **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
   products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
   (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form
