@@ -59,6 +59,12 @@ type releasedKind struct {
 	// what the guard refuses — an exemption nobody wrote a reason for is an oversight
 	// that looks like a decision.
 	Why string
+	// Manifest is the repository path of this kind's Worker Type manifest
+	// (atlas.io/v1alpha1, runtime "bundled"): the declaration of what a second delivery
+	// of each of its operations does (ADR-0538). Every connector kind owes one, except
+	// those listed in kindsWithoutManifest, which predate the rule
+	// (ADR-draft-new-built-in-worker-types-ship-a-manifest).
+	Manifest string
 }
 
 // kindClass is what a reserved job type *is*, which is what decides whether ADR-0167's
@@ -136,7 +142,49 @@ var releasedKinds = []releasedKind{
 	{JobType: compiler.GoogleContactsJobType, Slug: "google-contacts-worker", Class: classConnector, Package: "atlas.google-contacts"},
 	{JobType: compiler.CardDAVJobType, Slug: "carddav-worker", Class: classConnector, Package: "atlas.carddav"},
 	{JobType: compiler.WikiwikibangbangJobType, Slug: "wikiwikibangbang-worker", Class: classConnector, Package: "atlas.wikiwikibangbang"},
-	{JobType: compiler.SharePointServerJobType, Slug: "sharepoint-server-worker", Class: classConnector, Package: "atlas.sharepoint-server"},
+	{JobType: compiler.SharePointServerJobType, Slug: "sharepoint-server-worker", Class: classConnector, Package: "atlas.sharepoint-server",
+		Manifest: "connector/sharepointserver/manifest.json"},
+}
+
+// kindsWithoutManifest are the connector kinds released before every new built-in
+// Worker Type had to ship a manifest declaring its operations' idempotency and effect
+// (ADR-draft-new-built-in-worker-types-ship-a-manifest).
+// The list may only shrink: a kind that gains a manifest leaves it, and a kind not on it
+// must have one, so a new kind cannot arrive without its declaration. Each entry still
+// owes one; until then ADR-0538 treats its operations as none / irreversible wherever it
+// warns.
+var kindsWithoutManifest = map[string]bool{
+	compiler.TemisDecisionJobType:    true,
+	compiler.RestJobType:             true,
+	compiler.ClioWriteJobType:        true,
+	compiler.ClioQueryJobType:        true,
+	compiler.ClioReadJobType:         true,
+	compiler.MailJobType:             true,
+	compiler.CsvImportJobType:        true,
+	compiler.SharePointJobType:       true,
+	compiler.RemedyJobType:           true,
+	compiler.WebScrapeJobType:        true,
+	compiler.ScimJobType:             true,
+	compiler.LdapJobType:             true,
+	compiler.SoapJobType:             true,
+	compiler.AdJobType:               true,
+	compiler.MsSqlJobType:            true,
+	compiler.MariaDBJobType:          true,
+	compiler.PostgresJobType:         true,
+	compiler.EntraJobType:            true,
+	compiler.LdifJobType:             true,
+	compiler.JiraJobType:             true,
+	compiler.GoogleSheetsJobType:     true,
+	compiler.AgentJobType:            true,
+	compiler.AiTaskJobType:           true,
+	compiler.DiscordJobType:          true,
+	compiler.S3JobType:               true,
+	compiler.ExchangeJobType:         true,
+	compiler.TeamsPhoneJobType:       true,
+	compiler.SharePointOpsJobType:    true,
+	compiler.GoogleContactsJobType:   true,
+	compiler.CardDAVJobType:          true,
+	compiler.WikiwikibangbangJobType: true,
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right

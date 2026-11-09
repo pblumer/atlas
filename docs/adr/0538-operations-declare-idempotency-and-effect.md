@@ -163,6 +163,11 @@ both. Not yet: every warning place of §4, the event of 4(a), the deploy acknowl
 the policy, and the hub's duplicate-delivery test (§5, recorded as a `verified` condition
 in ADR-0536).
 
+**2026-11-09 — built-in Worker Types.** A new built-in Worker Type ships a manifest with
+the declaration, and the kinds released before are listed and owe one
+([ADR-draft-new-built-in-worker-types-ship-a-manifest](draft-new-built-in-worker-types-ship-a-manifest.md)).
+SharePoint Server is the first (`connector/sharepointserver/manifest.json`).
+
 ## Links
 
 - [ADR-0007](0007-job-worker-protocol.md) — at-least-once delivery and leases
