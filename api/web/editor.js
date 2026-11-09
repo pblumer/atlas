@@ -16344,11 +16344,18 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     // nothing in it is in this element's reach.
     const chain = scopeChain(s.elementId);
     const reach = (v) => !v.scope || !chain || chain.includes(v.scope);
+    // A body's collection whose rounds' elements are not on record — an instance
+    // recorded before they were retained — reads as seeded however many rounds finished.
+    // That is worth saying only once a round of it has finished, by this step or before.
+    const roundDone = (elId) => steps.some((st) => st.elementId === elId && st.iteration > 0 && st.endAt
+      && (st.position < s.position || st === s));
+    const unrecorded = (v) => v.scopeKind === "multiInstanceBody" && !v.elementsRecorded && roundDone(v.scope);
     const env = [];
     for (const v of entry) {
       if (written.has(varRef(v)) || !reach(v) || dup(v)) continue;
       const end = atEnd && atEnd.get(varRef(v));
-      env.push(end && (end.value !== v.value || end.kind !== v.kind) ? { ...v, atEnd: end } : v);
+      const w = end && (end.value !== v.value || end.kind !== v.kind) ? { ...v, atEnd: end } : v;
+      env.push(unrecorded(w) ? { ...w, unrecorded: true } : w);
     }
     // What somebody else wrote while this element ran — a parallel branch, an operator —
     // was not there on entry and is not this element's output, but it was in reach.
@@ -16429,11 +16436,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         cls: "v-env",
         chips: v.lateOnly ? ` <span class="c-late" title="${esc(tr("ops.vars.lateOnlyTitle"))}">${esc(tr("ops.vars.lateOnly"))}</span>` : "",
         note: (v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "")
-          // A multi-instance body's collection is filled one element per round, and those
-          // element writes are not part of the history (ADR-0296): it reads unfilled until
-          // the body completes. Said where it is read, so an empty list is not taken for
-          // rounds that produced nothing — each round's result is in its own Output.
-          + (v.scopeKind === "multiInstanceBody" ? `<div class="v-was v-coll">${esc(tr("ops.vars.collectionNote"))}</div>` : ""),
+          // On an instance recorded before each round's element was retained, a body's
+          // collection reads unfilled until the loop completes (ADR-0296, ADR-draft-collection-by-round).
+          // Said where it is read, so an empty list is not taken for rounds that produced
+          // nothing — each round's result is in its own Output.
+          + (v.unrecorded ? `<div class="v-was v-coll">${esc(tr("ops.vars.collectionNote"))}</div>` : ""),
       })).join("");
     }
     if (!envShown) html += note(none("ops.vars.none.env"), "v-env");

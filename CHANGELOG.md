@@ -134,6 +134,16 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A multi-instance body's collection fills round by round in the replay.** The replay showed
+  the output collection as it was seeded — `[null, …]` — in every round and filled only once
+  the loop had finished, because a round records only its element (ADR-0296) and that element
+  was not retained. It is now retained, the size of one result, in a column family of its own
+  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
+  linear in the round count. The instance timeline applies each element to the collection as
+  it stands, so a round shows the list the rounds before it left and its own answer at
+  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
+  this keep the old reading, and only there does the Environment still explain it
+  ([ADR-draft-collection-by-round](docs/adr/draft-collection-by-round.md)).
 - **The replay's Variables tab sorts a selected element's variables by how it came by them.**
   Instead of one list with an Input/Output switch that meant before/after, the tab shows three
   sections: *Input* (the element's own scope — input mappings, a round's loop counter and item),

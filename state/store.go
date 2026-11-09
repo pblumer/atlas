@@ -1800,6 +1800,20 @@ func (q queries) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos 
 	})
 }
 
+// VariableElementHistory visits the retained element writes of one scope of one
+// instance in change order, each a VariableValue whose Index names the element it set
+// (ADR-0296). A reader folds them over the scope's whole-value snapshots
+// (VariableSnapshotHistory) by position to see a list as each write left it.
+func (q queries) VariableElementHistory(piKey, scopeKey uint64, fn func(ts int64, pos uint64, v *model.VariableValue) error) error {
+	return q.scanPrefix(variableElementSnapshotScopePrefix(piKey, scopeKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTVariable, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromVarSnapKey(k), positionFromVarSnapKey(k), v.(*model.VariableValue))
+	})
+}
+
 // DecisionEvaluationHistory folds the retained DMN decision evaluations of one
 // scope (a process instance), calling fn with each evaluation's event timestamp,
 // log position, and its frozen record (decision id, inputs, outputs, trace) in the

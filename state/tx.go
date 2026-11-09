@@ -571,6 +571,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		elementVisitInstancePrefix(procDefKey, piKey),
 		elementTerminationInstancePrefix(procDefKey, piKey),
 		variableSnapshotScopePrefix(piKey),
+		variableElementSnapshotInstancePrefix(piKey),
 		variableAuditScopePrefix(piKey),
 		decisionEvaluationScopePrefix(piKey),
 		variablePrefix(piKey),
@@ -1379,6 +1380,18 @@ func (t *Tx) RecordJobTake(piKey uint64, ts int64, pos uint64, elementKey uint64
 // new state (name, kind, value).
 func (t *Tx) RecordVariableSnapshot(ts int64, pos uint64, v *model.VariableValue) error {
 	return t.b.Set(keyVariableSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
+}
+
+// RecordVariableElementSnapshot retains one element write of a list variable — a
+// multi-instance round's result as it joins the body's output collection — under the
+// instance that owns it. The log carries only the element (ADR-0296), and so does this
+// row, so the history grows with the round count rather than its square. Written only
+// from applyToState, from the event and the batch's own state, so replay rebuilds it
+// identically (I4). Each key is unique (position is monotonic): a plain Set, never
+// overwritten, deleted only by the instance's purge
+// (ADR-draft-collection-by-round).
+func (t *Tx) RecordVariableElementSnapshot(piKey uint64, ts int64, pos uint64, v *model.VariableValue) error {
+	return t.b.Set(keyVariableElementSnapshot(piKey, v.ScopeKey, ts, pos), t.encodeValue(v), nil)
 }
 
 // --- Decision-evaluation history ---
