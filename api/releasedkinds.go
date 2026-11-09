@@ -136,6 +136,7 @@ var releasedKinds = []releasedKind{
 	{JobType: compiler.GoogleContactsJobType, Slug: "google-contacts-worker", Class: classConnector, Package: "atlas.google-contacts"},
 	{JobType: compiler.CardDAVJobType, Slug: "carddav-worker", Class: classConnector, Package: "atlas.carddav"},
 	{JobType: compiler.WikiwikibangbangJobType, Slug: "wikiwikibangbang-worker", Class: classConnector, Package: "atlas.wikiwikibangbang"},
+	{JobType: compiler.SharePointServerJobType, Slug: "sharepoint-server-worker", Class: classConnector, Package: "atlas.sharepoint-server"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right
