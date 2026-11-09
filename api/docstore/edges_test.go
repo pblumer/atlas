@@ -169,7 +169,11 @@ func TestLocalBackendRefusesWhatIsNotAHash(t *testing.T) {
 	if err := l.Delete(ctx, strings.Repeat("a", 64)); err != nil {
 		t.Errorf("Delete of an absent hash = %v", err)
 	}
-	if _, err := NewLocal(filepath.Join("/dev/null", "x")); err == nil {
+	file := filepath.Join(t.TempDir(), "a-file")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewLocal(filepath.Join(file, "x")); err == nil {
 		t.Error("NewLocal under a file succeeded")
 	}
 }
