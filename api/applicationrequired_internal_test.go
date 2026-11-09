@@ -302,3 +302,203 @@ func TestAdoptRefusesTheSystemApplication(t *testing.T) {
 		t.Fatalf("adopt into the system application = %d %s, want 403", code, body)
 	}
 }
+
+// TestAdoptRefusesWhatItCannotFile walks every way an adoption is refused: a body
+// that is not one, one that names nothing, an application that does not exist, and,
+// for each kind, an id that names nothing and an artifact that already belongs to an
+// application. Every refusal is the whole request's: nothing moves.
+func TestAdoptRefusesWhatItCannotFile(t *testing.T) {
+	srv := newServerWith(t)
+	home := filingApp(t, srv, "Home")
+	other := filingApp(t, srv, "Other")
+	adopt := "/api/v1/applications/" + home + "/adopt"
+
+	for _, c := range []struct{ name, path, body string }{
+		{"a body that is not JSON", adopt, `{`},
+		{"a request that names nothing", adopt, `{}`},
+		{"an application that does not exist", "/api/v1/applications/no-such-app/adopt", `{"drafts":["x"]}`},
+	} {
+		if code, body := serveInternal(t, srv, http.MethodPost, c.path, c.body, "application/json"); code != http.StatusBadRequest {
+			t.Errorf("%s = %d %s, want 400", c.name, code, body)
+		}
+	}
+
+	// One of each kind filed under Other, and a process whose versions are split
+	// between Other and no application.
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/drafts?projectId="+other, filingBPMN("filed"), "application/xml")
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/forms",
+		`{"id":"filed-form","projectId":"`+other+`","schema":{"type":"default","components":[]}}`, "application/json")
+	var ref dmnRefResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/dmnrefs",
+		`{"name":"Filed","modelRef":"filed","projectId":"`+other+`"}`, "application/json"), &ref)
+	var dd dmnDraftResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/dmn-drafts",
+		fmt.Sprintf(`{"xml":%q,"projectId":%q}`, discountDMN, other), "application/json"), &dd)
+	var dec deployDecisionResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/decision-deployments?projectId="+other,
+		discountDMN, "application/xml"), &dec)
+	var filedVersion deployResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/deployments?projectId="+other,
+		filingBPMN("split"), "application/xml"), &filedVersion)
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/deployments?projectId=", filingBPMN("split"), "application/xml")
+
+	var listed unassignedResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodGet, "/api/v1/unassigned", "", ""), &listed)
+	if len(listed.Processes) != 1 || listed.Processes[0].FiledVersions != 1 {
+		t.Fatalf("unassigned processes = %+v, want the split process with one version filed elsewhere", listed.Processes)
+	}
+
+	filed := fmt.Sprintf(`{"processes":["split"],"drafts":["filed"],"forms":["filed-form"],"decisionReferences":[%q],
+		"decisionDrafts":[%q],"decisionDeployments":[%d]}`, ref.ID, dd.ID, dec.Key)
+	missing := `{"processes":["none"],"drafts":["none"],"forms":["none"],"decisionReferences":["none"],
+		"decisionDrafts":["none"],"decisionDeployments":[999999]}`
+	for _, c := range []struct{ name, body, want string }{
+		{"artifacts filed elsewhere", filed, "already belongs to an application"},
+		{"ids that name nothing", missing, "no "},
+	} {
+		code, body := serveInternal(t, srv, http.MethodPost, adopt, c.body, "application/json")
+		var refused struct {
+			Problems []adoptProblem `json:"problems"`
+		}
+		_ = json.Unmarshal(body, &refused)
+		if code != http.StatusConflict || len(refused.Problems) != 6 {
+			t.Fatalf("%s = %d %s, want 409 naming all six", c.name, code, body)
+		}
+		for _, p := range refused.Problems {
+			if !strings.Contains(p.Problem, c.want) {
+				t.Errorf("%s: %s %s is refused for %q, want %q", c.name, p.Kind, p.ID, p.Problem, c.want)
+			}
+		}
+	}
+	if got := srv.deploymentProject(t, filedVersion.Key); got != other {
+		t.Errorf("a refused adoption moved the filed version to %q", got)
+	}
+}
+
+// TestAdoptTakesADecisionDraftOnItsOwn: a decision draft that belongs to no decision
+// reference is adopted by its own id.
+func TestAdoptTakesADecisionDraftOnItsOwn(t *testing.T) {
+	srv := newServerWith(t)
+	var dd dmnDraftResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/dmn-drafts",
+		fmt.Sprintf(`{"xml":%q}`, discountDMN), "application/json"), &dd)
+	home := filingApp(t, srv, "Home")
+	var adopted adoptResp
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/applications/"+home+"/adopt",
+		`{"decisionDrafts":["`+dd.ID+`"]}`, "application/json"), &adopted)
+	if len(adopted.DecisionDrafts) != 1 || adopted.DecisionDrafts[0] != dd.ID {
+		t.Fatalf("adopted = %+v, want the decision draft", adopted)
+	}
+}
+
+// TestADeployDoesNotInheritAnApplicationThatIsGone: the application a process's
+// earlier version names is inherited only while it exists; one deleted before the
+// rule leaves nothing to inherit, and the deploy has to name one.
+func TestADeployDoesNotInheritAnApplicationThatIsGone(t *testing.T) {
+	srv := newServerWith(t)
+	gone := filingApp(t, srv, "Gone")
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/deployments?projectId="+gone, filingBPMN("left"), "application/xml")
+	mustServe(t, srv, http.StatusNoContent, http.MethodDelete, "/api/v1/applications/"+gone, "", "")
+	srv.applicationRequired = true
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", filingBPMN("left"), "application/xml"); code != http.StatusBadRequest {
+		t.Fatalf("redeploy of a process whose application is gone = %d %s, want 400", code, body)
+	}
+}
+
+// TestAnImportAndARenamedFormStayInsideAnApplication: a MIM import names the
+// application its drafts go to; a form renamed while it is filed keeps its
+// application; and a form is not filed under an application that does not exist.
+func TestAnImportAndARenamedFormStayInsideAnApplication(t *testing.T) {
+	srv := newServerWith(t, withApplicationRequired())
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/imports/mim", mimImportHTTPPathsXOML, "application/xml"); code != http.StatusBadRequest ||
+		!strings.Contains(string(body), "must belong to an application") {
+		t.Fatalf("a MIM import without an application = %d %s, want 400", code, body)
+	}
+	app := filingApp(t, srv, "Forms")
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/forms",
+		`{"id":"before","projectId":"`+app+`","schema":{"type":"default","components":[]}}`, "application/json")
+	var renamed formMeta
+	_ = json.Unmarshal(mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/forms",
+		`{"id":"after","from":"before","schema":{"type":"default","components":[]}}`, "application/json"), &renamed)
+	if renamed.ProjectID != app {
+		t.Errorf("a renamed form is filed under %q, want it to stay in %q", renamed.ProjectID, app)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/forms",
+		`{"id":"after","projectId":"no-such-app","schema":{"type":"default","components":[]}}`, "application/json"); code != http.StatusBadRequest {
+		t.Errorf("a form moved under an application that does not exist = %d %s, want 400", code, body)
+	}
+}
+
+// TestTheCleanUpReportsAStoreItCannotRead: listing and adopting read every store an
+// artifact can sit in, and one that cannot answer is a 500 — never read as "nothing
+// unassigned there", which would hide part of the clean-up — and nothing is moved.
+// So does the check that keeps an application from being deleted while it holds
+// anything.
+func TestTheCleanUpReportsAStoreItCannotRead(t *testing.T) {
+	for _, store := range []string{"projects", "drafts", "forms", "dmnrefs", "dmn-drafts", "decisions"} {
+		t.Run(store, func(t *testing.T) {
+			dir := t.TempDir()
+			st := bootDecisionStack(t, dir)
+			defer st.shutdown()
+			srv := st.srv
+			app := filingApp(t, srv, "Holder")
+			srv.applicationRequired = true
+			breakStore(t, dir, store)
+
+			if code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/unassigned", "", ""); code != http.StatusInternalServerError {
+				t.Errorf("unassigned = %d %s, want 500", code, body)
+			}
+			code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/applications/"+app+"/adopt",
+				`{"drafts":["d"],"forms":["f"],"decisionReferences":["r"],"decisionDrafts":["dd"],"decisionDeployments":[1]}`,
+				"application/json")
+			if code != http.StatusInternalServerError && !(store == "projects" && code == http.StatusBadRequest) {
+				t.Errorf("adopt = %d %s, want 500", code, body)
+			}
+			if code, body := serveInternal(t, srv, http.MethodDelete, "/api/v1/applications/"+app, "", ""); code != http.StatusInternalServerError {
+				t.Errorf("delete = %d %s, want 500", code, body)
+			}
+		})
+	}
+}
+
+// TestAdoptWritesOnlyWhatIsStillUnfiled drives the write turn of an adoption the
+// way a concurrent change would leave it: an artifact deleted since the plan is
+// skipped, one filed since is left where it is, and a store that refuses the write
+// is reported — with what was written before it kept.
+func TestAdoptWritesOnlyWhatIsStillUnfiled(t *testing.T) {
+	dir := t.TempDir()
+	st := bootDecisionStack(t, dir)
+	defer st.shutdown()
+	srv := st.srv
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/drafts", filingBPMN("planned"), "application/xml")
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/forms", `{"id":"planned-form","schema":{"type":"default","components":[]}}`, "application/json")
+	home := filingApp(t, srv, "Home")
+	plan := adoptPlan{
+		drafts:    []draft{{ProcessID: "planned"}, {ProcessID: "deleted-since"}},
+		forms:     []form{{ID: "planned-form"}},
+		decisions: []persistedDecision{{Key: 424242}},
+	}
+
+	var (
+		resp adoptResp
+		err  error
+	)
+	srv.do(func() { resp, err = srv.adoptOnLoop(plan, home) })
+	if err != nil || len(resp.Drafts) != 1 || len(resp.Forms) != 1 || len(resp.DecisionDeployments) != 0 {
+		t.Fatalf("first write = %+v, %v; want the draft and the form, and nothing for what is gone", resp, err)
+	}
+	// The same plan again: everything it names is filed now, so nothing moves.
+	other := filingApp(t, srv, "Other")
+	srv.do(func() { resp, err = srv.adoptOnLoop(plan, other) })
+	if err != nil || len(resp.Drafts)+len(resp.Forms) != 0 {
+		t.Fatalf("second write = %+v, %v; want nothing taken from Home", resp, err)
+	}
+
+	mustServe(t, srv, http.StatusOK, http.MethodPost, "/api/v1/forms", `{"id":"late-form","schema":{"type":"default","components":[]}}`, "application/json")
+	breakStore(t, dir, "drafts")
+	plan = adoptPlan{drafts: []draft{{ProcessID: "planned"}}, forms: []form{{ID: "late-form"}}}
+	srv.do(func() { resp, err = srv.adoptOnLoop(plan, home) })
+	if err == nil {
+		t.Fatalf("a write to a broken store = %+v, want its error", resp)
+	}
+}

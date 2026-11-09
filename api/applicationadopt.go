@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"sort"
@@ -76,13 +77,17 @@ type adoptPlan struct {
 	dmnDrafts   []dmnDraft
 	decisions   []persistedDecision
 	scopes      [][2]string
+	seen        map[[2]string]bool
 	problems    []adoptProblem
 }
 
-func (p *adoptPlan) scope(projectID, ownerID string, seen map[[2]string]bool) {
+func (p *adoptPlan) scope(projectID, ownerID string) {
 	k := [2]string{projectID, ownerID}
-	if !seen[k] {
-		seen[k] = true
+	if p.seen == nil {
+		p.seen = map[[2]string]bool{}
+	}
+	if !p.seen[k] {
+		p.seen[k] = true
 		p.scopes = append(p.scopes, k)
 	}
 }
@@ -95,6 +100,116 @@ func (p *adoptPlan) refuse(kind, id, problem string) {
 // application: adopt is not the move route.
 const filedElsewhere = "already belongs to an application; move it with its own move route instead"
 
+// adoptKind is one kind of design-time record adopt files, addressed by a string id:
+// how it is read and written, which application it names and whose personal space
+// it is in while it names none. One description per kind keeps the check and the
+// write the same for all of them.
+type adoptKind[T any] struct {
+	kind    string // the kind as a problem names it
+	missing string // the problem of an id that names nothing
+	route   string // where a filed one is moved instead
+	get     func(id string) (T, bool, error)
+	save    func(T) error
+	id      func(T) string
+	tag     func(T) string // the application it is filed under
+	owner   func(T) string
+	retag   func(T, string) T
+}
+
+// plan checks each id: it names a record, and that record belongs to no application.
+func (k adoptKind[T]) plan(ids []string, projs map[string]project, p *adoptPlan) ([]T, error) {
+	var out []T
+	for _, id := range ids {
+		rec, ok, err := k.get(id)
+		switch {
+		case err != nil:
+			return out, err
+		case !ok:
+			p.refuse(k.kind, id, k.missing)
+		case !unfiled(k.tag(rec), projs):
+			p.refuse(k.kind, id, filedElsewhere+k.route)
+		default:
+			out = append(out, rec)
+			p.scope(k.tag(rec), k.owner(rec))
+		}
+	}
+	return out, nil
+}
+
+// write files each planned record under appID, re-read first: a record a concurrent
+// move filed since the plan is left where it now is, and one deleted since is
+// skipped. Returns the ids it moved. Must be called on the run loop.
+func (k adoptKind[T]) write(recs []T, appID string, projs map[string]project) ([]string, error) {
+	moved := []string{}
+	for _, planned := range recs {
+		cur, ok, err := k.get(k.id(planned))
+		if err != nil {
+			return moved, err
+		}
+		if !ok || !unfiled(k.tag(cur), projs) {
+			continue
+		}
+		if err := k.save(k.retag(cur, appID)); err != nil {
+			return moved, err
+		}
+		moved = append(moved, k.id(cur))
+	}
+	return moved, nil
+}
+
+func (s *Server) adoptDrafts() adoptKind[draft] {
+	return adoptKind[draft]{
+		kind: "draft", missing: "no draft with that process id", route: " (PATCH /api/v1/drafts/{id})",
+		get: s.drafts.Get, save: s.drafts.Save,
+		id: func(d draft) string { return d.ProcessID }, tag: func(d draft) string { return d.ProjectID },
+		owner: func(d draft) string { return d.OwnerID },
+		retag: func(d draft, app string) draft { d.ProjectID = app; return d },
+	}
+}
+
+func (s *Server) adoptForms() adoptKind[form] {
+	return adoptKind[form]{
+		kind: "form", missing: "no form with that id", route: " (save it with another projectId)",
+		get: s.forms.Get, save: s.forms.Save,
+		id: func(f form) string { return f.ID }, tag: func(f form) string { return f.ProjectID },
+		owner: func(f form) string { return f.OwnerID },
+		retag: func(f form, app string) form { f.ProjectID = app; return f },
+	}
+}
+
+func (s *Server) adoptRefs() adoptKind[dmnRef] {
+	return adoptKind[dmnRef]{
+		kind: "decisionReference", missing: "no decision reference with that id", route: " (PATCH /api/v1/dmnrefs/{id})",
+		get: s.dmnrefs.Get, save: s.dmnrefs.Save,
+		id: func(r dmnRef) string { return r.ID }, tag: func(r dmnRef) string { return r.ProjectID },
+		owner: func(r dmnRef) string { return r.OwnerID },
+		retag: func(r dmnRef, app string) dmnRef { r.ProjectID = app; return r },
+	}
+}
+
+func (s *Server) adoptDmnDrafts() adoptKind[dmnDraft] {
+	return adoptKind[dmnDraft]{
+		kind: "decisionDraft", missing: "no decision draft with that id",
+		get: s.dmnDrafts.Get, save: s.dmnDrafts.Save,
+		id: func(d dmnDraft) string { return d.ID }, tag: func(d dmnDraft) string { return d.ProjectID },
+		owner: func(d dmnDraft) string { return d.OwnerID },
+		retag: func(d dmnDraft, app string) dmnDraft { d.ProjectID = app; return d },
+	}
+}
+
+// adoptDecisions addresses a decision deployment by its key in decimal, the only
+// form in which a key reaches it.
+func (s *Server) adoptDecisions() adoptKind[persistedDecision] {
+	return adoptKind[persistedDecision]{
+		kind: "decisionDeployment", missing: "no decision deployment with that key",
+		get: s.decisionDeploys.Get, save: s.decisionDeploys.Save,
+		id:    func(d persistedDecision) string { return decisionKeyName(d.Key) },
+		tag:   func(d persistedDecision) string { return d.ApplicationID },
+		owner: func(d persistedDecision) string { return d.DeployedBy },
+		retag: func(d persistedDecision, app string) persistedDecision { d.ApplicationID = app; return d },
+	}
+}
+
 // planAdoptionOnLoop reads what q names and checks that each exists and belongs to
 // no application. Must be called on the run loop.
 func (s *Server) planAdoptionOnLoop(q adoptRequest) (adoptPlan, error) {
@@ -103,12 +218,57 @@ func (s *Server) planAdoptionOnLoop(q adoptRequest) (adoptPlan, error) {
 	if err != nil {
 		return plan, err
 	}
-	seen := map[[2]string]bool{}
+	s.planProcessAdoptionOnLoop(q.Processes, projs, &plan)
+	if plan.drafts, err = s.adoptDrafts().plan(q.Drafts, projs, &plan); err != nil {
+		return plan, err
+	}
+	if plan.forms, err = s.adoptForms().plan(q.Forms, projs, &plan); err != nil {
+		return plan, err
+	}
+	if plan.refs, err = s.adoptRefs().plan(q.DecisionReferences, projs, &plan); err != nil {
+		return plan, err
+	}
+	// A reference takes its unfiled decision drafts along: a decision draft belongs
+	// where its decision does. The ones named on their own are planned after, once.
+	allDmnDrafts, err := s.dmnDrafts.LoadAll()
+	if err != nil {
+		return plan, err
+	}
+	taken := map[string]bool{}
+	for _, ref := range plan.refs {
+		for _, dd := range allDmnDrafts {
+			if dd.RefID == ref.ID && unfiled(dd.ProjectID, projs) {
+				taken[dd.ID] = true
+				plan.dmnDrafts = append(plan.dmnDrafts, dd)
+				plan.scope(dd.ProjectID, dd.OwnerID)
+			}
+		}
+	}
+	var named []string
+	for _, id := range q.DecisionDrafts {
+		if !taken[id] {
+			named = append(named, id)
+		}
+	}
+	more, err := s.adoptDmnDrafts().plan(named, projs, &plan)
+	if err != nil {
+		return plan, err
+	}
+	plan.dmnDrafts = append(plan.dmnDrafts, more...)
+	keys := make([]string, 0, len(q.DecisionDeployments))
+	for _, k := range q.DecisionDeployments {
+		keys = append(keys, decisionKeyName(k))
+	}
+	plan.decisions, err = s.adoptDecisions().plan(keys, projs, &plan)
+	return plan, err
+}
 
-	// Processes: every version of the definition and of the other pools of its
-	// collaboration, all of which have to be unfiled.
+// planProcessAdoptionOnLoop plans the deployed processes: every version of the
+// definition and of the other pools of its collaboration, all of which have to be
+// unfiled. Must be called on the run loop.
+func (s *Server) planProcessAdoptionOnLoop(processIDs []string, projs map[string]project, plan *adoptPlan) {
 	keySeen := map[uint64]bool{}
-	for _, pid := range q.Processes {
+	for _, pid := range processIDs {
 		var latest *deployment
 		for _, k := range s.order {
 			if d := s.deployments[k]; d != nil && d.ProcessID == pid {
@@ -123,125 +283,26 @@ func (s *Server) planAdoptionOnLoop(q adoptRequest) (adoptPlan, error) {
 		for _, sib := range s.poolSiblings(latest) {
 			pools[sib.ProcessID] = true
 		}
-		var keys []uint64
+		var versions []*deployment
 		filed := false
 		for _, k := range s.order {
-			d := s.deployments[k]
-			if d == nil || !pools[d.ProcessID] {
-				continue
+			if d := s.deployments[k]; d != nil && pools[d.ProcessID] {
+				versions = append(versions, d)
+				filed = filed || !unfiled(d.ProjectID, projs)
 			}
-			if !unfiled(d.ProjectID, projs) {
-				filed = true
-				break
-			}
-			keys = append(keys, k)
-			plan.scope(d.ProjectID, d.DeployedBy, seen)
 		}
 		if filed {
 			plan.refuse("process", pid, "a version of it "+filedElsewhere+" (PATCH /api/v1/processes/{key})")
 			continue
 		}
-		for _, k := range keys {
-			if !keySeen[k] {
-				keySeen[k] = true
-				plan.versionKeys = append(plan.versionKeys, k)
+		for _, d := range versions {
+			plan.scope(d.ProjectID, d.DeployedBy)
+			if !keySeen[d.Key] {
+				keySeen[d.Key] = true
+				plan.versionKeys = append(plan.versionKeys, d.Key)
 			}
 		}
 	}
-
-	for _, id := range q.Drafts {
-		d, ok, err := s.drafts.Get(id)
-		switch {
-		case err != nil:
-			return plan, err
-		case !ok:
-			plan.refuse("draft", id, "no draft with that process id")
-		case !unfiled(d.ProjectID, projs):
-			plan.refuse("draft", id, filedElsewhere+" (PATCH /api/v1/drafts/{id})")
-		default:
-			plan.drafts = append(plan.drafts, d)
-			plan.scope(d.ProjectID, d.OwnerID, seen)
-		}
-	}
-
-	for _, id := range q.Forms {
-		f, ok, err := s.forms.Get(id)
-		switch {
-		case err != nil:
-			return plan, err
-		case !ok:
-			plan.refuse("form", id, "no form with that id")
-		case !unfiled(f.ProjectID, projs):
-			plan.refuse("form", id, filedElsewhere+" (save it with another projectId)")
-		default:
-			plan.forms = append(plan.forms, f)
-			plan.scope(f.ProjectID, f.OwnerID, seen)
-		}
-	}
-
-	allDmnDrafts, err := s.dmnDrafts.LoadAll()
-	if err != nil {
-		return plan, err
-	}
-	dmnDraftSeen := map[string]bool{}
-	for _, id := range q.DecisionReferences {
-		ref, ok, err := s.dmnrefs.Get(id)
-		switch {
-		case err != nil:
-			return plan, err
-		case !ok:
-			plan.refuse("decisionReference", id, "no decision reference with that id")
-			continue
-		case !unfiled(ref.ProjectID, projs):
-			plan.refuse("decisionReference", id, filedElsewhere+" (PATCH /api/v1/dmnrefs/{id})")
-			continue
-		}
-		plan.refs = append(plan.refs, ref)
-		plan.scope(ref.ProjectID, ref.OwnerID, seen)
-		for _, dd := range allDmnDrafts {
-			if dd.RefID == ref.ID && unfiled(dd.ProjectID, projs) && !dmnDraftSeen[dd.ID] {
-				dmnDraftSeen[dd.ID] = true
-				plan.dmnDrafts = append(plan.dmnDrafts, dd)
-				plan.scope(dd.ProjectID, dd.OwnerID, seen)
-			}
-		}
-	}
-
-	for _, id := range q.DecisionDrafts {
-		if dmnDraftSeen[id] {
-			continue
-		}
-		dd, ok, err := s.dmnDrafts.Get(id)
-		switch {
-		case err != nil:
-			return plan, err
-		case !ok:
-			plan.refuse("decisionDraft", id, "no decision draft with that id")
-		case !unfiled(dd.ProjectID, projs):
-			plan.refuse("decisionDraft", id, filedElsewhere)
-		default:
-			dmnDraftSeen[id] = true
-			plan.dmnDrafts = append(plan.dmnDrafts, dd)
-			plan.scope(dd.ProjectID, dd.OwnerID, seen)
-		}
-	}
-
-	for _, key := range q.DecisionDeployments {
-		rec, ok, err := s.decisionDeploys.load(key)
-		id := strconv.FormatUint(key, 10)
-		switch {
-		case err != nil:
-			return plan, err
-		case !ok:
-			plan.refuse("decisionDeployment", id, "no decision deployment with that key")
-		case !unfiled(rec.ApplicationID, projs):
-			plan.refuse("decisionDeployment", id, filedElsewhere)
-		default:
-			plan.decisions = append(plan.decisions, rec)
-			plan.scope(rec.ApplicationID, rec.DeployedBy, seen)
-		}
-	}
-	return plan, nil
 }
 
 // handleAdoptArtifacts is POST /api/v1/applications/{id}/adopt: it files the named
@@ -270,37 +331,30 @@ func (s *Server) handleAdoptArtifacts(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, code, msg)
 		return
 	}
+
+	// First turn: what the request names, and whether each may be adopted. The
+	// application's record is read in the same turn: a protected system application
+	// (ADR-0122) is no destination, for any caller.
 	var (
+		plan      adoptPlan
+		planErr   error
 		protected bool
-		readErr   error
 	)
 	s.do(func() {
-		if proj, ok, e := s.projects.Get(appID); e != nil {
-			readErr = e
-		} else if ok && proj.Protected {
-			protected = true
+		if proj, ok, e := s.projects.Get(appID); e != nil || (ok && proj.Protected) {
+			planErr, protected = e, e == nil
+			return
 		}
+		plan, planErr = s.planAdoptionOnLoop(q)
 	})
-	if readErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "read application: "+readErr.Error())
-		return
-	}
-	if protected {
-		httpapi.Error(w, http.StatusForbidden, "protected system application cannot be modified")
-		return
-	}
-
-	// First turn: what the request names, and whether each may be adopted.
-	var (
-		plan    adoptPlan
-		planErr error
-	)
-	s.do(func() { plan, planErr = s.planAdoptionOnLoop(q) })
-	if planErr != nil {
+	switch {
+	case planErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read artifacts: "+planErr.Error())
 		return
-	}
-	if len(plan.problems) > 0 {
+	case protected:
+		httpapi.Error(w, http.StatusForbidden, "protected system application cannot be modified")
+		return
+	case len(plan.problems) > 0:
 		httpapi.JSON(w, http.StatusConflict, map[string]any{
 			"error":    "nothing was adopted: some of the named artifacts cannot be",
 			"problems": plan.problems,
@@ -317,115 +371,60 @@ func (s *Server) handleAdoptArtifacts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Second turn: the writes, each re-checked against what the store holds now,
-	// because a concurrent move could have filed it since the first turn. Such an
-	// artifact is left where it is rather than taken from its new application.
-	resp := adoptResp{ApplicationID: appID, Processes: []uint64{}, Drafts: []string{}, Forms: []string{},
-		DecisionReferences: []string{}, DecisionDrafts: []string{}, DecisionDeployments: []uint64{}}
-	var loadErr, writeErr error
-	s.do(func() {
-		projs, err := s.projectsByID()
-		if err != nil {
-			loadErr = err
-			return
-		}
-		var keys []uint64
-		for _, k := range plan.versionKeys {
-			if d := s.deployments[k]; d != nil && unfiled(d.ProjectID, projs) {
-				keys = append(keys, k)
-			}
-		}
-		if resp.Processes, loadErr, writeErr = s.refileDeploymentsOnLoop(keys, appID); loadErr != nil || writeErr != nil {
-			return
-		}
-		for _, d := range plan.drafts {
-			cur, ok, err := s.drafts.Get(d.ProcessID)
-			if err != nil {
-				loadErr = err
-				return
-			}
-			if !ok || !unfiled(cur.ProjectID, projs) {
-				continue
-			}
-			cur.ProjectID = appID
-			if writeErr = s.drafts.Save(cur); writeErr != nil {
-				return
-			}
-			resp.Drafts = append(resp.Drafts, cur.ProcessID)
-		}
-		for _, f := range plan.forms {
-			cur, ok, err := s.forms.Get(f.ID)
-			if err != nil {
-				loadErr = err
-				return
-			}
-			if !ok || !unfiled(cur.ProjectID, projs) {
-				continue
-			}
-			cur.ProjectID = appID
-			if writeErr = s.forms.Save(cur); writeErr != nil {
-				return
-			}
-			resp.Forms = append(resp.Forms, cur.ID)
-		}
-		for _, ref := range plan.refs {
-			cur, ok, err := s.dmnrefs.Get(ref.ID)
-			if err != nil {
-				loadErr = err
-				return
-			}
-			if !ok || !unfiled(cur.ProjectID, projs) {
-				continue
-			}
-			cur.ProjectID = appID
-			if writeErr = s.dmnrefs.Save(cur); writeErr != nil {
-				return
-			}
-			resp.DecisionReferences = append(resp.DecisionReferences, cur.ID)
-		}
-		for _, dd := range plan.dmnDrafts {
-			cur, ok, err := s.dmnDrafts.Get(dd.ID)
-			if err != nil {
-				loadErr = err
-				return
-			}
-			if !ok || !unfiled(cur.ProjectID, projs) {
-				continue
-			}
-			cur.ProjectID = appID
-			if writeErr = s.dmnDrafts.Save(cur); writeErr != nil {
-				return
-			}
-			resp.DecisionDrafts = append(resp.DecisionDrafts, cur.ID)
-		}
-		for _, rec := range plan.decisions {
-			cur, ok, err := s.decisionDeploys.load(rec.Key)
-			if err != nil {
-				loadErr = err
-				return
-			}
-			if !ok || !unfiled(cur.ApplicationID, projs) {
-				continue
-			}
-			cur.ApplicationID = appID
-			if writeErr = s.decisionDeploys.Save(cur); writeErr != nil {
-				return
-			}
-			resp.DecisionDeployments = append(resp.DecisionDeployments, cur.Key)
-		}
-	})
-	switch {
-	case loadErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read artifacts: "+loadErr.Error())
-	case writeErr != nil:
+	// because a concurrent move could have filed it since the first turn.
+	var (
+		resp     adoptResp
+		writeErr error
+	)
+	s.do(func() { resp, writeErr = s.adoptOnLoop(plan, appID) })
+	if writeErr != nil {
 		// What was written before the failure stays written, and is filed correctly:
 		// repeating the request adopts the rest, since what moved is no longer unfiled
 		// and is skipped.
 		httpapi.Error(w, http.StatusInternalServerError, "adopt: "+writeErr.Error()+
 			" — what was adopted before the failure stays adopted; repeat the request for the rest")
-	default:
-		sort.Slice(resp.Processes, func(i, j int) bool { return resp.Processes[i] < resp.Processes[j] })
-		httpapi.JSON(w, http.StatusOK, resp)
+		return
 	}
+	httpapi.JSON(w, http.StatusOK, resp)
+}
+
+// adoptOnLoop writes what plan found under appID. Must be called on the run loop.
+func (s *Server) adoptOnLoop(plan adoptPlan, appID string) (adoptResp, error) {
+	resp := adoptResp{ApplicationID: appID, Processes: []uint64{}, DecisionDeployments: []uint64{}}
+	projs, err := s.projectsByID()
+	if err != nil {
+		return resp, err
+	}
+	var keys []uint64
+	for _, k := range plan.versionKeys {
+		if d := s.deployments[k]; d != nil && unfiled(d.ProjectID, projs) {
+			keys = append(keys, k)
+		}
+	}
+	moved, loadErr, persistErr := s.refileDeploymentsOnLoop(keys, appID)
+	resp.Processes = append(resp.Processes, moved...)
+	if err := errors.Join(loadErr, persistErr); err != nil {
+		return resp, err
+	}
+	sort.Slice(resp.Processes, func(i, j int) bool { return resp.Processes[i] < resp.Processes[j] })
+	if resp.Drafts, err = s.adoptDrafts().write(plan.drafts, appID, projs); err != nil {
+		return resp, err
+	}
+	if resp.Forms, err = s.adoptForms().write(plan.forms, appID, projs); err != nil {
+		return resp, err
+	}
+	if resp.DecisionReferences, err = s.adoptRefs().write(plan.refs, appID, projs); err != nil {
+		return resp, err
+	}
+	if resp.DecisionDrafts, err = s.adoptDmnDrafts().write(plan.dmnDrafts, appID, projs); err != nil {
+		return resp, err
+	}
+	decided, err := s.adoptDecisions().write(plan.decisions, appID, projs)
+	for _, id := range decided {
+		key, _ := strconv.ParseUint(id, 10, 64)
+		resp.DecisionDeployments = append(resp.DecisionDeployments, key)
+	}
+	return resp, err
 }
 
 // unassignedResp is what GET /api/v1/unassigned lists: everything the caller can see
