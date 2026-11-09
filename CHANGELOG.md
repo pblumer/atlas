@@ -198,7 +198,7 @@ _Changed_ / _Removed_ for each version.
   `local`; an operator's correction of a local is not included. The body's output collection
   still reads unfilled until the loop finishes, because its per-round element writes are not
   part of the history (ADR-0296); the Environment now says so on the collection
-  ([ADR-draft-variables-by-provenance](docs/adr/draft-variables-by-provenance.md)).
+  ([ADR-0542](docs/adr/0542-variables-by-provenance.md)).
 - **A wide decision table fits its hover card.** The card that shows which rule fired —
   in Operations → Decisions, the live view and the instance replay — held every cell to one
   line inside a 480 px card, so a table with a long list of literals or a long input
