@@ -148,7 +148,7 @@ _Changed_ / _Removed_ for each version.
   gains `scopeKind` (`subprocess`, `multiInstanceBody`, `loopBody`) and `constant` (`process`,
   `application`, `server`) on its variables, and no longer lets a multi-instance subprocess's
   body and one of its iterations overwrite each other's same-named variables
-  ([ADR-draft-variables-by-provenance](docs/adr/draft-variables-by-provenance.md)).
+  ([ADR-0542](docs/adr/0542-variables-by-provenance.md)).
 - **An application lists what it has deployed; the Modeler home lists applications.** The
   Modeler home's *Deployed* list is gone: the same processes were also listed in each
   application's *Deployments* tab and under *Operations › Instances*, and pausing or deleting

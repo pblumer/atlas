@@ -1,4 +1,4 @@
-# ADR-DRAFT: A selected element's variables are shown by how it came by them
+# ADR-0542: A selected element's variables are shown by how it came by them
 
 - **Status:** Accepted
 - **Implementation:** Landed

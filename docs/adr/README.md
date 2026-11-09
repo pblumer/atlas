@@ -629,6 +629,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0539](0539-blueprint-architecture-preview.md) | An atlas hub release shows its architecture sketch and its process models before it is installed | Accepted | Landed |
 | [0540](0540-sharepoint-server-worker.md) | SharePoint Server is a Worker Type of its own | Accepted | Landed |
 | [0541](0541-the-application-holds-its-deployments.md) | An application's deployed processes are listed in the application, not on the Modeler home | Accepted | Landed |
+| [0542](0542-variables-by-provenance.md) | A selected element's variables are shown by how it came by them | Accepted | Landed |
 
 ## The two states of a record
 
