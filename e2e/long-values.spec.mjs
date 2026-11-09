@@ -182,6 +182,9 @@ test.describe("the replay's Variables tab", () => {
     await page.evaluate(() => window.__mountReplay());
     await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
     await page.locator("#rp-tabs button[data-tab='variables']").click();
+    // The task holds no text of its own: the upload is in its environment, which a
+    // selected task folds away until the reader opens it.
+    await page.locator("#tab-variables .v-env-toggle").click();
 
     const row = page.locator("#tab-variables .vt tbody tr", { has: page.locator("td.c-name", { hasText: "csvText" }) });
     await expect(row).toBeVisible();

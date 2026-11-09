@@ -22,6 +22,12 @@ const open = async (page, opts) => {
   await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
   await page.locator("#rp-tabs button[data-tab='variables']").click();
   await expect(page.locator("#tab-variables .vt tbody tr").first()).toBeVisible();
+  // The service task reads everything it names from its environment, which a selected
+  // task folds away until the reader opens it.
+  await page.locator("#tab-variables .v-env-toggle").click();
+  // The rows open under the pointer that opened them; left there, it hovers whichever
+  // reference lands beneath it, and the card says that one's name instead.
+  await page.mouse.move(0, 0);
 };
 
 const row = (page, name) =>

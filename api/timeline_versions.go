@@ -138,6 +138,17 @@ func (v *versionAt) isLoop(pos uint64, idx int32) bool {
 	return ok && n.MultiInstance >= 0
 }
 
+// isStandardLoop reports whether the element at an index is a standard loop rather than
+// a multi-instance at a log position (ADR-0133). Both are compiled onto the same detail,
+// so a loop body's scope is named by asking which of the two the model drew.
+func (v *versionAt) isStandardLoop(pos uint64, idx int32) bool {
+	n, ok := v.node(pos, idx)
+	if !ok || n.MultiInstance < 0 {
+		return false
+	}
+	return v.cp(pos).MultiInstance(n.MultiInstance).Standard
+}
+
 // flowSource is the element index a flow leaves from at a log position, and whether it
 // resolved. Used both to name the element a token came from and to link a deferred
 // completion to the activation that succeeds it.

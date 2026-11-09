@@ -105,6 +105,21 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **The replay's Variables tab sorts a selected element's variables by how it came by them.**
+  Instead of one list with an Input/Output switch that meant before/after, the tab shows three
+  sections: *Input* (the element's own scope — input mappings, a round's loop counter and item),
+  *Output* (what the element itself wrote, with the value it replaced or marked new, and
+  "still running" while there is no output yet) and *Environment* (everything else it could
+  reach, grouped by scope innermost first: its loop body, each enclosing subprocess, the
+  process and the process's constants). The Environment is folded until the reader opens it,
+  remembered per browser, and a name the filter finds in it is shown while folded; variables
+  of a subprocess running beside the element are left out, being out of its reach. Input and
+  Output now mean what the diagram's in/out card means. With nothing selected the tab stays one
+  list, and its scope chip names the kind of scope beside the element id. The instance timeline
+  gains `scopeKind` (`subprocess`, `multiInstanceBody`, `loopBody`) and `constant` (`process`,
+  `application`, `server`) on its variables, and no longer lets a multi-instance subprocess's
+  body and one of its iterations overwrite each other's same-named variables
+  ([ADR-draft-variables-by-provenance](docs/adr/draft-variables-by-provenance.md)).
 - **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
   the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
   "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact

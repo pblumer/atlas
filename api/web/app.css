@@ -1243,21 +1243,6 @@ textarea::placeholder {
   padding: 0 6px; border-radius: 999px;
   color: var(--warn); background: var(--warn-soft);
 }
-/* A value the selected element itself wrote, on the Variables tab's Output side
-   (ADR-0159), so its own contribution stands out from what it inherited. */
-.c-changed {
-  font: 700 10px/1.6 system-ui, sans-serif; white-space: nowrap;
-  padding: 0 5px; border-radius: 999px;
-  color: var(--ok); background: var(--ok-soft, var(--accent-soft));
-}
-/* Input / Output switch in the replay Variables toolbar (ADR-0159). */
-.v-side { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
-.v-side-btn {
-  background: none; border: none; cursor: pointer; border-radius: 4px;
-  padding: 2px 8px; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted);
-}
-.v-side-btn:hover { color: var(--text); }
-.v-side-btn.active { background: var(--surface); color: var(--accent-text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 /* A step a person forced rather than one the engine drove (ADR-0159). It leads the
    Details tab's blocks because it changes how every other fact on the step reads. */
 .ops-manual {
@@ -3118,6 +3103,48 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .vt .c-act .vcopy { opacity: 0; }
 .vt tbody tr:hover .c-act .vcopy, .vt .c-act .vcopy:focus-visible { opacity: 1; }
 .vt .v-none { color: var(--muted); padding: 14px 12px; }
+
+/* A selected element's variables in three sections — Input, Output, Environment — each
+   under a heading row whose label takes the colour the diagram's in/out card gives it,
+   so the two surfaces read as one story. The environment is grouped by the scope that
+   holds a value, under lighter sub-headings, and folds away (closed by default). */
+.vt tbody tr.v-ghead, .vt tbody tr.v-gsub, .vt tbody tr.v-gnote { border-bottom: none; }
+.vt tbody tr.v-ghead:hover, .vt tbody tr.v-gsub:hover, .vt tbody tr.v-gnote:hover { background: none; }
+.vt tr.v-ghead td { padding: 14px 12px 6px; }
+.vt tbody tr.v-ghead:first-child td { padding-top: 6px; }
+.vt .v-glbl {
+  font: 700 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-text);
+}
+.vt .v-sec-out .v-glbl { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.vt .v-sec-env .v-glbl { background: color-mix(in srgb, var(--muted) 13%, var(--surface)); color: var(--muted); }
+.vt .v-ghint { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.vt .v-gcount {
+  margin-left: 8px; font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted);
+  padding: 0 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg);
+}
+.vt .v-env-toggle {
+  display: inline-flex; align-items: baseline; border: none; background: none; padding: 0; margin: 0;
+  cursor: pointer; color: inherit; font: inherit; text-align: left;
+}
+.vt .v-env-toggle .v-chev { width: 14px; color: var(--muted); font-size: 10px; }
+.vt .v-env-toggle:hover .v-ghint { color: var(--text); }
+.vt tr.v-gsub td { padding: 8px 12px 3px 30px; font: 600 11.5px/1.5 system-ui, sans-serif; color: var(--muted); }
+.vt tr.v-gnote td { padding: 3px 12px 8px 30px; color: var(--muted); font-style: italic; font-size: 12.5px; }
+.vt tbody tr.v-env:not(.v-gsub):not(.v-gnote) td.c-name { padding-left: 30px; }
+.vt tbody.v-env-collapsed tr.v-env { display: none; }
+.vt.dt-filtered tbody.v-env-collapsed tr.v-env:not([hidden]) { display: table-row; }
+/* What a value was before the element wrote it, or had become once it finished. */
+.vt .v-was { margin-top: 2px; font: 11.5px/1.4 ui-monospace, monospace; color: var(--muted); word-break: break-word; }
+/* A constant, and whose (ADR-0454/0456); a value that did not exist before the element
+   wrote it; one that appeared in reach only while the element ran. */
+.c-const, .c-new, .c-late {
+  font: 600 9.5px/1.6 system-ui, sans-serif; white-space: nowrap; vertical-align: middle;
+  padding: 0 6px; margin-left: 6px; border-radius: 999px;
+}
+.c-const { color: var(--accent-text); background: var(--accent-soft); }
+.c-new { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, var(--surface)); }
+.c-late { color: var(--muted); background: var(--surface); border: 1px solid var(--border); }
 
 /* Object/array value → a "···" button that opens the deep-inspect modal. */
 .vt .v-open {
