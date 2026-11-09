@@ -289,3 +289,16 @@ output "exchange_service_password" {
   value       = local.exchange_count == 1 ? random_password.exchange_service[0].result : null
   sensitive   = true
 }
+
+output "sharepoint_server" {
+  description = "The SharePoint server, for the SharePoint Server worker: whether it is built, its VM, its web application (inside the virtual network) and the runbook service account. No password."
+  value = {
+    enabled             = local.sharepoint_count == 1
+    vm                  = local.sharepoint_count == 1 ? azurerm_windows_virtual_machine.sharepoint[0].name : null
+    resource_group      = local.sharepoint_count == 1 ? azurerm_resource_group.env[0].name : null
+    fqdn                = local.sharepoint_count == 1 ? local.sharepoint_fqdn : null
+    private_ip          = local.sharepoint_count == 1 ? local.sharepoint_private_ip : null
+    web_application_url = local.sharepoint_count == 1 ? local.sharepoint_url : null
+    runbook_account     = local.sharepoint_count == 1 ? "${local.sharepoint_runbook_account}@${var.ad_domain_name}" : null
+  }
+}
