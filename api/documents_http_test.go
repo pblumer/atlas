@@ -254,7 +254,9 @@ func TestADocumentIsOnlyItsUploadersUntilItEntersAnInstance(t *testing.T) {
 // reference (ADR-draft-a-file-is-a-document-not-a-variable).
 func TestEveryEntryRefusesAnUnknownDocument(t *testing.T) {
 	ts := newTestServer(t)
-	do := func(method, path, body string) (int, []byte) { return doReq(t, ts, method, path, body, "application/json") }
+	do := func(method, path, body string) (int, []byte) {
+		return doReq(t, ts, method, path, body, "application/json")
+	}
 	const unknown = `{"$document":"doc_aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	key := deployDoc(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, csvDocBPMN)
 	_ = key
