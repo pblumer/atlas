@@ -2496,6 +2496,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		type scopeSpan struct {
 			scopeKey uint64
 			label    string
+			kind     string // what the scope is: see variableView.ScopeKind
 			endPos   uint64
 		}
 		// A loop body is a scope too. Its rounds do not each get their own copy of the
@@ -2527,7 +2528,14 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				continue
 			}
 			if rr.v.Action == 1 { // the scope opened
-				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: ver.elementID(rr.pos, rr.v.ElementID), endPos: noEnd}
+				kind := scopeKindSubprocess
+				if isLoopBody {
+					kind = scopeKindMultiInstanceBody
+					if ver.isStandardLoop(rr.pos, rr.v.ElementID) {
+						kind = scopeKindLoopBody
+					}
+				}
+				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: ver.elementID(rr.pos, rr.v.ElementID), kind: kind, endPos: noEnd}
 				subScopes[rr.v.ElementInstanceKey] = sp
 				subScopeList = append(subScopeList, sp)
 			} else if sp := subScopes[rr.v.ElementInstanceKey]; sp != nil { // it completed/terminated
@@ -2554,6 +2562,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Actor = actorByPos[pos]
+				view.Constant = constantKind(ver.cp(pos), v.Name)
 				changes = append(changes, varChange{pos: pos, endPos: noEnd, producer: v.ProducerKey, view: view})
 				return nil
 			})
@@ -2565,6 +2574,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
+				view.ScopeKind = sp.kind
 				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view})
 				return nil
@@ -2760,7 +2770,10 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// for the same (scope, name) — a subprocess-local shadows nothing here, it is a
 		// distinct entry keyed by its scope. A local is only surfaced while its
 		// subprocess is live (endPos), since its drop is not snapshotted (ADR-0074).
-		type varKey struct{ scope, name string }
+		// The scope kind is part of the key: a multi-instance subprocess's body and each of
+		// its iterations are two scopes under one element id, and a variable of the same
+		// name in each is two variables, not one overwriting the other.
+		type varKey struct{ scope, kind, name string }
 		type varEntry struct {
 			view   variableView
 			endPos uint64
@@ -2770,7 +2783,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		for _, sr := range stepRows {
 			for ci < len(changes) && changes[ci].pos <= sr.pos {
 				c := changes[ci]
-				running[varKey{c.view.Scope, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				running[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
 				ci++
 			}
 			vars := make([]variableView, 0, len(running))
@@ -2782,6 +2795,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			sort.Slice(vars, func(i, j int) bool {
 				if vars[i].Scope != vars[j].Scope {
 					return vars[i].Scope < vars[j].Scope // process (root) scope first
+				}
+				if vars[i].ScopeKind != vars[j].ScopeKind {
+					return vars[i].ScopeKind < vars[j].ScopeKind
 				}
 				return vars[i].Name < vars[j].Name
 			})
@@ -2927,7 +2943,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		for _, r := range refs {
 			for ai < len(changes) && changes[ai].pos <= r.pos {
 				c := changes[ai]
-				after[varKey{c.view.Scope, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				after[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
 				ai++
 			}
 			vars := make([]variableView, 0, len(after))
@@ -2939,6 +2955,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			sort.Slice(vars, func(i, j int) bool {
 				if vars[i].Scope != vars[j].Scope {
 					return vars[i].Scope < vars[j].Scope
+				}
+				if vars[i].ScopeKind != vars[j].ScopeKind {
+					return vars[i].ScopeKind < vars[j].ScopeKind
 				}
 				return vars[i].Name < vars[j].Name
 			})
@@ -2965,7 +2984,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				w = map[varKey]variableView{}
 				byProducer[c.producer] = w
 			}
-			w[varKey{c.view.Scope, c.view.Name}] = c.view
+			w[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = c.view
 		}
 		resp.VariableAttribution = len(byProducer) > 0
 		for i := range resp.Steps {
@@ -2980,6 +2999,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			sort.Slice(vars, func(a, b int) bool {
 				if vars[a].Scope != vars[b].Scope {
 					return vars[a].Scope < vars[b].Scope
+				}
+				if vars[a].ScopeKind != vars[b].ScopeKind {
+					return vars[a].ScopeKind < vars[b].ScopeKind
 				}
 				return vars[a].Name < vars[b].Name
 			})
@@ -3089,6 +3111,15 @@ type variableView struct {
 	// Scope labels a subprocess-local variable with the id of the embedded
 	// subprocess it lives in; empty for a process (root) scope variable (ADR-0074).
 	Scope string `json:"scope,omitempty"`
+	// ScopeKind says what the scope Scope names is: "subprocess", "multiInstanceBody" or
+	// "loopBody". A label alone cannot tell them apart — a multi-instance body and each of
+	// its iterations carry the same element id — and the replay groups what a selected
+	// element can reach by the scope it reaches it through. Empty at the process scope.
+	ScopeKind string `json:"scopeKind,omitempty"`
+	// Constant marks a process-scope variable the model's constants occupy (ADR-0454,
+	// ADR-0456): "process" for a process constant's own variable, "application" or
+	// "server" for the namespace the installation fills. Empty for every other variable.
+	Constant string `json:"constant,omitempty"`
 	// Actor names the operator who last set this value via an external override
 	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
 	// value was written by the model itself or the override carried no identity (auth

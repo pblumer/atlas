@@ -721,6 +721,19 @@ function copyAllBtn(list) {
   return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
 }
 
+// briefValue is a value in a few characters, for a line under another value — what it
+// was before an element wrote it, what it had become by the time the element finished.
+// A short structure is shown as itself; a longer one by its shape and its beginning.
+function briefValue(v) {
+  if (!v) return "";
+  if (v.kind === "null" || v.value === null || v.value === undefined) return "null";
+  const text = String(v.value);
+  if (text.length <= 60) return text;
+  if (!isComplexVar(v)) return text.slice(0, 59) + "…";
+  const arr = jsonTypeLabel(v.value) === "array";
+  return `${arr ? "[" : "{"}${jsonSummary(v.value)}${arr ? "]" : "}"} ${text.slice(0, 40)}…`;
+}
+
 // prettyJSON canonicalizes a JSON variable's stored string to pretty-printed form
 // for copying (falling back to the raw text if it isn't valid JSON), so what lands
 // on the clipboard matches what the operator sees in the card.
@@ -15585,11 +15598,6 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   let badges = [];   // overlay ids for the execution-count badges
   let visits = {};   // elementId → cumulative execution count (the badge number)
   let selEik = 0;    // selected element-instance key (0 = none / process root)
-  // Which side of a selected element's variables the tab shows: "in" as they stood when
-  // the token entered, "out" as they stood once it finished (ADR-0159). A task that
-  // writes its result on completion has nothing on entry, so a bare "as of activation"
-  // view reports "no variables" for an element that plainly produced some.
-  let varSide = "in";
   let selElId = "";  // selected diagram element id (may cover several instances)
   // A migration is the one history row that is not an element at all (ADR-0162), so it
   // cannot be selected by element instance key like every other. Index into steps, -1
@@ -15629,10 +15637,17 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // survive the poll that re-renders this tab.
   let lifecycleOf = null;
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
-  let curVarList = [];   // the variable set the Variables tab is currently showing
-  // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
-  // shown — so its own contribution stands out from the values it merely inherited.
-  let changedNames = null;
+  let curVarList = [];   // every variable the Variables tab is currently showing
+  // What a selected element's variables are, sorted by how it came by them: what it was
+  // handed, what it wrote, and what it could merely reach (buildVarSections). null with
+  // no element selected, when the tab shows the instance's variables as one list.
+  let varSections = null;
+  // Whether the Environment section of a selected element is open. Closed by default:
+  // a reader who picks a task is asking about the task, and the process's variables
+  // beside its two of its own were the noise they had to read past. Remembered per
+  // reader, because it is about how a person reads, not about this instance.
+  let envOpen = false;
+  try { envOpen = localStorage.getItem("atlas.replay.envOpen") === "1"; } catch { /* storage off */ }
   let varsBuilt = false; // the Variables tab's stable shell (toolbar + table) is mounted
   // Whether the selected element carries its in/out card on the diagram, and the
   // overlay ids + content signature backing it (see drawIOOverlay).
@@ -16097,11 +16112,37 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     </dl>${loopBlock(s)}${manualBlock(s)}${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
   }
 
+  // scopeName names a scope by the element it belongs to, the way the history does.
+  const scopeName = (id) => {
+    const bo = (registry.get(id) || {}).businessObject;
+    return (bo && (bo.name || bo.id)) || id;
+  };
+
+  // scopeChipHTML labels, in the one list, the scope a variable lives in below the
+  // process: what kind of scope it is and whose.
+  function scopeChipHTML(v) {
+    const kind = v.local ? "local"
+      : ({ subprocess: "subprocess", multiInstanceBody: "multiInstanceBody", loopBody: "loopBody" }[v.scopeKind] || "other");
+    const label = kind === "other" ? v.scope : `${tr(`ops.vars.chip.${kind}`)} · ${v.scope}`;
+    return `<span class="c-scope" title="${esc(tr(`ops.vars.chipTitle.${kind}`, { name: scopeName(v.scope) }))}">${esc(label)}</span>`;
+  }
+
+  // constChipHTML marks a constant and whose value it is (ADR-0454/0456).
+  function constChipHTML(v) {
+    const kind = ["process", "application", "server"].includes(v.constant) ? v.constant : "process";
+    return `<span class="c-const" title="${esc(tr(`ops.vars.const.${kind}Title`))}">${esc(tr(`ops.vars.const.${kind}`))}</span>`;
+  }
+
   // varRow renders one variable as a table row: name, value, type, and a copy
   // action. Scalars show inline and type-colored; objects and arrays show a compact
   // summary + preview behind a "···" button that opens the value in a modal — the
   // table stays scannable no matter how deep a structure is (operator's request).
-  function varRow(v) {
+  //
+  // opt shapes the row for where it stands: `flat` labels the scope a variable lives in
+  // (the one list, where nothing else says it), `chips` and `note` add what a section
+  // knows about the value — what it was before, what it became — and `cls` marks the
+  // row as part of a section that can be folded away.
+  function varRow(v, opt = {}) {
     const complex = isComplexVar(v);
     let valCell;
     if (complex) {
@@ -16134,29 +16175,25 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
       : `<span class="vtag">${esc(v.kind)}</span>`;
     const copyData = complex ? prettyJSON(v.value) : v.value;
-    // A subprocess-local variable (an input mapping) carries the id of the
-    // subprocess it lives in; label it so it reads apart from a process variable
-    // (ADR-0074). A process-scope variable has no scope and no chip.
-    const scopeChip = v.scope
-      ? ` <span class="c-scope" title="${v.local
-        ? `Local to this element — its input mapping, or the round's loop counter`
-        : `Local to subprocess ${esc(v.scope)}`}">${esc(v.scope)}</span>`
-      : "";
+    // In the one list a variable that lives below the process says which scope holds it,
+    // by the kind of scope as well as its element: a multi-instance body and one of its
+    // rounds carry the same element id, and a bare id told them apart for nobody
+    // (ADR-0074). In a selected element's sections the group heading says it instead.
+    const scopeChip = opt.flat && v.scope ? ` ${scopeChipHTML(v)}` : "";
+    // A constant says so and says whose it is (ADR-0454/0456): nothing in the run can
+    // change it, which is the first thing to know about a value that looks wrong.
+    const constChip = v.constant ? ` ${constChipHTML(v)}` : "";
     // A value the process did not compute: an operator set it by hand on the running
     // instance (ADR-0098). The audit log has carried who did it since that landed and
     // the timeline has returned it all along; showing it is what makes an operator
     // correction reviewable rather than an unexplained jump in the values (ADR-0158).
-    // On the Output side, mark what this element itself contributed — a value it wrote
-    // or rewrote — so its result stands apart from what it merely inherited (ADR-0159).
-    const changedChip = changedNames && changedNames.has(varRef(v))
-      ? ` <span class="c-changed" title="Written by this element">+</span>`
-      : "";
     const actorChip = v.actor
       ? ` <span class="c-actor" title="Set by ${esc(v.actor)} — an operator correction, not a value the process computed">✎ ${esc(v.actor)}</span>`
       : "";
-    const row = `<tr>
-      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}${changedChip}${actorChip}</td>
-      <td class="c-valcell">${valCell}</td>
+    const cls = opt.cls ? ` class="${opt.cls}"` : "";
+    const row = `<tr${cls}>
+      <td class="c-name" title="${esc(v.name)}">${esc(v.name)}${scopeChip}${constChip}${opt.chips || ""}${actorChip}</td>
+      <td class="c-valcell">${valCell}${opt.note || ""}</td>
       <td class="c-type">${typeBadge}</td>
       <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
     </tr>`;
@@ -16164,7 +16201,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     // Rendered with the row and hidden, rather than built on the click: the rows are
     // rewritten on every poll and every frame, and an expansion that lived only in the
     // click handler would collapse under the reader every 1.5 seconds.
-    return row + `<tr class="v-struct" data-dt-detail data-vkey="${esc(varRef(v))}" hidden><td colspan="4">
+    return row + `<tr class="v-struct${opt.cls ? " " + opt.cls : ""}" data-dt-detail data-vkey="${esc(varRef(v))}" hidden><td colspan="4">
       <pre class="vj-body">${highlightJSON(v.value)}</pre>
       <button class="v-big" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}"
         data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)} in a window">⤢ Open in a window</button>
@@ -16229,18 +16266,173 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     const shown = shownVars();
     refs.want(shown.filter((v) => v.kind === "string").map((v) => v.value));
     varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
-    body.innerHTML = shown.length
-      ? shown.map(varRow).join("")
-      : `<tr><td colspan="4" class="v-none">${f ? `No variables match “${esc(varFilter)}”.` : "The element has no variables."}</td></tr>`;
+    if (varSections) {
+      const { html, envShown } = sectionRowsHTML(varSections, f);
+      body.innerHTML = html;
+      // A name the filter finds in the environment is shown, folded or not: a match the
+      // reader cannot see reads as no match.
+      body.classList.toggle("v-env-collapsed", !(envOpen || (f && envShown)));
+    } else {
+      body.classList.remove("v-env-collapsed");
+      body.innerHTML = shown.length
+        ? shown.map((v) => varRow(v, { flat: true })).join("")
+        : `<tr><td colspan="4" class="v-none">${f ? `No variables match “${esc(varFilter)}”.` : "The element has no variables."}</td></tr>`;
+    }
     for (const key of expandedVars) {
       const struct = body.querySelector(`.v-struct[data-vkey="${CSS.escape(key)}"]`);
       const open = body.querySelector(`.v-open[data-vkey="${CSS.escape(key)}"]`);
       if (!struct || !open) continue; // that variable is not in this set (filtered, or gone)
       struct.hidden = false;
       open.setAttribute("aria-expanded", "true");
-      open.querySelector(".v-chev").textContent = "\u25BE";
+      open.querySelector(".v-chev").textContent = "▾";
     }
     syncStructToggle(shown);
+  }
+
+  // --- A selected element's variables, by how it came by them -----------------------
+  // Everything a token can read in an element falls into exactly one of three sets, and
+  // the timeline carries each of them exactly:
+  //   Input       — the element instance's own scope: its evaluated input mappings and,
+  //                 for one round of a loop, the round's counter and item (step.inputs).
+  //   Output      — what this element instance itself wrote (step.writes, ADR-0219).
+  //   Environment — what it could reach and was neither handed nor wrote: the variables
+  //                 of every scope that encloses it, and the process's constants.
+  // The tab used to show the first and third as one list, with an Input/Output switch
+  // that meant "before/after" — the diagram's card meant "mapped in/written" by the same
+  // two words. Reachable is not read: the engine does not record which values a worker
+  // or a form actually used, so the environment is everything the element could have
+  // used, never a claim that it did.
+
+  // scopeTitle names a group of the environment for the reader: the kind of scope and
+  // the element it belongs to, in the history's own words.
+  function scopeTitle(g) {
+    if (g.key === "const") return tr("ops.vars.scope.constants");
+    if (g.key === "process") return tr("ops.vars.scope.process", { name: titleEl.textContent || tl.processId || "" });
+    const name = scopeName(g.scope);
+    const kind = { subprocess: "subprocess", multiInstanceBody: "multiInstanceBody", loopBody: "loopBody" }[g.kind] || "other";
+    return tr(`ops.vars.scope.${kind}`, { name });
+  }
+
+  // scopeChain is which scopes an element reaches, innermost first, by the element ids
+  // that label them: its own (a loop body, or a subprocess's own scope) and each
+  // enclosing subprocess. null when the element is not on this diagram — then nobody
+  // can say which scopes enclose it, and the tab shows them all rather than guess.
+  function scopeChain(elementId) {
+    const el = registry.get(elementId);
+    if (!el || !el.businessObject) return null;
+    const chain = [elementId];
+    for (let bo = el.businessObject.$parent; bo && bo.$type !== "bpmn:Process" && bo.$type !== "bpmn:Definitions"; bo = bo.$parent) {
+      if (bo.id) chain.push(bo.id);
+    }
+    return chain;
+  }
+
+  // buildVarSections sorts a selected step's variables into the three sets above.
+  function buildVarSections(s) {
+    const inputs = localsOf(s);
+    const outs = writtenBy(s); // null while the element runs: there is no "after" yet
+    const entry = (s && s.variables) || [];
+    const after = (s && s.variablesAfter) || null;
+    const written = new Set((outs || []).map(varRef));
+    const before = new Map(entry.map((v) => [varRef(v), v]));
+    const atEnd = after ? new Map(after.map((v) => [varRef(v), v])) : null;
+    // A subprocess holds its input mappings in its own scope, so they arrive twice: as
+    // its locals, and folded with that scope. Input lists them; the environment does not.
+    const ownInputs = new Set(inputs.map((v) => v.name));
+    const dup = (v) => v.scope === s.elementId && v.scopeKind === "subprocess" && ownInputs.has(v.name);
+    // A subprocess running beside this element is folded into the same snapshot, and
+    // nothing in it is in this element's reach.
+    const chain = scopeChain(s.elementId);
+    const reach = (v) => !v.scope || !chain || chain.includes(v.scope);
+    const env = [];
+    for (const v of entry) {
+      if (written.has(varRef(v)) || !reach(v) || dup(v)) continue;
+      const end = atEnd && atEnd.get(varRef(v));
+      env.push(end && (end.value !== v.value || end.kind !== v.kind) ? { ...v, atEnd: end } : v);
+    }
+    // What somebody else wrote while this element ran — a parallel branch, an operator —
+    // was not there on entry and is not this element's output, but it was in reach.
+    if (after) {
+      for (const v of after) {
+        const r = varRef(v);
+        if (before.has(r) || written.has(r) || !reach(v) || dup(v)) continue;
+        env.push({ ...v, lateOnly: true });
+      }
+    }
+    // Grouped by the scope that holds a value, innermost first, then the process and
+    // its constants — the order a name is looked up in.
+    const groups = new Map();
+    for (const v of env) {
+      const key = !v.scope ? (v.constant ? "const" : "process") : `${v.scope}\u0000${v.scopeKind || ""}`;
+      if (!groups.has(key)) groups.set(key, { key, scope: v.scope || "", kind: v.scopeKind || "", vars: [] });
+      groups.get(key).vars.push(v);
+    }
+    const kindRank = { subprocess: 0, multiInstanceBody: 1, loopBody: 1 };
+    const rank = (g) => {
+      if (g.key === "process") return [1e6, 0];
+      if (g.key === "const") return [1e6 + 1, 0];
+      const at = chain ? chain.indexOf(g.scope) : -1;
+      return [at < 0 ? 1e5 : at, kindRank[g.kind] ?? 2];
+    };
+    const ordered = [...groups.values()].sort((a, b) => {
+      const [a1, a2] = rank(a), [b1, b2] = rank(b);
+      return a1 - b1 || a2 - b2 || a.scope.localeCompare(b.scope);
+    });
+    for (const g of ordered) {
+      g.title = scopeTitle(g);
+      g.vars.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return {
+      inputs,
+      output: outs ? outs.map((v) => ({ ...v, before: before.get(varRef(v)) || null })) : null,
+      legacy: !!outs && !attributed,
+      env: ordered,
+    };
+  }
+
+  // The rows of the three sections. A heading row carries data-dt-group, which the
+  // shared table helper keeps in place and sorts and filters the rows under it within.
+  function sectionRowsHTML(sec, f) {
+    const match = (v) => !f || v.name.toLowerCase().includes(f);
+    const head = (kind, label, hint, n, extra = "") => `<tr class="v-ghead v-sec-${kind}" data-dt-group${extra}>
+        <td colspan="4"><span class="v-glbl">${esc(label)}</span><span class="v-ghint">${esc(hint)}</span><span class="v-gcount">${n}</span></td>
+      </tr>`;
+    const note = (text, cls = "") => `<tr class="v-gnote${cls ? " " + cls : ""}" data-dt-group><td colspan="4">${esc(text)}</td></tr>`;
+    const none = (key) => (f ? tr("ops.vars.none.match") : tr(key));
+
+    const ins = sec.inputs.filter(match);
+    let html = head("in", tr("ops.vars.sec.input"), tr("ops.vars.sec.inputHint"), ins.length);
+    html += ins.length ? ins.map((v) => varRow(v)).join("") : note(none("ops.vars.none.input"));
+
+    const outs = (sec.output || []).filter(match);
+    const legacy = sec.legacy ? ` title="${esc(tr("ops.vars.legacyOut"))}"` : "";
+    html += head("out", tr("ops.vars.sec.output"), tr("ops.vars.sec.outputHint"), outs.length, legacy);
+    if (outs.length) {
+      html += outs.map((v) => varRow(v, {
+        chips: v.before ? "" : ` <span class="c-new" title="${esc(tr("ops.vars.newTitle"))}">${esc(tr("ops.vars.new"))}</span>`,
+        note: v.before ? `<div class="v-was">${esc(tr("ops.vars.was", { value: briefValue(v.before) }))}</div>` : "",
+      })).join("");
+    } else {
+      html += note(sec.output ? none("ops.vars.none.output") : tr("ops.vars.none.running"));
+    }
+
+    const groups = sec.env.map((g) => ({ ...g, vars: g.vars.filter(match) })).filter((g) => g.vars.length);
+    const envShown = groups.reduce((n, g) => n + g.vars.length, 0);
+    const open = envOpen || (f && envShown);
+    html += `<tr class="v-ghead v-sec-env" data-dt-group>
+        <td colspan="4"><button type="button" class="v-env-toggle" aria-expanded="${open ? "true" : "false"}"
+          title="${esc(tr("ops.vars.sec.envTitle"))}"><span class="v-chev" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="v-glbl">${esc(tr("ops.vars.sec.env"))}</span><span class="v-ghint">${esc(tr("ops.vars.sec.envHint"))}</span><span class="v-gcount">${envShown}</span></button></td>
+      </tr>`;
+    for (const g of groups) {
+      html += `<tr class="v-gsub v-env" data-dt-group><td colspan="4">${esc(g.title)}</td></tr>`;
+      html += g.vars.map((v) => varRow(v, {
+        cls: "v-env",
+        chips: v.lateOnly ? ` <span class="c-late" title="${esc(tr("ops.vars.lateOnlyTitle"))}">${esc(tr("ops.vars.lateOnly"))}</span>` : "",
+        note: v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "",
+      })).join("");
+    }
+    if (!envShown) html += note(none("ops.vars.none.env"), "v-env");
+    return { html, envShown };
   }
 
   // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
@@ -16250,10 +16442,6 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     varsEl.innerHTML = `
       <div class="vp-head v-toolbar">
         <span class="vp-title" id="v-scope">Variables</span>
-        <span class="v-side" id="v-side" hidden>
-          <button type="button" class="v-side-btn" data-side="in" title="The variables as they stood when the token entered this element">Input</button>
-          <button type="button" class="v-side-btn" data-side="out" title="The variables as they stood once this element finished — its result, output mappings included">Output</button>
-        </span>
         <span class="vp-count" id="v-count">0 variables</span>
         <span class="v-filter">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
@@ -16273,62 +16461,46 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     filterEl.value = varFilter;
     filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
     varsEl.querySelector("#v-struct-toggle").addEventListener("click", toggleAllVars);
-    varsEl.querySelector("#v-side").addEventListener("click", (e) => {
-      const b = e.target.closest(".v-side-btn");
-      if (!b) return;
-      varSide = b.dataset.side;
-      renderVars();
-    });
     varsBuilt = true;
   }
 
-  // renderVars fills the Variables tab. With an element selected it shows the
-  // variables as they stood when that element activated (the per-step snapshot,
-  // ADR-0048 — the closest analogue to Operate's element-scoped variables);
-  // otherwise it shows the variables as of the current replay frame.
+  // toggleEnv opens or folds a selected element's Environment section, and remembers
+  // the choice for the next element.
+  function toggleEnv() {
+    envOpen = !envOpen;
+    try { localStorage.setItem("atlas.replay.envOpen", envOpen ? "1" : "0"); } catch { /* storage off */ }
+    renderVarRows();
+  }
+
+  // renderVars fills the Variables tab. With an element selected it sorts what that
+  // element could see into Input, Output and Environment (see above); otherwise it
+  // shows the instance's variables as of the current replay frame, as one list.
   function renderVars() {
     if (!varsBuilt) buildVarsShell();
-    let src, scope;
-    const sideEl = varsEl.querySelector("#v-side");
-    changedNames = null;
+    let scope;
     if (selEik) {
       const s = stepByEik(selEik);
-      // What the element could see on entry is its whole scope chain: the process (and
-      // subprocess) fold, plus the locals of its own scope — its input mappings, and for
-      // one round of a loop that round's loopCounter and item (ADR-0068/0077/0133).
-      // Without the locals a loop iteration reported only the process variables, which is
-      // why six rounds of one task all read identically.
-      const entry = [...((s && s.variables) || []), ...localsOf(s)];
-      const after = (s && s.variablesAfter) || null;
-      // Offer the two sides only for an element that has finished; while it is still
-      // running there is no "after" to show. Landing on Output when the element saw
-      // nothing on entry keeps the panel from reading as empty for a task whose whole
-      // contribution is its result.
-      sideEl.hidden = !after;
-      if (!after) varSide = "in";
-      else if (varSide === "in" && !entry.length && after.length) varSide = "out";
-      for (const b of sideEl.querySelectorAll(".v-side-btn")) b.classList.toggle("active", b.dataset.side === varSide);
-      const out = varSide === "out" && after;
-      src = out ? after : entry;
-      if (out) {
-        // Mark what this element actually contributed — the very set the diagram's
-        // in/out card labels "out", so the two surfaces can never tell different stories.
-        changedNames = new Set((writtenBy(s) || []).map(varRef));
-      }
+      varSections = s ? buildVarSections(s) : { inputs: [], output: null, legacy: false, env: [] };
+      curVarList = [
+        ...varSections.inputs,
+        ...(varSections.output || []),
+        ...varSections.env.flatMap((g) => g.vars),
+      ];
       scope = s
-        ? `${out ? "After" : "As of"} <b>${esc(stepLabel(s))}</b> ${out ? "completion" : "activation"}`
+        ? `<b>${esc(stepLabel(s))}</b>`
+          + (s.iteration ? ` · ${esc(tr("ops.vars.head.iteration", { n: s.iteration }))}` : "")
+          + ` · ${esc(tr(s.endAt ? "ops.vars.head.done" : "ops.vars.head.active"))}`
         : "Variables";
     } else {
-      sideEl.hidden = true;
+      varSections = null;
       const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
       const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
-      src = cur ? cur.variables : [];
+      curVarList = (cur && cur.variables) || [];
       scope = cur ? `As of step ${playhead} · <b>${esc(stepLabel(cur))}</b>` : "Variables";
     }
-    curVarList = src || [];
-    // The rows are about to be of a different element (or the other side of one): what the
-    // reader opened in the previous set does not carry over to this one.
-    const ctx = `${selEik || 0}\u0000${varSide}\u0000${selEik ? "" : String(playhead)}`;
+    // The rows are about to be of a different element: what the reader opened in the
+    // previous set does not carry over to this one.
+    const ctx = `${selEik || 0}\u0000${selEik ? "" : String(playhead)}`;
     if (ctx !== varsContext) {
       varsContext = ctx;
       expandedVars.clear();
@@ -16996,7 +17168,9 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // varRef identifies a variable across two snapshots of the same instance. A
   // subprocess-local shadows nothing — it is a distinct variable that happens to share a
   // name with one in an enclosing scope — so the scope belongs in the key (ADR-0074).
-  const varRef = (v) => v.scope + "\u0000" + v.name;
+  // So does the kind of scope: a multi-instance body and each of its rounds carry the
+  // same element id, and an element's own locals (localsOf) are a scope of their own.
+  const varRef = (v) => `${v.local ? "L" : ""}${v.scope || ""}\u0000${v.scopeKind || ""}\u0000${v.name}`;
 
   // localsOf is what lives in the element instance's own scope: its evaluated input
   // mappings and, for one round of a loop, that round's counter and item. They are
@@ -17721,6 +17895,8 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
   // A "···" button in the Variables table opens its object/array value in the modal.
   varsEl.addEventListener("click", (e) => {
+    const env = e.target.closest(".v-env-toggle");
+    if (env && varsEl.contains(env)) { toggleEnv(); return; }
     // The value cell expands the structure in place — the common case is a glance at the
     // shape, not a window. The window is one step further in, from inside the expansion.
     // A long text opens whole in the same window, found in the set the tab is showing
