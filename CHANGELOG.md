@@ -12,6 +12,42 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-11-09
+
+**Worker Types become artifacts that are installed, configured and checked.** An administrator
+uploads a Worker Type's manifest and executable; the server verifies the executable against
+the manifest's digest, keeps it content-addressed, checks it again before every start and
+configures its Workers from the type's own JSON Schema, with secrets named as vault entries
+only. Every operation declares what a repeated delivery does, and every job carries an
+idempotency key a target can filter duplicates by (ADR-0538). Worker Instances report their
+protocol version and Worker Type identity, the Worker protocol is written down for other
+languages, the Worker SDK depends on nothing of atlas, and the release ships `atlas-workers`,
+the worker-only executable, beside `atlas`.
+
+**A SharePoint Server Worker administers team sites on an on-premises farm** (ADR-0540), and
+the M365 test environment can build a SharePoint Server Subscription Edition farm to run it
+against. The `m365-dienste` example gains an additional calendar, a visibility change for
+Teams and SharePoint team sites, and the on-premises product «Teamwebsite».
+
+**The atlas hub shows where the way to the registry ends and what a release contains.** The
+hub dialog draws the load station by station — name, TCP, TLS, index, signature — and names
+the cause where it stops; a preview, package or import that cannot reach the registry says the
+same, and the server logs it. Before a release is installed, its preview shows the
+application's architecture sketch derived from the verified package and draws its process
+models read-only (ADR-0539).
+
+**The Console arranges deployed processes by application.** The Modeler home is one table of
+applications, and each application's Deployments tab lists one row per process with its
+versions folded under it and its pause and delete actions (ADR-0541). The Instances overview
+can group its processes by application. A DMN reference is called a rule throughout, the
+replay names a multi-instance activity once, and an opened entry of "My services" is laid out
+in sections.
+
+Nothing in the log, the state or a deployment's format changed; 0.25.0 replaces 0.24.0 in
+place. Workers from before this release name no protocol version and are served as version 1.
+A server that finds `atlas-workers` beside its own binary starts its supervised workers with
+it; `ATLAS_WORKERS_BINARY=self` keeps the earlier behaviour.
+
 ### Added
 - **The Instances overview can group its processes by application.** A switch above the list
   offers "Liste" and "Nach Applikation". The list stays the default and unchanged; grouped, each
@@ -18443,7 +18479,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/pblumer/atlas/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
