@@ -487,7 +487,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   hit-testing answers. Only a browser knows any of this geometry: the card's height comes
   from its content through the CSS that lays it out.
 
-- **`variables-sections.spec.mjs`** ([ADR-draft-variables-by-provenance](../docs/adr/draft-variables-by-provenance.md)):
+- **`variables-sections.spec.mjs`** ([ADR-0542](../docs/adr/0542-variables-by-provenance.md)):
   the **Variables tab of a selected element**, on one round of a multi-instance task inside a
   subprocess, beside a second subprocess (`variables-sections-harness.html`). The round's
   variables must fall into *Input* (its counter and item, nothing else), *Output* (what it
