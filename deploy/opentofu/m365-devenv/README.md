@@ -247,6 +247,11 @@ Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` 
 - Der Run Command `atlas-exchange-worker` auf `exch01` wird von `onprem/install-worker.sh`
   selbst wieder gelöscht; der Worker selbst geht mit der VM.
 
+## Testszenario
+
+Einen durchgehenden Test mit einer erfundenen Firma beschreibt
+[TESTSZENARIO.md](TESTSZENARIO.md).
+
 ## Beispiele einspielen
 
 Die Pakete unter `examples/` lassen sich mit ihrem `installieren.sh` in jede Atlas-Instanz
