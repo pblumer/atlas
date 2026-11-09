@@ -25,6 +25,9 @@ const LABELS = {
   tls: "blueprint.route.tls",
   index: "blueprint.route.index",
   signature: "blueprint.route.signature",
+  // Not a station of the index load: a release's package, downloaded for its
+  // preview or import and checked against the signed index.
+  package: "blueprint.route.package",
 };
 
 // What a cause is called and what it usually means. A timeout at the connection
@@ -51,10 +54,14 @@ const CAUSES = {
   signature_unavailable: ["blueprint.cause.signatureUnavailable", "blueprint.hint.signatureUnavailable"],
   no_pinned_key: ["blueprint.cause.noPinnedKey", "blueprint.hint.noPinnedKey"],
   index_invalid: ["blueprint.cause.indexInvalid", "blueprint.hint.indexInvalid"],
+  package_status: ["blueprint.cause.packageStatus", "blueprint.hint.packageStatus"],
+  package_mismatch: ["blueprint.cause.packageMismatch", "blueprint.hint.packageMismatch"],
 };
 
 // The network stations: where they stop, how Atlas connects is part of the answer.
-const NETWORK = new Set(["resolve", "connect", "tls", "index"]);
+// A package that arrived and differs from the signed index is not the network's.
+const NETWORK = new Set(["resolve", "connect", "tls", "index", "package"]);
+const network = (step) => NETWORK.has(step.stage) && step.cause !== "package_mismatch";
 
 const ms = (n) => (n < 1000 ? `${n} ms` : `${(n / 1000).toFixed(1).replace(".", t("blueprint.route.decimal"))} s`);
 const size = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1).replace(".", t("blueprint.route.decimal"))} KB`);
@@ -76,8 +83,13 @@ function facts(step) {
   }
 }
 
-// causeOf names the cause a stopped station gives, a dropped connection apart.
-const causeOf = (step) => (step.stage === "connect" && step.cause === "timeout" ? "dropped" : step.cause);
+// causeOf names the cause a stopped station gives, a dropped connection apart, and
+// a package the registry does not serve apart from an index it does not.
+const causeOf = (step) => {
+  if (step.stage === "connect" && step.cause === "timeout") return "dropped";
+  if (step.stage === "package" && step.cause === "http_status") return "package_status";
+  return step.cause;
+};
 
 // finding is the explanation under the route for the station it stopped at.
 function finding(step, host) {
@@ -96,9 +108,24 @@ function finding(step, host) {
   return `<div class="hub-finding" role="alert" data-cause="${esc(causeOf(step))}" aria-label="${esc(t(title, vars))}">
       <p>${esc(t(hint, vars))}</p>
       ${facts.length ? `<p class="small">${facts.join(" · ")}</p>` : ""}
-      ${NETWORK.has(step.stage) ? `<p class="small muted">${esc(t("blueprint.route.how"))}</p>` : ""}
+      ${network(step) ? `<p class="small muted">${esc(t("blueprint.route.how"))}</p>` : ""}
       ${step.error ? `<p class="small">${esc(t("blueprint.route.error"))}: <code>${esc(step.error)}</code></p>` : ""}
     </div>`;
+}
+
+// explainStop explains a request the registry could not serve — the list, a
+// preview, a package — from the station its 502 answer names: line says in one
+// sentence where the way ended and why, html is the finding the route shows at
+// that station.
+export function explainStop(station, host) {
+  const [title] = CAUSES[causeOf(station)] || ["blueprint.cause.unknown"];
+  return {
+    line: t("blueprint.stoppedAt", {
+      station: t(LABELS[station.stage] || "blueprint.cause.unknown"),
+      cause: t(title, { status: station.status || "?" }),
+    }),
+    html: finding(station, host),
+  };
 }
 
 // openRoute draws the route into container and returns its update(event), fed

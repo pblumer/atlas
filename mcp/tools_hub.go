@@ -54,7 +54,9 @@ func hubTools() []Tool {
 				"description, license, tags, atlas (the versions it is offered to), needs (Worker Types " +
 				"and server constants it declares — not verified) and artifact (path, digest, size). " +
 				"The index is verified against the operator's pinned Ed25519 key before anything is " +
-				"answered; an unconfigured registry answers 503, an unreachable or wrongly signed one 502. " +
+				"answered; an unconfigured registry answers 503, an unreachable or wrongly signed one 502 " +
+				"naming the station the way ended at and its cause — \"(stopped at tls: unknown_authority)\", " +
+				"for example; say that to the person, it tells a firewall from a wrong key. " +
 				"Filter by tags yourself. Nothing is installed.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, _ map[string]any) (string, error) {
@@ -67,7 +69,9 @@ func hubTools() []Tool {
 				"pinned registry, checks it against the signed digest and inspects the archive in memory, " +
 				"and answers the application it installs (applicationKey, applicationName), its files, the " +
 				"catalogues and products it offers, its declared needs and its digest. Pass that digest to " +
-				"atlas_hub_import_release. Nothing is written.",
+				"atlas_hub_import_release. When the registry cannot be read, or the package differs from " +
+				"the signed index, it answers 502 naming the station it stopped at and its cause. Nothing " +
+				"is written.",
 			InputSchema: release(),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				path, err := releasePath(args, "/preview")

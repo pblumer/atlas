@@ -114,11 +114,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 - **The Console's landing page follows the chosen language.** The welcome card — its introduction, the three first steps, the buttons and the System Overview tooltip — and the Deployments and Engine tiles under it were written in English in `app.js` and stayed English whatever language was set. They now come from the message catalogue (`dashboard.*` in `api/web/locales/`), so a Console set to German greets with «Willkommen bei atlas» and English stays as it was.
-- **Why the atlas hub registry could not be read is in the server log.** The Console still
-  says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
+- **Why the atlas hub registry could not be read is in the server log.** The server now logs
   the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
   an HTTP status or a signature no pinned key made — so an operator can tell a firewall from
   a wrong key.
+- **A hub preview, package or import that cannot reach the registry says where and why.** These
+  routes and the listing answered every registry failure with one sentence, "trusted Blueprint
+  registry is unavailable or invalid"; only the connection check named the cause. Their 502 now
+  names the station the way ended at and its cause — the name, the TCP connection, TLS, the
+  index, the signature or the package itself — in the message an agent reads over MCP and as a
+  `station` object. The Console's hub dialog explains it as the connection check does, with what
+  the cause usually means and a button to check the whole way again. A package whose bytes
+  differ from the signed index is named as such, not as a network fault. The error text is still
+  shown to administrators only.
 - **A package import names why the target refused the publish.** When the publish step of a
   Console package or hub import was refused — for example because a process uses a Worker
   operation the target's build does not know yet — the import reported only "HTTP 409". It now

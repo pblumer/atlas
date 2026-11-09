@@ -162,10 +162,12 @@ server at startup. At startup the server logs the pinned fingerprints as event
 `hub.registry_keys_pinned`: as INFO for one key, and as a WARN for two, so a rotation that
 was never finished does not go unnoticed.
 
-When the registry cannot be read, the Console says only "trusted Blueprint registry is
-unavailable or invalid". The server logs the cause as a WARN with event
+When the registry cannot be read, the server logs the cause as a WARN with event
 `hub.registry_unavailable`: a DNS failure, a refused or timed-out connection, a TLS error,
-an HTTP status or a signature no pinned key made. The client connects directly to the
+an HTTP status, a signature no pinned key made or a package that differs from the signed
+index. The listing, the preview, the package and the import answer such a failure with 502,
+the station the way ended at and its cause (`station`, ADR-0499 amendment f); the Console's
+hub dialog explains it and offers to check the whole way again. The client connects directly to the
 registry on port 443: it ignores `HTTPS_PROXY`, follows no redirect and refuses a
 registry whose name resolves to a private address. A network that reaches the internet only
 through a proxy therefore cannot read the registry.
