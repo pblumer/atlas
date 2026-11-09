@@ -108,6 +108,12 @@ var mcpToolRoutes = map[string]string{
 	"atlas_compare_versions":           "GET /api/v1/processes/{key}/comparison",
 	"atlas_call_activities":            "GET /api/v1/call-activities",
 
+	// Published process interfaces (ADR-0373): the reads an agent models an
+	// interaction with another domain from, and the candidates a publisher reads.
+	"atlas_list_published_interfaces": "GET /api/v1/published-interfaces",
+	"atlas_get_published_interface":   "GET /api/v1/published-interfaces/{id}",
+	"atlas_interface_candidates":      "GET /api/v1/processes/{key}/interface-candidates",
+
 	// The business architecture (ADR-0305):
 	// the map an agent needs in order to say what a process it deploys is *for*.
 	"atlas_business_architecture_subset":       "GET /api/v1/business-architecture/subset",
@@ -710,6 +716,15 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
+	// ADR-0373: publishing, rebinding, deprecating and granting are deliberate acts on
+	// a contract other domains bind to; the audit names people.
+	"GET /api/v1/published-interfaces/{id}/versions/{version}":              "atlas_get_published_interface reads one version with its version argument (ADR-0373)",
+	"GET /api/v1/published-interfaces/{id}/history":                         "the audit names the people who published and every audience granted; the application owner's (ADR-0373)",
+	"POST /api/v1/published-interfaces/{id}/versions":                       "publishing a contract other domains bind to is a deliberate act on the HTTP surface (ADR-0373)",
+	"PUT /api/v1/published-interfaces/{id}/versions/{version}/binding":      "rebinding a published contract is a deliberate act on the HTTP surface (ADR-0373)",
+	"POST /api/v1/published-interfaces/{id}/versions/{version}/deprecation": "deprecating a contract consumers bind to is a deliberate act on the HTTP surface (ADR-0373)",
+	"PUT /api/v1/published-interfaces/{id}/grants":                          "granting view or send is the application owner's own act from their session (ADR-0373)",
+
 	// ADR-0516: changing who may start work is an administrator's act from their own
 	// session, which no agent has; reading the grants and their history names people.
 	"GET /api/v1/applications/{id}/start-grants":                     "start grants name who may start work; an admin/UI concern (ADR-0516)",
