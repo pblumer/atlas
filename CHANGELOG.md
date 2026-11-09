@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ## [0.25.0] — 2026-11-09
 
+**Every process, decision and form belongs to an application** (ADR-0544). Nothing new is
+created, deployed or moved outside one, and what belongs to none yet keeps running and is
+listed under "Not assigned", from where many can be assigned to an application at once.
+
+**A file a process receives is a document, not a variable** (ADR-0543). A file picked in a task
+form is stored once, outside the log and the state, and the instance holds a reference to it;
+access follows the instance, a personal document becomes unreadable with an erasure, and the
+store lives in the data directory or an S3 bucket. The CSV import, the S3 and mail tasks, the
+Worker SDK and the MCP tools read and write documents.
+
+**A process can publish an interface, not its model** (ADR-0373). A deployed definition's
+message entry points, ends and error codes are published as a small, versioned contract under
+names of its own, which a newer definition can take over without breaking a consumer. View and
+send are granted apart; a consumer can read a contract now, while sending through it waits for
+the peer endpoint of ADR-0372.
+
 **Worker Types become artifacts that are installed, configured and checked.** An administrator
 uploads a Worker Type's manifest and executable; the server verifies the executable against
 the manifest's digest, keeps it content-addressed, checks it again before every start and
@@ -39,14 +55,30 @@ models read-only (ADR-0539).
 **The Console arranges deployed processes by application.** The Modeler home is one table of
 applications, and each application's Deployments tab lists one row per process with its
 versions folded under it and its pause and delete actions (ADR-0541). The Instances overview
-can group its processes by application. A DMN reference is called a rule throughout, the
-replay names a multi-instance activity once, and an opened entry of "My services" is laid out
-in sections.
+can group its processes by application. The replay's Variables tab sorts an element's
+variables into Input, Output and Environment (ADR-0542), and a round of a multi-instance names
+what it wrote. A DMN reference is called a rule throughout, the replay names a multi-instance
+activity once, and an opened entry of "My services" is laid out in sections.
 
-Nothing in the log, the state or a deployment's format changed; 0.25.0 replaces 0.24.0 in
-place. Workers from before this release name no protocol version and are served as version 1.
-A server that finds `atlas-workers` beside its own binary starts its supervised workers with
-it; `ATLAS_WORKERS_BINARY=self` keeps the earlier behaviour.
+Nothing in the log or the state changed; 0.25.0 replaces 0.24.0 in place, and the data
+directory gains the document store. Four changes can break what worked against 0.24.0:
+
+- **A script or agent has to name an application.** Saving a draft, form, decision draft or
+  decision reference, deploying a decision and importing a MIM model without a `projectId` are
+  refused with 400, and so is a move with an empty one; `POST /api/v1/deployments` refuses a
+  model whose draft and earlier versions name no application. The MCP tools `atlas_save_draft`,
+  `atlas_save_form`, `atlas_register_decision` and `atlas_deploy_decision` require `projectId`.
+  Deleting an application that still holds anything is refused with 409 unless `?purge=true`.
+- **A file field no longer lands in `csvText`.** A file picked in a task form is a reference
+  under the field's own key. A model whose file field has another key and whose CSV import reads
+  `csvText` stops working; rename the field to `csvText` or point the import at the field. The
+  shipped examples are not affected, and `csvText` still accepts a text.
+- **A full snapshot leaves the documents out** unless it is taken with `?documents=true`; a
+  backup that is to restore uploaded files has to ask for them.
+- **Supervised workers run `atlas-workers`** when it sits beside the server's binary, as it does
+  in the release archives and the image; `ATLAS_WORKERS_BINARY=self` keeps the earlier
+  behaviour. Workers from before this release name no protocol version and are served as
+  version 1.
 
 ### Added
 - **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
