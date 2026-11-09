@@ -270,15 +270,20 @@
       "conformanceClass": "process-execution",
       "clause": "13.4",
       "applicability": "required",
-      "implementation": "implemented",
-      "verification": "unverified",
+      "implementation": "partial",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveLocatedDiagnostics",
+        "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveCoarseDiagnostics",
+        "conformance/normative_diagnostics_test.go:TestCON2ModelingSmellsAreWarningsNotRefusals",
+        "conformance/normative_diagnostics_test.go:TestCON2KnownAcceptedSpecViolations"
+      ],
       "scenarioIds": [],
-      "limitations": "`compiler/validation.go`; diagnostic matrix incomplete",
+      "limitations": "`compiler/validation.go`. CON2 pins 8 located diagnostics (rule + element + severity), 10 element-local refusals that carry only rule \"compile\" and no element field (id in message text only), and 2 non-blocking warnings. Known accepted violations: start event with incoming flow, end event with outgoing flow (silently never taken), gateway default naming a non-outgoing flow (ignored; only the generic missing-default warning). Closing them changes deploy acceptance and needs an ADR-gated slice; reload of existing definitions is protected by ADR-0177/ADR-0393.",
       "reviewState": "provisional"
     },
     {
