@@ -15,7 +15,7 @@ import (
 )
 
 // The credential an installed Worker Type's instance is launched with
-// (ADR-draft-installed-worker-instances-hold-their-own-credential).
+// (ADR-0545).
 //
 // Every other supervised child holds this server's internal token, whose worker scope
 // reaches every job type. That is acceptable for the Worker Types built in this

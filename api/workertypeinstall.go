@@ -96,7 +96,7 @@ func (s *Server) superviseRelease(inst install.Installed) {
 // with: the launch contract, its Workers' configuration, and its own credential —
 // never this server's internal token, the broker key or an operator's ATLAS_TOKEN,
 // which reach every job type
-// (ADR-draft-installed-worker-instances-hold-their-own-credential).
+// (ADR-0545).
 func (s *Server) installedLaunchEnv(inst install.Installed) []string {
 	id := installedSupervisorID(inst.ID, inst.Version)
 	out := []string{

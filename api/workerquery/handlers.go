@@ -79,7 +79,7 @@ func (s *Service) HandleActivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// An installed Worker Type's instance leases only the queries of its own types,
-	// as itself (ADR-draft-installed-worker-instances-hold-their-own-credential).
+	// as itself (ADR-0545).
 	if why := httpapi.InstanceRefusal(httpapi.PrincipalFrom(r.Context()), body.Worker, body.Type); why != "" {
 		httpapi.Error(w, http.StatusForbidden, why)
 		return

@@ -276,3 +276,45 @@ func TestStartGrantsNeedAuthentication(t *testing.T) {
 		}
 	}
 }
+
+// TestStartGrantReadsCarryTheSharedBlockers: the list and the single read say, for
+// the process's newest version, what the preview and the self-service list would
+// say — offered, or why not — with the server's own codes (MFE1A).
+func TestStartGrantReadsCarryTheSharedBlockers(t *testing.T) {
+	w := newGrantWorld(t, t.TempDir())
+	defer w.close()
+	path := grantPath(w.fieldApp, "safety-inspection")
+	if code, body := cReq(t, w.admin, w.ts, "PUT", path, `{"groupIds":["`+w.groupID+`"],"expectedRevision":0}`); code != http.StatusOK {
+		t.Fatalf("grant = %d %s", code, body)
+	}
+	key, version := newestKey(t, w, "safety-inspection")
+	read := func() map[string]any {
+		t.Helper()
+		_, body := cReq(t, w.admin, w.ts, "GET", path, "")
+		return decodeMap(t, body)
+	}
+	got := read()
+	if b, ok := got["blockers"].([]any); !ok || len(b) != 0 || got["definitionKey"] != float64(key) || got["version"] != float64(version) {
+		t.Fatalf("eligible grant = %v, want blockers [] and key %d version %d", got, key, version)
+	}
+	active := "/api/v1/processes/" + jsonNum(key) + "/active"
+	if code, body := cReq(t, w.admin, w.ts, "PUT", active, `{"active":false}`); code != http.StatusOK {
+		t.Fatalf("deactivate = %d %s", code, body)
+	}
+	if b, _ := read()["blockers"].([]any); len(b) != 1 || b[0] != "inactive" {
+		t.Fatalf("deactivated grant blockers = %v, want [inactive]", b)
+	}
+	_, list := cReq(t, w.admin, w.ts, "GET", "/api/v1/applications/"+w.fieldApp+"/start-grants", "")
+	items, _ := decodeMap(t, list)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("list = %s", list)
+	}
+	if b, _ := items[0].(map[string]any)["blockers"].([]any); len(b) != 1 || b[0] != "inactive" {
+		t.Fatalf("list blockers = %v, want [inactive]", b)
+	}
+	// The preview agrees, for a member of the group.
+	_, pv := cReq(t, w.admin, w.ts, "GET", path+"/preview?userId="+w.workerID, "")
+	if b, _ := decodeMap(t, pv)["blockers"].([]any); len(b) != 1 || b[0] != "inactive" {
+		t.Fatalf("preview blockers = %v, want the same as the read", b)
+	}
+}

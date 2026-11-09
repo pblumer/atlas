@@ -6873,7 +6873,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		return
 	}
 	// An installed Worker Type's instance leases only the types its manifest declares,
-	// as itself (ADR-draft-installed-worker-instances-hold-their-own-credential).
+	// as itself (ADR-0545).
 	if why := httpapi.InstanceRefusal(httpapi.PrincipalFrom(r.Context()), body.Worker, body.Type); why != "" {
 		refuseInstance(w, r, why)
 		return

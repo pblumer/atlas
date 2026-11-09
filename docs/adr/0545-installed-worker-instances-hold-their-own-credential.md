@@ -1,4 +1,4 @@
-# ADR-DRAFT: An installed Worker Type's instance holds its own credential, confined to the job types its manifest declares
+# ADR-0545: An installed Worker Type's instance holds its own credential, confined to the job types its manifest declares
 
 - **Status:** Proposed
 - **Implementation:** Partial
