@@ -7030,10 +7030,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.CsvImportJobTypeIndex:
 		// A source that names a document is not read here: this runs on the run loop,
-		// and reading a document is file or network I/O. A Worker Instance therefore
-		// cannot parse a referenced upload yet, and its job fails saying so; the
-		// in-process worker reads it off the loop
-		// (ADR-draft-a-file-is-a-document-not-a-variable, slice 5).
+		// and reading a document is file or network I/O. The payload carries the
+		// document's id instead, and the Worker Instance reads it under the job's lease
+		// (POST /api/v1/jobs/{key}/documents/{id},
+		// ADR-draft-a-file-is-a-document-not-a-variable).
 		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease
@@ -7041,7 +7041,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
-			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
+			"source": j.Source, "sourceDocument": j.SourceDocument, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
 		}}

@@ -449,6 +449,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/documents/{id}", s.handleDownloadDocument, apiOp{
 			summary: "Download a document under its detected type — 404 for an id that does not exist or that the caller may not read (its uploader, or whoever may read an instance it entered); 410 when the reference survived and the bytes did not (a restore from a snapshot taken without documents). A type a browser would run as a page is sent as an attachment; ?download=1 asks for one", tag: "Documents", role: roleAny,
 			resp: &bodySpec{mediaType: "application/octet-stream", desc: "The document's bytes", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"POST", "/api/v1/jobs/{key}/documents/{id}", s.handleJobDocument, apiOp{
+			summary: "Read, as the lease-holding worker, a document the job's instance was given — the bytes, under the detected type, with the file name in X-Atlas-Document-Name. Answers only for a document bound to the root of the job's instance and only while the caller holds the job's current lease; 404 for anything else, 410 when the bytes are gone (ADR-draft-a-file-is-a-document-not-a-variable)", tag: "Documents", role: RoleOperator,
+			req: jsonBody("The holding worker id and the lease token its activation returned", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tInteger(),
+			}, "worker", "leaseToken")),
+			resp: &bodySpec{mediaType: "application/octet-stream", desc: "The document's bytes", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"GET", "/api/v1/documents/{id}/meta", s.handleDocumentMeta, apiOp{
 			summary: "A document's reference and state without its bytes — {reference, state (pending|bound), createdAt, backend, available}; the same access rule as the download", tag: "Documents", role: roleAny,
 			resp: jsonBody("Document metadata", tObject())}},

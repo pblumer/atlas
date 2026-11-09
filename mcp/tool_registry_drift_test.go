@@ -247,9 +247,10 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
-	"POST /api/v1/documents":          "a document is a file a person picks in a task form, uploaded by the browser that holds it; what an agent may do with documents is decided in its own slice (ADR-draft-a-file-is-a-document-not-a-variable, plan S6)",
-	"GET /api/v1/documents/{id}":      "a document's bytes are for the person downloading it, up to 35 MiB, which is not something to put into an agent's context; decided in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable",
-	"GET /api/v1/documents/{id}/meta": "decided together with the other document routes in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable; an agent already sees the reference in the variable",
+	"POST /api/v1/jobs/{key}/documents/{id}": "the worker protocol: a document read under a job's lease, for the Worker Instance working that job; an agent holds no lease",
+	"POST /api/v1/documents":                 "a document is a file a person picks in a task form, uploaded by the browser that holds it; what an agent may do with documents is decided in its own slice (ADR-draft-a-file-is-a-document-not-a-variable, plan S6)",
+	"GET /api/v1/documents/{id}":             "a document's bytes are for the person downloading it, up to 35 MiB, which is not something to put into an agent's context; decided in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable",
+	"GET /api/v1/documents/{id}/meta":        "decided together with the other document routes in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable; an agent already sees the reference in the variable",
 	// Installed Worker Type artifacts (ADR-0535, migration step 3). Installing one puts
 	// code on the server that its supervisor runs; that is an administrator's decision
 	// made with the artifact in hand, not something an agent should be able to do or

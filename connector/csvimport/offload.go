@@ -22,10 +22,15 @@ import (
 // Job is a CSV-import task with everything already looked up: the text to parse and
 // the layout to parse it against. It is what travels with a leased job.
 type Job struct {
-	Source    string   `json:"source"`
-	Delimiter string   `json:"delimiter,omitempty"`
-	HasHeader bool     `json:"hasHeader"`
-	Columns   []Column `json:"columns,omitempty"`
+	Source string `json:"source"`
+	// SourceDocument is the id of the uploaded document a reading task's source variable
+	// names, when the file was not read where the job was resolved — on the engine's run
+	// loop, which does no file or network I/O. The worker reads it under the job's lease
+	// and parses it as Source (ADR-draft-a-file-is-a-document-not-a-variable).
+	SourceDocument string   `json:"sourceDocument,omitempty"`
+	Delimiter      string   `json:"delimiter,omitempty"`
+	HasHeader      bool     `json:"hasHeader"`
+	Columns        []Column `json:"columns,omitempty"`
 	// Format is csv (the default and what every model authored before formats
 	// existed), fixed-width, or avp. Operation is read (the default) or write.
 	Format    string `json:"format,omitempty"`
@@ -94,6 +99,9 @@ func Run(j Job) (Result, error) {
 			return Result{}, fmt.Errorf("csv-import: %v", err)
 		}
 		return Result{ResultVariable: name, Text: text, IsText: true, RowCount: len(rows)}, nil
+	}
+	if strings.TrimSpace(j.Source) == "" && j.SourceDocument != "" {
+		return Result{}, fmt.Errorf("csv-import: the source is document %s, which was not read", j.SourceDocument)
 	}
 	if strings.TrimSpace(j.Source) == "" {
 		return Result{}, fmt.Errorf("csv-import: the source is empty")
@@ -183,6 +191,9 @@ func ResolveWithDocuments(store VarStore, cp *compiler.CompiledProcess, detail *
 		if src.Kind != model.VarJSON || strings.TrimSpace(src.Text) == "" {
 			return Job{}, fmt.Errorf("csv-import: source variable %q must hold the rows to write, as a JSON array", sourceName)
 		}
+	} else if id := documentID(src); id != "" && docs == nil {
+		// Resolved where no document can be read: the worker reads it under its lease.
+		j.Source, j.SourceDocument = "", id
 	} else {
 		text, err := sourceText(src, sourceName, docs)
 		if err != nil {

@@ -32,6 +32,7 @@ import (
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/logging"
+	"github.com/pblumer/atlas/workersdk"
 	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
@@ -922,7 +923,7 @@ func RunMailJobWith(ctx context.Context, j Job, reg *mail.Registry, docs mail.Do
 // with. It shares [csvimport.Run] with the in-process path, so the two cannot
 // disagree about defaults, validation, or what a headerless file's column list
 // means.
-func runCSV(_ context.Context, j Job) (map[string]any, error) {
+func runCSV(ctx context.Context, j Job) (map[string]any, error) {
 	if j.Connector == nil {
 		return nil, fmt.Errorf("csv: the job carried no resolved worker detail; is this server offloading the csv kind?")
 	}
@@ -933,6 +934,15 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 	var task csvimport.Job
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("csv: cannot read the resolved detail: %w", err)
+	}
+	// The source is an uploaded document the engine did not read: read it here, under
+	// this job's lease (ADR-draft-a-file-is-a-document-not-a-variable).
+	if task.SourceDocument != "" && task.Source == "" {
+		data, _, err := workersdk.ReadDocument(ctx, task.SourceDocument)
+		if err != nil {
+			return nil, fmt.Errorf("csv: read document %s: %w", task.SourceDocument, err)
+		}
+		task.Source = string(data)
 	}
 	res, err := csvimport.Run(task)
 	if err != nil {

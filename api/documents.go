@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -537,4 +539,107 @@ func (s *Server) sweepDocuments() {
 		logging.Info(logging.DocumentsSwept, "removed documents nobody can reach any more",
 			slog.Int("expired", res.Expired), slog.Int("released", res.Released), slog.Int("blobs", res.Blobs))
 	}
+}
+
+// --- Worker Instances ------------------------------------------------------------
+
+// handleJobDocument hands a Worker Instance the bytes of a document its job needs —
+// the CSV a CSV-import task parses, the file an S3 task puts into a bucket
+// (ADR-draft-a-file-is-a-document-not-a-variable, slice 5). The answer to the open
+// question the record left: over the HTTP API the worker already speaks, under the
+// lease it holds, not over a second channel. Holding the lease is what makes the read
+// the job's and not the token's: a worker token reads no document of its own accord,
+// only one the instance its job works on was given, and only while it holds that job.
+func (s *Server) handleJobDocument(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	var body struct {
+		Worker     string `json:"worker"`
+		LeaseToken uint64 `json:"leaseToken"`
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
+	if err == nil {
+		err = json.Unmarshal(raw, &body)
+	}
+	if err != nil || strings.TrimSpace(body.Worker) == "" || body.LeaseToken == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "worker and leaseToken are required: a document is read for the job a worker holds")
+		return
+	}
+	var (
+		instance uint64
+		holder   bool
+		found    bool
+	)
+	s.do(func() {
+		jv, ok, gerr := s.store.GetJob(key)
+		if gerr != nil || !ok {
+			return
+		}
+		found = true
+		holder = holdsLease(jv, body.Worker, body.LeaseToken)
+		instance = jv.ProcessInstanceKey
+	})
+	switch {
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+		return
+	case !holder:
+		httpapi.Error(w, http.StatusConflict, "worker "+strconv.Quote(body.Worker)+" does not hold this job's current lease")
+		return
+	}
+	docs, err := s.documents()
+	if err != nil {
+		httpapi.Error(w, http.StatusServiceUnavailable, "the document store is not available: "+err.Error())
+		return
+	}
+	rec, err := docs.Get(r.PathValue("id"))
+	if err == nil {
+		var root uint64
+		if rerr := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+			var err error
+			root, err = rootInstanceOf(rv, instance)
+			return err
+		}); rerr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "resolve instance: "+rerr.Error())
+			return
+		}
+		if !boundTo(rec, root) {
+			err = docstore.ErrNotFound
+		}
+	}
+	if err != nil {
+		// Not this job's document and no document at all answer alike.
+		httpapi.Error(w, http.StatusNotFound, "no document with that id for this job")
+		return
+	}
+	rc, err := docs.OpenBytes(r.Context(), rec)
+	if errors.Is(err, docstore.ErrUnavailable) {
+		httpapi.Error(w, http.StatusGone, "the document is not available: its bytes are not in this installation's document store")
+		return
+	}
+	if err != nil {
+		httpapi.Error(w, http.StatusBadGateway, "read document: "+err.Error())
+		return
+	}
+	defer rc.Close()
+	h := w.Header()
+	h.Set("Content-Type", rec.ContentType)
+	h.Set("Content-Length", strconv.FormatInt(rec.Size, 10))
+	h.Set("X-Atlas-Document-Name", url.PathEscape(rec.Name))
+	h.Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, rc)
+}
+
+// boundTo reports whether a document entered the root instance.
+func boundTo(rec docstore.Record, root uint64) bool {
+	for _, k := range rec.BoundTo {
+		if k == root {
+			return true
+		}
+	}
+	return false
 }
