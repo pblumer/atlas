@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "MFE1 software is merged (#1492, #1495, #1497, #1498, #1500); collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. Next planned slice: MFE1A, the Console page for start grants (#1639) — owner to start it; PR A adds the additive blockers field, PR B the page, the read-only application hint, Playwright and docs.",
+  "next_action": "MFE1 software is merged (#1492, #1495, #1497, #1498, #1500); collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. MFE1A (Console page for start grants, #1639) is active: PR A adds the additive blockers field, PR B the page, the read-only application hint, Playwright and docs.",
   "slices": [
     {
       "id": "MFE0",
@@ -60,7 +60,7 @@
     {
       "id": "MFE1A",
       "title": "Start-grant administration in the Console",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "MFE1"
@@ -68,8 +68,11 @@
       "issues": [
         1639
       ],
-      "prs": [],
-      "note": "Planned 2026-11-09 by the owner (plan docs/planning/mfe1a-start-grant-administration.md). Console → Administration → Start grants page over the existing ADR-0516 admin routes: application, processes with audience by name and offered/not-offered state, grant/revoke by name with 409 handling, check a person or group, history. Plus a read-only, admin-only hint per process in the application's Deployments tab. Server change limited to an additive blockers field (with the newest definitionKey/version) on the list and single grant reads; no new route, no new authority, no new ADR. Two PRs: A server field, B web page, hint, Playwright and docs. Stays planned until the owner starts it."
+      "prs": [
+        1640,
+        1642
+      ],
+      "note": "Planned 2026-11-09 by the owner (plan docs/planning/mfe1a-start-grant-administration.md). Console → Administration → Start grants page over the existing ADR-0516 admin routes: application, processes with audience by name and offered/not-offered state, grant/revoke by name with 409 handling, check a person or group, history. Plus a read-only, admin-only hint per process in the application's Deployments tab. Server change limited to an additive blockers field (with the newest definitionKey/version) on the list and single grant reads; no new route, no new authority, no new ADR. Two PRs: A server field, B web page, hint, Playwright and docs. Started by the owner on 2026-11-09: plan merged (#1640); PR A (blockers on the grant reads) is #1642."
     },
     {
       "id": "MFE2",

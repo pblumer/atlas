@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/internal/trustedproxy"
@@ -269,5 +270,33 @@ func TestWithCursorDoesNotMutateThePageItCameFrom(t *testing.T) {
 	}
 	if withCursor.NextCursor != "77" {
 		t.Errorf("nextCursor = %q, want 77", withCursor.NextCursor)
+	}
+}
+
+// TestInstanceRefusalNarrowsOnlyABoundPrincipal: the binding an installed Worker
+// Type's instance carries takes away, and nothing else is narrowed.
+func TestInstanceRefusalNarrowsOnlyABoundPrincipal(t *testing.T) {
+	if why := InstanceRefusal(nil, "", "any"); why != "" {
+		t.Errorf("no principal: %q, want no refusal", why)
+	}
+	if why := InstanceRefusal(&Principal{UserID: "usr_1"}, "w", "any"); why != "" {
+		t.Errorf("an unbound principal: %q, want no refusal", why)
+	}
+	bound := &Principal{Instance: &InstanceBinding{Worker: "workertype:x@1", JobTypes: []string{"com.x.a", "com.x.b"}}}
+	for _, tc := range []struct {
+		worker, jobType string
+		refused         bool
+		mentions        string
+	}{
+		{"workertype:x@1", "com.x.a", false, ""},
+		{"workertype:x@1", "", false, ""},
+		{"workertype:x@1", "com.y.other", true, "com.x.a, com.x.b"},
+		{"someone", "com.x.a", true, "workertype:x@1"},
+		{"", "com.x.a", true, "on a lease it holds"},
+	} {
+		why := InstanceRefusal(bound, tc.worker, tc.jobType)
+		if (why != "") != tc.refused || (tc.refused && !strings.Contains(why, tc.mentions)) {
+			t.Errorf("worker=%q type=%q: %q, want refused=%v naming %q", tc.worker, tc.jobType, why, tc.refused, tc.mentions)
+		}
 	}
 }
