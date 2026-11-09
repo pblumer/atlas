@@ -17,3 +17,11 @@ func TestDocumentText(t *testing.T) {
 		t.Errorf("binary = %q", got)
 	}
 }
+
+func TestDocumentTextOfStructuredTypes(t *testing.T) {
+	for _, ct := range []string{"application/json", "application/xml; charset=utf-8", "image/svg+xml"} {
+		if got := documentText("doc_j", ct, []byte(`{"a":1}`), 100); !strings.Contains(got, `{"a":1}`) {
+			t.Errorf("%s = %q, want the text", ct, got)
+		}
+	}
+}

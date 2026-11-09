@@ -223,3 +223,33 @@ func TestBlobCollectionFailures(t *testing.T) {
 		t.Errorf("a journal that does not parse = %v", err)
 	}
 }
+
+// The local backend reports what the file system refuses it.
+func TestLocalBackendReportsTheFileSystem(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blobs")
+	l, err := NewLocal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := strings.Repeat("d", 64)
+	if err := l.Put(ctx, hash, filepath.Join(dir, "no-such-upload"), 1, ""); err == nil {
+		t.Error("Put of an upload that is not there succeeded")
+	}
+	// A hash that is a directory with something in it cannot be removed.
+	if err := os.MkdirAll(filepath.Join(dir, hash, "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Delete(ctx, hash); err == nil {
+		t.Error("Delete of what the file system will not remove succeeded")
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Hashes(); err == nil {
+		t.Error("Hashes of a directory that is gone succeeded")
+	}
+	if got := FindRefsInJSON(`{"$document":`); got != nil {
+		t.Errorf("refs in text that is not JSON = %v", got)
+	}
+}

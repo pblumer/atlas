@@ -469,6 +469,12 @@ func TestSealBytesRoundTripAndErasure(t *testing.T) {
 	if _, err := v.OpenBytes("usr_anna", "document:doc_b", sealed); err == nil {
 		t.Fatal("the ciphertext opened under another document's name")
 	}
+	if _, err := v.OpenBytes("usr_anna", "document:doc_a", sealed[:4]); err == nil || !strings.Contains(err.Error(), "too short") {
+		t.Fatalf("a truncated ciphertext = %v", err)
+	}
+	if _, err := v.SealBytes("", "document:doc_a", plain); err == nil {
+		t.Fatal("a seal with no data subject succeeded")
+	}
 	if err := v.Erase("usr_anna"); err != nil {
 		t.Fatal(err)
 	}

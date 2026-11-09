@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A record the store cannot parse, bytes that are gone and a store directory that
@@ -79,7 +80,15 @@ func TestDocumentRoutesReportAStoreThatFails(t *testing.T) {
 		`{"variables":{"d":`+string(bad)+`}}`); code < 500 {
 		t.Errorf("a start naming a broken record = %d %s, want a server error", code, out)
 	}
-	srv.sweepDocuments() // logs the record it cannot read, and does not panic
+	srv.sweepDocuments()                      // logs the record it cannot read, and does not panic
+	srv.bindDocuments([]string{broken}, 4242) // logs the bind it cannot make, and does not panic
+
+	// A public form's visitor uploaded nothing, so a reference there is refused before
+	// the link is even resolved.
+	if code, out := call("POST", "/public/forms/no-such-token/start", "application/json",
+		`{"variables":{"d":`+string(good)+`}}`); code != http.StatusBadRequest || !strings.Contains(string(out), "does not accept document references") {
+		t.Errorf("a public start naming a document = %d %s", code, out)
+	}
 
 	// A store whose upload directory is gone refuses the upload with the reason.
 	if err := os.RemoveAll(filepath.Join(dir, "tmp")); err != nil {
@@ -87,6 +96,34 @@ func TestDocumentRoutesReportAStoreThatFails(t *testing.T) {
 	}
 	if code, out := call("POST", "/api/v1/documents?name=c.csv", "text/csv", "x"); code != http.StatusInternalServerError || !strings.Contains(string(out), "store document") {
 		t.Errorf("an upload the store cannot write = %d %s", code, out)
+	}
+	if _, err := (jobDocuments{s: srv}).StoreDocument(t.Context(), "d.csv", "text/csv", []byte("x")); err == nil {
+		t.Error("an in-process worker stored a document the store cannot write")
+	}
+}
+
+// The sweeper sweeps on its own schedule until the server stops.
+func TestDocumentSweeperRunsOnItsSchedule(t *testing.T) {
+	srv, _ := newOffLoopServer(t, WithDocumentPendingTTL(time.Nanosecond))
+	docs, err := srv.documents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := docs.Put(t.Context(), "a.csv", "text/csv", "", strings.NewReader("x\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.wg.Add(1)
+	go srv.documentSweeper(time.Millisecond)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := docs.Get(rec.ID); err != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the sweeper never removed the expired upload")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
