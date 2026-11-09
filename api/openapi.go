@@ -1807,6 +1807,20 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/preview", s.handleBlueprintPreview, apiOp{
 			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, catalogue IDs, offered products and home-catalogue ownership, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Verified Blueprint preview", tObject())}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/architecture", s.handleBlueprintArchitecture, apiOp{
+			summary: "The architecture sketch of a signed atlas hub release's application before it is installed (ADR-draft-blueprint-architecture-preview), derived on this server from the process models its package carries and from nothing else: the messages its processes receive, the workers, job types, decisions and calls they name, the data objects and personal data they declare, the roles their user tasks name and the names they throw and catch. It is marked packaged and carries no physical part, no strategy layer, no catalogue products and no applications at the other end of a name — those belong to an installation, and a release published after installing records its own snapshot. ?digest= must equal the digest the preview reported; ?layers= as on a release's architecture route. Does not import or deploy", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("The Blueprint release and its derived architecture", schemaObj(map[string]any{
+				"blueprintId": tString(), "version": tString(), "digest": tString(), "applicationKey": tString(),
+				"application": tString(), "layers": tObject(), "architecture": tObject(),
+			}, "blueprintId", "version", "digest", "architecture"))}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/architecture.svg", s.handleBlueprintArchitectureSVG, apiOp{
+			summary: "The architecture sketch of the route above as a standalone SVG, stamped with the Blueprint, its version and digest instead of a release, and served under a sandbox policy. ?digest= and ?layers= as on the JSON route", tag: "Applications", role: RoleModeler,
+			resp: &bodySpec{mediaType: "image/svg+xml", schema: tString(), desc: "The derived architecture sketch"}}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/diagrams", s.handleBlueprintDiagrams, apiOp{
+			summary: "The BPMN models a signed atlas hub release's package carries, one per process file in its manifest's order, for the Console to draw read-only before anything is installed. ?digest= must equal the digest the preview reported. Does not import or deploy", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("The package's process models", schemaObj(map[string]any{
+				"blueprintId": tString(), "version": tString(), "digest": tString(), "processes": tArray(),
+			}, "blueprintId", "version", "digest", "processes"))}},
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
 			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},

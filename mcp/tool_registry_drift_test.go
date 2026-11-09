@@ -67,6 +67,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_hub_list_releases":        "GET /api/v1/blueprints",
 	"atlas_hub_preview_release":      "GET /api/v1/blueprints/{id}/releases/{version}/preview",
 	"atlas_hub_import_release":       "POST /api/v1/blueprints/{id}/releases/{version}/import",
+	"atlas_hub_release_architecture": "GET /api/v1/blueprints/{id}/releases/{version}/architecture",
 	"atlas_export_catalog":           "GET /api/v1/catalogs/{id}/document",
 	"atlas_export_catalog_products":  "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate": "POST /api/v1/catalogs/{id}/import",
@@ -889,8 +890,10 @@ var mcpOmittedRoutes = map[string]string{
 	// application APIs, returning a raw downloaded package to an MCP agent
 	// would bypass the dedicated import decision UI without adding a distinct
 	// agent capability. MCP uses the existing application/import tools.
-	"GET /api/v1/blueprints/connection":                      "a stream of the registry load's stations (NDJSON) for the Console to draw live; an agent lists with atlas_hub_list_releases, whose failure the operator's log explains (hub.registry_unavailable)",
-	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; an agent installs through atlas_hub_import_release, which the server feeds the verified bytes, so MCP never moves raw package bytes",
+	"GET /api/v1/blueprints/connection":                               "a stream of the registry load's stations (NDJSON) for the Console to draw live; an agent lists with atlas_hub_list_releases, whose failure the operator's log explains (hub.registry_unavailable)",
+	"GET /api/v1/blueprints/{id}/releases/{version}/architecture.svg": "a rendering for people to look at in the Console's atlas hub preview; atlas_hub_release_architecture returns the same facts as data",
+	"GET /api/v1/blueprints/{id}/releases/{version}/diagrams":         "the package's raw BPMN files for the Console's diagram viewer; MCP never moves raw package content (ADR-0499 amendment d), and atlas_hub_release_architecture returns what the models fix as data",
+	"GET /api/v1/blueprints/{id}/releases/{version}/package":          "binary download for an explicitly reviewed Console import; an agent installs through atlas_hub_import_release, which the server feeds the verified bytes, so MCP never moves raw package bytes",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",

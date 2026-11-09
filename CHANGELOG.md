@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The atlas hub preview shows the application's architecture sketch and its process diagrams.**
+  Before a release is installed, the server derives its architecture sketch from the process
+  models of the verified package (ADR-draft-blueprint-architecture-preview): the messages its
+  processes receive, the workers, job types, decisions and calls they name, their data objects
+  and personal data, the roles of their user tasks and the names they throw and catch — drawn
+  by the same code as a release's sketch, marked as a package preview and stamped with the
+  Blueprint, its version and digest. Endpoints, capabilities, catalogue products and coupled
+  applications belong to an installation and are listed as not shown. The Console's hub preview
+  shows the sketch and, on request, draws each BPMN model read-only. New routes
+  `GET /api/v1/blueprints/{id}/releases/{version}/architecture`, `…/architecture.svg` and
+  `…/diagrams`, each bound by `?digest=` to the previewed package; new MCP tool
+  `atlas_hub_release_architecture`. A release's own sketch is unchanged.
 - **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
   products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
   (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form
