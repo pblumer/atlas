@@ -504,6 +504,17 @@ jobs:
           timeout 5m npx playwright install --with-deps chromium \
             || npx playwright install chromium
 
+      # TEMPORARY DIAGNOSTIC — remove before merging. Playwright's rewriteError reports
+      # every protocol error that is neither a page exception nor a closed session as
+      # "Execution context was destroyed", and the trace of the flaky harness specs shows
+      # no navigation at all. Print the protocol's own message beside it.
+      - name: Surface the protocol error behind "Execution context was destroyed"
+        working-directory: e2e
+        run: |
+          f=node_modules/playwright-core/lib/server/chromium/crExecutionContext.js
+          sed -i 's|^function rewriteError(error) {|function rewriteError(error) {\n  console.error("DIAG rewriteError original: " + (error \&\& error.message));|' "$f"
+          grep -n "DIAG" "$f"
+
       - name: Run browser e2e tests
         working-directory: e2e
         run: npm test
