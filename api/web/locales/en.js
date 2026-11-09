@@ -4,6 +4,15 @@
 // selected only when somebody asks for it: German is the default, and the browser's
 // language is not consulted.
 export default {
+  "ops.group.label": "Arrangement of the processes",
+  "ops.group.process": "List",
+  "ops.group.processTitle": "Every process in one list, one row per process",
+  "ops.group.application": "By application",
+  "ops.group.applicationTitle": "Group the processes under the application they are assigned to",
+  "ops.group.processes.one": "{n} process",
+  "ops.group.processes.other": "{n} processes",
+  "ops.group.openApp": "Open application",
+  "ops.group.openAppTitle": "Open this application's page in the Modeler",
   "ops.versions.running.one": "{n} running",
   "ops.versions.running.other": "{n} running",
   "ops.versions.incidents.one": "{n} incident",

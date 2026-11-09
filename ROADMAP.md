@@ -1448,7 +1448,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   form-js, the ArchiMate/UML/Panorama canvases and the screenshot contract. The
   company/catalogue accent theme is not a dark mode.
 - ✅ **Instance management** view: Operations lists running process instances
-  (process, version, tokens, status) and links each to its live diagram.
+  (process, version, tokens, status) and links each to its live diagram. Beside the
+  one list of processes, the overview can group the same rows by the application each
+  process is filed in, one folding section per application with its summed counts;
+  the list stays the default and the browser remembers the choice.
 - ✅ **Multi-token replay & causal token lineage**
   ([ADR-0065](docs/adr/0065-multi-token-process-replay.md)): element-instance
   events now carry a durable token id, an optional parent token id, and the

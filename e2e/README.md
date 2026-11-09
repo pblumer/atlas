@@ -442,6 +442,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   toolbar — publishing a numbered version with the model's prose and a real PDF, the
   history reading newest first, and the per-version public link being minted and revoked.
   Drives the real `mountEditor` against a mock `api` that keeps the versions in memory.
+- **`instances-by-application.spec.mjs`** (ADR-0034 / ADR-0128): the **Instances overview
+  grouped by application** — the one list stays the default (one table, one row per process),
+  the "Nach Applikation" switch puts every process under its application in name order with
+  the not-assigned group last (a process filed nowhere and one whose application name the
+  server withholds both land there), each heading sums processes, running, incidents and
+  finished over every version and links to the application, the choice and a folded group
+  survive a reload and a Refresh, switching back restores the enhanced list, and a grouped
+  row's overflow menu still reaches its terminate confirmation. Drives the real app shell
+  against a routed mock of the processes, instance summary and incident summary.
 - **`incidents-ops.spec.mjs`** (ADR-0150 / ADR-0151): **incidents where the operator is**
   — the **live view** outlines and badges the element two parked tokens sit on, counts them
   in its toolbar, leads its variables panel with both instances' incidents, and resolves one

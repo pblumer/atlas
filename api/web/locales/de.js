@@ -10,6 +10,15 @@
 //
 // Every other locale carries exactly these keys; a test holds it to that.
 export default {
+  "ops.group.label": "Anordnung der Prozesse",
+  "ops.group.process": "Liste",
+  "ops.group.processTitle": "Alle Prozesse in einer Liste, eine Zeile je Prozess",
+  "ops.group.application": "Nach Applikation",
+  "ops.group.applicationTitle": "Die Prozesse unter der Applikation gruppieren, der sie zugeordnet sind",
+  "ops.group.processes.one": "{n} Prozess",
+  "ops.group.processes.other": "{n} Prozesse",
+  "ops.group.openApp": "Applikation öffnen",
+  "ops.group.openAppTitle": "Die Seite dieser Applikation im Modeler öffnen",
   "ops.versions.running.one": "{n} läuft",
   "ops.versions.running.other": "{n} laufen",
   "ops.versions.incidents.one": "{n} Incident",

@@ -961,6 +961,20 @@ td.inc-msg { overflow-wrap: anywhere; min-width: 24ch; }
    wrap "Open replay" onto two lines. Toolbar buttons never wrap their label. */
 .ops-jump-go { flex: none; padding: 7px 12px; font-size: 15px; line-height: 1; }
 .ops-toolbar .btn, .ops-varsearch .btn { white-space: nowrap; }
+/* The Instances overview grouped by application: one folding section per application,
+   each with its own table. The tables share fixed column widths so that a column reads
+   down the page across groups as it does in the single list. */
+.ops-app-group + .ops-app-group { margin-top: 18px; }
+.ops-app-group > .sec-head { margin: 0 0 8px; }
+.ops-app-group > .sec-head h2 { font-size: 15px; }
+@media (min-width: 720px) {
+  .ops-app-groups table { table-layout: fixed; width: 100%; }
+  .ops-app-groups th:nth-child(1) { width: 30%; }
+  .ops-app-groups th:nth-child(2), .ops-app-groups th:nth-child(3),
+  .ops-app-groups th:nth-child(4), .ops-app-groups th:nth-child(5) { width: 10%; }
+  .ops-app-groups th:nth-child(6) { width: 15%; }
+  .ops-app-groups th:nth-child(7) { width: 15%; }
+}
 /* Variable-content instance search. */
 .ops-varsearch { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 .ops-varsearch .ops-search { flex: 1 1 320px; }
