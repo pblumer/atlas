@@ -113,6 +113,7 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **The Console's landing page follows the chosen language.** The welcome card — its introduction, the three first steps, the buttons and the System Overview tooltip — and the Deployments and Engine tiles under it were written in English in `app.js` and stayed English whatever language was set. They now come from the message catalogue (`dashboard.*` in `api/web/locales/`), so a Console set to German greets with «Willkommen bei atlas» and English stays as it was.
 - **Why the atlas hub registry could not be read is in the server log.** The Console still
   says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
   the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
