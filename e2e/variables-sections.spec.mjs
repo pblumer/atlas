@@ -54,6 +54,8 @@ test("a round's variables are sorted into what it was handed, what it wrote and 
 
   // Output is what the round itself wrote: a new value says so, a rewritten one says
   // what it was.
+  // The round's answer lives in its own scope until the body collects it; it is still
+  // what the round produced.
   await expect(rowOf(page, "bewertung").locator(".c-new")).toBeVisible();
   await expect(rowOf(page, "szenario").locator(".v-was")).toContainText("manuell");
   await expect(rowOf(page, "szenario").locator(".c-val")).toHaveText("geprueft");
@@ -91,9 +93,11 @@ test("the environment groups what is in reach by scope, innermost first, and lea
 
   // A subprocess running beside the task shares the snapshot and is out of its reach.
   await expect(rowOf(page, "fremd")).toHaveCount(0);
-  // What changed under the round while it ran says so; what only appeared then too.
-  await expect(rowOf(page, "bewertungen").locator(".v-was")).toContainText("gut");
+  // What only appeared while the round ran says so. The body's collection, which the
+  // history shows unfilled until the loop is done, says that rather than read as rounds
+  // that produced nothing.
   await expect(rowOf(page, "notiz").locator(".c-late")).toBeVisible();
+  await expect(rowOf(page, "bewertungen").locator(".v-coll")).toHaveCount(1);
   // A constant says whose it is.
   await expect(rowOf(page, "MAX_POSITIONEN").locator(".c-const")).toBeVisible();
   await expect(rowOf(page, "server").locator(".c-const")).toBeVisible();
@@ -108,7 +112,7 @@ test("a round still running says it has no output yet", async ({ page }) => {
   await selectRound(page, "1004");
   const note = tab(page).locator(".vt tbody tr.v-sec-out + tr.v-gnote");
   await expect(note).toBeVisible();
-  await expect(tab(page).locator(".v-was")).toHaveCount(0);
+  await expect(tab(page).locator(".v-was:not(.v-coll)")).toHaveCount(0);
   expect(page.__errors, "page errors").toEqual([]);
 });
 

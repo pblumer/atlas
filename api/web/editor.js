@@ -16121,7 +16121,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // scopeChipHTML labels, in the one list, the scope a variable lives in below the
   // process: what kind of scope it is and whose.
   function scopeChipHTML(v) {
-    const kind = v.local ? "local"
+    const kind = v.local || v.scopeKind === "local" ? "local"
       : ({ subprocess: "subprocess", multiInstanceBody: "multiInstanceBody", loopBody: "loopBody" }[v.scopeKind] || "other");
     const label = kind === "other" ? v.scope : `${tr(`ops.vars.chip.${kind}`)} · ${v.scope}`;
     return `<span class="c-scope" title="${esc(tr(`ops.vars.chipTitle.${kind}`, { name: scopeName(v.scope) }))}">${esc(label)}</span>`;
@@ -16428,7 +16428,12 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       html += g.vars.map((v) => varRow(v, {
         cls: "v-env",
         chips: v.lateOnly ? ` <span class="c-late" title="${esc(tr("ops.vars.lateOnlyTitle"))}">${esc(tr("ops.vars.lateOnly"))}</span>` : "",
-        note: v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "",
+        note: (v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "")
+          // A multi-instance body's collection is filled one element per round, and those
+          // element writes are not part of the history (ADR-0296): it reads unfilled until
+          // the body completes. Said where it is read, so an empty list is not taken for
+          // rounds that produced nothing — each round's result is in its own Output.
+          + (v.scopeKind === "multiInstanceBody" ? `<div class="v-was v-coll">${esc(tr("ops.vars.collectionNote"))}</div>` : ""),
       })).join("");
     }
     if (!envShown) html += note(none("ops.vars.none.env"), "v-env");

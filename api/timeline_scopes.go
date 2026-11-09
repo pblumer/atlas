@@ -8,6 +8,9 @@ const (
 	scopeKindSubprocess        = "subprocess"
 	scopeKindMultiInstanceBody = "multiInstanceBody"
 	scopeKindLoopBody          = "loopBody"
+	// scopeKindLocal is an element instance's own scope: what it was handed (its
+	// inputs) and what it wrote there itself, such as a multi-instance round's result.
+	scopeKindLocal = "local"
 )
 
 // What a constant's variable holds (variableView.Constant, ADR-0454/0456).

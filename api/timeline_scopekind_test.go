@@ -27,6 +27,7 @@ type scopedStep struct {
 	Iteration      int         `json:"iteration"`
 	Variables      []scopedVar `json:"variables"`
 	VariablesAfter []scopedVar `json:"variablesAfter"`
+	Writes         []scopedVar `json:"writes"`
 }
 
 // scopedTimeline deploys model, starts one instance with start and returns its replay.
