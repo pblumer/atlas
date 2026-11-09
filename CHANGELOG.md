@@ -34,7 +34,8 @@ the peer endpoint of ADR-0372.
 uploads a Worker Type's manifest and executable; the server verifies the executable against
 the manifest's digest, keeps it content-addressed, checks it again before every start and
 configures its Workers from the type's own JSON Schema, with secrets named as vault entries
-only. Every operation declares what a repeated delivery does, and every job carries an
+only. Its instance works with a credential of its own that reaches only the job types its
+manifest declares (ADR-0545). Every operation declares what a repeated delivery does, and every job carries an
 idempotency key a target can filter duplicates by (ADR-0538). Worker Instances report their
 protocol version and Worker Type identity, the Worker protocol is written down for other
 languages, the Worker SDK depends on nothing of atlas, and the release ships `atlas-workers`,
