@@ -922,6 +922,9 @@ const TOPNAV = {
       // The systems an administrator connected, what they read, and their people
       // (ADR-0512 §4): beside the tokens they replace.
       { name: "Connected systems", route: "#/console/connected-systems", role: "admin" },
+      // Who besides an operator may start which process themselves (ADR-0516, MFE1A).
+      // Admin, like every start-grant route: an application's owner does not decide it.
+      { name: "Start grants", route: "#/console/start-grants", role: "admin" },
       // The vault (ADR-0069): the credentials atlas signs in elsewhere with, where API
       // tokens are the ones machines sign in to atlas with. Admin, like every vault route.
       { name: "Secrets", route: "#/console/secrets", role: "admin" },
@@ -1450,6 +1453,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/connections")) return H("konten", "Connected accounts");
   if (path.startsWith("#/console/connected-systems")) return H("konten", "Connected systems");
+  if (path.startsWith("#/console/start-grants")) return H("konten", "Start grants");
   if (path.startsWith("#/console/approvals")) return H("konten", "Approving an action");
   if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
@@ -4657,7 +4661,7 @@ async function renderAppDeployments(id, { canWrite = false } = {}) {
       ] : []),
     ];
     return `<tr data-process="${esc(g.processId)}">
-    <td data-filter="${esc((d.name || "") + " " + g.processId)}"><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || g.processId)}</b></a>${starButton("process", g.processId)}${frozenPill}</div>
+    <td data-filter="${esc((d.name || "") + " " + g.processId)}"><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || g.processId)}</b></a>${starButton("process", g.processId)}${frozenPill}${grantHint(id, grantsByProcess.get(g.processId))}</div>
       <div class="muted" style="font-size:12px; padding-left:26px">${esc(g.processId)}</div></td>
     ${versionCell(g)}
     ${stateCell(d)}
@@ -4669,6 +4673,22 @@ async function renderAppDeployments(id, { canWrite = false } = {}) {
   };
 
   const processes = groupDeployedProcesses(view.definitions);
+
+  // Start grants (ADR-0516, MFE1A): an administrator sees, beside a process, that
+  // somebody may start it themselves, with a link to the Console page where that is
+  // decided. Read-only and for administrators alone — owners and editors work in this
+  // view, and a grant is not theirs. Its request failing costs the mark, not the tab.
+  let grantsByProcess = new Map(), grantHint = () => "";
+  if (!ungrouped && AUTH.enabled && mayUse("admin")) {
+    try {
+      const [{ grantHint: hint }, grants] = await Promise.all([
+        import("./startgrants.js"),
+        api("GET", `/api/v1/applications/${encodeURIComponent(id)}/start-grants`),
+      ]);
+      grantsByProcess = new Map(((grants && grants.items) || []).map((g) => [g.processId, g]));
+      grantHint = hint;
+    } catch { /* no mark: the deployments still render */ }
+  }
 
   // Deployment targets (ADR-0129): what each peer server runs for this
   // application. Fetched separately from the local view because it makes an
@@ -12704,6 +12724,7 @@ function routeTitle(path) {
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
     [/^#\/console\/connected-systems/, "Connected systems · Console"],
+    [/^#\/console\/start-grants/, "Start grants · Console"],
     [/^#\/console\/approvals$/, "Approvals · Console"],
     [/^#\/console\/security$/, "Security · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
@@ -12826,6 +12847,12 @@ async function route() {
       const gen = navGen;
       const { viewConnectedSystems } = await import("./connectedsystems.js");
       return await viewConnectedSystems({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/start-grants") {
+      const gen = navGen;
+      const { viewStartGrants } = await import("./startgrants.js");
+      return await viewStartGrants({ api, view, isSuperseded: () => superseded(gen),
+        isAdmin: mayUse("admin"), authEnabled: AUTH.enabled });
     }
     if (path === "#/console/approvals") {
       const gen = navGen;

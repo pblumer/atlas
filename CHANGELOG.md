@@ -82,6 +82,13 @@ directory gains the document store. Four changes can break what worked against 0
   version 1.
 
 ### Added
+- **Administrators manage start grants in the Console.** Console → Administration → Start
+  grants shows, per application, every process with who may start it themselves, whether it is
+  offered and if not why, and the last change; an administrator grants or revokes by name,
+  checks one person or group, and reads the history, without typing an id or a revision
+  (ADR-0516, MFE1A). A competing change is shown and nothing is sent twice. The grant reads
+  answer `blockers` for this, and an application's Deployments tab marks a granted process for
+  administrators, read-only.
 - **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
   lists the deployed processes, diagrams, forms, decisions, decision drafts and deployed decisions
   that belong to no application — no tag, or an application that no longer exists — and

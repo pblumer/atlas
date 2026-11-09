@@ -114,20 +114,25 @@ A task user notices nothing new: the self-service routes and the Start view
 
 ## Acceptance criteria
 
-- [ ] An administrator grants a group and a person a process from the Console page,
+The boxes below are ticked against the Go tests and the Playwright specs, which mock the
+API. The owner decided on 2026-11-09 that MFE1A stays **active** until one run of the
+first criterion against a real server with sign-in (a browser, an administrator's own
+session, a real group and person) is recorded on #1639.
+
+- [x] An administrator grants a group and a person a process from the Console page,
       sees it as offered, checks a member with "Check a person", revokes it, and
       reads all three changes in the history — without typing an id or revision.
-- [ ] A process that is deactivated, not executable, or whose newest version sits in
+- [x] A process that is deactivated, not executable, or whose newest version sits in
       another application is shown as not offered, with the reason in words.
-- [ ] A competing change (409) shows the current audience and changes nothing until
+- [x] A competing change (409) shows the current audience and changes nothing until
       the administrator decides again.
-- [ ] A grant whose process is no longer deployed in the application is listed and
+- [x] A grant whose process is no longer deployed in the application is listed and
       can be revoked.
-- [ ] A modeler, operator or task user sees neither the nav entry nor the hint; the
+- [x] A modeler, operator or task user sees neither the nav entry nor the hint; the
       route opened directly says it is for administrators.
-- [ ] On a server without authentication the page says start grants need sign-in.
-- [ ] `blockers` on the list and single read match the preview's for every code.
-- [ ] Playwright spec(s) for the page and the hint at desktop and 768px, plus the
+- [x] On a server without authentication the page says start grants need sign-in.
+- [x] `blockers` on the list and single read match the preview's for every code.
+- [x] Playwright spec(s) for the page and the hint at desktop and 768px, plus the
       existing MFE1 and Console specs unchanged; Go tests for PR A; the full
       `AGENTS.md` sequence green.
 
