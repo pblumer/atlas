@@ -245,9 +245,9 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if err != nil {
 				return Connectors{}, err
 			}
-			var docs mail.DocumentStore
+			var docs mail.DocumentStore = mailDocuments{}
 			if s3reg != nil {
-				docs = s3.Documents(s3reg)
+				docs = mailDocuments{objects: s3.Documents(s3reg)}
 			}
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJobWith(ctx, j, reg, docs)
@@ -1141,4 +1141,24 @@ func announceADMock(mock *ad.MockDirectory, seed string) {
 		logging.Info(logging.ADMockPerformed, "ad mock directory",
 			slog.String("operation", op.Op), slog.String("dn", op.DN), slog.String("detail", op.Detail))
 	})
+}
+
+// mailDocuments is what a mail job on a Worker Instance hands documents to: the S3
+// Workers this host holds, for export-attachment, and Atlas's document store through the
+// job, for store-attachment (ADR-draft-a-file-is-a-document-not-a-variable).
+type mailDocuments struct{ objects mail.DocumentStore }
+
+func (d mailDocuments) PutDocument(ctx context.Context, worker, bucket, key, contentType, disposition string, data []byte, metadata map[string]string) (map[string]any, error) {
+	if d.objects == nil {
+		return nil, fmt.Errorf("mail: this Worker Instance holds no S3 Worker, so it cannot reach %q", worker)
+	}
+	return d.objects.PutDocument(ctx, worker, bucket, key, contentType, disposition, data, metadata)
+}
+
+// HoldsObjectStores tells an export apart from a store-attachment: only the first needs
+// an S3 Worker.
+func (d mailDocuments) HoldsObjectStores() bool { return d.objects != nil }
+
+func (mailDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	return workersdk.UploadDocument(ctx, name, contentType, data)
 }

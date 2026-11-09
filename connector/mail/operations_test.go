@@ -516,3 +516,47 @@ func TestADocumentOperationStopsAtTheFirstThingThatIsNotThere(t *testing.T) {
 		t.Errorf("a scanned export = %v, metadata %v; the object must say which scanner looked", err, docs.meta)
 	}
 }
+
+// atlasDocuments is a document store that also takes attachments into Atlas's own
+// document store, as the server's does.
+type atlasDocuments struct {
+	fakeDocuments
+	name, contentType string
+	data              []byte
+}
+
+func (a *atlasDocuments) StoreDocument(_ context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	a.name, a.contentType, a.data = name, contentType, data
+	return map[string]any{"$document": "doc_" + strings.Repeat("a", 26), "name": name, "contentType": contentType}, nil
+}
+
+// store-attachment puts an inspected attachment into Atlas's document store and answers
+// a reference, so a document of any size up to the document budget reaches a process
+// without an S3 Worker and without passing through a variable
+// (ADR-draft-a-file-is-a-document-not-a-variable).
+func TestStoreAttachmentAnswersAReference(t *testing.T) {
+	docs := &atlasDocuments{}
+	j := mail.Job{Connector: "box", Operation: mail.OpStoreAttachment, Target: "m1", Attachment: "2"}
+	res, err := mail.RunWith(context.Background(), j, registryWith(&mailboxClient{doc: pdfDoc}), docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := res.(map[string]any)
+	if m["$document"] == nil || docs.name != pdfDoc.Name || docs.contentType != "application/pdf" || string(docs.data) != string(pdfDoc.Data) {
+		t.Fatalf("answer %v, stored %q %q", m, docs.name, docs.contentType)
+	}
+	if _, ok := m["inspection"]; !ok {
+		t.Errorf("the answer does not say what inspection found: %v", m)
+	}
+	// Inspection still decides: a program is refused before anything is stored.
+	exe := mail.Document{Name: "rechnung.pdf", Data: []byte("MZ\x90\x00")}
+	docs = &atlasDocuments{}
+	if _, err := mail.RunWith(context.Background(), j, registryWith(&mailboxClient{doc: exe}), docs); err == nil || docs.data != nil {
+		t.Errorf("a refused document = %v, stored %d bytes", err, len(docs.data))
+	}
+	// A store that cannot take documents says so.
+	if _, err := mail.RunWith(context.Background(), j, registryWith(&mailboxClient{doc: pdfDoc}), &fakeDocuments{}); err == nil ||
+		!strings.Contains(err.Error(), "document store") {
+		t.Errorf("store-attachment without the document store = %v", err)
+	}
+}

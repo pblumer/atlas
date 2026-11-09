@@ -1583,6 +1583,8 @@ var mailOps = map[string]mailOp{
 	"forward":           {forward: true, message: true},
 	"get-attachment":    {attachment: true, message: true, needsResult: true, takesResult: true},
 	"export-attachment": {attachment: true, export: true, message: true, takesResult: true},
+	// Into Atlas's document store (ADR-draft-a-file-is-a-document-not-a-variable).
+	"store-attachment": {attachment: true, message: true, needsResult: true, takesResult: true},
 }
 
 // mailAllowedTypes reads an allowedTypes value: comma-separated media types, each exact

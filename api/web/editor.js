@@ -4748,6 +4748,7 @@ const SERVICE_TASK_KINDS = [
           { v: "forward", l: "Forward message (with its attachments)" },
           { v: "get-attachment", l: "Read attachment into a variable" },
           { v: "export-attachment", l: "Export attachment to an S3 Worker" },
+          { v: "store-attachment", l: "Store attachment as a document" },
         ],
       },
       { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward" },
@@ -4819,15 +4820,15 @@ const SERVICE_TASK_KINDS = [
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }, { v: "html", l: "Include the text and the HTML" }],
         hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB. The HTML version is cleaned of scripts, forms and everything else that runs, and cut to fit the variable; show it to a person with an E-mail view in a task form, which keeps remote images blocked until they are asked for. What a process receives, every operator of a shared server can read — include the text, let alone the HTML, only where the process needs it.",
       },
-      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
+      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment" },
       {
         key: "attachmentId", label: "Attachment", placeholder: "=mail.attachments[1].id", fx: true,
-        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment",
         hint: "The attachment to read: the id an envelope's attachments list carries — usually a FEEL expression (fx), e.g. =mail.attachments[1].id, or an item of a multi-instance loop over them.",
       },
       {
         key: "allowedTypes", label: "Accepted types", placeholder: "application/pdf, image/*",
-        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment",
         hint: "Optional. Comma-separated media types the task accepts, judged from the document's content rather than from what the sender called it. Anything else ends the task with the error code MAIL_ATTACHMENT_REJECTED. Programs, scripts, macro documents, encrypted archives and PDFs that run code are refused in any case, and a Worker with a malware scanner scans every attachment first.",
       },
       { group: "Object store", showIf: (v) => v.operation === "export-attachment" },
@@ -4840,18 +4841,20 @@ const SERVICE_TASK_KINDS = [
         key: "key", label: "Object key", placeholder: "=\"rechnungen/\" + mail.messageId + \".pdf\"", fx: true, showIf: (v) => v.operation === "export-attachment",
         hint: "Where the attachment is stored. Build it from values that stay the same on a retry — a key computed from now() writes a second object when the task runs again.",
       },
-      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment" },
       {
         key: "resultVariable", label: "Result variable",
         resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
         placeholder: "mail",
-        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment",
         hint: (v) => (v.operation === "move"
           ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
           : v.operation === "get-attachment"
             ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
             : v.operation === "export-attachment"
               ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
+              : v.operation === "store-attachment"
+                ? "Receives a reference to the attachment in Atlas's document store — name, contentType as detected, size — with declaredType and the inspection. Up to 35 MiB, and the file never passes through a variable: a form shows it as a download, and an S3 Put document or a CSV import reads it."
               : (v.operation === "list" ? tr("pnl.kindB.mail.resultList") : tr("pnl.kindB.mail.resultMessage"))),
       },
     ],
