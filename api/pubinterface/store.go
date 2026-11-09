@@ -293,7 +293,7 @@ func (m Meta) valid() bool { return validID(m.ActorID) && m.At > 0 }
 // mutate applies one change to a copy of the interface, appends its audit entry and
 // saves the whole document in one fsync-backed replacement; only then does the
 // store's own view move.
-func (s *Store) mutate(id string, m Meta, create func() (Interface, error), apply func(*Interface, *Change) error) (Interface, error) {
+func (s *Store) mutate(id string, m Meta, create func() Interface, apply func(*Interface, *Change) error) (Interface, error) {
 	if s.uncertain {
 		return Interface{}, ErrUncertainWrite
 	}
@@ -311,10 +311,7 @@ func (s *Store) mutate(id string, m Meta, create func() (Interface, error), appl
 		if create == nil {
 			return Interface{}, ErrNotFound
 		}
-		var err error
-		if next, err = create(); err != nil {
-			return Interface{}, err
-		}
+		next = create()
 	}
 	change := Change{Revision: next.Revision + 1, At: m.At, ActorID: m.ActorID}
 	if err := apply(&next, &change); err != nil {
@@ -342,9 +339,9 @@ func (s *Store) Publish(id, applicationID string, contract Contract, binding Bin
 	}
 	contract = contract.clone()
 	contract.canonical()
-	return s.mutate(id, m, func() (Interface, error) {
+	return s.mutate(id, m, func() Interface {
 		return Interface{SchemaVersion: SchemaVersion, ID: id, ProcessID: binding.ProcessID, ApplicationID: applicationID,
-			Grants: Grants{View: Audience{UserIDs: []string{}, GroupIDs: []string{}}, Send: Audience{UserIDs: []string{}, GroupIDs: []string{}}}}, nil
+			Grants: Grants{View: Audience{UserIDs: []string{}, GroupIDs: []string{}}, Send: Audience{UserIDs: []string{}, GroupIDs: []string{}}}}
 	}, func(in *Interface, c *Change) error {
 		switch {
 		case in.ProcessID != binding.ProcessID:

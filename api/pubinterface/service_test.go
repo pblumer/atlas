@@ -23,11 +23,15 @@ type fixture struct {
 	defs  map[uint64]Definition
 	roles map[string]map[string]int // application -> user -> rank
 	users map[string]bool
+	dir   string
+	// rankErr and dirErr make the application store or the directory fail.
+	rankErr, dirErr error
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	store, err := NewStore(filepath.Join(t.TempDir(), "published-interfaces"))
+	dir := filepath.Join(t.TempDir(), "published-interfaces")
+	store, err := NewStore(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +41,7 @@ func newFixture(t *testing.T) *fixture {
 	go func() { loop.Run(); close(done) }()
 	t.Cleanup(func() { close(quit); <-done })
 	f := &fixture{
-		t: t, auth: true,
+		t: t, auth: true, dir: dir,
 		defs: map[uint64]Definition{
 			7: {Key: 7, ProcessID: "kredit", Version: 1, ApplicationID: "app_kredit", Process: compile(t, kreditBPMN)},
 		},
@@ -48,13 +52,16 @@ func newFixture(t *testing.T) *fixture {
 	f.svc = NewService(loop, store, Host{
 		Definition: func(key uint64) (Definition, bool) { d, ok := f.defs[key]; return d, ok },
 		Rank: func(p *httpapi.Principal, app string) (int, error) {
+			if f.rankErr != nil {
+				return RankNone, f.rankErr
+			}
 			if p == nil {
 				return RankNone, nil
 			}
 			return f.roles[app][p.UserID], nil
 		},
-		UserExists:  func(id string) (bool, error) { return f.users[id], nil },
-		GroupExists: func(id string) (bool, error) { return id == "grp_peers", nil },
+		UserExists:  func(id string) (bool, error) { return f.users[id], f.dirErr },
+		GroupExists: func(id string) (bool, error) { return id == "grp_peers", f.dirErr },
 		Names:       func(uint64) map[string]string { return map[string]string{"start": "Antrag eingegangen"} },
 	}, func() bool { return f.auth }, func() int64 { clock++; return clock })
 	f.mux = http.NewServeMux()

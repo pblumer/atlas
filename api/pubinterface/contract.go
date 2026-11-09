@@ -130,8 +130,6 @@ type Audience struct {
 	GroupIDs []string `json:"groupIds"`
 }
 
-func (a Audience) empty() bool { return len(a.UserIDs)+len(a.GroupIDs) == 0 }
-
 // Grants are an interface's two rights, kept apart on purpose (ADR-0373): seeing a
 // contract never lets anybody drive work into the publishing domain. Public means
 // "viewable without a grant" and never implies send.
