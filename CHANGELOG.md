@@ -28,6 +28,26 @@ _Changed_ / _Removed_ for each version.
   `GET /api/v1/published-interfaces` lists only what the caller may see. Three MCP tools read
   them. Not yet: a commitment is refused because nothing measures one, and the send grant waits
   for the peer endpoint of ADR-0372.
+- **The M365 test environment can build a SharePoint Server Subscription Edition farm.** `deploy/opentofu/m365-devenv` gains
+  `enable_sharepoint_server` (off by default): a VM `sp01` joined to the test forest, built from
+  Microsoft's SharePoint image, with SQL Server Developer on the same machine, a single-server
+  farm, a web application at `http://sp01.<domain>` and a root site collection, set up unattended
+  by `scripts/sharepoint-setup.ps1` and followed by `scripts/wait-sharepoint.sh`. It shuts down
+  every night with the domain controller, and a test now fails for any VM of the environment
+  without a shutdown schedule. SharePoint runs as a 180-day evaluation; apply it to a running
+  environment only with the `-target` list in the README.
+- **The atlas hub preview shows the application's architecture sketch and its process diagrams.**
+  Before a release is installed, the server derives its architecture sketch from the process
+  models of the verified package (ADR-0539): the messages its
+  processes receive, the workers, job types, decisions and calls they name, their data objects
+  and personal data, the roles of their user tasks and the names they throw and catch — drawn
+  by the same code as a release's sketch, marked as a package preview and stamped with the
+  Blueprint, its version and digest. Endpoints, capabilities, catalogue products and coupled
+  applications belong to an installation and are listed as not shown. The Console's hub preview
+  shows the sketch and, on request, draws each BPMN model read-only. New routes
+  `GET /api/v1/blueprints/{id}/releases/{version}/architecture`, `…/architecture.svg` and
+  `…/diagrams`, each bound by `?digest=` to the previewed package; new MCP tool
+  `atlas_hub_release_architecture`. A release's own sketch is unchanged.
 - **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
   products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
   (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form
@@ -128,6 +148,13 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A wide decision table fits its hover card.** The card that shows which rule fired —
+  in Operations → Decisions, the live view and the instance replay — held every cell to one
+  line inside a 480 px card, so a table with a long list of literals or a long input
+  expression ran out past the card's edge over the page beneath it, where nothing could
+  scroll to it. The card now grows to 760 px, never wider than the window, its cells wrap, and it is
+  kept inside the window vertically too: a table too tall for either side of its row is no
+  longer placed off the bottom of the screen.
 - **The Console's landing page follows the chosen language.** The welcome card — its introduction, the three first steps, the buttons and the System Overview tooltip — and the Deployments and Engine tiles under it were written in English in `app.js` and stayed English whatever language was set. They now come from the message catalogue (`dashboard.*` in `api/web/locales/`), so a Console set to German greets with «Willkommen bei atlas» and English stays as it was.
 - **Why the atlas hub registry could not be read is in the server log.** The server now logs
   the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,

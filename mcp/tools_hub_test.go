@@ -45,3 +45,32 @@ func TestHubImportIsADryRunUnlessAskedAndCarriesTheDigest(t *testing.T) {
 		t.Fatalf("an import without a digest reached the server: %s (%v)", gotPath, response)
 	}
 }
+
+// The hub sketch is read for the previewed digest and the layers asked for, and a
+// call without a digest never reaches the server.
+func TestHubReleaseArchitectureCarriesTheDigestAndLayers(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotQuery url.Values
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.EscapedPath(), r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"blueprintId":"io.github.pblumer.atlas.einstieg","architecture":{"packaged":true}}`))
+	}))
+	defer backend.Close()
+
+	args := map[string]any{"blueprintId": "io.github.pblumer.atlas.einstieg", "version": "1.0.0", "digest": "sha256:abc", "layers": "application,data"}
+	callToolAgainstBackend(t, backend, "atlas_hub_release_architecture", args)
+	if gotMethod != http.MethodGet || gotPath != "/api/v1/blueprints/io.github.pblumer.atlas.einstieg/releases/1.0.0/architecture" {
+		t.Fatalf("called %s %s", gotMethod, gotPath)
+	}
+	if gotQuery.Get("digest") != "sha256:abc" || gotQuery.Get("layers") != "application,data" {
+		t.Fatalf("query = %v, want the digest and the layers", gotQuery)
+	}
+
+	gotPath = ""
+	delete(args, "digest")
+	callToolAgainstBackend(t, backend, "atlas_hub_release_architecture", args)
+	if gotPath != "" {
+		t.Fatalf("a sketch without a digest reached the server: %s", gotPath)
+	}
+}

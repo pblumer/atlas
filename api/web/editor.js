@@ -49,7 +49,7 @@ import { attachShownVersion } from "./shown-version.js";
 // The document behind the diagram as text, corrected in place and applied back onto the
 // canvas — the bar menu's "XML source", shared with the decision editor.
 import { openXmlSource, closeXmlSource } from "./xml-source.js";
-import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderTraceTable, placeTracePop, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
@@ -14374,10 +14374,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
       tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     decPop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - decPop.offsetHeight - 10;
-    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
-    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(decPop, row.getBoundingClientRect());
   };
   const hideDecPop = () => { decPop.hidden = true; };
   varPanel.addEventListener("pointerover", (e) => {
@@ -14908,6 +14905,29 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // of "what is inside this box" without leaving the task. `onInstance` is called with
 // the instance now on screen whenever that changes, so what the Tasks pane shows
 // beside the diagram (its variables) follows it.
+// mountDiagramPreview draws one BPMN model read-only into container: an atlas hub
+// package's model, before anything of it is installed
+// (ADR-0539). The container is expected to carry the
+// tp-canvas class, which hides the palette, the context pad and the inline editor, so
+// the model reads as a diagram; nothing drawn here is saved anywhere. The XML is the
+// package's own text, parsed by bpmn-js into shapes whose labels are text, never
+// markup. Answers a handle whose destroy() releases the canvas.
+export async function mountDiagramPreview(container, xml) {
+  const lib = await loadBpmn();
+  container.innerHTML = "";
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  try {
+    await viewer.importXML(String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    try { viewer.destroy(); } catch { /* already gone */ }
+    throw e;
+  }
+  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+  try { drawDataStateLabels(viewer); } catch { /* best-effort [state] captions */ }
+  return { destroy() { try { viewer.destroy(); } catch { /* already gone */ } } };
+}
+
 export async function mountTaskProcess(container, { api, instanceKey, activeElementId, onInstance }) {
   let viewer = null;
   let destroyed = false;
@@ -17681,10 +17701,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
       tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     decPop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - decPop.offsetHeight - 10;
-    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
-    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(decPop, row.getBoundingClientRect());
   };
   const hideDecPop = () => { decPop.hidden = true; };
   decEl.addEventListener("pointerover", (e) => {
