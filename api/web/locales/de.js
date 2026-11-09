@@ -167,6 +167,7 @@ export default {
   "ops.vars.atEnd": "bei Abschluss: {value}",
   "ops.vars.lateOnly": "erst bei Abschluss",
   "ops.vars.lateOnlyTitle": "Kam hinzu, während diese Instanz lief – geschrieben von einem anderen Pfad oder von Hand",
+  "ops.vars.collectionNote": "Füllt sich Runde für Runde, erscheint hier aber erst gefüllt, wenn die Schleife abgeschlossen ist. Das Ergebnis jeder Runde steht in deren Ausgabe.",
   "ops.vars.head.iteration": "Runde {n}",
   "ops.vars.head.done": "abgeschlossen",
   "ops.vars.head.active": "aktiv",

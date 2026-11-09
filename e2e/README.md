@@ -491,9 +491,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   the **Variables tab of a selected element**, on one round of a multi-instance task inside a
   subprocess, beside a second subprocess (`variables-sections-harness.html`). The round's
   variables must fall into *Input* (its counter and item, nothing else), *Output* (what it
-  wrote, a rewritten value saying what it was, a new one marked new) and a folded
+  wrote — including its answer, kept in the round's own scope — a rewritten value saying
+  what it was, a new one marked new) and a folded
   *Environment*, grouped body → subprocess → process → constants, without the variable of the
-  subprocess running beside it. A round still running must say it has no output yet; a name
+  subprocess running beside it, and with the body's collection saying that it reads
+  unfilled until the loop is done. A round still running must say it has no output yet; a name
   the filter finds in the folded environment must show; sorting the table must keep every row
   in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
   nothing selected the tab must stay one list whose scope chip names the kind of scope.

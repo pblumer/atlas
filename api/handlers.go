@@ -2713,6 +2713,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// which is the loop's result and not an input to any one round — and an element
 		// that declares neither mappings nor a loop is never scanned at all.
 		inputsByEIK := map[uint64][]variableView{}
+		// What an element instance wrote into that same scope of its own. A round of a
+		// multi-instance keeps its result there until the body collects it (ADR-0077), and
+		// none of the folds above reads the scope, so without this every round reported
+		// writing nothing. Only the element's own writes count (its producer key): an
+		// operator's correction of a local is not the element's output. A loop body and a
+		// subprocess are left out — their scopes are folded above and attributed there.
+		localWritesByEIK := map[uint64][]variableView{}
 		iterationByEIK := map[uint64]int{}
 		for actPos, v := range activations {
 			acp := ver.cp(actPos)
@@ -2735,9 +2742,18 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			if len(targets) == 0 {
 				continue
 			}
+			_, isBody := loopBodyTokens[v.TokenID]
+			ownScope := !isBody && !ver.isType(actPos, v.ElementID, compiler.TypeSubProcess)
 			byName := map[string]variableView{}
+			written := map[string]variableView{}
 			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
 				if _, ok := targets[vv.Name]; !ok {
+					if ownScope && vv.ProducerKey == v.ElementInstanceKey {
+						view := toVariableView(vv)
+						view.Scope = ver.elementID(actPos, v.ElementID)
+						view.ScopeKind = scopeKindLocal
+						written[vv.Name] = view // the last value it wrote
+					}
 					return nil
 				}
 				view := toVariableView(vv)
@@ -2753,6 +2769,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 			inputsByEIK[v.ElementInstanceKey] = list
+			if len(written) > 0 {
+				own := make([]variableView, 0, len(written))
+				for _, view := range written {
+					own = append(own, view)
+				}
+				localWritesByEIK[v.ElementInstanceKey] = own
+			}
 			// The counter is also this step's identity — which round of the loop it is — so
 			// the history can tell repeated activations of one task apart without the
 			// operator reading variable lists. Surfaced as a number of its own rather than
@@ -2989,13 +3012,15 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		resp.VariableAttribution = len(byProducer) > 0
 		for i := range resp.Steps {
 			w := byProducer[resp.Steps[i].ElementInstanceKey]
-			if len(w) == 0 {
+			own := localWritesByEIK[resp.Steps[i].ElementInstanceKey]
+			if len(w) == 0 && len(own) == 0 {
 				continue
 			}
-			vars := make([]variableView, 0, len(w))
+			vars := make([]variableView, 0, len(w)+len(own))
 			for _, view := range w {
 				vars = append(vars, view)
 			}
+			vars = append(vars, own...)
 			sort.Slice(vars, func(a, b int) bool {
 				if vars[a].Scope != vars[b].Scope {
 					return vars[a].Scope < vars[b].Scope

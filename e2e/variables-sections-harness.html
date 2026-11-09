@@ -66,17 +66,17 @@
         { name: "bewertungen", value: "[null,null]", kind: "json", scope: "Bewerten_1", scopeKind: "multiInstanceBody" },
         { name: "fremd", value: "x", kind: "string", scope: "Andere_1", scopeKind: "subprocess" },
       ];
-      // Once the round finished: it wrote a new value and rewrote one it found, the body's
-      // collection took its result, and another path wrote a note meanwhile.
+      // Once the round finished: it kept its answer in its own scope and rewrote a process
+      // variable it found, another path wrote a note meanwhile — and the body's collection
+      // still reads unfilled, because its per-round element writes are not in the history
+      // (ADR-0296); the server folds it filled only once the loop has finished.
       const after = [
-        ...entry.map((v) => v.name === "szenario" ? { ...v, value: "geprueft" }
-          : v.name === "bewertungen" ? { ...v, value: '["gut",null]' } : v),
-        { name: "bewertung", value: "gut", kind: "string" },
+        ...entry.map((v) => v.name === "szenario" ? { ...v, value: "geprueft" } : v),
         { name: "notiz", value: "von Hand", kind: "string" },
       ];
       const writes = [
-        { name: "bewertung", value: "gut", kind: "string" },
         { name: "szenario", value: "geprueft", kind: "string" },
+        { name: "bewertung", value: "gut", kind: "string", scope: "Bewerten_1", scopeKind: "local" },
       ];
 
       const steps = [
