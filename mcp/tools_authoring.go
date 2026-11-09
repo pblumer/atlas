@@ -476,8 +476,9 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_delete_application",
 			Description: "Delete a design-time process application by id. The operation is idempotent. " +
-				"By default it removes only the application container; its drafts, forms, decision " +
-				"references and deployments remain and become unassigned. purge=true deletes everything " +
+				"By default it removes only an empty application container, and is refused while the " +
+				"application still holds drafts, forms, decision references or deployments, which would " +
+				"then belong to no application: move them first. purge=true deletes everything " +
 				"the application owns on this server as well — deployed versions after cancelling their " +
 				"running instances (that needs the operator or admin role), decision deployments, drafts, " +
 				"forms, references and models — irreversibly, even where a catalogue product, an order or " +
@@ -533,17 +534,69 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_list_unassigned",
+			Description: "List what belongs to no application and you may see: deployed processes " +
+				"(with their version keys, and how many versions are filed elsewhere), drafts, forms, " +
+				"rules (decision references), decision drafts and decision deployments. These were " +
+				"written before every artifact had to belong to an application; nothing new can be " +
+				"created unassigned. File them with atlas_adopt_artifacts. Read-only.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/unassigned"))
+			},
+		},
+		{
+			Name: "atlas_adopt_artifacts",
+			Description: "File artifacts that belong to no application (atlas_list_unassigned) under one " +
+				"application in one request: deployed processes by process id (every version moves, and " +
+				"the other pools of a collaboration), drafts by process id, forms, rules (decision " +
+				"references, with their unfiled decision drafts), decision drafts and decision deployment " +
+				"keys. Metadata only: nothing is redeployed and running instances are untouched. Anything " +
+				"that is already filed, or does not exist, refuses the whole request and nothing moves. " +
+				"Needs editor on the application. Which application a process belongs to is its owner's " +
+				"decision: confirm the grouping with the person you work for before adopting.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId":       stringProp("The application to file the artifacts under."),
+					"processes":           arrayProp("Deployed process ids."),
+					"drafts":              arrayProp("BPMN draft process ids."),
+					"forms":               arrayProp("Form ids."),
+					"decisionReferences":  arrayProp("Rule (decision reference) ids."),
+					"decisionDrafts":      arrayProp("Decision draft ids."),
+					"decisionDeployments": arrayProp("Decision deployment keys (integers)."),
+				},
+				"required": []any{"applicationId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "applicationId")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{}
+				for _, k := range []string{"processes", "drafts", "forms", "decisionReferences", "decisionDrafts", "decisionDeployments"} {
+					if v, ok := args[k].([]any); ok && len(v) > 0 {
+						payload[k] = v
+					}
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/applications/"+url.PathEscape(id)+"/adopt", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_save_draft",
-			Description: "Save a BPMN 2.0 XML diagram as a draft, optionally filed under a project " +
-				"(projectId). The process id and name are read from the diagram. A draft is design-time " +
-				"only — deploy it with atlas_deploy_project (for a project) or atlas_deploy (raw).",
+			Description: "Save a BPMN 2.0 XML diagram as a draft in an application (projectId, from " +
+				"atlas_create_application or atlas_list_applications). Every new draft belongs to an " +
+				"application; a draft already filed keeps its application. The process id and name are read " +
+				"from the diagram. A draft is design-time only — deploy it with atlas_deploy_application or " +
+				"atlas_deploy.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"xml":       stringProp("The full BPMN 2.0 XML diagram to save as a draft."),
-					"projectId": stringProp("Optional project id to file the draft under (from atlas_create_project)."),
+					"projectId": stringProp("The application id to file the draft under (from atlas_create_application)."),
 				},
-				"required": []any{"xml"},
+				"required": []any{"xml", "projectId"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				xml, err := argString(args, "xml")
@@ -559,17 +612,18 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_save_form",
-			Description: "Create or overwrite a form (a form-js JSON schema) by id, optionally filed " +
-				"under a project. A user task binds to it by its formId. Overwriting the same id updates it.",
+			Description: "Create or overwrite a form (a form-js JSON schema) by id in an application " +
+				"(projectId). Every form belongs to an application. A user task binds to it by its formId. " +
+				"Overwriting the same id updates it.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"id":        stringProp("The form id a user task's formId references."),
 					"name":      stringProp("Optional display name (defaults to the id)."),
 					"schema":    objectProp("The form-js schema document (an object with type and components)."),
-					"projectId": stringProp("Optional project id to file the form under."),
+					"projectId": stringProp("The application id to file the form under."),
 				},
-				"required": []any{"id", "schema"},
+				"required": []any{"id", "schema", "projectId"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				id, err := argString(args, "id")
@@ -660,10 +714,10 @@ func authoringTools() []Tool {
 				"type": "object",
 				"properties": map[string]any{
 					"xml":       stringProp("The full DMN XML document to deploy."),
-					"projectId": stringProp("Optional application id to file the deployment under."),
+					"projectId": stringProp("The application id to file the deployment under; every decision deployment belongs to an application."),
 					"modelRef":  stringProp("Optional model handle this was authored as, recorded as the deployment's provenance."),
 				},
-				"required": []any{"xml"},
+				"required": []any{"xml", "projectId"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				xml, err := argString(args, "xml")
@@ -687,16 +741,16 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_register_decision",
 			Description: "Register a rule — the Console's name for a decision reference (name + modelRef) — so a business rule task's " +
-				"calledDecision resolves to an uploaded model at deploy time, optionally under a project. " +
+				"calledDecision resolves to an uploaded model at deploy time, in an application (projectId). " +
 				"modelRef is the handle used with atlas_upload_decision_model.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"name":      stringProp("The rule (decision reference) name (typically the decisionId a rule task calls)."),
 					"modelRef":  stringProp("The model handle (from atlas_upload_decision_model) that provides the decision."),
-					"projectId": stringProp("Optional project id to file the reference under."),
+					"projectId": stringProp("The application id to file the reference under."),
 				},
-				"required": []any{"name", "modelRef"},
+				"required": []any{"name", "modelRef", "projectId"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				name, err := argString(args, "name")

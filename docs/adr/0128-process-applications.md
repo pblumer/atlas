@@ -11,6 +11,8 @@
 > not: [ADR-0134](0134-git-backed-applications.md) built only the source layout and a tar.gz
 > export and import. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
+> **Amended (2026-11-09).** Every process, decision and form belongs to an application; what belongs to none is adopted explicitly: [ADR-0544](0544-artifacts-belong-to-an-application.md).
+
 ## Context and problem statement
 
 [ADR-0034](0034-projects-and-artifacts.md) introduced the **project**: a

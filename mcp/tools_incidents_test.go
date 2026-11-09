@@ -96,7 +96,7 @@ func TestListIncidentsEmpty(t *testing.T) {
 // page is capped and the folded truncation flag is true.
 func TestListIncidentsTruncated(t *testing.T) {
 	atlas := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": userTaskBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": userTaskBPMN, "projectId": testApp(t, atlas)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	for i := 0; i < 2; i++ {

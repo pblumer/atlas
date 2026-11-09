@@ -29,7 +29,7 @@ Bearer` header.
 | Tool | Arguments | Result |
 |---|---|---|
 | `atlas_info` | none | product and build metadata |
-| `atlas_deploy` | `xml` | deployed definitions and keys |
+| `atlas_deploy` | `xml`, `projectId?` | deployed definitions and keys — filed under `projectId`, else the draft's or earlier versions' application; refused with none |
 | `atlas_list_processes` | none | deployed definitions |
 | `atlas_get_process_xml` | `key` | deployed BPMN XML |
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
@@ -72,16 +72,18 @@ Bearer` header.
 | `atlas_create_project` | `name` | project id and metadata |
 | `atlas_list_projects` | none | visible projects |
 | `atlas_delete_project` | `id` | `{deleted:true,id}` |
-| `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
+| `atlas_save_draft` | `xml`, `projectId` | saved BPMN draft |
 | `atlas_list_drafts` | `projectId?` | saved diagram drafts |
 | `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
 | `atlas_compare_draft` | `id`, `key?` | whether the draft is the same model as the newest (or the named) deployed version, where they differ, who saved and who deployed — saving does not deploy and deploying does not save |
 | `atlas_delete_draft` | `id` | `{deleted:true,id}` — design-time only, idempotent |
-| `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
+| `atlas_save_form` | `id`, `schema`, `projectId`, `name?` | saved form-js form |
 | `atlas_list_forms` | `projectId?` | saved form definitions |
 | `atlas_get_form` | `id` | a form's schema |
 | `atlas_upload_decision_model` | `handle`, `xml` | stored DMN model |
-| `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered rule (decision reference) |
+| `atlas_register_decision` | `name`, `modelRef`, `projectId` | registered rule (decision reference) |
+| `atlas_list_unassigned` | none | what belongs to no application (written before every artifact had to) |
+| `atlas_adopt_artifacts` | `applicationId`, `processes?`, `drafts?`, `forms?`, `decisionReferences?`, `decisionDrafts?`, `decisionDeployments?` | files unassigned artifacts under one application; all or nothing |
 | `atlas_list_decision_refs` | `projectId?` | registered rules (DMN decision references) |
 | `atlas_list_decisions` | `projectId?` | DMN decisions (with inputs/outputs) from references |
 | `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |

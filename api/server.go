@@ -968,6 +968,12 @@ type Server struct {
 	// mounted; read-only thereafter.
 	docsEnabled bool
 
+	// applicationRequired refuses a process, decision or form that would be created,
+	// deployed or moved outside an application
+	// (ADR-0544). Copied from
+	// applicationRequiredByDefault when the server is built; read-only thereafter.
+	applicationRequired bool
+
 	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
 	// off with --catalogue=false / WithoutCatalogue
 	// (ADR-0434). Spelled as "off" rather than
@@ -1939,6 +1945,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
 		readyTimeout:      readyTimeoutDefault,
+
+		applicationRequired: applicationRequiredByDefault,
 	}
 	// The retention sweep reads its eligibility cutoff from the system clock by
 	// default; the options below may replace it (withClock) for a deterministic

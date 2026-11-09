@@ -24,7 +24,7 @@ const twoTriggersBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/201005
 // not an object is a tool error rather than a request.
 func TestTriggerStartViaTool(t *testing.T) {
 	ts := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": twoTriggersBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": twoTriggersBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	args := map[string]any{"processId": "hr-events", "message": "hr.leaver", "triggerId": "leaver-1",

@@ -15,7 +15,13 @@ import (
 // Streamable HTTP transport and returns an httptest server for it.
 func newMCPHTTP(t *testing.T) *httptest.Server {
 	t.Helper()
-	atlas := newAtlas(t)
+	return newMCPHTTPOver(t, newAtlas(t))
+}
+
+// newMCPHTTPOver is newMCPHTTP in front of a given atlas server, for a test that
+// also prepares that server directly.
+func newMCPHTTPOver(t *testing.T, atlas *httptest.Server) *httptest.Server {
+	t.Helper()
 	srv := mcp.NewServer(mcp.NewClient(atlas.URL))
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
@@ -43,7 +49,8 @@ func postRPC(t *testing.T, url, payload string) (int, map[string]any) {
 }
 
 func TestHTTPInitializeAndCall(t *testing.T) {
-	ts := newMCPHTTP(t)
+	atlas := newAtlas(t)
+	ts := newMCPHTTPOver(t, atlas)
 
 	// initialize
 	code, resp := postRPC(t, ts.URL, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)
@@ -58,7 +65,7 @@ func TestHTTPInitializeAndCall(t *testing.T) {
 	// tools/call: deploy a model over HTTP transport.
 	req := map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-		"params": map[string]any{"name": "atlas_deploy", "arguments": map[string]any{"xml": sampleBPMN}},
+		"params": map[string]any{"name": "atlas_deploy", "arguments": map[string]any{"xml": sampleBPMN, "projectId": testApp(t, atlas)}},
 	}
 	b, _ := json.Marshal(req)
 	code, resp = postRPC(t, ts.URL, string(b))

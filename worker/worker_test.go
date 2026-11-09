@@ -118,7 +118,7 @@ func liveAtlasWith(t *testing.T, model, vars string, opts ...api.Option) *httpte
 		_ = store.Close()
 		_ = log.Close()
 	})
-	post(t, ts, "/api/v1/deployments", model, "application/xml")
+	deployInApp(t, ts, model)
 	post(t, ts, "/api/v1/processes/1/instances", `{"variables":`+vars+`}`, "application/json")
 	return ts
 }

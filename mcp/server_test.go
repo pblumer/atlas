@@ -198,7 +198,7 @@ func TestDeployRunInspectViaTools(t *testing.T) {
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{
 			"name":      "atlas_deploy",
-			"arguments": map[string]any{"xml": sampleBPMN},
+			"arguments": map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)},
 		},
 	}
 	dep, _ := json.Marshal(deployReq)

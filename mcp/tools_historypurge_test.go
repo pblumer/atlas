@@ -17,7 +17,7 @@ import (
 // version holds n finished instances.
 func finishedRuns(t *testing.T, ts *httptest.Server, n int) {
 	t.Helper()
-	if text, isErr := callText(t, ts, "atlas_deploy", map[string]any{"xml": sampleBPMN}); isErr {
+	if text, isErr := callText(t, ts, "atlas_deploy", map[string]any{"projectId": testApp(t, ts), "xml": sampleBPMN}); isErr {
 		t.Fatalf("deploy = %q", text)
 	}
 	for i := 0; i < n; i++ {
