@@ -495,7 +495,7 @@ removed, which reaches only the job and query protocol, only the job types its m
 declares and only as its own Worker Instance id; anything else is refused with `403` and
 the reason. Built-in supervised workers and external workers with API tokens are
 unchanged. Decided in
-[ADR-draft-installed-worker-instances-hold-their-own-credential](draft-installed-worker-instances-hold-their-own-credential.md).
+[ADR-0545](0545-installed-worker-instances-hold-their-own-credential.md).
 Still open in step 3: process confinement for installed artifacts, the Console view of
 installed releases, and comparing the digest an instance reports with the one it was
 launched with.

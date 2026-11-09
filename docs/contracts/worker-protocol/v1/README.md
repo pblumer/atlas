@@ -267,7 +267,7 @@ none, and every other route. It stays the same across restarts of the instance, 
 refused (`401`) once the release is removed, and is replaced by a new one when the server
 restarts. It is never the server's internal token nor an operator's `ATLAS_TOKEN`, and an
 installed instance is never brokered a delegated credential
-([ADR-draft-installed-worker-instances-hold-their-own-credential](../../../adr/draft-installed-worker-instances-hold-their-own-credential.md)).
+([ADR-0545](../../../adr/0545-installed-worker-instances-hold-their-own-credential.md)).
 Without authentication on the server there is no token and nothing to confine.
 
 `workersdk.LaunchOptions(os.Getenv)` reads these, and `workersdk.LaunchConfig(os.Getenv)` reads the configured Workers. The instance stops when the server stops

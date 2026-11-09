@@ -47,7 +47,7 @@ const (
 
 	// apiScopeInstalledWorker is what the secret of an installed Worker Type's
 	// instance carries: the job and query protocol, and none of the routes the
-	// built-in Worker Types report to (ADR-draft-installed-worker-instances-hold-their-own-credential).
+	// built-in Worker Types report to (ADR-0545).
 	// The principal also carries a binding to its instance id and job types, which the
 	// six handlers check, because a route pattern cannot say which job a key names.
 	// Not mintable: the supervisor mints it, and nothing asks for it.
