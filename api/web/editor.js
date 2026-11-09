@@ -14,6 +14,7 @@ import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
+import { sharepointServerOperationOptions, sharepointServerParametersPlaceholder, sharepointServerParametersHint, sharepointServerResultType, sharepointServerResultShape } from "./sharepointserver-ops.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
@@ -4384,6 +4385,34 @@ const SERVICE_TASK_KINDS = [
         hint: (v) => "Nimmt auf, was Graph zurückgibt. " + entraResultShape(v.operation) +
           " Der Wert ist zur Laufzeit unter Operations → Instanz → Variablen sichtbar und im Modell als =" +
           (v.resultVariable ? v.resultVariable : "konto") + ".<feld> referenzierbar. Leer lassen, um ihn zu verwerfen.",
+      },
+    ],
+  },
+  {
+    id: "sharepointserver", name: "SharePoint Server", group: "Applications", desc: "Administer site collections on SharePoint Server (Subscription Edition, on-premises): create a team site, read and list sites, set owners, change site administrators and the default groups, delete to the recycle bin, restore, and set the storage quota. The worker runs on a server of the farm.",
+    // A building block on SharePoint teal: the on-premises farm, beside the online Worker.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><path d="M3.5 4h9v2h-9zM3.5 7h4v5h-4zM8.5 7h4v5h-4z" fill="#fff"/></svg>`,
+    ext: "atlas:SharepointServerConnector",
+    fields: [
+      { group: "Farm" },
+      {
+        key: "connector", label: "Worker", datalist: "sharepointserver", placeholder: "sp_farm",
+        hint: "The configured SharePoint Server Worker, by its name under Workers in the Console. Its endpoint is the web application and its worker runs on a server of the farm, as an account that may administer it; there is no credential in the Worker or the model.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: sharepointServerOperationOptions(),
+      },
+      {
+        key: "parameters", label: "Parameters", type: "json", rows: 8,
+        placeholder: (v) => sharepointServerParametersPlaceholder(v.operation || "get-site"),
+        hint: (v) => sharepointServerParametersHint(v.operation || "get-site"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", resultType: (v) => sharepointServerResultType(v.operation || "get-site"), placeholder: "site",
+        hint: (v) => sharepointServerResultShape(v.operation || "get-site"),
       },
     ],
   },

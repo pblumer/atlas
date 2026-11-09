@@ -663,6 +663,10 @@ The control-flow basics most real models use.
   record's open question), Exchange mailbox contacts through Microsoft Graph, and no
   capability claim yet — the two contact Worker Types are not declared interchangeable
   ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  **SharePoint Server farms are a Worker Type too**
+  (ADR-draft-sharepoint-server-worker): a service task marked
+  `<atlas:sharepointServerConnector>` creates and administers site collections on an
+  on-premises farm through a worker on that farm; not yet walked on a real farm.
   **wikiwikibangbang wikis are a Worker Type too**
   ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)): a
   service task marked `<atlas:wikiwikibangbangConnector connector operation …>` opens,

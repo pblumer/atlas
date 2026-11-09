@@ -151,6 +151,9 @@ export function workerShape(kind, provider) {
   // meaning the bundle decides — empty for Exchange Online, a sovereign cloud's host, or
   // an Exchange Server's Remote PowerShell URI.
   const exchange = kind === "exchange";
+  // SharePoint Server's endpoint is the web application, and it has no credential at
+  // all: the worker runs on the farm as an account that may administer it.
+  const spServer = kind === "sharepointserver";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -224,7 +227,7 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview || spMock ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav || wiki ? "required" : "optional")),
+    credRef: preview || spMock || spServer ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav || wiki ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"
@@ -236,6 +239,8 @@ export function workerShape(kind, provider) {
       ? "smtp.office365.com:587"
       : s3
       ? "https://minio.example:9000 (empty = AWS)"
+      : spServer
+      ? "http://sp01.contoso.local (the web application)"
       : exchange
       ? "http://exch01.contoso.local/PowerShell/ (empty = Exchange Online)"
       : carddav

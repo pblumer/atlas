@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The SharePoint Server Worker administers team sites on an on-premises farm.** A new Worker Type `sharepointserver`
+  (`<atlas:sharepointServerConnector>`, ADR-draft-sharepoint-server-worker) creates a site collection with its
+  default groups, reads and lists sites, sets owners, changes site collection administrators and the default
+  groups with AD accounts or AD groups, deletes a site to the recycle bin, restores it, and sets the storage
+  quota. The worker runs on a server of the farm and starts fixed PowerShell for each job, so no model authors a
+  cmdlet and no credential reaches Atlas; refusals a process can act on are BPMN errors. The example
+  `m365-dienste` adds the product «Teamwebsite» to the on-premises catalogue when a SharePoint Server is built.
 - **The M365 test environment can build a SharePoint Server Subscription Edition farm.** `deploy/opentofu/m365-devenv` gains
   `enable_sharepoint_server` (off by default): a VM `sp01` joined to the test forest, built from
   Microsoft's SharePoint image, with SQL Server Developer on the same machine, a single-server
