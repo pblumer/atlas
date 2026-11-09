@@ -65,14 +65,17 @@
     {
       "id": "CDA3",
       "title": "Verified Worker Type mappings",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "CDA2"
       ],
       "issues": [],
       "prs": [],
-      "note": "Prove account versus contact distinction; source-derived provider mappings with no drift."
+      "note": "Candidate half started (programme owner's request, Teams as the first case instead of account/contact): the Entra Team operations and the Teams Phone operations declare claims on their own table rows — neutral io.atlas.collaboration.* and io.atlas.telephony.* identifiers, version 0.1.0, profiles microsoft-teams and microsoft-teams-phone — and GET /api/v1/worker-types projects them per operation as candidate. Tests pin the reviewed set, apply workertype.ValidateCapabilityClaims, require a profile and refuse one contract identity on two operations. Not done: verified/withdrawn states, which need CDA2's published contracts and evidence; the account/contact/entry distinction; no contract with these identifiers exists.",
+      "evidence": [
+        "../../../api/builtinclaims_internal_test.go"
+      ]
     },
     {
       "id": "CDA4",

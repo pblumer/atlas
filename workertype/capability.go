@@ -19,9 +19,12 @@ type CapabilityClaim struct {
 
 var capabilityProfilePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`)
 
-// validateCapabilityClaims checks metadata at manifest admission, never while
-// processing a job. Legacy operations are allowed to declare no claims.
-func validateCapabilityClaims(operation string, claims []CapabilityClaim) error {
+// ValidateCapabilityClaims checks one operation's claims at design time — a
+// manifest's at admission, a built-in Worker Type's operation table in its tests —
+// never while processing a job. It is the one rule both are held to, so a claim a
+// built-in table carries is refused for exactly what would refuse it in a manifest.
+// Legacy operations are allowed to declare no claims.
+func ValidateCapabilityClaims(operation string, claims []CapabilityClaim) error {
 	seen := make(map[string]struct{}, len(claims))
 	for _, claim := range claims {
 		if !workerTypeIDPattern.MatchString(claim.ID) {

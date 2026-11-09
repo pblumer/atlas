@@ -2482,12 +2482,21 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   a CI gate that fails on stale evidence are in review ([PR #1401](https://github.com/pblumer/atlas/pull/1401)). No contract is
   published, no record exists, and revocation is not yet implemented. No Worker Type
   can certify its own claims or obtain runtime routing from JSON validation.
-- 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
+- 🚧 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
   Derive from existing provider operation catalogues, first distinguishing
   an Entra account from a Google contact and an LDAP entry. Mark unknown,
   candidate, verified and withdrawn truthfully, prevent catalogue drift;
   no implicit provider substitution. Depends on CDA2 and ADR-0208's
   relevant trust/pinning prerequisites.
+  *Started with the candidate half:* the operation rows of the Entra and
+  Teams Phone Worker Types carry their claims — Entra's Team operations under
+  the neutral `io.atlas.collaboration.*` identifiers with the `microsoft-teams`
+  profile, Teams Phone's under `io.atlas.telephony.*` with
+  `microsoft-teams-phone` — and `GET /api/v1/worker-types` projects them per
+  operation as `candidate`. Tests pin the reviewed set, hold each row to the
+  manifest's rule, require a profile and refuse one contract identity on two
+  operations. Still open: verified and withdrawn states (they need CDA2's
+  published contracts and evidence), and the account/contact/entry claims.
 - 🔲 **CDA4 — Cross-layer technical capability graph (T3).**
   Extend proposed [ADR-0420](docs/adr/0420-one-graph-model-several-projections.md)
   with stable technical capability and Worker operation nodes, authored

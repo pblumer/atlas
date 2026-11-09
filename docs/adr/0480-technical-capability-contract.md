@@ -136,6 +136,38 @@ No recovery test is required for this isolated design-time metadata slice becaus
 - **Negative:** Built-in provider mappings and a canonical contract catalogue are intentionally deferred; the first slice alone does not power Panorama discovery.
 - **Follow-ups / risks to watch:** Semantic governance and compatibility checks; existing ADR-0208 package-installation gaps; ADR-0420 graph approval; ADR-0475's currently limited provider enforcement; avoiding a second manually maintained operation catalogue.
 
+### As built (2026-11-09): built-in claims on the operation rows (CDA3, candidate half)
+
+§2's rule — derive built-in claims from the provider operation tables, never keep a
+parallel list — is implemented for two Worker Types:
+
+- The row type of `connector/entra.Ops` and of `connector/teamsphone.Ops` carries a
+  `Capabilities` field. The connector packages mirror `workertype.CapabilityClaim`'s three
+  fields instead of importing it, so the worker binary does not take on the contract
+  validator's dependencies.
+- The first claims are Teams': Entra's `create-team`, `add-team-member`, `add-team-owner`,
+  `create-channel` and `archive-team` claim `io.atlas.collaboration.space.*` and
+  `io.atlas.collaboration.channel.create` with the profile `microsoft-teams`; Teams Phone's
+  operations claim `io.atlas.telephony.*` with `microsoft-teams-phone`. `resolve-users`
+  declares none. Every claim is version `0.1.0`: no contract with these identifiers is
+  published.
+- The identifiers are deliberately provider-neutral, and a built-in claim must carry a
+  profile. The neutral name says what kind of step it is; the profile restricts the claim to
+  that provider. Together they say nothing about interchangeability, which §3 leaves to a
+  later decision.
+- `GET /api/v1/worker-types` lists, per built-in Worker Type, the operations that declare a
+  claim (`operations[].capabilities[]`), each with `state: "candidate"`
+  ([ADR-0483](0483-technical-capability-conformance-governance.md)). An operation without
+  a claim is left out: unknown, not unsupported.
+- `workertype.ValidateCapabilityClaims` is the manifest's admission rule, now exported.
+  `api/builtinclaims_internal_test.go` applies it to every row. The same file pins the
+  reviewed set, requires a profile and refuses one contract identity
+  (`id@version+profile`) on two operations.
+
+Not built: the verified and withdrawn states, which need published contracts and evidence
+(CDA2), and claims for the remaining Entra operations — in particular, no
+`directory.user.create`-style claim, per §3.
+
 ## Pros and cons of the options
 
 ### Option 1: Universal Directory Worker Type

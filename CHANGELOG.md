@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Built-in Worker Type operations declare technical capabilities.** The operation rows of the
+  Entra and Teams Phone Worker Types carry their capability claims (ADR-0480), and
+  `GET /api/v1/worker-types` lists them per operation as `candidate`: Entra's Team operations
+  under the provider-neutral `io.atlas.collaboration.*` identifiers (for example
+  `io.atlas.collaboration.channel.create`) with the profile `microsoft-teams`, the Teams Phone
+  operations under `io.atlas.telephony.*` with `microsoft-teams-phone`. A claim describes; it
+  is not verified, authorizes nothing and does not make two providers interchangeable — the
+  profile keeps it to the one provider. Tests pin the reviewed claims, hold every row to the
+  manifest's rule and refuse one contract identity on two operations.
 - **The M365 test environment can build a SharePoint Server Subscription Edition farm.** `deploy/opentofu/m365-devenv` gains
   `enable_sharepoint_server` (off by default): a VM `sp01` joined to the test forest, built from
   Microsoft's SharePoint image, with SQL Server Developer on the same machine, a single-server
