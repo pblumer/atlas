@@ -213,6 +213,19 @@ var Ops = map[string]Op{
 		NeedsBucket: true, NeedsKey: true, TakesExpiry: true, TakesContentType: true,
 		NeedsResult: true, TakesResult: true, Label: "mint an upload link",
 	},
+	// The two operations between a bucket and Atlas's own document store
+	// (ADR-0543). Neither carries the bytes through
+	// a variable: put-document's content is a *reference* to a document the process
+	// holds, and get-document answers with one. Both are bounded by limits.Document, not
+	// by a variable's budget.
+	"put-document": {
+		NeedsBucket: true, NeedsKey: true, NeedsContent: true, TakesMetadata: true,
+		TakesResult: true, Label: "put a document from the document store into a bucket",
+	},
+	"get-document": {
+		NeedsBucket: true, NeedsKey: true,
+		NeedsResult: true, TakesResult: true, Label: "take an object into the document store",
+	},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what was

@@ -80,7 +80,7 @@ import { fmtCount } from "./numfmt.js";
 import {
   CARD_CHARS, CARD_VARS, FIELD_CHARS, FIELD_LINES,
   isLongText, previewText, sizeText, searchableNames, cardOrder, downloadName,
-  variableSizeText, variableShape,
+  variableSizeText, variableShape, documentRef, documentHref, documentSizeText,
 } from "./varpreview.js";
 // The heatmap over the live view (ADR-0496): the strip that
 // chooses what the diagram shows, the shading, and the figures behind it.
@@ -663,6 +663,14 @@ function renderVarsBody(list, collapsed) {
     }).join("")}</div>`;
   }
   html += jsons.map((v) => {
+    // A document reference is the file, not a structure to read: it is a link.
+    const doc = documentRef(v);
+    if (doc) {
+      return `<div class="vjson vdoc-card" data-var="${esc(v.name)}">
+        <div class="vj-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(tr("ops.doc.label"))}</span></div>
+        ${documentLink(doc, "vdoc-link")}
+      </div>`;
+    }
     // A structure the listing cut cannot be laid out: it is not valid JSON any more.
     // It says what it is and opens whole in the value window instead.
     if (v.truncated) {
@@ -684,6 +692,15 @@ function renderVarsBody(list, collapsed) {
     </div>`;
   }).join("");
   return html;
+}
+
+// documentLink renders a variable that names a document as a download link: the file is
+// in the document store, and the variable holds only its reference
+// (ADR-0543). cls is the surface's own class.
+function documentLink(ref, cls) {
+  const size = documentSizeText(ref);
+  return `<a class="${cls} vdoc" href="${esc(documentHref(ref.id))}" download="${esc(ref.name)}"
+    title="${esc(tr("ops.doc.download", { name: ref.name }))}"><span class="vdoc-ic" aria-hidden="true">&#128196;</span><span class="vdoc-name">${esc(ref.name)}</span>${size ? `<span class="vdoc-size">${esc(size)}</span>` : ""}</a>`;
 }
 
 // showAllBtn is the way from a value's preview to the whole of it in the value window,
@@ -4773,6 +4790,7 @@ const SERVICE_TASK_KINDS = [
           { v: "forward", l: "Forward message (with its attachments)" },
           { v: "get-attachment", l: "Read attachment into a variable" },
           { v: "export-attachment", l: "Export attachment to an S3 Worker" },
+          { v: "store-attachment", l: "Store attachment as a document" },
         ],
       },
       { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward" },
@@ -4844,15 +4862,15 @@ const SERVICE_TASK_KINDS = [
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }, { v: "html", l: "Include the text and the HTML" }],
         hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB. The HTML version is cleaned of scripts, forms and everything else that runs, and cut to fit the variable; show it to a person with an E-mail view in a task form, which keeps remote images blocked until they are asked for. What a process receives, every operator of a shared server can read — include the text, let alone the HTML, only where the process needs it.",
       },
-      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
+      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment" },
       {
         key: "attachmentId", label: "Attachment", placeholder: "=mail.attachments[1].id", fx: true,
-        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment",
         hint: "The attachment to read: the id an envelope's attachments list carries — usually a FEEL expression (fx), e.g. =mail.attachments[1].id, or an item of a multi-instance loop over them.",
       },
       {
         key: "allowedTypes", label: "Accepted types", placeholder: "application/pdf, image/*",
-        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment",
         hint: "Optional. Comma-separated media types the task accepts, judged from the document's content rather than from what the sender called it. Anything else ends the task with the error code MAIL_ATTACHMENT_REJECTED. Programs, scripts, macro documents, encrypted archives and PDFs that run code are refused in any case, and a Worker with a malware scanner scans every attachment first.",
       },
       { group: "Object store", showIf: (v) => v.operation === "export-attachment" },
@@ -4865,18 +4883,20 @@ const SERVICE_TASK_KINDS = [
         key: "key", label: "Object key", placeholder: "=\"rechnungen/\" + mail.messageId + \".pdf\"", fx: true, showIf: (v) => v.operation === "export-attachment",
         hint: "Where the attachment is stored. Build it from values that stay the same on a retry — a key computed from now() writes a second object when the task runs again.",
       },
-      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment" },
       {
         key: "resultVariable", label: "Result variable",
         resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
         placeholder: "mail",
-        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" || v.operation === "store-attachment",
         hint: (v) => (v.operation === "move"
           ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
           : v.operation === "get-attachment"
             ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
             : v.operation === "export-attachment"
               ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
+              : v.operation === "store-attachment"
+                ? "Receives a reference to the attachment in Atlas's document store — name, contentType as detected, size — with declaredType and the inspection. Up to 35 MiB, and the file never passes through a variable: a form shows it as a download, and an S3 Put document or a CSV import reads it."
               : (v.operation === "list" ? tr("pnl.kindB.mail.resultList") : tr("pnl.kindB.mail.resultMessage"))),
       },
     ],
@@ -5685,6 +5705,8 @@ const SERVICE_TASK_KINDS = [
           { v: "delete-object", l: "Delete object" },
           { v: "presign-get", l: "Link to download" },
           { v: "presign-put", l: "Link to upload" },
+          { v: "put-document", l: "Put document" },
+          { v: "get-document", l: "Take into document store" },
         ],
       },
       {
@@ -5698,8 +5720,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "content", label: "Content", placeholder: "=antwort", fx: true,
-        showIf: (v) => v.operation === "put-object",
-        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+        showIf: (v) => v.operation === "put-object" || v.operation === "put-document",
+        hint: (v) => (v.operation === "put-document"
+          ? "A variable holding a document reference, e.g. =antrag — the file a task form uploaded. The document goes from Atlas's document store into the bucket, up to 35 MiB, and only a document this instance was given."
+          : "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store."),
       },
       {
         key: "encoding", label: "Content is", type: "select",
@@ -5751,7 +5775,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "meta", label: "Metadata & headers", type: "map", childType: "atlas:S3Meta", fx: true,
-        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object",
+        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object" || v.operation === "put-document",
         hint: "Extra request headers. A plain name becomes user metadata on the object (x-amz-meta-<name>), which is where a case number belongs; a name starting with x-amz- is sent as itself, which is how you reach server-side encryption or a storage class. On a copy these replace the source's metadata rather than adding to it — the store offers no third option.",
       },
       { group: "Output" },
@@ -5776,6 +5800,10 @@ const SERVICE_TASK_KINDS = [
               return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through atlas.";
             case "copy-object":
               return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
+            case "get-document":
+              return "A reference to the new document lands here — =datei.name, =datei.size, =datei.contentType. The file itself is in Atlas's document store, not in the variable; a form, Operations and Put document all take the reference.";
+            case "put-document":
+              return "The stored object's identity lands here — =datei.etag, =datei.key, and =datei.document, the reference it came from. Leave empty to discard it.";
             default:
               return "The stored object's identity lands here — =datei.etag, and =datei.versionId on a versioned bucket. Leave empty to discard it.";
           }
@@ -13472,6 +13500,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance, mayUs
     // The listing arrives with ?values=preview, so a long value is already cut and
     // says what the whole is (truncated, size, lines, shape, count): variableShape and
     // variableSizeText read it either way.
+    const doc = documentRef(v);
+    if (doc) {
+      return `<span class="chip vp-chip-doc" ${at}><span class="vp-chip-k">${esc(v.name)}</span>=${documentLink(doc, "vp-doc-link")}</span>`;
+    }
     const shape = variableShape(v);
     const long = !shape && (v.truncated || (v.kind === "string" && isLongText(v.value, CARD_CHARS, 1)));
     if (!shape && !long) {
@@ -16121,7 +16153,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // scopeChipHTML labels, in the one list, the scope a variable lives in below the
   // process: what kind of scope it is and whose.
   function scopeChipHTML(v) {
-    const kind = v.local ? "local"
+    const kind = v.local || v.scopeKind === "local" ? "local"
       : ({ subprocess: "subprocess", multiInstanceBody: "multiInstanceBody", loopBody: "loopBody" }[v.scopeKind] || "other");
     const label = kind === "other" ? v.scope : `${tr(`ops.vars.chip.${kind}`)} · ${v.scope}`;
     return `<span class="c-scope" title="${esc(tr(`ops.vars.chipTitle.${kind}`, { name: scopeName(v.scope) }))}">${esc(label)}</span>`;
@@ -16143,9 +16175,12 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // knows about the value — what it was before, what it became — and `cls` marks the
   // row as part of a section that can be folded away.
   function varRow(v, opt = {}) {
-    const complex = isComplexVar(v);
+    const doc = documentRef(v);
+    const complex = !doc && isComplexVar(v);
     let valCell;
-    if (complex) {
+    if (doc) {
+      valCell = documentLink(doc, "c-doc");
+    } else if (complex) {
       // A list and an object read almost alike once their text is truncated — the peek of
       // [{"Nachname":…}] and of {"Nachname":…} differ by one character, off the left edge
       // of what fits. So the summary carries the brackets, and the row expands in place:
@@ -16171,9 +16206,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
              title="${esc(tr("ops.vars.open", { name: v.name }))}">⤢ ${esc(tr("ops.vars.showAll"))} · ${esc(sizeText(v.value))}</button>`
         : `<span class="c-val ${cls}">${esc(v.value)}</span>${ref}`;
     }
-    const typeBadge = complex
-      ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
-      : `<span class="vtag">${esc(v.kind)}</span>`;
+    const typeBadge = doc
+      ? `<span class="vtag obj">${esc(tr("ops.doc.label"))}</span>`
+      : complex
+        ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
+        : `<span class="vtag">${esc(v.kind)}</span>`;
     const copyData = complex ? prettyJSON(v.value) : v.value;
     // In the one list a variable that lives below the process says which scope holds it,
     // by the kind of scope as well as its element: a multi-instance body and one of its
@@ -16428,7 +16465,12 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       html += g.vars.map((v) => varRow(v, {
         cls: "v-env",
         chips: v.lateOnly ? ` <span class="c-late" title="${esc(tr("ops.vars.lateOnlyTitle"))}">${esc(tr("ops.vars.lateOnly"))}</span>` : "",
-        note: v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "",
+        note: (v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "")
+          // A multi-instance body's collection is filled one element per round, and those
+          // element writes are not part of the history (ADR-0296): it reads unfilled until
+          // the body completes. Said where it is read, so an empty list is not taken for
+          // rounds that produced nothing — each round's result is in its own Output.
+          + (v.scopeKind === "multiInstanceBody" ? `<div class="v-was v-coll">${esc(tr("ops.vars.collectionNote"))}</div>` : ""),
       })).join("");
     }
     if (!envShown) html += note(none("ops.vars.none.env"), "v-env");

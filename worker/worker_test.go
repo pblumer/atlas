@@ -118,14 +118,7 @@ func liveAtlasWith(t *testing.T, model, vars string, opts ...api.Option) *httpte
 		_ = store.Close()
 		_ = log.Close()
 	})
-	// Every process belongs to an application (ADR-draft-artifacts-belong-to-an-application).
-	var app struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(post(t, ts, "/api/v1/applications", `{"name":"Worker"}`, "application/json"), &app); err != nil || app.ID == "" {
-		t.Fatalf("create application: %v", err)
-	}
-	post(t, ts, "/api/v1/deployments?projectId="+app.ID, model, "application/xml")
+	deployInApp(t, ts, model)
 	post(t, ts, "/api/v1/processes/1/instances", `{"variables":`+vars+`}`, "application/json")
 	return ts
 }

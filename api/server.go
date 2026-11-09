@@ -731,6 +731,12 @@ type Server struct {
 	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
 	s3Registry *s3.Registry
 
+	// docCfg is where this installation keeps documents, and docState the document
+	// store, opened on first use (documents.go,
+	// ADR-0543).
+	docCfg   documentConfig
+	docState documentState
+
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
@@ -2499,7 +2505,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// records is ingested and validated on the engine with the file arriving through a
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
-	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler { return csvimport.Handler(rd, s.processLookup) })
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		// A source variable may name an uploaded document rather than hold its text
+		// (ADR-0543).
+		return csvimport.HandlerWithDocuments(rd, s.processLookup, s.readDocumentBytes)
+	})
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
 	// writing the extracted values into the task's result variable as a JSON array.
@@ -2721,6 +2731,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// processor and its bounded, resumable cursor.
 	s.wg.Add(1)
 	go s.retentionSweeper(s.retentionInterval)
+	// The document store's sweep removes uploads nobody used within their time to live
+	// and documents whose instances history retention removed. It reads state through a
+	// view, off the run loop, and touches nothing until the store exists.
+	s.wg.Add(1)
+	go s.documentSweeper(documentSweepInterval)
 	// Recovery checkpoints bound restart time (ADR-0131). Off unless a cadence is
 	// configured. Unlike the pollers above, this one's actual work happens *on* the run
 	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
@@ -3351,7 +3366,15 @@ func WithWorkerHistory(connector, scope string) Option {
 // Handlers read through a [state.ReadView] taken while the loop is held, so each
 // round sees one coherent state rather than whatever the writer has reached since —
 // the guarantee they used to get for free by running on the writer itself.
-func (s *Server) drive() error {
+func (s *Server) drive() error { return s.driveThen(nil) }
+
+// driveThen is drive with afterDurable run once, right after the first RunUntilIdle
+// has made the caller's command durable and before any worker is handed a job it
+// unblocked. It is where a route binds the documents its command carried
+// (ADR-0543): bound later, a worker could already
+// be asked to read a document its instance does not hold yet.
+func (s *Server) driveThen(afterDurable func()) error {
+	var pendingBinds []jobBind
 	for {
 		var (
 			jobs []job.Job
@@ -3378,6 +3401,14 @@ func (s *Server) drive() error {
 		if err != nil {
 			return err
 		}
+		// The caller's command, and the previous round's completions, are durable now:
+		// RunUntilIdle above wrote them.
+		if afterDurable != nil {
+			afterDurable()
+			afterDurable = nil
+		}
+		s.bindJobOutputs(pendingBinds)
+		pendingBinds = nil
 		if len(jobs) == 0 {
 			return nil
 		}
@@ -3406,6 +3437,17 @@ func (s *Server) drive() error {
 			}
 			if sealErr := s.encipherJobVars(outcomes[i].Job.Key, outcomes[i].Completion.Outputs); sealErr != nil {
 				outcomes[i].Err = sealErr
+			}
+		}
+		// A worker's output may name a document it stored (an S3 get-document); it is
+		// bound to the job's instance once the completion is durable, which is the next
+		// round's RunUntilIdle (ADR-0543).
+		for i := range outcomes {
+			if outcomes[i].Err != nil {
+				continue
+			}
+			if ids := documentRefsOf(outcomes[i].Completion.Outputs); len(ids) > 0 {
+				pendingBinds = append(pendingBinds, jobBind{ids: ids, instance: outcomes[i].Job.ProcessInstanceKey})
 			}
 		}
 		s.driveMu.Lock()

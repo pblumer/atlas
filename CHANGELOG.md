@@ -22,6 +22,27 @@ _Changed_ / _Removed_ for each version.
   than taken from it. The Modeler's "Not assigned" page offers it as "Assign to an application…";
   the MCP tools are `atlas_list_unassigned` and `atlas_adopt_artifacts`
   (ADR-draft-artifacts-belong-to-an-application).
+- **A file a process receives is a document, not a variable.** A file picked in a task form is
+  uploaded to a document store and the task is completed with a reference under the field's own
+  key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
+  outside the log, the state and the per-step history, up to `limits.Document` (35 MiB), and no
+  longer read as text into `csvText` whatever the field was called. `POST /api/v1/documents`
+  uploads, `GET /api/v1/documents/{id}` downloads, and `GET /api/v1/documents/{id}/meta` reads the
+  reference and its state. An upload is its uploader's until a variable naming it enters an
+  instance; then whoever may read that instance may read it. Every route that lets variables in
+  refuses a reference the caller may not use, and the routes that cannot bind one (messages,
+  public links, order actions) refuse references outright. Unused uploads are removed after
+  `--document-pending-ttl` (24 h by default), and a document is removed once history retention
+  removed every instance it entered. Documents live in the data directory by default, or in an S3
+  bucket with `--documents-backend=s3 --documents-s3-worker --documents-s3-bucket`. A full
+  snapshot carries them only with `?documents=true`. The CSV import reads a referenced file from
+  the store, in process and on a Worker Instance, which reads it under its job's lease through
+  `POST /api/v1/jobs/{key}/documents/{id}` (`workersdk.ReadDocument`, `UploadDocument`). S3 tasks
+  gain `put-document` and `get-document`, mail tasks `store-attachment`. The MCP tools
+  `atlas_document_meta`, `atlas_read_document` and `atlas_upload_document` reach the store. A
+  document a personal variable names is enciphered under the data subject's key and becomes
+  unreadable with an erasure. Operations and the replay show a reference as a download link
+  (ADR-0543).
 - **A process can publish an interface, not its model.** A deployed definition's message
   entry points can be published as a small, versioned contract another domain binds to
   (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition
@@ -213,6 +234,14 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A round of a multi-instance names what it produced.** The replay's Output of one round —
+  and the diagram's in/out card — now lists what the round wrote into its own scope, such as a
+  script's result variable or a person's answer on the form, where it said "wrote nothing" for
+  every round. The timeline adds those values to the round's `writes` with `scopeKind`
+  `local`; an operator's correction of a local is not included. The body's output collection
+  still reads unfilled until the loop finishes, because its per-round element writes are not
+  part of the history (ADR-0296); the Environment now says so on the collection
+  ([ADR-0542](docs/adr/0542-variables-by-provenance.md)).
 - **A wide decision table fits its hover card.** The card that shows which rule fired —
   in Operations → Decisions, the live view and the instance replay — held every cell to one
   line inside a 480 px card, so a table with a long list of literals or a long input

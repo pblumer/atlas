@@ -1360,6 +1360,8 @@ Adoption and polish.
 
 - 🚧 **atlas hub (legacy delivery ID BMP):** trusted discovery and distribution for solutions: process applications and their product catalogues now, with standalone catalogues, reusable components and public, internal or commercial offers as separately governed extensions. Signed Blueprint Registry v1 retains its existing versioned application package, safety checks and native import baselines. **Proposed extension:** application-plus-product-catalogue solution bundles by default, standalone catalogue offers, free/paid/internal access and explicitly governed update policies; unattended publication requires a separate ADR/recovery gate. The free engine does not depend on payments or runtime licence checks. Before installing, the preview shows the application's architecture sketch, derived by the server from the verified package's process models, and draws each BPMN model read-only ([ADR draft](docs/adr/0539-blueprint-architecture-preview.md)). [Programme](docs/planning/blueprint-marketplace-program.md) · [Accepted ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md) · [Catalogue extension plan](docs/planning/blueprint-catalogue-bundles.md) · [Proposed ADR](docs/adr/0506-marketplace-catalogue-bundles-and-updates.md).
 
+- 🚧 **Worker Types as distributed artifacts (delivery ID WTD):** a Worker Type ships as a signed artifact that atlas installs, verifies and launches, and atlas hub distributes, for atlas, commercial, third-party and organisation-internal publishers ([Accepted ADR-0535](docs/adr/0535-worker-types-as-distributed-artifacts.md)). On main: `workersdk` free of atlas, the Worker protocol contract v1 and its handshake, the worker-only `atlas-workers` executable, a content-addressed store of installed releases verified before every launch, configuration from the manifest's own schema, and the required idempotency declaration with a stable `idempotencyKey` per job ([ADR-0538](docs/adr/0538-operations-declare-idempotency-and-effect.md)). Not yet: a credential per installed instance, the generic worker queries, publisher signatures and revocation (gated by the Proposed [ADR-0536](docs/adr/0536-worker-sdk-licence-and-hub-curation.md)), the container and Kubernetes launchers, and the migration of the built-in Worker Types. [Programme manifest](docs/programs/wtd/program.json).
+
 - 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
   descriptor for a Worker Type operation's claimed semantics: resource kind and
   identity scope, JSON Schema roots, error taxonomy, idempotency, consistency and
@@ -1650,6 +1652,16 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   tooling via `keyId`, a KMS/envelope (A4) backend, extending the vault to the DMN
   resolver and other `ATLAS_*_TOKEN` references, and a Console Organization →
   Secrets panel over the CRUD endpoints.
+- ✅ **A file a process receives is a document, not a variable**
+  ([ADR-0543](docs/adr/0543-a-file-is-a-document-not-a-variable.md),
+  [plan](docs/planning/documents-instead-of-variables.md)). ✅ A document store (local by
+  default, S3 selectable), upload/download routes with per-document access, binding to the
+  instance a reference enters, a sweep for unused uploads and released documents, the Tasks
+  app uploading files as documents, Operations and the replay showing a reference as a link,
+  and the CSV import reading a referenced file; Worker Instances reading documents under
+  their job's lease, S3 and mail Workers moving documents, MCP tools, and personal documents
+  enciphered under the data subject's key. 🔲 Quality checks over files of many thousands of
+  rows, whose parsed result does not fit one variable.
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone P — Panorama architecture & live landscape ✅

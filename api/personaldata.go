@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/pblumer/atlas/api/docstore"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/compiler"
@@ -127,6 +128,16 @@ func (s *Server) seal(p personalSealing, vars []model.VariableValue) error {
 		}
 		if v.Kind == model.VarJSON && vault.IsEnciphered(v.Text) {
 			continue // already sealed: a value read out and written back unchanged
+		}
+		// A personal variable that names a document makes the document personal data
+		// too: its bytes are enciphered under the same subject's key, so an erasure
+		// reaches the file as it reaches the value
+		// (ADR-0543). Here, before the value's own
+		// envelope hides the reference.
+		if v.Kind == model.VarJSON {
+			if err := s.sealDocuments(p.subject, docstore.FindRefsInJSON(v.Text)); err != nil {
+				return fmt.Errorf("encipher the document %q names: %w", v.Name, err)
+			}
 		}
 		plain := v.Text
 		if v.Kind == model.VarBool {

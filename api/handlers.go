@@ -2727,6 +2727,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// which is the loop's result and not an input to any one round — and an element
 		// that declares neither mappings nor a loop is never scanned at all.
 		inputsByEIK := map[uint64][]variableView{}
+		// What an element instance wrote into that same scope of its own. A round of a
+		// multi-instance keeps its result there until the body collects it (ADR-0077), and
+		// none of the folds above reads the scope, so without this every round reported
+		// writing nothing. Only the element's own writes count (its producer key): an
+		// operator's correction of a local is not the element's output. A loop body and a
+		// subprocess are left out — their scopes are folded above and attributed there.
+		localWritesByEIK := map[uint64][]variableView{}
 		iterationByEIK := map[uint64]int{}
 		for actPos, v := range activations {
 			acp := ver.cp(actPos)
@@ -2749,9 +2756,18 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			if len(targets) == 0 {
 				continue
 			}
+			_, isBody := loopBodyTokens[v.TokenID]
+			ownScope := !isBody && !ver.isType(actPos, v.ElementID, compiler.TypeSubProcess)
 			byName := map[string]variableView{}
+			written := map[string]variableView{}
 			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
 				if _, ok := targets[vv.Name]; !ok {
+					if ownScope && vv.ProducerKey == v.ElementInstanceKey {
+						view := toVariableView(vv)
+						view.Scope = ver.elementID(actPos, v.ElementID)
+						view.ScopeKind = scopeKindLocal
+						written[vv.Name] = view // the last value it wrote
+					}
 					return nil
 				}
 				view := toVariableView(vv)
@@ -2767,6 +2783,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 			inputsByEIK[v.ElementInstanceKey] = list
+			if len(written) > 0 {
+				own := make([]variableView, 0, len(written))
+				for _, view := range written {
+					own = append(own, view)
+				}
+				localWritesByEIK[v.ElementInstanceKey] = own
+			}
 			// The counter is also this step's identity — which round of the loop it is — so
 			// the history can tell repeated activations of one task apart without the
 			// operator reading variable lists. Surfaced as a number of its own rather than
@@ -3003,13 +3026,15 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		resp.VariableAttribution = len(byProducer) > 0
 		for i := range resp.Steps {
 			w := byProducer[resp.Steps[i].ElementInstanceKey]
-			if len(w) == 0 {
+			own := localWritesByEIK[resp.Steps[i].ElementInstanceKey]
+			if len(w) == 0 && len(own) == 0 {
 				continue
 			}
-			vars := make([]variableView, 0, len(w))
+			vars := make([]variableView, 0, len(w)+len(own))
 			for _, view := range w {
 				vars = append(vars, view)
 			}
+			vars = append(vars, own...)
 			sort.Slice(vars, func(a, b int) bool {
 				if vars[a].Scope != vars[b].Scope {
 					return vars[a].Scope < vars[b].Scope
@@ -3308,6 +3333,13 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
 		return
 	}
+	// An operator may point a variable at a document they may read; it is bound to this
+	// instance once the change is durable (ADR-0543).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	scopeKey := payload.ScopeKey
 	// A declared personal value is enciphered here, before it becomes a command, exactly
 	// as it would be on the way in from a form or a worker (ADR-0314). An operator
@@ -3360,9 +3392,14 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
-	// its duration is the stall ADR-0157 step 6 removes.
+	// its duration is the stall ADR-0157 step 6 removes. A document the change names
+	// is bound once it is durable, before a worker can be asked to read it.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !scopeBad && scanErr == nil {
+				s.bindDocuments(docIDs, key)
+			}
+		})
 	}
 	switch {
 	case scanErr != nil:
@@ -4408,6 +4445,13 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Which instance a message reaches is decided by correlation, possibly long after
+	// this request, so a document it named could not be bound to it
+	// (ADR-0543).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	var (
@@ -5607,6 +5651,11 @@ func toolCallsFromReport(jv *model.JobValue, reps []toolCallReport) ([]model.Too
 		if err != nil {
 			return nil, fmt.Errorf("tool call %q: %v", rep.Tool, err)
 		}
+		// A tool's arguments are a model's, handed to a tool; a document reference among
+		// them would name a file nothing binds to anything.
+		if code, msg := refuseDocumentRefs(args); code != 0 {
+			return nil, fmt.Errorf("tool call %q: %s", rep.Tool, msg)
+		}
 		out = append(out, model.ToolCall{
 			Tool:      strings.TrimSpace(rep.Tool),
 			CallId:    strings.TrimSpace(rep.CallId),
@@ -5633,6 +5682,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// A worker's result may name a document; the worker (or operator) must be one who
+	// may use it, and it is bound to the job's instance once the completion is durable
+	// (ADR-0543).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	// A worker result landing a job's output is one of the two edges ADR-0314 enciphers
@@ -5717,6 +5774,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		unauthorized bool
 		badReport    error
 		runErr       error
+		jobInstance  uint64
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -5724,6 +5782,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		jobInstance = jv.ProcessInstanceKey
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
@@ -5784,7 +5843,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !notHolder && !unauthorized && badReport == nil {
+				s.bindDocuments(docIDs, jobInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -5993,6 +6056,16 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A file field's answer is a reference to the document its browser uploaded; the
+	// person completing must be one who may use it, and it is bound to the task's
+	// instance once the completion is durable
+	// (ADR-0543). Before sealing, which would hide
+	// a reference inside a personal value.
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// The form's answer is the other half of the in edge: a submitted personal value is
 	// enciphered before it becomes a command (ADR-0314).
 	if err := s.encipherJobVars(key, vars); err != nil {
@@ -6023,6 +6096,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		// read before the completion, because a completed task's element instance is
 		// gone, and with it the way up to the sitting.
 		sitting, sittingPI uint64
+		taskInstance       uint64
 	)
 	s.do(func() {
 		// A job that can't be read — absent, already completed, or unreadable — is
@@ -6033,6 +6107,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		taskInstance = jv.ProcessInstanceKey
 		// A sitting that cannot be read is no reason to refuse the answer: the
 		// completion goes ahead, and the next screen is found in the inbox instead.
 		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
@@ -6042,7 +6117,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found {
+				s.bindDocuments(docIDs, taskInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -7049,6 +7128,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"inputs": j.Inputs, "resultVariable": j.Result,
 		}}
 	case compiler.CsvImportJobTypeIndex:
+		// A source that names a document is not read here: this runs on the run loop,
+		// and reading a document is file or network I/O. The payload carries the
+		// document's id instead, and the Worker Instance reads it under the job's lease
+		// (POST /api/v1/jobs/{key}/documents/{id},
+		// ADR-0543).
 		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease
@@ -7056,7 +7140,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
-			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
+			"source": j.Source, "sourceDocument": j.SourceDocument, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
 		}}

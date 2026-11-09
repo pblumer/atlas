@@ -127,6 +127,10 @@ export default {
   "ops.vars.window.download": "Herunterladen",
   "ops.vars.window.downloadTitle": "Den Wert als Datei speichern",
   "ops.vars.window.close": "Schliessen",
+  "backup.full.withDocuments": "Mit Dokumenten herunterladen",
+  "backup.full.withDocumentsTitle": "Der Snapshot enthält zusätzlich die Dateien, die Prozesse erhalten haben (Dokumentenspeicher). Ohne sie bleiben die Verweise erhalten, die Dateien sind nach einer Wiederherstellung aber nicht verfügbar.",
+  "ops.doc.download": "{name} herunterladen",
+  "ops.doc.label": "Dokument",
   "ops.vars.sec.input": "Eingabe",
   "ops.vars.sec.inputHint": "lokal in dieser Instanz",
   "ops.vars.sec.output": "Ausgabe",
@@ -167,6 +171,7 @@ export default {
   "ops.vars.atEnd": "bei Abschluss: {value}",
   "ops.vars.lateOnly": "erst bei Abschluss",
   "ops.vars.lateOnlyTitle": "Kam hinzu, während diese Instanz lief – geschrieben von einem anderen Pfad oder von Hand",
+  "ops.vars.collectionNote": "Füllt sich Runde für Runde, erscheint hier aber erst gefüllt, wenn die Schleife abgeschlossen ist. Das Ergebnis jeder Runde steht in deren Ausgabe.",
   "ops.vars.head.iteration": "Runde {n}",
   "ops.vars.head.done": "abgeschlossen",
   "ops.vars.head.active": "aktiv",
@@ -1275,7 +1280,7 @@ export default {
   "tasks.folders.unit.h": "Stunden",
   "tasks.folders.unit.d": "Tagen",
 
-  "tasks.complete.fileUnreadable": "Datei konnte nicht gelesen werden: {error}",
+  "tasks.complete.uploadFailed": "Datei konnte nicht hochgeladen werden: {error}",
 
   // The FEEL assistant (feel-assistant.js, ADR-0445).
   "feel.title": "FEEL-Assistent",
@@ -5418,7 +5423,7 @@ export default {
   "workerDoc.mail.trap": "Schicke die erste echte Serie an dich selbst und prüfe, dass die Absenderadresse senden darf (SPF/DKIM). Eine Automatisierung, die zweihundert falsche Mails verschickt, ist schneller als jede Korrektur. Und ein Watch veröffentlicht Mail von <b>allen</b>, die an die Adresse schreiben können: Eine Absenderadresse ist eine Behauptung, die jeder aufstellen kann — beschränke den Watch also auf erlaubte Absender <i>und</i> verlange einen DMARC-Pass.",
   "workerDoc.csv.title": "Textdatei",
   "workerDoc.csv.needs": "Nichts einzurichten: kein konfigurierter Worker, kein Credential, kein Endpoint. Das Layout steht in der Task, der Text der Datei ist eine Prozessvariable.",
-  "workerDoc.csv.step1": "Lesen: Lege den Text der Datei zuerst in eine Variable (ein Formular-Upload, ein REST-Aufruf), nenne sie als Quelle, und die Zeilen landen als JSON-Array von Objekten in der Ergebnisvariable.",
+  "workerDoc.csv.step1": "Lesen: Nenne als Quelle die Variable, die die Datei enthält – einen Dokument-Verweis aus einem Formular-Upload oder den Text der Datei (etwa aus einem REST-Aufruf) –, und die Zeilen landen als JSON-Array von Objekten in der Ergebnisvariable.",
   "workerDoc.csv.step2": "Sag, wie das Layout aussieht: Trennzeichen und Kopfzeile für eine Datei mit Trennzeichen, <code>name:width</code>-Paare für eine mit fester Breite, Feldnamen für Attribut-Wert-Paare. Eine Datei mit Trennzeichen und Kopfzeile kann ihre Spalten selbst ableiten.",
   "workerDoc.csv.step3": "Schreiben: Die Quellvariable enthält die Zeilen als Array von Objekten, und die erzeugte Datei landet als Text in der Ergebnisvariable — gib sie an einen Mail-Anhang, einen REST-Aufruf oder eine Task vom Typ Verzeichnisdatei weiter.",
   "workerDoc.csv.trap": "Ein Wert mit fester Breite, der breiter ist als seine Spalte, wird beim Schreiben abgeschnitten, weil das Format ihn nicht halten kann. Bemiss die Spalten nach dem breitesten Wert, den du tatsächlich erwartest.",

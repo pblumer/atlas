@@ -67,7 +67,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   single-instance view and in the replay's Variables tab. The harness cuts values the way
   `?values=preview` does, so the spec also holds that the overview asks for previews, that
   opening a cut value reads the instance whole by its key, and that the single-instance
-  view copies whole values.
+  view copies whole values. A variable that names a document
+  (ADR-0543) is a download link on the card, in the
+  single view and in the replay. `tasks-logo-upload.spec.mjs` holds that a file field
+  without a catalogue uploads its file as a document first and completes with the
+  reference under its own key, and that a failed upload leaves the task open.
 
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
@@ -491,9 +495,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   the **Variables tab of a selected element**, on one round of a multi-instance task inside a
   subprocess, beside a second subprocess (`variables-sections-harness.html`). The round's
   variables must fall into *Input* (its counter and item, nothing else), *Output* (what it
-  wrote, a rewritten value saying what it was, a new one marked new) and a folded
+  wrote — including its answer, kept in the round's own scope — a rewritten value saying
+  what it was, a new one marked new) and a folded
   *Environment*, grouped body → subprocess → process → constants, without the variable of the
-  subprocess running beside it. A round still running must say it has no output yet; a name
+  subprocess running beside it, and with the body's collection saying that it reads
+  unfilled until the loop is done. A round still running must say it has no output yet; a name
   the filter finds in the folded environment must show; sorting the table must keep every row
   in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
   nothing selected the tab must stay one list whose scope chip names the kind of scope.

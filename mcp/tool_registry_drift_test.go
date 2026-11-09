@@ -191,6 +191,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_reindex_instances":                  "POST /api/v1/processes/{key}/reindex-instances",
 	"atlas_mail_outbox":                        "GET /api/v1/mail/outbox",
 	"atlas_clear_mail_outbox":                  "DELETE /api/v1/mail/outbox",
+	"atlas_document_meta":                      "GET /api/v1/documents/{id}/meta",
+	"atlas_read_document":                      "GET /api/v1/documents/{id}",
+	"atlas_upload_document":                    "POST /api/v1/documents",
 	"atlas_instance_variables":                 "GET /api/v1/instances/{key}/variables",
 	"atlas_instance_jobs":                      "GET /api/v1/instances/{key}/jobs",
 	"atlas_instance_timeline":                  "GET /api/v1/instances/{key}/timeline",
@@ -258,6 +261,7 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
+	"POST /api/v1/jobs/{key}/documents/{id}": "the worker protocol: a document read under a job's lease, for the Worker Instance working that job; an agent holds no lease",
 	// Installed Worker Type artifacts (ADR-0535, migration step 3). Installing one puts
 	// code on the server that its supervisor runs; that is an administrator's decision
 	// made with the artifact in hand, not something an agent should be able to do or

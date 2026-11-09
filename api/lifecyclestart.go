@@ -83,9 +83,20 @@ func (s *Server) startBinding(b catalog.Binding, triggerID string, vars []model.
 
 // fireTrigger enqueues one directed trigger and drives it to a durable answer.
 func (s *Server) fireTrigger(defKey uint64, message, source, triggerID string, vars []model.VariableValue) (engine.TriggerResult, error) {
+	return s.fireTriggerBinding(defKey, message, source, triggerID, nil, vars)
+}
+
+// fireTriggerBinding is fireTrigger that binds the documents the variables carry to the
+// instance it created, once that is durable
+// (ADR-0543).
+func (s *Server) fireTriggerBinding(defKey uint64, message, source, triggerID string, docIDs []string, vars []model.VariableValue) (engine.TriggerResult, error) {
 	var res engine.TriggerResult
 	s.do(func() { s.proc.TriggerStart(defKey, message, source, triggerID, &res, vars...) })
-	if err := s.drive(); err != nil {
+	if err := s.driveThen(func() {
+		if res.Outcome == engine.TriggerCreated {
+			s.bindDocuments(docIDs, res.InstanceKey)
+		}
+	}); err != nil {
 		return res, err
 	}
 	return res, nil

@@ -240,6 +240,42 @@ func (v *Vault) Open(name string, e Envelope) (string, error) {
 	return string(plain), nil
 }
 
+// SealBytes enciphers a document under the subject's data key, creating the key on first
+// use, and answers the nonce and the ciphertext as one opaque value. name binds it to
+// what it is — a document's id — as Seal binds a value to its variable
+// (ADR-0543).
+func (v *Vault) SealBytes(subject, name string, plain []byte) ([]byte, error) {
+	if subject == "" {
+		return nil, fmt.Errorf("vault: seal %q: no data subject", name)
+	}
+	aead, err := v.dataKeyAEAD(subject, true)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("vault: nonce: %w", err)
+	}
+	return aead.Seal(nonce, nonce, plain, personalAAD(subject, name)), nil
+}
+
+// OpenBytes deciphers what SealBytes produced. An erased subject is ErrErased.
+func (v *Vault) OpenBytes(subject, name string, sealed []byte) ([]byte, error) {
+	aead, err := v.dataKeyAEAD(subject, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(sealed) < aead.NonceSize() {
+		return nil, fmt.Errorf("vault: open %q of subject %q: too short", name, subject)
+	}
+	n := aead.NonceSize()
+	plain, err := aead.Open(nil, sealed[:n], sealed[n:], personalAAD(subject, name))
+	if err != nil {
+		return nil, fmt.Errorf("vault: open %q of subject %q: %w", name, subject, err)
+	}
+	return plain, nil
+}
+
 // Erase destroys a subject's data key, which is the whole of an erasure: every copy of
 // every value ever sealed under it, in every store and every backup, becomes
 // permanently unreadable in one act. It is idempotent, so a repeated request is not an
