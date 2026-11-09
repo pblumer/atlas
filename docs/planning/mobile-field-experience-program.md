@@ -93,9 +93,9 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 - Vertical example: safety inspection with validation and confirmation; completion uses the existing HTTP API and only displays confirmed success after durability.
 - **Exit:** device-size and E2E tests for claim, data validation, submit, back navigation, expired session and server refusal; no unsupported form-js features claimed.
 
-### MFE1A — Start-grant administration in the Console (planned)
+### MFE1A — Start-grant administration in the Console (active)
 
-**Planned 2026-11-09 by the programme owner** ([plan](mfe1a-start-grant-administration.md), [issue #1639](https://github.com/pblumer/atlas/issues/1639)). Administrators manage ADR-0516's start grants on a Console administration page — application, processes, audience picked by name, check one person or group, revoke, history — instead of HTTP requests with ids and revisions. Administrators also see a read-only hint per process in the application's Deployments tab. The only server change is an additive `blockers` field on the two grant reads; no new route and no new authority. No new ADR. Stays planned until the owner starts it (WIP exception covers MFE0/MFE1/MFE2 only).
+**Planned 2026-11-09 by the programme owner** ([plan](mfe1a-start-grant-administration.md), [issue #1639](https://github.com/pblumer/atlas/issues/1639)). Administrators manage ADR-0516's start grants on a Console administration page — application, processes, audience picked by name, check one person or group, revoke, history — instead of HTTP requests with ids and revisions. Administrators also see a read-only hint per process in the application's Deployments tab. The only server change is an additive `blockers` field on the two grant reads; no new route and no new authority. No new ADR. Started by the owner on 2026-11-09, who thereby extends the WIP exception to MFE1A.
 
 ### MFE2 — Mobile incident triage
 

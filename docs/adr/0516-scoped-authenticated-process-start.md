@@ -307,6 +307,12 @@ into another application, deleted application, anonymous 401, machine token 403,
 account without the user role 403, logout and disabled account 401, open server
 404), `api/selfservicestart_internal_test.go`, `api/startgrant/store_test.go`.
 
+- **Reads say whether the process would be offered (MFE1A, 2026-11-09):** the
+  list and the single read answer `blockers` beside each scope — the codes above,
+  for the newest version, empty when a granted person would be offered it — with
+  that version's `definitionKey` and `version`. The write answers do not carry them.
+  A process that cannot be resolved fails the list rather than reading as offered.
+
 Tests: `api/startgrant/service_test.go` (deny by default, open server, delegated
 credential, malformed and forged bodies, unknown identities and scopes, competing
 administrators, idempotent and always-possible revocation, persistence failure and
