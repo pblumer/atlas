@@ -633,6 +633,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0543](0543-a-file-is-a-document-not-a-variable.md) | A file is a document, and a variable holds a reference to it | Accepted | Landed |
 | [0544](0544-artifacts-belong-to-an-application.md) | Every process, decision and form belongs to an application | Accepted | Landed |
 | [0545](0545-installed-worker-instances-hold-their-own-credential.md) | An installed Worker Type's instance holds its own credential, confined to the job types its manifest declares | Proposed | Partial |
+| [0546](0546-new-built-in-worker-types-ship-a-manifest.md) | Every new built-in Worker Type ships a manifest that declares its operations' idempotency and effect | Accepted | Landed |
 
 ## The two states of a record
 

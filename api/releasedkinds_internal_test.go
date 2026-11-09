@@ -372,7 +372,7 @@ func adrStatusesBySlug(t *testing.T) map[string]string {
 
 // TestEveryNewConnectorKindShipsAManifest holds the rule that a new built-in Worker
 // Type declares what a second delivery of each of its operations does
-// (ADR-draft-new-built-in-worker-types-ship-a-manifest).
+// (ADR-0546).
 // Unlike packagesOwed this is not a count but a list of names, so one kind gaining a
 // manifest cannot pay for another arriving without one.
 func TestEveryNewConnectorKindShipsAManifest(t *testing.T) {

@@ -165,7 +165,7 @@ in ADR-0536).
 
 **2026-11-09 — built-in Worker Types.** A new built-in Worker Type ships a manifest with
 the declaration, and the kinds released before are listed and owe one
-([ADR-draft-new-built-in-worker-types-ship-a-manifest](draft-new-built-in-worker-types-ship-a-manifest.md)).
+([ADR-0546](0546-new-built-in-worker-types-ship-a-manifest.md)).
 SharePoint Server is the first (`connector/sharepointserver/manifest.json`).
 
 ## Links

@@ -246,7 +246,7 @@ directory gains the document store. Four changes can break what worked against 0
   before are listed and owe theirs. SharePoint Server has one: its operations are safe to
   deliver twice, with one caveat now recorded — a second `create-site` after a first that
   finished ends in `SHAREPOINT_SERVER_SITE_EXISTS`, not in success
-  (ADR-draft-new-built-in-worker-types-ship-a-manifest).
+  (ADR-0546).
 - **An installed Worker Type works only its own job types.** An artifact installed with
   `POST /api/v1/worker-types/installed` used to be launched with the server's internal
   worker credential, which reaches every job type. Its instance now gets a credential of

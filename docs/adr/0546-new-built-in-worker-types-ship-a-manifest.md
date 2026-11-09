@@ -1,4 +1,4 @@
-# ADR-DRAFT: Every new built-in Worker Type ships a manifest that declares its operations' idempotency and effect
+# ADR-0546: Every new built-in Worker Type ships a manifest that declares its operations' idempotency and effect
 
 - **Status:** Accepted
 - **Implementation:** Landed

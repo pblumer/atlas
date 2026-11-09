@@ -63,7 +63,7 @@ type releasedKind struct {
 	// (atlas.io/v1alpha1, runtime "bundled"): the declaration of what a second delivery
 	// of each of its operations does (ADR-0538). Every connector kind owes one, except
 	// those listed in kindsWithoutManifest, which predate the rule
-	// (ADR-draft-new-built-in-worker-types-ship-a-manifest).
+	// (ADR-0546).
 	Manifest string
 }
 
@@ -148,7 +148,7 @@ var releasedKinds = []releasedKind{
 
 // kindsWithoutManifest are the connector kinds released before every new built-in
 // Worker Type had to ship a manifest declaring its operations' idempotency and effect
-// (ADR-draft-new-built-in-worker-types-ship-a-manifest).
+// (ADR-0546).
 // The list may only shrink: a kind that gains a manifest leaves it, and a kind not on it
 // must have one, so a new kind cannot arrive without its declaration. Each entry still
 // owes one; until then ADR-0538 treats its operations as none / irreversible wherever it
