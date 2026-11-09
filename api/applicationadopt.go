@@ -12,7 +12,7 @@ import (
 )
 
 // Adopting what belongs to no application
-// (ADR-draft-artifacts-belong-to-an-application).
+// (ADR-0544).
 //
 // The artifacts written before every artifact had to belong to an application are
 // listed under Not assigned. They are not filed anywhere automatically — which

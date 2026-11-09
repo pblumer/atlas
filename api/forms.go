@@ -185,7 +185,7 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		rec.OwnerID = s.artifactOwnerOnCreate(r)
 	}
 	// A save that names no application keeps the one the form is filed under, and a
-	// new form names one (ADR-draft-artifacts-belong-to-an-application). Until now an
+	// new form names one (ADR-0544). Until now an
 	// empty projectId took the form out of its application, which is no longer a
 	// destination. A form written before the rule may still be saved unfiled, so its
 	// author can finish it and adopt it.

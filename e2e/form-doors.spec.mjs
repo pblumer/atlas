@@ -300,7 +300,7 @@ test("a form created for a user task is linked when the author comes back", asyn
   await expect.poll(() => hash(page)).toBe("#/modeler/form/new/for/reise/Task_review/from/reise/Task_review");
   // The diagram belongs to no application, and a new form has to: the author is asked
   // which, and the address carries it on, the way back included
-  // (ADR-draft-artifacts-belong-to-an-application).
+  // (ADR-0544).
   await page.locator(".modal [data-ok]").click();
   await expect.poll(() => hash(page)).toBe("#/modeler/form/new/p/app-1/for/reise/Task_review/from/reise/Task_review");
   await formEditorReady(page);

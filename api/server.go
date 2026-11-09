@@ -967,7 +967,7 @@ type Server struct {
 
 	// applicationRequired refuses a process, decision or form that would be created,
 	// deployed or moved outside an application
-	// (ADR-draft-artifacts-belong-to-an-application). Copied from
+	// (ADR-0544). Copied from
 	// applicationRequiredByDefault when the server is built; read-only thereafter.
 	applicationRequired bool
 

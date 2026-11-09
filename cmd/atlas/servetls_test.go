@@ -84,7 +84,7 @@ func TestServeStreamsOverHTTP2(t *testing.T) {
 	client := tlsClient(pool, true)
 	waitHealthy(t, client, "https://"+addr+"/healthz")
 
-	// Every draft belongs to an application (ADR-draft-artifacts-belong-to-an-application).
+	// Every draft belongs to an application (ADR-0544).
 	appResp, err := client.Post("https://"+addr+"/api/v1/applications", "application/json", strings.NewReader(`{"name":"TLS"}`))
 	if err != nil {
 		t.Fatalf("create application: %v", err)

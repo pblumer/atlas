@@ -9,7 +9,7 @@ import (
 )
 
 // The rule that every process, decision and form belongs to an application
-// (ADR-draft-artifacts-belong-to-an-application), and the adoption of what was
+// (ADR-0544), and the adoption of what was
 // written before it.
 
 // filingBPMN is a model with nothing to execute but a start and an end, under the

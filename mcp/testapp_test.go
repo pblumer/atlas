@@ -11,7 +11,7 @@ import (
 
 // testApps is the application each test server's artifacts are filed under, made on
 // first use: every process, decision and form belongs to an application
-// (ADR-draft-artifacts-belong-to-an-application), and the tests in this package are
+// (ADR-0544), and the tests in this package are
 // about the adapter, not about filing.
 var testApps sync.Map // *httptest.Server -> application id
 

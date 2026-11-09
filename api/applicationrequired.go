@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // Every process, decision and form belongs to an application
-// (ADR-draft-artifacts-belong-to-an-application).
+// (ADR-0544).
 //
 // ADR-0034 made the application tag optional so that the artifacts written before
 // applications existed kept working without a migration, and ADR-0128 kept it that

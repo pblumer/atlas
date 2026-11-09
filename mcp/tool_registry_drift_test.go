@@ -156,7 +156,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_application_deployments":      "GET /api/v1/applications/{id}/deployments",
 	"atlas_application_deletion_preview": "GET /api/v1/applications/{id}/deletion-preview",
 	// The clean-up of what belongs to no application
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	"atlas_list_unassigned":                    "GET /api/v1/unassigned",
 	"atlas_adopt_artifacts":                    "POST /api/v1/applications/{id}/adopt",
 	"atlas_application_constants":              "GET /api/v1/applications/{id}/constants",

@@ -339,7 +339,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
-			summary: "Deploy a BPMN model into an application: ?projectId= names it; without it the model inherits the application of the draft with its process id, else of the process's earlier versions, and a model with none of the three is refused with 400 (ADR-draft-artifacts-belong-to-an-application). The response carries warnings for references that will not resolve at runtime (an unconfigured worker)", tag: "Deployments", role: RoleModeler,
+			summary: "Deploy a BPMN model into an application: ?projectId= names it; without it the model inherits the application of the draft with its process id, else of the process's earlier versions, and a model with none of the three is refused with 400 (ADR-0544). The response carries warnings for references that will not resolve at runtime (an unconfigured worker)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
@@ -372,7 +372,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// before its application existed — stayed Ungrouped with a redeploy, and a
 		// version bump, the only way out.
 		{"PATCH", "/api/v1/processes/{key}", s.handleMoveProcess, apiOp{
-			summary: "File a deployed process under another application (an empty projectId is refused: every process belongs to an application, ADR-draft-artifacts-belong-to-an-application). Metadata only: the version, the model and everything running are untouched. Every version of the definition moves, and so do the other pools of a collaboration, because they are one drawing",
+			summary: "File a deployed process under another application (an empty projectId is refused: every process belongs to an application, ADR-0544). Metadata only: the version, the model and everything running are untouched. Every version of the definition moves, and so do the other pools of a collaboration, because they are one drawing",
 			tag:     "Processes", role: RoleModeler,
 			req:  jsonBody("Move", tObject()),
 			resp: jsonBody("What moved", tObject())}},
@@ -526,7 +526,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
 		{"POST", "/api/v1/decision-deployments", s.handleDeployDecision, apiOp{
-			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application and is required (ADR-draft-artifacts-belong-to-an-application), ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
+			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application and is required (ADR-0544), ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
 			req:  xmlBody("DMN XML"),
 			resp: jsonBody("The deployment key and the version each of its decisions is now at", tObject())}},
 		// roleAny, like GET /api/v1/processes, which it is the decision counterpart of
@@ -881,7 +881,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Your start favourites", schemaObj(map[string]any{"processIds": tArray()}))}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
-			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants. ?projectId= names the application; a new draft needs one, and a filed draft cannot be taken out of its application (ADR-draft-artifacts-belong-to-an-application)", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
+			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants. ?projectId= names the application; a new draft needs one, and a filed draft cannot be taken out of its application (ADR-0544)", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/diagram-shortcuts", s.handleListDiagramShortcuts, apiOp{
 			summary: "The diagrams you marked as favourites and the ones you opened last, across the Modeler, Data and Panorama (ADR-0460). Always your own. A mark stores a kind and an id and grants nothing: each entry is resolved against the diagram's own scope on every read, a favourite you can no longer open comes back with available=false and no name so it can still be cleared, and a visit you can no longer open is left out", tag: "Drafts", role: roleAny,
 			resp: jsonBody("Your favourites and recent diagrams", schemaObj(map[string]any{
@@ -920,12 +920,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
 			}))}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
-			summary: "Move a draft to another application (an empty projectId is refused, ADR-draft-artifacts-belong-to-an-application)", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
+			summary: "Move a draft to another application (an empty projectId is refused, ADR-0544)", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
 			summary: "Delete a draft", tag: "Drafts", role: RoleModeler, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/imports/mim", s.handleImportMIM, apiOp{
-			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report) into the application ?projectId= names, which is required (ADR-draft-artifacts-belong-to-an-application)", tag: "Drafts", role: RoleModeler,
+			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report) into the application ?projectId= names, which is required (ADR-0544)", tag: "Drafts", role: RoleModeler,
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
@@ -1002,7 +1002,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
-			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants. \"projectId\" names the application: a new form needs one, and a save without it keeps the one the form is in (ADR-draft-artifacts-belong-to-an-application)", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
+			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants. \"projectId\" names the application: a new form needs one, and a save without it keeps the one the form is in (ADR-0544)", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
 		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
@@ -1865,7 +1865,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a process application. Refused with 409 while it still holds processes, decisions, forms or drafts, which would then belong to no application: move them into another application first (ADR-draft-artifacts-belong-to-an-application); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-0468). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
+			summary: "Delete a process application. Refused with 409 while it still holds processes, decisions, forms or drafts, which would then belong to no application: move them into another application first (ADR-0544); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-0468). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/applications/{id}/deletion-preview", s.handleApplicationDeletionPreview, apiOp{
 			summary: "What deleting an application with ?purge=true would remove — every deployed version with its running instances, decision deployments, drafts, forms, references and models — and what outside it would stop working: catalogue products binding its processes, order lines that could still start them, other applications' processes evaluating its decisions. Owner only (ADR-0468)", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Deletion preview", tObject())}},
@@ -1878,14 +1878,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/applications/{id}/validate", s.handleValidateProject, apiOp{
 			summary: "Validate an application's artifacts", tag: "Applications", role: RoleModeler, resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/adopt", s.handleAdoptArtifacts, apiOp{
-			summary: "File artifacts that belong to no application under this one: deployed processes (every version, and the other pools of a collaboration), drafts, forms, decision references (with their unfiled decision drafts), decision drafts and decision deployments. Only what belongs to no application — no tag, or an application that no longer exists — may be adopted; one that cannot refuses the whole request with 409 and nothing is written. Needs editor on the application and on each artifact (ADR-draft-artifacts-belong-to-an-application)", tag: "Applications", role: RoleModeler,
+			summary: "File artifacts that belong to no application under this one: deployed processes (every version, and the other pools of a collaboration), drafts, forms, decision references (with their unfiled decision drafts), decision drafts and decision deployments. Only what belongs to no application — no tag, or an application that no longer exists — may be adopted; one that cannot refuses the whole request with 409 and nothing is written. Needs editor on the application and on each artifact (ADR-0544)", tag: "Applications", role: RoleModeler,
 			req: jsonBody("What to adopt", schemaObj(map[string]any{
 				"processes": tArray(), "drafts": tArray(), "forms": tArray(), "decisionReferences": tArray(),
 				"decisionDrafts": tArray(), "decisionDeployments": tArray(),
 			})),
 			resp: jsonBody("What was adopted", tObject())}},
 		{"GET", "/api/v1/unassigned", s.handleListUnassigned, apiOp{
-			summary: "List what belongs to no application and the caller may see — deployed processes with their version keys, drafts, forms, decision references, decision drafts and decision deployments — the inventory POST /api/v1/applications/{id}/adopt files from (ADR-draft-artifacts-belong-to-an-application)", tag: "Applications", role: RoleModeler,
+			summary: "List what belongs to no application and the caller may see — deployed processes with their version keys, drafts, forms, decision references, decision drafts and decision deployments — the inventory POST /api/v1/applications/{id}/adopt files from (ADR-0544)", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Unassigned artifacts", tObject())}},
 		{"POST", "/api/v1/applications/{id}/deploy", s.handleDeployProject, apiOp{
 			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0128)", tag: "Applications", role: RoleModeler, resp: jsonBody("Deploy result", tObject())}},
@@ -2218,7 +2218,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Deleted", tObject())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
-			summary: "Create a DMN reference artifact in the application its projectId names, which is required (ADR-draft-artifacts-belong-to-an-application)", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
+			summary: "Create a DMN reference artifact in the application its projectId names, which is required (ADR-0544)", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
 		{"GET", "/api/v1/dmnrefs", s.handleListDmnRefs, apiOp{
 			summary: "List DMN reference artifacts", tag: "DMN References", role: RoleModeler, resp: jsonBody("References", tArray())}},
 		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleUpdateDmnRef, apiOp{

@@ -106,7 +106,7 @@ func liveServer(t *testing.T) (*httptest.Server, *seen) {
 		_ = log.Close()
 	})
 
-	// Every draft belongs to an application (ADR-draft-artifacts-belong-to-an-application).
+	// Every draft belongs to an application (ADR-0544).
 	// Set up past the watcher, so a test of what the runner writes sees only that.
 	setup := func(path, contentType, body string) []byte {
 		rec := httptest.NewRecorder()

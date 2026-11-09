@@ -194,7 +194,7 @@ func (s *Server) inventoryOnLoop(app project) (applicationInventory, error) {
 
 // heldArtifacts counts what a plain delete would leave belonging to no application:
 // deployed versions, decision deployments, drafts, decision drafts and references,
-// and forms (ADR-draft-artifacts-belong-to-an-application).
+// and forms (ADR-0544).
 func (inv applicationInventory) heldArtifacts() int {
 	return len(inv.versions) + len(inv.decisions) + len(inv.drafts) + len(inv.dmnDrafts) +
 		len(inv.refs) + len(inv.forms)

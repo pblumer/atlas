@@ -4075,7 +4075,7 @@ async function viewModelerHome() {
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
     // An import files what it brings under an application, so it asks which first
-    // (ADR-draft-artifacts-belong-to-an-application).
+    // (ADR-0544).
     if (act === "import") pickApplication(tr("application.pick.titleImport")).then((pid) => { if (pid) importArtifact(pid, renderProjects); });
     if (act === "import-mim") pickApplication(tr("application.pick.titleImport")).then((pid) => { if (pid) importMIM(pid, renderProjects); });
     if (act === "import-source") importApplicationSource(renderProjects);
@@ -4144,7 +4144,7 @@ async function viewProjectDetail(id, pane = "artifacts") {
     const moveItems = (currentPid, act, key) => [{
       label: tr("application.row.moveTo"), icon: "&#128450;",
       // Not assigned is no destination: everything belongs to an application
-      // (ADR-draft-artifacts-belong-to-an-application).
+      // (ADR-0544).
       items: projects.filter((p) => !p.protected && roleRank(p.myRole) >= 2)
         .map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
     }];
@@ -4250,7 +4250,7 @@ async function viewProjectDetail(id, pane = "artifacts") {
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     // Nothing new is created outside an application
-    // (ADR-draft-artifacts-belong-to-an-application): Not assigned offers to file
+    // (ADR-0544): Not assigned offers to file
     // what is already there instead.
     const createItems = ungrouped ? [] : [
       { header: tr("create.blank") },
@@ -6686,7 +6686,7 @@ function editDmnRef(ref) {
 }
 
 // pickApplication asks which application something new goes into: every process,
-// decision and form belongs to one (ADR-draft-artifacts-belong-to-an-application).
+// decision and form belongs to one (ADR-0544).
 // Resolves to the application's id, or "" when the dialog is cancelled or there is
 // none the caller may write to.
 async function pickApplication(title) {
@@ -6712,7 +6712,7 @@ async function routeIntoApplication(path, prefix, title) {
 }
 
 // adoptUnassigned files what belongs to no application under one, many at once
-// (ADR-draft-artifacts-belong-to-an-application).
+// (ADR-0544).
 async function adoptUnassigned(projects, reload) {
   let unassigned;
   try { unassigned = await api("GET", "/api/v1/unassigned"); } catch (e) { toast(e.message, "err"); return; }
@@ -6736,7 +6736,7 @@ async function moveDmnRef(id, projectId, reload) {
 // a re-upload would file a second model under a suffixed handle (ADR-0222).
 async function referenceStoredModel(handle, suggested, reload, projectId = "") {
   // The reference is filed under an application like everything else
-  // (ADR-draft-artifacts-belong-to-an-application); from Not assigned, it asks which.
+  // (ADR-0544); from Not assigned, it asks which.
   const pid = projectId || await pickApplication(tr("application.pick.titleDecision"));
   if (!pid) return;
   const name = (window.prompt(tr("artifact.ref.namePrompt"), suggested || handle) || "").trim();
@@ -12882,7 +12882,7 @@ async function route() {
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]), pd[2] || "artifacts");
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
     // A new diagram, form or decision is created inside an application, so an address
-    // that names none asks for one first (ADR-draft-artifacts-belong-to-an-application).
+    // that names none asks for one first (ADR-0544).
     if (dnew && !dnew[1]) return await routeIntoApplication(path, "#/modeler/new", tr("application.pick.titleDiagram"));
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
     if (/^#\/modeler\/form\/new(?!\/p\/)/.test(path)) {

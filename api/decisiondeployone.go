@@ -85,7 +85,7 @@ func (s *Server) handleDeployDecision(w http.ResponseWriter, r *http.Request) {
 	// dispatching onto the loop from the loop would deadlock.
 	projectID := r.URL.Query().Get("projectId")
 	// A decision is deployed into an application
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	if code, msg := s.unfiledRefusal(projectID, "a deployed decision"); code != 0 {
 		httpapi.Error(w, code, msg)
 		return

@@ -111,7 +111,7 @@ func serveOK(b *testing.B, h http.Handler, method, path, body, contentType strin
 }
 
 // deployInApp files the model under a fresh application and deploys it there: every
-// process belongs to an application (ADR-draft-artifacts-belong-to-an-application).
+// process belongs to an application (ADR-0544).
 func deployInApp(b *testing.B, h http.Handler, model string) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"name":"Bench"}`))
 	req.Header.Set("Content-Type", "application/json")

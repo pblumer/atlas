@@ -14,7 +14,7 @@ import (
 // digest format, the comparison — is the code a server runs.
 //
 // It also builds the package's servers without the rule that everything belongs to an
-// application (ADR-draft-artifacts-belong-to-an-application): the engine behaviour
+// application (ADR-0544): the engine behaviour
 // most of these tests cover is not about filing, and hundreds of them deploy a bare
 // model. The rule's own tests turn it back on with withApplicationRequired, and
 // TestAServerRequiresAnApplicationByDefault holds the production value.

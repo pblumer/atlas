@@ -1125,7 +1125,7 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 	// Without a draft to inherit from, a new version files where the process's
 	// earlier versions are: redeploying a definition through the API must not need
 	// to be told an application its history already names
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	if !hasProjectParam && projectID == "" {
 		var readErr error
 		s.do(func() { projectID, readErr = s.deployedApplicationOf(pid) })
@@ -6418,7 +6418,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		destProjectID = projectID
 	}
 	// A new draft is filed under an application, and a filed one stays in one
-	// (ADR-draft-artifacts-belong-to-an-application). A draft written before the rule
+	// (ADR-0544). A draft written before the rule
 	// may still be saved where it is, so its author can finish it and adopt it.
 	if !continuing {
 		if code, msg := s.unfiledRefusal(destProjectID, "a draft"); code != 0 {

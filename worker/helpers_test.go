@@ -27,7 +27,7 @@ func post(t *testing.T, ts *httptest.Server, path, body, contentType string) []b
 }
 
 // deployInApp deploys model into a fresh application: every process belongs to one
-// (ADR-draft-artifacts-belong-to-an-application).
+// (ADR-0544).
 func deployInApp(t *testing.T, ts *httptest.Server, model string) {
 	t.Helper()
 	var app struct {

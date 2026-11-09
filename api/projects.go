@@ -386,7 +386,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Nor may it leave processes, decisions or forms behind under Not assigned
-		// (ADR-draft-artifacts-belong-to-an-application): they are moved into another
+		// (ADR-0544): they are moved into another
 		// application first, or go with this one in a purge.
 		if s.applicationRequired {
 			inv, err := s.inventoryOnLoop(rec)

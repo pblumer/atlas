@@ -201,7 +201,7 @@ func TestInformationModelToolsScenario(t *testing.T) {
 
 	// 7. The other direction: which running instances carry an Order right now.
 	// Into an application of its own, which has no information model: every process
-	// belongs to one (ADR-draft-artifacts-belong-to-an-application), and this one is
+	// belongs to one (ADR-0544), and this one is
 	// meant to declare a type nothing resolves.
 	callOne(t, atlas, "atlas_deploy", map[string]any{"xml": infomodelDataBPMN, "projectId": testApp(t, atlas)})
 	var procs []struct {

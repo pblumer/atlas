@@ -104,7 +104,7 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Out of every application is no longer a destination
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	if code, msg := s.unfileRefusal(payload.ProjectID); code != 0 {
 		httpapi.Error(w, code, msg)
 		return

@@ -96,7 +96,7 @@ func (a *acceptanceServer) shutdown() {
 func (a *acceptanceServer) deploy(xml string) uint64 {
 	a.t.Helper()
 	// Every process belongs to an application
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	code, body, _ := a.do(http.MethodPost, "/api/v1/applications", `{"name":"Acceptance"}`)
 	var app struct {
 		ID string `json:"id"`

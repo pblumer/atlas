@@ -21,7 +21,7 @@ _Changed_ / _Removed_ for each version.
   moves unless everything named can, and what already belongs to an application is refused rather
   than taken from it. The Modeler's "Not assigned" page offers it as "Assign to an application…";
   the MCP tools are `atlas_list_unassigned` and `atlas_adopt_artifacts`
-  (ADR-draft-artifacts-belong-to-an-application).
+  (ADR-0544).
 - **A file a process receives is a document, not a variable.** A file picked in a task form is
   uploaded to a document store and the task is completed with a reference under the field's own
   key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
@@ -165,7 +165,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 - **Every process, decision and form belongs to an application.** Nothing new is created,
-  deployed or moved outside one (ADR-draft-artifacts-belong-to-an-application): a draft, form,
+  deployed or moved outside one (ADR-0544): a draft, form,
   decision draft or decision reference without a `projectId`, a decision deployment without one,
   and a MIM import without one are refused with 400. `POST /api/v1/deployments` files a model
   under the application of its draft, else of the process's earlier versions, and refuses one with

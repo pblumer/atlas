@@ -60,7 +60,7 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 	}
 	rec := dmnRef{ID: id, Name: name, ModelRef: modelRef, ProjectID: payload.ProjectID, OwnerID: s.artifactOwnerOnCreate(r), CreatedAt: time.Now().Unix()}
 	// A reference is filed under an application
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	if code, msg := s.unfiledRefusal(rec.ProjectID, "a decision reference"); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
@@ -172,7 +172,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Out of every application is no longer a destination
-	// (ADR-draft-artifacts-belong-to-an-application).
+	// (ADR-0544).
 	if payload.ProjectID != nil {
 		if code, msg := s.unfileRefusal(*payload.ProjectID); code != 0 {
 			httpapi.Error(w, code, msg)

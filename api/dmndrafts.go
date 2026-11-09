@@ -171,7 +171,7 @@ func (s *Server) handleSaveDmnDraft(w http.ResponseWriter, r *http.Request) {
 		projectID = payload.ProjectID
 	}
 	// A new decision draft is filed under an application
-	// (ADR-draft-artifacts-belong-to-an-application) — its decision's, when it has
+	// (ADR-0544) — its decision's, when it has
 	// one, which is why a draft on an unfiled decision is refused too: adopt the
 	// decision first. A draft written before the rule may still be saved unfiled.
 	if !existed {
