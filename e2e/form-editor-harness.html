@@ -220,6 +220,26 @@
 
       window.__save = () => document.getElementById("form-save").click();
       window.__cleanup = cleanup; // stands in for the navigation teardown (route → __atlasCleanup)
+      // window.__start(name, ...args) begins one of the __mount* calls above and returns
+      // at once; window.__mountState says when it has settled and how. A spec waits for
+      // it with waitForFunction rather than by awaiting the mount's promise inside
+      // page.evaluate. On the CI runner that promise, awaited over the DevTools protocol
+      // while the editor loaded, was garbage-collected before it settled: the protocol
+      // answers "Promise was collected", which Playwright reports as "Execution context
+      // was destroyed, most likely because of a navigation", although nothing navigated
+      // and the editor finished mounting. Polling never holds a promise across the
+      // protocol for longer than one short check.
+      window.__mountState = null;
+      window.__start = (name, ...args) => {
+        const state = { done: false, error: null };
+        window.__mountState = state;
+        Promise.resolve()
+          .then(() => window[name](...args))
+          .then(
+            () => { state.done = true; },
+            (e) => { state.error = String((e && e.stack) || e); state.done = true; },
+          );
+      };
       window.__ready = true;
     </script>
   </body>

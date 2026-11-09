@@ -129,13 +129,30 @@ func TestCON3MidflightRecoveryAndContinuation(t *testing.T) {
 		{"incident", 1, "incident"},
 		{"event-gateway-message", 0, "race"},
 		{"boundary-message-noninterrupting", 0, "job"},
+		// In-flight sequential multi-instance: one iteration done, the next parked.
+		{"multi-instance-sequential", 1, "job"},
+		// Compensation in progress: the compensable activity completed, the throw
+		// is waiting for its handler's job.
+		{"compensation", 1, "job"},
+		// Transaction cancellation in progress: the cancel end has started the
+		// rollback and the compensation handler's job is pending.
+		{"transaction-cancel", 1, "job"},
+		// Two concurrently active non-interrupting event-subprocess runs, each
+		// waiting on its own correlated answer, beside the parked main task.
+		{"event-subprocess-concurrent-runs", 2, "message"},
+		// One of those runs answered, the other still waiting.
+		{"event-subprocess-concurrent-runs", 3, "message"},
+		// Cancellation from an event subprocess inside a transaction, mid-rollback.
+		{"transaction-cancel-event-subprocess", 2, "job"},
+		// Compensation thrown from an event subprocess, waiting for the handler.
+		{"compensation-event-subprocess", 2, "job"},
 	}
 	registered := make(map[string]Scenario, len(Scenarios))
 	for _, scenario := range Scenarios {
 		registered[scenario.Name] = scenario
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s@step%d", tc.name, tc.prefix), func(t *testing.T) {
 			sc, ok := registered[tc.name]
 			if !ok {
 				t.Fatalf("missing scenario %s", tc.name)
@@ -215,7 +232,13 @@ func TestCON3MidflightRecoveryAndContinuation(t *testing.T) {
 				t.Fatalf("open fresh replay state: %v", err)
 			}
 			defer closeStores(replayLog, recovered)
-			restartClock := &driverClock{}
+			// A restarted node's clock does not run backwards: resume from the last
+			// live reading. Restarting it at zero would stamp post-restart steps
+			// before pre-restart ones, and the step history is ordered by
+			// (timestamp, WAL position), so the path would read out of order for a
+			// reason that is the harness's, not the engine's. A clock that does go
+			// backwards across a restart is a separate failure-injection case.
+			restartClock := &driverClock{t: clock.t}
 			restarted := engine.New(1, replayLog, recovered, restartClock)
 			deployAll(restarted, defs, root)
 			if err := restarted.Recover(); err != nil {

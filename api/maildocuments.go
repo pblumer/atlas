@@ -24,6 +24,13 @@ func (d serverDocuments) PutDocument(ctx context.Context, worker, bucket, key, c
 	return s3.Documents(d.s.s3Registry).PutDocument(ctx, worker, bucket, key, contentType, disposition, data, metadata)
 }
 
+// StoreDocument is where a store-attachment run inside this server puts its attachment:
+// the document store, pending until the job's completion binds it
+// (ADR-0543).
+func (d serverDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	return jobDocuments{s: d.s}.StoreDocument(ctx, name, contentType, data)
+}
+
 // mailStoresEnv lists the S3 Workers a supervised mail worker holds to export
 // attachments into. It is a list of its own rather than ATLAS_S3_CONNECTORS because a
 // worker serving both kinds is handed both renderings, and the s3 kind's list must

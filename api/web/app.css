@@ -2580,6 +2580,17 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   flex: none; margin-left: 8px; color: var(--muted); font: 11px/1.6 system-ui, sans-serif;
 }
 .var-panel .vp-more-vars { margin-top: 4px; padding: 0 6px; font-size: 11px; }
+/* A variable that names a document: the file is in the document store, and the value is
+   a link to it (ADR-0543). */
+.vdoc { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; min-width: 0;
+  color: var(--accent-text); text-decoration: none; }
+.vdoc:hover .vdoc-name { text-decoration: underline; }
+.vdoc .vdoc-ic { flex: none; }
+.vdoc .vdoc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vdoc .vdoc-size { flex: none; color: var(--muted); font: 11px/1.6 system-ui, sans-serif; }
+.var-panel .vp-inst-vars .chip.vp-chip-doc { display: inline-flex; align-items: baseline; max-width: 100%;
+  white-space: nowrap; overflow: hidden; vertical-align: top; }
+.vars .vdoc-card .vdoc-link { margin: 6px 10px 8px; }
 
 /* Operator metadata for an instance — when it started, how long it ran (or has
    been running), and the message correlation key it began with — shown under the
@@ -4563,6 +4574,12 @@ tr[hidden] { display: none; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
 /* A button's label stays on one line; the note beside it is what gives way. */
 .modal-foot .btn { white-space: nowrap; }
+/* The adopt dialog (adoptdialog.js): one fieldset per kind, one checkbox per row. */
+.adopt-kind { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 10px; padding: 6px 12px 8px; }
+.adopt-kind legend { padding: 0 4px; font-weight: 600; }
+.adopt-list { list-style: none; margin: 0; padding: 0; }
+.adopt-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; cursor: pointer; }
+.adopt-row.muted { cursor: default; }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
 /* The catalogue page (catalog-admin.js pageSection): one <details> per step — products,

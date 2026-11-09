@@ -30,7 +30,7 @@ func TestCollabSessionToolScenario(t *testing.T) {
 	ts := newAtlas(t)
 
 	// Save a draft to co-edit.
-	callOne(t, ts, "atlas_save_draft", map[string]any{"xml": collabDraftBPMN})
+	callOne(t, ts, "atlas_save_draft", map[string]any{"projectId": testApp(t, ts), "xml": collabDraftBPMN})
 
 	// Join the session; the reply carries our own participant id.
 	joinText := callOne(t, ts, "atlas_join_session", map[string]any{"draftId": "wip-collab", "name": "Claude"})
@@ -92,7 +92,7 @@ func TestCollabSessionToolScenario(t *testing.T) {
 // the agent when it targets an element another participant holds.
 func TestCollabSessionLockConflictTool(t *testing.T) {
 	ts := newAtlas(t)
-	callOne(t, ts, "atlas_save_draft", map[string]any{"xml": collabDraftBPMN})
+	callOne(t, ts, "atlas_save_draft", map[string]any{"projectId": testApp(t, ts), "xml": collabDraftBPMN})
 
 	// Two agent participants.
 	self1 := joinSelf(t, ts, "wip-collab", "One")

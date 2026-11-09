@@ -13,6 +13,7 @@ This directory contains **product and engineering plans for atlas**: implementat
 | [Capability-driven Automation](capability-driven-automation-program.md) | Multi-slice capability-driven automation programme |
 | [Identity-aware Execution](identity-aware-execution-program.md) | Identity and policy-aware worker execution programme |
 | [Technical Capability Contract](technical-capability-contract.md) | Capability contract semantics, conformance and integration plan |
+| [Documents instead of variables (ADR draft)](documents-instead-of-variables.md) | Storing uploaded files once in a document store, with a reference in the variable |
 
 The [programme register](../programs/README.md) is generated from manifests and tracks ownership and delivery gates. The [roadmap](../../ROADMAP.md) covers strategic milestones.
 

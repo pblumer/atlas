@@ -1122,6 +1122,20 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 			}
 		}
 	}
+	// Without a draft to inherit from, a new version files where the process's
+	// earlier versions are: redeploying a definition through the API must not need
+	// to be told an application its history already names
+	// (ADR-0544).
+	if !hasProjectParam && projectID == "" {
+		var readErr error
+		s.do(func() { projectID, readErr = s.deployedApplicationOf(pid) })
+		if readErr != nil {
+			return deployResp{}, refusedWith(http.StatusInternalServerError, "read project: "+readErr.Error())
+		}
+	}
+	if code, msg := s.unfiledRefusal(projectID, "a deployed process"); code != 0 {
+		return deployResp{}, refusedWith(code, msg)
+	}
 	// Filing a definition into a project is a write on that project, so it needs
 	// editor there — the check the project deploy path has always made, and the
 	// axis a role-per-route table cannot express (ADR-0071,
@@ -3365,6 +3379,13 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
 		return
 	}
+	// An operator may point a variable at a document they may read; it is bound to this
+	// instance once the change is durable (ADR-0543).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	scopeKey := payload.ScopeKey
 	// A declared personal value is enciphered here, before it becomes a command, exactly
 	// as it would be on the way in from a form or a worker (ADR-0314). An operator
@@ -3417,9 +3438,14 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
-	// its duration is the stall ADR-0157 step 6 removes.
+	// its duration is the stall ADR-0157 step 6 removes. A document the change names
+	// is bound once it is durable, before a worker can be asked to read it.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !scopeBad && scanErr == nil {
+				s.bindDocuments(docIDs, key)
+			}
+		})
 	}
 	switch {
 	case scanErr != nil:
@@ -4465,6 +4491,13 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Which instance a message reaches is decided by correlation, possibly long after
+	// this request, so a document it named could not be bound to it
+	// (ADR-0543).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	var (
@@ -5664,6 +5697,11 @@ func toolCallsFromReport(jv *model.JobValue, reps []toolCallReport) ([]model.Too
 		if err != nil {
 			return nil, fmt.Errorf("tool call %q: %v", rep.Tool, err)
 		}
+		// A tool's arguments are a model's, handed to a tool; a document reference among
+		// them would name a file nothing binds to anything.
+		if code, msg := refuseDocumentRefs(args); code != 0 {
+			return nil, fmt.Errorf("tool call %q: %s", rep.Tool, msg)
+		}
 		out = append(out, model.ToolCall{
 			Tool:      strings.TrimSpace(rep.Tool),
 			CallId:    strings.TrimSpace(rep.CallId),
@@ -5690,6 +5728,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// A worker's result may name a document; the worker (or operator) must be one who
+	// may use it, and it is bound to the job's instance once the completion is durable
+	// (ADR-0543).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	// A worker result landing a job's output is one of the two edges ADR-0314 enciphers
@@ -5774,6 +5820,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		unauthorized bool
 		badReport    error
 		runErr       error
+		jobInstance  uint64
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -5781,6 +5828,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		jobInstance = jv.ProcessInstanceKey
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
@@ -5841,7 +5889,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found && !notHolder && !unauthorized && badReport == nil {
+				s.bindDocuments(docIDs, jobInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -6050,6 +6102,16 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A file field's answer is a reference to the document its browser uploaded; the
+	// person completing must be one who may use it, and it is bound to the task's
+	// instance once the completion is durable
+	// (ADR-0543). Before sealing, which would hide
+	// a reference inside a personal value.
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// The form's answer is the other half of the in edge: a submitted personal value is
 	// enciphered before it becomes a command (ADR-0314).
 	if err := s.encipherJobVars(key, vars); err != nil {
@@ -6080,6 +6142,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		// read before the completion, because a completed task's element instance is
 		// gone, and with it the way up to the sitting.
 		sitting, sittingPI uint64
+		taskInstance       uint64
 	)
 	s.do(func() {
 		// A job that can't be read — absent, already completed, or unreadable — is
@@ -6090,6 +6153,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		taskInstance = jv.ProcessInstanceKey
 		// A sitting that cannot be read is no reason to refuse the answer: the
 		// completion goes ahead, and the next screen is found in the inbox instead.
 		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
@@ -6099,7 +6163,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
-		runErr = s.drive()
+		runErr = s.driveThen(func() {
+			if found {
+				s.bindDocuments(docIDs, taskInstance)
+			}
+		})
 	}
 	switch {
 	case runErr != nil:
@@ -6395,6 +6463,20 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if hasProjectParam {
 		destProjectID = projectID
 	}
+	// A new draft is filed under an application, and a filed one stays in one
+	// (ADR-0544). A draft written before the rule
+	// may still be saved where it is, so its author can finish it and adopt it.
+	if !continuing {
+		if code, msg := s.unfiledRefusal(destProjectID, "a draft"); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	} else if base.ProjectID != "" {
+		if code, msg := s.unfileRefusal(destProjectID); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	if destProjectID != "" && (hasProjectParam || !continuing) {
 		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
@@ -6566,6 +6648,10 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	// Moving a draft needs editor on both ends (ADR-0071): the project it leaves
 	// and, when non-empty, the project it joins (which must exist).
 	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if code, msg := s.unfileRefusal(payload.ProjectID); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}
@@ -7088,6 +7174,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"inputs": j.Inputs, "resultVariable": j.Result,
 		}}
 	case compiler.CsvImportJobTypeIndex:
+		// A source that names a document is not read here: this runs on the run loop,
+		// and reading a document is file or network I/O. The payload carries the
+		// document's id instead, and the Worker Instance reads it under the job's lease
+		// (POST /api/v1/jobs/{key}/documents/{id},
+		// ADR-0543).
 		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease
@@ -7095,7 +7186,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
-			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
+			"source": j.Source, "sourceDocument": j.SourceDocument, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
 		}}

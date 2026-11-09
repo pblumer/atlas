@@ -36,7 +36,7 @@ func TestDmnRefGraphViaTool(t *testing.T) {
 	callOne(t, atlas, "atlas_upload_decision_model", map[string]any{
 		"handle": "rowvalid", "xml": mustRead(t, exampleFile("pruefe-datensaetze.dmn")),
 	})
-	refJSON := callOne(t, atlas, "atlas_register_decision", map[string]any{"name": "RowValid", "modelRef": "rowvalid"})
+	refJSON := callOne(t, atlas, "atlas_register_decision", map[string]any{"projectId": testApp(t, atlas), "name": "RowValid", "modelRef": "rowvalid"})
 	var ref struct {
 		ID string `json:"id"`
 	}

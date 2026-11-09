@@ -4,10 +4,10 @@
   "summary": "Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-11-08",
+  "last_reviewed": "2026-11-09",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Review and merge verified CON2–CON4 test oracles, while formally closing outstanding CON0 normative scope and CON1 acceptance. Do not mark CON2–CON4 complete merely because CI is green: per-clause reviewer sign-off, explicit remaining family coverage, and independent reference expansion are open. Combined CON2–CON4 integration exception requested by programme owner; deliver in one bounded PR and keep acceptance per-slice.",
+  "next_action": "Review the third CON2 increment (exact negative diagnostics, FLOW-14 downgraded to partial). Owner decision needed: whether to open an ADR-gated validation slice that refuses three spec-forbidden but currently deployable shapes (start event with incoming flow, end event with outgoing flow, default naming a non-outgoing flow) and attaches element locations to element-local compile errors. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
   "slices": [
     {
       "id": "CON0",
@@ -64,9 +64,11 @@
       "prs": [
         1622
       ],
-      "note": "CON2 implemented subset in combined branch: execution outcomes for exclusive event race, parallel/inclusive joins and boundary paths; exact rule/severity/element diagnostic tests for unsupported variants, plus explicit Complex Gateway rejection. No hidden spec-wide support claim. Owner review of clauses, other valid variants and CI pending.",
+      "note": "First increment (PR #1622): execution outcomes for exclusive event race, parallel/inclusive joins and boundary paths; exact rule/severity/element diagnostics for unsupported variants and Complex Gateway. Second increment: inline oracles for terminate end (root and subprocess scope), link throw/catch, error end interrupting a concurrent sibling, escalation end (interrupting) and throw (non-interrupting), signal end, message end and message throw, exclusive default flow and no-route incident, uncontrolled flow without gateways; register now links CON2/CON3 tests to 27 rows (unverified 50 -> 40). Third increment: exact negative diagnostics (normative_diagnostics_test.go) — 8 located rule+element errors, 10 element-local refusals that carry only rule \"compile\" with no element field, 2 non-blocking warnings, and a characterisation of three spec-forbidden shapes atlas deploys without error (end-event outgoing flow silently never taken; non-outgoing default ignored). FLOW-14 moves to partial. No spec-wide support claim; clause anchors are the provisional register anchors. Owner review of clauses and remaining variants pending.",
       "evidence": [
-        "../../../conformance/normative_oracles_test.go"
+        "../../../conformance/normative_oracles_test.go",
+        "../../../conformance/normative_events_oracles_test.go",
+        "../../../conformance/normative_diagnostics_test.go"
       ]
     },
     {
@@ -83,7 +85,7 @@
       "prs": [
         1622
       ],
-      "note": "CON3 implemented six deterministic mid-flight checkpoints: activatable job, message, timer, incident, event-based competing waits and noninterrupting boundary. Restart via WAL into a fresh state; compare durable process, element, job, timers, incidents, variables and subscription counter; repeat Recover and continue. Remaining full-state families/child scopes, checkpoint compaction and failover scenarios require owner review and follow-ups.",
+      "note": "Thirteen deterministic mid-flight checkpoints: activatable job, message, timer, incident, event-gateway competing waits, non-interrupting boundary (PR #1622), plus in-flight sequential multi-instance, compensation and transaction cancellation awaiting their handler, two concurrent and one half-answered non-interrupting event-subprocess run, and cancellation/compensation thrown from an event subprocess. Restart via WAL into a fresh state; compare durable process, element, job, timer, incident, variable and subscription-count families; repeat Recover and continue. The harness now resumes the restarted clock from the last live reading (a clock reset made post-restart step history sort before pre-restart steps). Remaining: byte-level full-state families and child-scope variables beyond active scopes, checkpoint compaction, clock-regression and failover scenarios.",
       "evidence": [
         "../../../conformance/recovery_midflight_test.go"
       ]
@@ -136,7 +138,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests."
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. Triage candidate from CON2: deploy-time refusal of start events with incoming flows, end events with outgoing flows and defaults that are not outgoing flows, plus element locations on element-local compile diagnostics (ADR-0177/ADR-0393 already keep existing definitions reloadable)."
     }
   ]
 }

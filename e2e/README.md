@@ -67,7 +67,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   single-instance view and in the replay's Variables tab. The harness cuts values the way
   `?values=preview` does, so the spec also holds that the overview asks for previews, that
   opening a cut value reads the instance whole by its key, and that the single-instance
-  view copies whole values.
+  view copies whole values. A variable that names a document
+  (ADR-0543) is a download link on the card, in the
+  single view and in the replay. `tasks-logo-upload.spec.mjs` holds that a file field
+  without a catalogue uploads its file as a document first and completes with the
+  reference under its own key, and that a failed upload leaves the task open.
 
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
@@ -1059,6 +1063,29 @@ node render-diagram.mjs ../conformance/models/standard-loop.bpmn \
 ```
 
 The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
+
+## Waiting for a mount: poll, do not await
+
+Do not write `await page.evaluate(() => window.__mountX())` for a mount that loads an
+editor. Playwright then awaits the mount's promise over the DevTools protocol for as long
+as the editor takes to load, and on the CI runner that promise was garbage-collected
+before it settled. The protocol answered "Promise was collected", and Playwright reported
+it as "Execution context was destroyed, most likely because of a navigation", although
+nothing navigated and the editor finished mounting. It never happened on a workstation,
+and it failed `formgen-editor-open` and `shown-version` in most CI runs.
+
+Start the mount and poll for it instead. `form-editor-harness.html` and
+`shown-version-harness.html` offer `window.__start(name, ...args)`, which begins a
+`__mount*` call and records its outcome in `window.__mountState`. The `mount(page, name,
+...args)` helper in `formgen-editor-open.spec.mjs` and `shown-version.spec.mjs` waits for
+that state with `waitForFunction` and rethrows a failed mount.
+
+Two diagnostics help when a test fails only on the runner. The e2e job uploads
+`e2e/test-results` as the `e2e-test-results` artifact whenever a test failed, including a
+first attempt that passed on retry: it holds the Playwright trace. And Playwright's
+`rewriteError` (`playwright-core/lib/server/chromium/crExecutionContext.js`) turns every
+protocol error that is not a page exception into "Execution context was destroyed".
+Logging `error.message` there names the real one.
 
 ## CI
 

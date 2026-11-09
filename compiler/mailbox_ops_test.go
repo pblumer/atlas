@@ -117,7 +117,7 @@ func TestMailOperationsRefuseWhatTheyDoNotUse(t *testing.T) {
 
 func TestMailOperationsListIsSorted(t *testing.T) {
 	ops := MailOperations()
-	if strings.Join(ops, ",") != "delete,export-attachment,forward,get,get-attachment,list,mark-read,mark-unread,move,reply,send" {
+	if strings.Join(ops, ",") != "delete,export-attachment,forward,get,get-attachment,list,mark-read,mark-unread,move,reply,send,store-attachment" {
 		t.Errorf("MailOperations = %v", ops)
 	}
 }

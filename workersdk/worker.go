@@ -470,7 +470,7 @@ func (w *Worker) pollOnce(ctx context.Context, jobType string) error {
 // sees, and a worker that swallowed the error would park the token silently. A
 // [BPMNError] is the one error that is not a failure, and it is thrown instead.
 func (w *Worker) work(ctx context.Context, j Job) {
-	out, err := RunHandler(w.AuthorizingContext(ctx, j), w.opts.Handlers[j.Type], j)
+	out, err := RunHandler(w.DocumentContext(w.AuthorizingContext(ctx, j), j), w.opts.Handlers[j.Type], j)
 	if errors.Is(err, errPolicyRefused) {
 		// Refused by policy: the server settled the job with its decision.
 		return

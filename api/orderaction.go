@@ -205,6 +205,12 @@ func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actio
 	if err != nil {
 		return actionResp{}, http.StatusBadRequest, err.Error()
 	}
+	// An order action's variables travel through the order to whatever its product's
+	// process does with them; a document reference there would name a file nothing
+	// binds (ADR-0543).
+	if code, msg := refuseDocumentRefs(extra); code != 0 {
+		return actionResp{}, code, msg
+	}
 	asked := strings.TrimSpace(req.Trigger)
 	if asked != "" && !catalog.KnownTrigger(asked) {
 		return actionResp{}, http.StatusBadRequest, "trigger must be one of customer, operator, system"

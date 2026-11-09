@@ -89,9 +89,16 @@ function Remove-Task([string] $N) {
     Unregister-ScheduledTask -TaskName "AtlasSharePointPhase$N" -Confirm:$false -ErrorAction SilentlyContinue
 }
 
+# Retries here, not with curl --retry-all-errors: the curl.exe of Windows Server 2022 is
+# too old for that option. -f makes an HTTP error a failure instead of a saved error page.
 function Get-File([string] $Url, [string] $Path) {
-    & curl.exe -sSL --retry 10 --retry-all-errors --retry-delay 15 -o $Path $Url
-    if ($LASTEXITCODE -ne 0) { throw "download of $Url failed (curl exit $LASTEXITCODE)" }
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+        & curl.exe -fsSL -o $Path $Url
+        if ($LASTEXITCODE -eq 0) { return }
+        Write-Output "download of $Url failed (curl exit $LASTEXITCODE), attempt $attempt"
+        Start-Sleep -Seconds 15
+    }
+    throw "download of $Url failed (curl exit $LASTEXITCODE)"
 }
 
 # Never given a password: its arguments go to the log.

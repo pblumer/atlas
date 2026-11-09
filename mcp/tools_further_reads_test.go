@@ -133,7 +133,7 @@ func TestSearchInstancesRequiresQ(t *testing.T) {
 // with its name and data state.
 func TestInstanceDataObjectsViaTool(t *testing.T) {
 	atlas := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": dataObjectBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": dataObjectBPMN, "projectId": testApp(t, atlas)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {

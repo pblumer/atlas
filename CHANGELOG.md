@@ -13,6 +13,36 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
+  lists the deployed processes, diagrams, forms, decisions, decision drafts and deployed decisions
+  that belong to no application — no tag, or an application that no longer exists — and
+  `POST /api/v1/applications/{id}/adopt` files a chosen set of them under one application in one
+  request: every version of a process moves, and a decision's unfiled drafts move with it. Nothing
+  moves unless everything named can, and what already belongs to an application is refused rather
+  than taken from it. The Modeler's "Not assigned" page offers it as "Assign to an application…";
+  the MCP tools are `atlas_list_unassigned` and `atlas_adopt_artifacts`
+  (ADR-0544).
+- **A file a process receives is a document, not a variable.** A file picked in a task form is
+  uploaded to a document store and the task is completed with a reference under the field's own
+  key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
+  outside the log, the state and the per-step history, up to `limits.Document` (35 MiB), and no
+  longer read as text into `csvText` whatever the field was called. `POST /api/v1/documents`
+  uploads, `GET /api/v1/documents/{id}` downloads, and `GET /api/v1/documents/{id}/meta` reads the
+  reference and its state. An upload is its uploader's until a variable naming it enters an
+  instance; then whoever may read that instance may read it. Every route that lets variables in
+  refuses a reference the caller may not use, and the routes that cannot bind one (messages,
+  public links, order actions) refuse references outright. Unused uploads are removed after
+  `--document-pending-ttl` (24 h by default), and a document is removed once history retention
+  removed every instance it entered. Documents live in the data directory by default, or in an S3
+  bucket with `--documents-backend=s3 --documents-s3-worker --documents-s3-bucket`. A full
+  snapshot carries them only with `?documents=true`. The CSV import reads a referenced file from
+  the store, in process and on a Worker Instance, which reads it under its job's lease through
+  `POST /api/v1/jobs/{key}/documents/{id}` (`workersdk.ReadDocument`, `UploadDocument`). S3 tasks
+  gain `put-document` and `get-document`, mail tasks `store-attachment`. The MCP tools
+  `atlas_document_meta`, `atlas_read_document` and `atlas_upload_document` reach the store. A
+  document a personal variable names is enciphered under the data subject's key and becomes
+  unreadable with an erasure. Operations and the replay show a reference as a download link
+  (ADR-0543).
 - **A process can publish an interface, not its model.** A deployed definition's message
   entry points can be published as a small, versioned contract another domain binds to
   (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition
@@ -144,6 +174,19 @@ _Changed_ / _Removed_ for each version.
   completion, and marks such a body's values `elementsRecorded`. Instances recorded before
   this keep the old reading, and only there does the Environment still explain it
   ([ADR-draft-collection-by-round](docs/adr/draft-collection-by-round.md)).
+- **Every process, decision and form belongs to an application.** Nothing new is created,
+  deployed or moved outside one (ADR-0544): a draft, form,
+  decision draft or decision reference without a `projectId`, a decision deployment without one,
+  and a MIM import without one are refused with 400. `POST /api/v1/deployments` files a model
+  under the application of its draft, else of the process's earlier versions, and refuses one with
+  neither. An empty `projectId` on a move — a draft, a deployed process, a decision reference — is
+  refused, a form saved without one keeps the application it is in, and deleting an application
+  that still holds anything is refused with 409 until it is moved or deleted with `?purge=true`.
+  What already belongs to no application keeps running and can still be edited; it is listed
+  under "Not assigned" until it is assigned. In the Modeler, "Create new" asks which application
+  a new process, form, decision or import goes into. MCP: `atlas_save_draft`, `atlas_save_form`,
+  `atlas_register_decision` and `atlas_deploy_decision` require `projectId`, and `atlas_deploy`
+  takes one. A script that deploys or saves without naming an application has to name one now.
 - **The replay's Variables tab sorts a selected element's variables by how it came by them.**
   Instead of one list with an Input/Output switch that meant before/after, the tab shows three
   sections: *Input* (the element's own scope — input mappings, a round's loop counter and item),

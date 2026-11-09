@@ -84,6 +84,12 @@ func (s *Server) handleDeployDecision(w http.ResponseWriter, r *http.Request) {
 	// own do(): authorization reads the project store through a do() of its own, and
 	// dispatching onto the loop from the loop would deadlock.
 	projectID := r.URL.Query().Get("projectId")
+	// A decision is deployed into an application
+	// (ADR-0544).
+	if code, msg := s.unfiledRefusal(projectID, "a deployed decision"); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	if projectID != "" {
 		if code, msg := s.authorizeTargetProject(r, projectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
