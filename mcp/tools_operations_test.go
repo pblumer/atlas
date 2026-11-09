@@ -49,7 +49,7 @@ func activeProcessInstances(t *testing.T, text string) int {
 func TestPublishMessageViaTool(t *testing.T) {
 	ts := newAtlas(t)
 
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	// Start with orderId=order-1; the instance parks at the catch event.
@@ -77,7 +77,7 @@ func TestPublishMessageViaTool(t *testing.T) {
 // the server.
 func TestAPublishedMessageWaitsViaTool(t *testing.T) {
 	ts := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	pubText, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_publish_message", map[string]any{
@@ -164,7 +164,7 @@ func instanceJobKey(t *testing.T, atlasURL string, instanceKey uint64) uint64 {
 func TestCompleteJobViaTool(t *testing.T) {
 	ts := newAtlas(t)
 
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	// sampleBPMN parks a token on its "payment" service task, creating one job.

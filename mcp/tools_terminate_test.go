@@ -12,7 +12,7 @@ import (
 // active instance key. sampleBPMN parks on its service task, so all stay active.
 func deployAndStartInstances(t *testing.T, atlas *httptest.Server, varsList []map[string]any) []uint64 {
 	t.Helper()
-	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, atlas)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	for i, vars := range varsList {

@@ -78,15 +78,21 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_deploy",
-			Description: "Deploy a BPMN 2.0 XML process definition to atlas. The model is " +
-				"compiled and validated; only elements atlas can execute are accepted. " +
-				"Returns the assigned definition key, process id, and version.",
+			Description: "Deploy a BPMN 2.0 XML process definition to atlas, into an application. The " +
+				"model is compiled and validated; only elements atlas can execute are accepted. Without " +
+				"projectId it files under the application of the draft with its process id, else of the " +
+				"process's earlier versions; with none of these the deploy is refused, because every " +
+				"process belongs to an application. Returns the assigned definition key, process id, and version.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"xml": map[string]any{
 						"type":        "string",
 						"description": "The full BPMN 2.0 XML document to deploy.",
+					},
+					"projectId": map[string]any{
+						"type":        "string",
+						"description": "The application id to deploy into (from atlas_create_application or atlas_list_applications).",
 					},
 				},
 				"required": []any{"xml"},
@@ -96,7 +102,11 @@ func runtimeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return asText(c.post("/api/v1/deployments", "application/xml", []byte(xml)))
+				path := "/api/v1/deployments"
+				if pid, _ := args["projectId"].(string); pid != "" {
+					path += "?projectId=" + url.QueryEscape(pid)
+				}
+				return asText(c.post(path, "application/xml", []byte(xml)))
 			},
 		},
 		{

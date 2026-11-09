@@ -59,6 +59,12 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec := dmnRef{ID: id, Name: name, ModelRef: modelRef, ProjectID: payload.ProjectID, OwnerID: s.artifactOwnerOnCreate(r), CreatedAt: time.Now().Unix()}
+	// A reference is filed under an application
+	// (ADR-draft-artifacts-belong-to-an-application).
+	if code, msg := s.unfiledRefusal(rec.ProjectID, "a decision reference"); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// Filing a reference into a project needs editor on that project (ADR-0071),
 	// which also enforces that it exists (400 otherwise).
 	if rec.ProjectID != "" {
@@ -164,6 +170,14 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
+	}
+	// Out of every application is no longer a destination
+	// (ADR-draft-artifacts-belong-to-an-application).
+	if payload.ProjectID != nil {
+		if code, msg := s.unfileRefusal(*payload.ProjectID); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
 	}
 	if payload.ProjectID != nil && *payload.ProjectID != "" {
 		if code, msg := s.authorizeTargetProject(r, *payload.ProjectID, ScopeRoleEditor); code != 0 {

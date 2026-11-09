@@ -144,6 +144,12 @@ func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
 
 	projectID := r.URL.Query().Get("projectId")
 	overwrite := r.URL.Query().Get("overwrite") == "true"
+	// The drafts an import writes are filed under an application
+	// (ADR-draft-artifacts-belong-to-an-application).
+	if code, msg := s.unfiledRefusal(projectID, "an imported workflow"); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 
 	// Phase 2, on the loop: read what each id already holds. Nothing is written.
 	var (

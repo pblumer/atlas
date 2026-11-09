@@ -12,8 +12,15 @@ import (
 // of the package's run under the race detector: about 1,800 hashes and checks at
 // over a second each. Everything else about a password — the length floor, the
 // digest format, the comparison — is the code a server runs.
+//
+// It also builds the package's servers without the rule that everything belongs to an
+// application (ADR-draft-artifacts-belong-to-an-application): the engine behaviour
+// most of these tests cover is not about filing, and hundreds of them deploy a bare
+// model. The rule's own tests turn it back on with withApplicationRequired, and
+// TestAServerRequiresAnApplicationByDefault holds the production value.
 func TestMain(m *testing.M) {
 	passwordCost = bcrypt.MinCost
+	applicationRequiredByDefault = false
 	os.Exit(m.Run())
 }
 

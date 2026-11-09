@@ -25,7 +25,7 @@ const miToolBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MO
 // to one iteration and read its detail.
 func TestMultiInstanceHistoryViaTools(t *testing.T) {
 	atlas := newAtlas(t)
-	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": miToolBPMN}))[0])); isErr {
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": miToolBPMN, "projectId": testApp(t, atlas)}))[0])); isErr {
 		t.Fatalf("deploy: %s", text)
 	}
 	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {
@@ -153,7 +153,7 @@ func TestMultiInstanceHistoryViaTools(t *testing.T) {
 
 func TestInstanceOutlineViaTool(t *testing.T) {
 	atlas := newAtlas(t)
-	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": miToolBPMN}))[0])); isErr {
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": miToolBPMN, "projectId": testApp(t, atlas)}))[0])); isErr {
 		t.Fatalf("deploy: %s", text)
 	}
 	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {

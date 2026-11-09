@@ -106,16 +106,25 @@ func liveServer(t *testing.T) (*httptest.Server, *seen) {
 		_ = log.Close()
 	})
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/drafts", strings.NewReader(scenarioBPMN))
-	req.Header.Set("Content-Type", "application/xml")
-	resp, err := ts.Client().Do(req)
-	if err != nil {
-		t.Fatalf("save draft: %v", err)
+	// Every draft belongs to an application (ADR-draft-artifacts-belong-to-an-application).
+	// Set up past the watcher, so a test of what the runner writes sees only that.
+	setup := func(path, contentType, body string) []byte {
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		r.Header.Set("Content-Type", contentType)
+		inner.ServeHTTP(rec, r)
+		if rec.Code != http.StatusOK && rec.Code != http.StatusCreated {
+			t.Fatalf("POST %s = %d %s", path, rec.Code, rec.Body.String())
+		}
+		return rec.Body.Bytes()
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("save draft = %s", resp.Status)
+	var app struct {
+		ID string `json:"id"`
 	}
+	if err := json.Unmarshal(setup("/api/v1/applications", "application/json", `{"name":"Scenarios"}`), &app); err != nil || app.ID == "" {
+		t.Fatalf("create application: %v", err)
+	}
+	setup("/api/v1/drafts?projectId="+app.ID, "application/xml", scenarioBPMN)
 	return ts, watched
 }
 

@@ -200,7 +200,10 @@ func TestInformationModelToolsScenario(t *testing.T) {
 	}
 
 	// 7. The other direction: which running instances carry an Order right now.
-	callOne(t, atlas, "atlas_deploy", map[string]any{"xml": infomodelDataBPMN})
+	// Into an application of its own, which has no information model: every process
+	// belongs to one (ADR-draft-artifacts-belong-to-an-application), and this one is
+	// meant to declare a type nothing resolves.
+	callOne(t, atlas, "atlas_deploy", map[string]any{"xml": infomodelDataBPMN, "projectId": testApp(t, atlas)})
 	var procs []struct {
 		Key uint64 `json:"key"`
 	}
@@ -281,8 +284,8 @@ func TestInformationModelToolsScenario(t *testing.T) {
 	if len(graph.Nodes) != 1 {
 		t.Fatalf("object graph = %+v, want the one object the instance carries", graph.Nodes)
 	}
-	// The process was deployed outside any application, so nothing resolves its
-	// declared type — the graph says it is showing less than it could rather than
+	// The process was deployed into an application with no information model, so
+	// nothing resolves its declared type — the graph says it is showing less than it could rather than
 	// inventing a class.
 	if !graph.Degraded || graph.Nodes[0].Class != "" || graph.Nodes[0].Label != "order" {
 		t.Errorf("node = %+v (degraded=%v)", graph.Nodes[0], graph.Degraded)
@@ -292,7 +295,7 @@ func TestInformationModelToolsScenario(t *testing.T) {
 	}
 
 	// 8b. The same instance read against the lifecycle its class declares. Here the
-	// process is deployed outside any application, so nothing resolves its class and
+	// process is deployed into an application with no model, so nothing resolves its class and
 	// there is no machine to draw — an empty answer, not a machine with no states.
 	lcJSON := callOne(t, atlas, "atlas_instance_lifecycle", map[string]any{"key": index.Objects[0].InstanceKey})
 	var traces []struct {

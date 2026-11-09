@@ -345,7 +345,8 @@ func TestExportNamesWhatThePackageCannotCarry(t *testing.T) {
 	ts, _ := liveServer(t)
 	mkApplication(t, ts, "Shop", "pkg-in-app")
 	elsewhere := strings.Replace(scenarioBPMN, `id="approval"`, `id="pkg-elsewhere"`, 1)
-	if code, raw := apiCall(t, ts, http.MethodPost, "/api/v1/deployments", elsewhere); code != http.StatusOK && code != http.StatusCreated {
+	other := createdApp(t, ts, "Elsewhere")
+	if code, raw := apiCall(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+other, elsewhere); code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("deploy = %d %s", code, raw)
 	}
 	group := createdID(t, ts, "/api/v1/groups", `{"name":"Einkauf"}`)
