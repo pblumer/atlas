@@ -1,0 +1,142 @@
+{
+  "id": "wtd",
+  "name": "Worker Type Distribution",
+  "summary": "Worker Types become signed artifacts that atlas installs, verifies and launches and atlas hub distributes, for atlas, commercial, third-party and organisation-internal publishers; the server half becomes data, and the built-in Worker Types are migrated, not grandfathered (ADR-0535).",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-09",
+  "plan": "../../adr/0535-worker-types-as-distributed-artifacts.md",
+  "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
+  "next_action": "WTD3: owner review of the per-release credential (ADR-0545); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: sign off WTD1 and WTD2, and decide the rule for new built-in Worker Types (ADR-0540 SharePoint Server landed on the old path).",
+  "slices": [
+    {
+      "id": "WTD1",
+      "title": "SDK, protocol contract and handshake (ADR-0535 step 1)",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1591,
+        1592,
+        1593
+      ],
+      "note": "Code on main: workersdk imports nothing of atlas (TestTheSDKImportsNothingOfAtlas), protocol contract v1, handshake (protocol, workerType) in api/workerproto and workertype.CheckIdentity. Open gate: owner acceptance; no approving review is recorded on the PRs, so the slice is not set complete. Residual work is tracked elsewhere: the SDK's own Go module waits for ADR-0536 (WTD5); the built-in Worker Types' imports of job/compiler/expr/dmn move with WTD4.",
+      "evidence": [
+        "../../../workersdk/sdk_deps_test.go",
+        "../../../workersdk/protocol_test.go",
+        "../../../workertype/identity_test.go",
+        "../../../api/workerproto/workerproto_test.go",
+        "../../contracts/worker-protocol/v1/README.md"
+      ]
+    },
+    {
+      "id": "WTD2",
+      "title": "Worker-only executable atlas-workers (ADR-0535 step 2)",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "WTD1"
+      ],
+      "issues": [],
+      "prs": [
+        1594
+      ],
+      "note": "Code on main: cmd/atlas-workers and internal/workercmd; the supervisor runs atlas-workers when it sits beside the server binary (ATLAS_WORKERS_BINARY overrides). Open gate: owner acceptance, as for WTD1. By design atlas-workers is trusted like the server binary and not digest-verified; the server binary still contains every Worker Type until WTD4 and WTD8.",
+      "evidence": [
+        "../../../internal/workercmd/run_test.go",
+        "../../../api/supervisorexe_internal_test.go"
+      ]
+    },
+    {
+      "id": "WTD3",
+      "title": "Verified local artifacts and the process launcher (ADR-0535 step 3)",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "WTD1"
+      ],
+      "issues": [],
+      "prs": [
+        1595
+      ],
+      "note": "On main (#1595): content-addressed store workertype/install, digest checked at install and before every launch, /api/v1/worker-types/installed, --allow-unsigned-worker-types for development, allowlisted launch environment, pilot examples/workertypes/echo. Credential per installed release (ADR-0545, Proposed/Partial pending owner acceptance): in-memory secret confined to the manifest's job types and the instance's own id, revoked at removal, replaced at server start; closes the shared worker-token gap for installed artifacts. Open: (1) process confinement for installed artifacts (Landlock/seccomp, Windows job object); (2) the Console view of installed releases; (3) comparing the reported digest with the launched one (ADR-0535 §3). Placement per configured Worker belongs with WTD6.",
+      "evidence": [
+        "../../../workertype/install/install_test.go",
+        "../../../api/workertypeinstall_internal_test.go",
+        "../../../api/instancecredential_internal_test.go"
+      ]
+    },
+    {
+      "id": "WTD4",
+      "title": "Generic server half: configuration, credentials, worker queries (ADR-0535 step 4)",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "WTD3"
+      ],
+      "issues": [],
+      "prs": [
+        1596,
+        1605
+      ],
+      "note": "On main: spec.configuration as JSON Schema with writeOnly secrets as vault references and ATLAS_WORKER_CONFIG (#1596); the required idempotency/effect declaration per operation and idempotencyKey atlas:<node id>:<job key>, stable across retries and incident resolution (#1605, ADR-0538 Partial). Open: validate-config, check-connection and diagnostics as worker queries; binding a task to one configured Worker; the per-job credential broker for installed types; migrating built-in types, smallest server half first. Migrating a built-in type touches stored configuration of existing installations and needs the owner's decision first. ADR-0540 (SharePoint Server, 2026-11-09) landed as a built-in type without manifest or idempotency declaration and adds to this slice's backlog.",
+      "evidence": [
+        "../../../workertype/configuration_test.go",
+        "../../../workersdk/launch_test.go",
+        "../../../api/idempotencykey_internal_test.go"
+      ]
+    },
+    {
+      "id": "WTD5",
+      "title": "Supply chain: publisher signatures, revocation, worker-type release kind in atlas hub (ADR-0535 step 5)",
+      "status": "blocked",
+      "owner": "unassigned",
+      "depends_on": [
+        "WTD3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Blocked by ADR-0536 (Proposed: SDK licence and hub curation tiers, needs legal review) and depends on the atlas hub programme (BMP) for the new index schema version. No Worker Type binary is published before this slice is complete. The SDK's own Go module (residual of WTD1) lands here, once the licence is decided."
+    },
+    {
+      "id": "WTD6",
+      "title": "container and kubernetes launchers, placement per Worker (ADR-0535 step 6)",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "WTD3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Not started. The kubernetes launcher needs RBAC for atlas's service account and is never on by default; placement is chosen per configured Worker."
+    },
+    {
+      "id": "WTD7",
+      "title": "Hard cases: ad, entra, exchange, teamsphone, SQL kinds, mail, script (ADR-0535 step 7)",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "WTD4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Not started. Each type may need its own record where its server half does not fit ADR-0535 section 4; identity-aware types depend on the IAE credential broker. Irreversible operations without a key may need ADR-0537 (Proposed) before they can be held instead of redelivered."
+    },
+    {
+      "id": "WTD8",
+      "title": "Removal: no Worker Type implementation in the engine binary (ADR-0535 step 8)",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "WTD4",
+        "WTD5",
+        "WTD6",
+        "WTD7"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Not started. A test enforces that the server imports no Worker Type implementation package; atlas-embedded ends; the distribution archive ships the first-party artifacts preinstalled so a fresh installation still works offline."
+    }
+  ]
+}

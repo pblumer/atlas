@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -59,6 +60,7 @@ func defaultTools() []Tool {
 	tools = append(tools, collabTools()...)
 	tools = append(tools, infomodelTools()...)
 	tools = append(tools, capabilityTools()...)
+	tools = append(tools, pubInterfaceTools()...)
 	tools = append(tools, catalogTools()...)
 	tools = append(tools, hubTools()...)
 	return append(tools, contentTools()...)
@@ -77,15 +79,21 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_deploy",
-			Description: "Deploy a BPMN 2.0 XML process definition to atlas. The model is " +
-				"compiled and validated; only elements atlas can execute are accepted. " +
-				"Returns the assigned definition key, process id, and version.",
+			Description: "Deploy a BPMN 2.0 XML process definition to atlas, into an application. The " +
+				"model is compiled and validated; only elements atlas can execute are accepted. Without " +
+				"projectId it files under the application of the draft with its process id, else of the " +
+				"process's earlier versions; with none of these the deploy is refused, because every " +
+				"process belongs to an application. Returns the assigned definition key, process id, and version.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"xml": map[string]any{
 						"type":        "string",
 						"description": "The full BPMN 2.0 XML document to deploy.",
+					},
+					"projectId": map[string]any{
+						"type":        "string",
+						"description": "The application id to deploy into (from atlas_create_application or atlas_list_applications).",
 					},
 				},
 				"required": []any{"xml"},
@@ -95,7 +103,11 @@ func runtimeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return asText(c.post("/api/v1/deployments", "application/xml", []byte(xml)))
+				path := "/api/v1/deployments"
+				if pid, _ := args["projectId"].(string); pid != "" {
+					path += "?projectId=" + url.QueryEscape(pid)
+				}
+				return asText(c.post(path, "application/xml", []byte(xml)))
 			},
 		},
 		{
@@ -433,6 +445,92 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/variables"))
+			},
+		},
+		// The document store (ADR-0543): a file a
+		// process received is a document, and a variable holds only its reference
+		// {"$document": "doc_…", …}. These read and create documents for an agent, under
+		// the same access rule as everyone: a document is its uploader's until it enters
+		// an instance, then readable by whoever may read that instance.
+		{
+			Name: "atlas_document_meta",
+			Description: "Read what a document is without its bytes: its reference ({$document, name, contentType, size, sha256}), " +
+				"whether it is pending (uploaded, not yet in any instance) or bound, when it was uploaded, which backend holds it, " +
+				"and whether its bytes are available. The id is the $document of a reference in a variable.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The document id, doc_… — the $document of a reference.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/documents/" + url.PathEscape(id) + "/meta"))
+			},
+		},
+		{
+			Name: "atlas_read_document",
+			Description: "Read a text document's content — a CSV a form uploaded, a JSON or XML file — at most maxBytes of it " +
+				"(default 65536, at most 1048576), and say whether it was cut. A binary document (a PDF, an image) is not " +
+				"returned: its type and size are, because bytes an agent cannot read only fill its context.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":       stringProp("The document id, doc_… — the $document of a reference."),
+					"maxBytes": map[string]any{"type": "integer", "description": "Optional: how much of the text to return (default 65536, at most 1048576)."},
+				},
+				"required": []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				max := uint64(64 << 10)
+				if n, ok, err := optPositiveUint(args, "maxBytes"); err != nil {
+					return "", err
+				} else if ok {
+					max = min(n, 1<<20)
+				}
+				resp, err := c.doResponse(http.MethodGet, "/api/v1/documents/"+url.PathEscape(id), "", nil)
+				if err != nil {
+					return "", err
+				}
+				return documentText(id, resp.header.Get("Content-Type"), resp.body, int(max)), nil
+			},
+		},
+		{
+			Name: "atlas_upload_document",
+			Description: "Store text as a new document — a CSV to start a process with, a JSON payload — and answer the reference a " +
+				"variable holds ({$document, name, contentType, size, sha256}). Pass that reference as a variable's value when " +
+				"starting an instance or completing a task; the document is yours until it enters an instance, and is removed if " +
+				"nothing uses it within the server's time to live (24 h by default). The type is detected from the content and the " +
+				"name's extension.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":        stringProp("The file name, e.g. mitarbeitende.csv; its extension refines the detected type."),
+					"content":     stringProp("The document's text."),
+					"contentType": stringProp("Optional: the type you claim, e.g. text/csv. Kept beside the detected one, not in its place."),
+				},
+				"required": []any{"name", "content"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				name, err := argString(args, "name")
+				if err != nil {
+					return "", err
+				}
+				content, err := argString(args, "content")
+				if err != nil {
+					return "", err
+				}
+				ct := optString(args, "contentType")
+				if ct == "" {
+					ct = "text/plain; charset=utf-8"
+				}
+				return asText(c.post("/api/v1/documents?name="+url.QueryEscape(name), ct, []byte(content)))
 			},
 		},
 		{

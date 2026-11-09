@@ -294,6 +294,12 @@ func (s *Server) handlePublicWizardComplete(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A visitor on a public link is nobody the document store knows, so nothing they
+	// could name is theirs to use (ADR-0543).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	var schema string
 	s.do(func() { schema, err = s.publicStepForm(piKey, taskKey) })
 	switch {

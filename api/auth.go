@@ -406,6 +406,12 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 				Scope:    apiScopeWorker,
 			}
 		}
+		// An installed Worker Type's instance holds a secret of its own, bound to its
+		// instance id and its manifest's job types
+		// (ADR-0545).
+		if cred, ok := s.instanceCreds.match(tok); ok {
+			return cred.principal()
+		}
 		// A deploy token identifies a peer Atlas publishing here (ADR-0129). The
 		// index is an in-memory, mutex-guarded mirror of the durable records, so this
 		// stays safe to call from a handler goroutine and costs no disk read.

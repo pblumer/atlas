@@ -1166,6 +1166,14 @@ type ConnectorTaskDetail struct {
 	ExchangeParameters    RestExpr
 	ExchangeParametersVar int32
 	ExchangeMaxResults    int32
+
+	// SharePoint Server fields (JobType == SharePointServerJobType,
+	// ADR-0540). SharePointServerOp is the interned operation —
+	// a row of connector/sharepointserver/catalog — and SharePointServerParameters the
+	// authored parameter object, compiled from the model's JSON template to one FEEL
+	// context at deploy (I5).
+	SharePointServerOp         int32
+	SharePointServerParameters RestExpr
 	// Teams Phone fields (JobType == TeamsPhoneJobType, ADR-0463).
 	// Connector (above) names the configured tenant; its app certificate lives with the
 	// worker, never in a model. TeamsPhoneOp is the interned operation

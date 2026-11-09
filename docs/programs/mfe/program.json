@@ -4,10 +4,10 @@
   "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-11-02",
+  "last_reviewed": "2026-11-09",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "MFE1 server and UI slices (#1492, #1495, #1497, #1498) are merged and the \"published\" question is decided (newest deployed version). Review and merge the handbook follow-up PR #1500, then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1.",
+  "next_action": "MFE1 software is merged (#1492, #1495, #1497, #1498, #1500); collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. MFE1A (Console page for start grants, #1639) is active: PR A adds the additive blockers field, PR B the page, the read-only application hint, Playwright and docs.",
   "slices": [
     {
       "id": "MFE0",
@@ -56,6 +56,23 @@
         1500
       ],
       "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is merged (PR #1492); it enables no start by itself. GET /api/v1/me/startable-processes (own session, newest eligible version only, sorted and capped) is merged (PR #1495). POST /api/v1/me/processes/{key}/instances (grant and version re-checked as a guard in the command turn, server-side start-form constraints, reuse of the operator start path, startedBy and WAL-replay recovery test over the safety-inspection example) is merged (PR #1497). The Tasks Start view for task users (offered only with a grant, all outcome states including unknown outcome, 320/390/768px Playwright E2E) completes ADR-0516's slices (merged, PR #1498). The owner decided on 2026-11-02 that \"published\" means the newest deployed version within the application (no release-membership requirement); ADR-0516 records it. A bilingual handbook section for administrators and task users is in PR #1500. MFE1 stays active: the issue #1456 acceptance list still needs real iOS/Android evidence (MFE0 #1451). Existing operator rights are unchanged."
+    },
+    {
+      "id": "MFE1A",
+      "title": "Start-grant administration in the Console",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "MFE1"
+      ],
+      "issues": [
+        1639
+      ],
+      "prs": [
+        1640,
+        1642
+      ],
+      "note": "Planned 2026-11-09 by the owner (plan docs/planning/mfe1a-start-grant-administration.md). Console → Administration → Start grants page over the existing ADR-0516 admin routes: application, processes with audience by name and offered/not-offered state, grant/revoke by name with 409 handling, check a person or group, history. Plus a read-only, admin-only hint per process in the application's Deployments tab. Server change limited to an additive blockers field (with the newest definitionKey/version) on the list and single grant reads; no new route, no new authority, no new ADR. Two PRs: A server field, B web page, hint, Playwright and docs. Started by the owner on 2026-11-09: plan merged (#1640); PR A (blockers on the grant reads) is #1642."
     },
     {
       "id": "MFE2",

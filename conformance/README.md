@@ -29,8 +29,10 @@ The suite keeps two questions apart:
 | **Metamorphic** | Behaviorally equivalent models (concurrent vs. sequential independent effects) reach the same effect projection despite different shapes — no reference engine needed. | `TestMetamorphic` |
 | **Differential** | The outcome matches an *independent* engine (Node's bpmn-engine) — the one oracle that catches Atlas being consistently wrong. Control-flow subset, opt-in. | [`differential/`](differential/) |
 
-The first four trust Atlas alone (self-consistency); the differential is the only
-one that compares against a second implementation. See [`differential/README.md`](differential/README.md).
+The first four trust atlas alone (self-consistency); the differential compares a
+**five-model subset** against a separately implemented BPMN executor and the portable
+TCK projection. Its dedicated CI job now **fails** on missing reference dependencies,
+but it does not establish complete OMG execution coverage. See [`differential/README.md`](differential/README.md).
 
 Runs are deterministic — the precondition for golden files. Self-completing
 models (inline FEEL scripts) need no help; models that **park a token** carry a
@@ -108,6 +110,27 @@ rejects each one, because "garbage refused at deploy" is as much a correctness
 property as "valid model runs" (invariant 5). They are listed in `COVERAGE.md`.
 Add one by dropping a `neg-*.bpmn` under `models/` and registering it in
 `NegativeModels` with the reason it must fail.
+
+
+## CON2–CON4 target-specific evidence
+
+- **CON2**: `normative_oracles_test.go` asserts explicit gateway/boundary end paths,
+  cancellation of losing outcomes, and exact severity/rule/element for unsupported
+  event-gateway and conditional-start variants. A rejected valid construct is a
+  diagnostic, **not** execution coverage.
+- **CON3**: `recovery_midflight_test.go` stops a live, still-active process at six
+  deterministic checkpoints (job, timer, message, incident, event-gateway race,
+  non-interrupting boundary). It closes the live stores, replays WAL into a fresh
+  state store, compares process/element/job/timer/incident/variable/subscription
+  snapshots, repeats recovery, resumes the instance and compares the end result
+  with an uninterrupted run. This does **not** cover every nested state family.
+- **CON4**: `differential/` executes five translated control-flow models with the
+  pinned independent `bpmn-engine`; on CI the reference is **required** rather
+  than optionally skipped. See `differential/README.md` for the translation scope.
+
+None of these pieces changes the provisional normative denominator or declares
+OMG certification. Completion of each slice still requires the corresponding
+review/CI/acceptance gate in the programme manifest.
 
 ## What's next
 

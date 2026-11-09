@@ -7807,6 +7807,24 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
+      <div class="card" id="runbook-sharepointserver">
+        <h4>SharePoint Server</h4>
+        <p data-l="de">Ein SharePoint-Server-Worker verwaltet Websitesammlungen einer Farm (Subscription Edition, on-premises). Das ist ein eigener Worker-Typ und nicht das Ziel «Server» des Typs <code>sharepoint</code>: Dessen Operationen sind Listen und Dateien über Microsoft Graph, das SharePoint Server nicht hat. Die Websitesammlung ist hier die Einheit, eine Microsoft-365-Gruppe gibt es nicht. Eine Aufgabe nennt die Site mit ihrem Namen unter dem verwalteten Pfad (<code>projekt-alpha</code>), nie mit einer URL. <i>Die Schritte sind aus der Dokumentation von Microsoft geschrieben und noch nicht an einer Farm durchgegangen worden.</i></p>
+        <p data-l="en">A SharePoint Server worker administers site collections of a farm (Subscription Edition, on-premises). It is a Worker Type of its own and not a "server" target of the <code>sharepoint</code> type, whose operations are lists and files over Microsoft Graph, which SharePoint Server does not have. The site collection is the unit here; there is no Microsoft 365 group. A task names a site by its leaf under the managed path (<code>projekt-alpha</code>), never by a URL. <i>These steps are written from Microsoft's documentation and have not yet been walked on a farm.</i></p>
+        <ol>
+          <li data-l="de"><b>Dienstkonto.</b> Ein Domänenkonto für den Worker, Mitglied von <code>WSS_ADMIN_WPG</code> auf dem Server und mit <code>Add-SPShellAdmin</code> in <code>SharePoint_Shell_Access</code> auf der Konfigurationsdatenbank und auf jeder Inhaltsdatenbank, in der es Sites verwalten soll.</li>
+          <li data-l="en"><b>Service account.</b> A domain account for the worker, a member of <code>WSS_ADMIN_WPG</code> on the server, given <code>SharePoint_Shell_Access</code> with <code>Add-SPShellAdmin</code> on the configuration database and on every content database it administers sites in.</li>
+          <li data-l="de"><b>Worker auf einem Server der Farm.</b> <code>atlas worker --connector sharepointserver</code> unter diesem Konto, mit <code>ATLAS_SHAREPOINTSERVER_CONNECTORS</code> und <code>ATLAS_SHAREPOINTSERVER_&lt;NAME&gt;_URL</code>. Atlas überwacht diesen Worker nicht: Die Cmdlets gibt es nur auf der Farm. Der Worker startet <code>powershell.exe</code>.</li>
+          <li data-l="en"><b>Worker on a farm server.</b> <code>atlas worker --connector sharepointserver</code> under that account, with <code>ATLAS_SHAREPOINTSERVER_CONNECTORS</code> and <code>ATLAS_SHAREPOINTSERVER_&lt;NAME&gt;_URL</code>. Atlas does not supervise this worker, because the cmdlets exist only on the farm. It starts <code>powershell.exe</code>.</li>
+          <li data-l="de"><b>Worker unter «Workers» anlegen.</b> Typ <b>sharepointserver</b>, der Name aus den Modellen, Endpoint ist die Webanwendung (<code>http://sp01.contoso.local</code>). Ein Zugangsdaten-Eintrag entfällt.</li>
+          <li data-l="en"><b>Add the Worker under Workers.</b> Type <b>sharepointserver</b>, the name the models use, endpoint is the web application (<code>http://sp01.contoso.local</code>). No credential entry.</li>
+        </ol>
+        <p data-l="de"><b>Fehler, auf die ein Prozess reagieren kann:</b> <code>SHAREPOINT_SERVER_SITE_EXISTS</code>, <code>SHAREPOINT_SERVER_SITE_NOT_FOUND</code>, <code>SHAREPOINT_SERVER_DELETED_SITE_NOT_FOUND</code>, <code>SHAREPOINT_SERVER_ACCOUNT_NOT_FOUND</code>, <code>SHAREPOINT_SERVER_GROUP_MISSING</code>, <code>SHAREPOINT_SERVER_OWNER_REQUIRED</code> und <code>SHAREPOINT_SERVER_QUOTA_REFUSED</code>. Die Kontingentgrösse <code>QuotaGB</code> zählt in Einheiten von 2<sup>30</sup> Byte; ohne <code>WarningPercent</code> warnt SharePoint bei 90 Prozent.</p>
+        <p data-l="en"><b>Errors a process can catch:</b> <code>SHAREPOINT_SERVER_SITE_EXISTS</code>, <code>SHAREPOINT_SERVER_SITE_NOT_FOUND</code>, <code>SHAREPOINT_SERVER_DELETED_SITE_NOT_FOUND</code>, <code>SHAREPOINT_SERVER_ACCOUNT_NOT_FOUND</code>, <code>SHAREPOINT_SERVER_GROUP_MISSING</code>, <code>SHAREPOINT_SERVER_OWNER_REQUIRED</code> and <code>SHAREPOINT_SERVER_QUOTA_REFUSED</code>. <code>QuotaGB</code> counts in units of 2<sup>30</sup> bytes; without <code>WarningPercent</code>, SharePoint warns at 90 percent.</p>
+        <p class="checked" data-checked="2026-11" data-l="de">Zuletzt geprüft: November 2026, an der Dokumentation.</p>
+        <p class="checked" data-checked="2026-11" data-l="en">Last checked: November 2026, against the documentation.</p>
+      </div>
+
       <div class="card" id="runbook-exchange">
         <h4>Microsoft Exchange</h4>
         <p data-l="de">Ein Exchange-Worker verwaltet eine Organisation – Exchange Online oder einen Exchange
@@ -8500,7 +8518,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           wie eine Prozessvariable sein darf (1&nbsp;MiB), und damit im Ereignisprotokoll, solange der Server seine
           Geschichte aufbewahrt. <i>Export attachment</i> legt einen Anhang direkt in einem S3-Worker ab, ohne dass er
           je im Prozess landet; einer Person zeigst du ihn danach mit einem S3-Task <code>presign-get</code> als Link
-          im User-Task. Welcher Anhang gemeint ist, sagt seine <code>id</code> aus <code>mail.attachments</code>.
+          im User-Task. <i>Store attachment as a document</i> legt ihn im <a href="#runbook-documents">Dokumentenspeicher</a>
+          ab und schreibt nur einen Verweis in die Variable – ohne S3-Worker und bis 35&nbsp;MiB. Welcher Anhang
+          gemeint ist, sagt seine <code>id</code> aus <code>mail.attachments</code>.
           Weiterleiten und Exportieren schreiben aus dem Postfach hinaus und brauchen deshalb beim Deploy
           <i>darf ändern</i> auf dem Mail-Worker, ein Export zusätzlich <i>darf ändern</i> auf dem S3-Worker. Ein
           Dokument ist auf 35&nbsp;MiB begrenzt (<code>ATLAS_LIMIT_DOCUMENT</code>).</p>
@@ -8510,7 +8530,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           a process variable may be (1&nbsp;MiB), and therefore in the event log for as long as the server keeps its
           history. <i>Export attachment</i> puts one attachment straight into an S3 Worker without it ever reaching
           the process; to show it to a person, mint a link with an S3 <code>presign-get</code> task and put it in the
-          user task. Which attachment is meant is its <code>id</code> from <code>mail.attachments</code>. Forwarding
+          user task. <i>Store attachment as a document</i> keeps it in the <a href="#runbook-documents">document
+          store</a> and writes only a reference into the variable – no S3 Worker needed, up to 35&nbsp;MiB. Which
+          attachment is meant is its <code>id</code> from <code>mail.attachments</code>. Forwarding
           and exporting write out of the mailbox, so a deploy needs <i>may change it</i> on the mail Worker, and an
           export also <i>may change it</i> on the S3 Worker. A document is limited to 35&nbsp;MiB
           (<code>ATLAS_LIMIT_DOCUMENT</code>).</p>
@@ -9014,7 +9036,65 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             im Modell. Beispiel: <a href="#bsp-pruefe-datensaetze">Datensätze prüfen</a>.</p>
           <p class="lead" data-l="en">Turns a CSV file into a list of objects. The column description lives in the
             model. Example: <a href="#bsp-pruefe-datensaetze">Check records</a>.</p>
-          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+          <p class="lead" data-l="de">Die Quellvariable darf den Text der Datei enthalten oder einen
+            <a href="#runbook-documents">Verweis auf ein Dokument</a> – das, was ein Dateifeld in einem Formular heute
+            schreibt. Ein Dokument liest der eingebaute Worker direkt aus dem Dokumentenspeicher, eine Worker-Instanz
+            unter der Lease ihres Jobs. Die geparsten Zeilen landen weiterhin in einer Variable und sind damit auf
+            1&nbsp;MiB begrenzt; eine Datei mit vielen tausend Zeilen braucht deshalb einen anderen Weg.</p>
+          <p class="lead" data-l="en">The source variable may hold the file's text or a
+            <a href="#runbook-documents">reference to a document</a> – which is what a form's file field writes now.
+            The built-in worker reads a document straight from the document store, a Worker Instance under its job's
+            lease. The parsed rows still land in a variable and are therefore limited to 1&nbsp;MiB; a file of many
+            thousands of rows needs another way.</p>
+          <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+        </div>
+        <div class="card" id="runbook-documents">
+          <b data-l="de">Dateien und Dokumente</b><b data-l="en">Files and documents</b>
+          <p class="lead" data-l="de">Eine Datei, die ein Prozess erhält – eine CSV-Datei aus einem Formular, ein PDF
+            aus einem Postfach –, liegt einmal im <b>Dokumentenspeicher</b>. Die Prozessvariable enthält nur einen
+            Verweis: <code>{"$document": "doc_…", "name", "contentType", "size", "sha256"}</code>. So wächst weder das
+            Ereignisprotokoll noch der Verlauf mit der Datei, und eine Datei darf bis 35&nbsp;MiB gross sein
+            (<code>ATLAS_LIMIT_DOCUMENT</code>). In Operations und im Replay erscheint ein Verweis als Download-Link.</p>
+          <p class="lead" data-l="en">A file a process receives – a CSV file from a form, a PDF from a mailbox – is kept
+            once in the <b>document store</b>. The process variable holds only a reference:
+            <code>{"$document": "doc_…", "name", "contentType", "size", "sha256"}</code>. Neither the event log nor the
+            history grows with the file, and a file may be up to 35&nbsp;MiB (<code>ATLAS_LIMIT_DOCUMENT</code>). In
+            Operations and the replay a reference shows as a download link.</p>
+          <p class="lead" data-l="de"><b>Wer ein Dokument lesen darf:</b> Bis eine Variable es in eine Instanz bringt,
+            nur wer es hochgeladen hat. Danach alle, die diese Instanz lesen dürfen. Wer eine Aufgabe bearbeitet,
+            liest es nur, wenn ein Feld des Formulars den Verweis zeigt. Ein Verweis allein genügt nie: Jeder Eingang,
+            der Variablen annimmt, prüft ihn, und Nachrichten, öffentliche Links und Bestellaktionen nehmen keine
+            Verweise an. Ein Upload, den nach 24&nbsp;Stunden keine Variable verwendet, wird entfernt
+            (<code>--document-pending-ttl</code>); ein Dokument verschwindet mit der letzten Instanz, in die es kam.</p>
+          <p class="lead" data-l="en"><b>Who may read a document:</b> until a variable brings it into an instance,
+            only whoever uploaded it. After that, everyone who may read that instance. Somebody working a task reads it
+            only when a field of the task's form shows the reference. A reference alone is never enough: every route
+            that takes variables checks it, and messages, public links and order actions take no references at all. An
+            upload no variable uses within 24&nbsp;hours is removed (<code>--document-pending-ttl</code>); a document
+            goes with the last instance it entered.</p>
+          <p class="lead" data-l="de"><b>Was mit einem Dokument geht:</b> Ein S3-Task legt es mit <i>Put document</i>
+            in einen Bucket und holt mit <i>Take into document store</i> ein Objekt herein; ein Mail-Task legt einen
+            Anhang mit <i>Store attachment as a document</i> ab, geprüft wie bei jedem Anhang. Eine Worker-Instanz liest
+            ein Dokument nur für den Job, dessen Lease sie hält, und nur eines, das dessen Instanz erhalten hat. Nennt
+            eine als personenbezogen deklarierte Variable ein Dokument, wird es mit dem Schlüssel der betroffenen
+            Person verschlüsselt; nach ihrer Löschung ist es unlesbar und wird entfernt.</p>
+          <p class="lead" data-l="en"><b>What a document can do:</b> an S3 task puts it into a bucket with <i>Put
+            document</i> and takes an object in with <i>Take into document store</i>; a mail task stores an attachment
+            with <i>Store attachment as a document</i>, inspected like any attachment. A Worker Instance reads a
+            document only for the job whose lease it holds, and only one that job's instance was given. When a variable
+            the process declares personal names a document, the document is enciphered under the data subject's key;
+            once that person is erased it is unreadable and is removed.</p>
+          <p class="lead" data-l="de"><b>Ablage und Sicherung:</b> Standardmässig im Datenverzeichnis, mit
+            <code>--documents-backend=s3</code> (dazu <code>--documents-s3-worker</code> und
+            <code>--documents-s3-bucket</code>) in einem Bucket. Der vollständige Snapshot enthält die Dokumente nur,
+            wenn du ihn <i>mit Dokumenten</i> herunterlädst; ohne sie bleiben die Verweise erhalten, und ein Download
+            sagt, dass das Dokument nicht verfügbar ist.</p>
+          <p class="lead" data-l="en"><b>Storage and backup:</b> in the data directory by default, or in a bucket with
+            <code>--documents-backend=s3</code> (plus <code>--documents-s3-worker</code> and
+            <code>--documents-s3-bucket</code>). The full snapshot carries the documents only when you download it
+            <i>with documents</i>; without them the references survive, and a download says the document is not
+            available.</p>
+          <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
         </div>
         <div class="card" id="runbook-script">
           <b data-l="de">Skript (PowerShell, Python, JavaScript)</b><b data-l="en">Script (PowerShell, Python, JavaScript)</b>
@@ -11808,15 +11888,18 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <code>operator</code>). Pausiert heisst: die Version startet <b>keine neuen Instanzen mehr von selbst</b> –
         aus einem Zeit-, Nachrichten- oder Signal-Start-Event. Ein <b>ausdrücklicher</b> Start über die API oder die
         Oberfläche bleibt möglich, und laufende Instanzen laufen unberührt weiter. Es wirkt je Version, nicht je
-        Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole trägt die pausierte Version im
-        Modeler die Marke <i>Inaktiv</i> und einen Knopf <i>Aktivieren</i> / <i>Deaktivieren</i>.</p>
+        Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole schaltest du das im Reiter <i>Deployments</i>
+        der Applikation (Menü <i>⋯</i> der Prozesszeile: <i>Aktivieren</i> / <i>Deaktivieren</i>) oder in der
+        Live-Ansicht unter Operations; beide zeigen die pausierte Version mit der Marke <i>pausiert</i>, die Spalte
+        <i>Deployt</i> auf der Startseite des Modelers zählt sie.</p>
       <p data-l="en">A deployed version can be <b>paused</b> without deleting it
         (<code>PUT /api/v1/processes/{key}/active</code> with <code>{"active":false}</code>, role
         <code>operator</code>). Paused means the version <b>no longer starts new instances on its own</b> – from a
         timer, message or signal start event. An <b>explicit</b> start over the API or the UI still works, and
         running instances continue untouched. It applies per version, not per process id; a new version starts
-        active regardless. In the Console the paused version carries an <i>Inactive</i> badge in the Modeler and an
-        <i>Activate</i> / <i>Deactivate</i> button.</p>
+        active regardless. In the Console you switch it in the application's <i>Deployments</i> tab
+        (the process row's <i>⋯</i> menu: <i>Activate</i> / <i>Deactivate</i>) or in the Operations live view; both
+        show the paused version with a <i>paused</i> badge, and the Modeler home's <i>Deployed</i> column counts it.</p>
 
       <h3 data-l="de">Eine Version oder eine ganze Applikation löschen</h3><h3 data-l="en">Deleting a version or a whole application</h3>
       <p data-l="de">Eine deployte Version löschst du mit <code>DELETE /api/v1/processes/{key}</code> (Rolle
@@ -11826,14 +11909,14 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         Version trotzdem; dafür brauchst du zusätzlich <code>operator</code>, sobald Instanzen laufen. Ein
         Katalogprodukt, das den Prozess bindet, lässt sich danach nicht mehr bestellen, und die Rückgabe einer
         bestehenden Position schlägt fehl, bis der Prozess wieder deployt ist. Ein geschützter Systemprozess lässt
-        sich nie löschen. Im Modeler zeigt <i>Löschen</i> den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
+        sich nie löschen. Im Reiter <i>Deployments</i> der Applikation löscht <i>Löschen</i> einen Prozess mit allen Versionen, zeigt den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
       <p data-l="en">You delete a deployed version with <code>DELETE /api/v1/processes/{key}</code> (role
         <code>modeler</code>). Atlas refuses while instances of the version are running, while an order line can
         still start the process, or while the current catalogue release binds it – and says which of these applies.
         With <code>?force=true</code> Atlas cancels the running instances and deletes the version anyway; that also
         needs <code>operator</code> as soon as instances are running. A catalogue product that binds the process can
         no longer be ordered afterwards, and returning an existing line fails until the process is deployed again. A
-        protected system process can never be deleted. In the Modeler, <i>Delete</i> shows the reason for a refusal
+        protected system process can never be deleted. In the application's <i>Deployments</i> tab, <i>Delete</i> removes a process with all its versions, shows the reason for a refusal
         and offers the forced delete.</p>
       <p data-l="de">Beim Löschen einer Applikation wählst du: Entweder bleibt ihr Inhalt erhalten und erscheint
         unter <i>Nicht zugeordnet</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen

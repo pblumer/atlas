@@ -1,0 +1,110 @@
+{
+  "type": "default",
+  "id": "m365-spserver-site-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint Server: Teamwebsite · SharePoint Server: team site**\n\nEine Websitesammlung auf SharePoint Server unter /sites/<URL>. · A site collection on SharePoint Server at /sites/<URL>."
+    },
+    {
+      "key": "titel",
+      "type": "textfield",
+      "label": "Titel · Title",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "url",
+      "type": "textfield",
+      "label": "URL · Url",
+      "description": "Der Teil nach /sites/: 3 bis 64 Zeichen, Kleinbuchstaben, Ziffern, - und _. · The part after /sites/: 3 to 64 characters, lower-case letters, digits, - and _.",
+      "validate": {
+        "required": true,
+        "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sprache",
+      "type": "select",
+      "label": "Sprache · Language",
+      "values": [
+        {
+          "label": "Deutsch · German",
+          "value": "1031"
+        },
+        {
+          "label": "Französisch · French",
+          "value": "1036"
+        },
+        {
+          "label": "Italienisch · Italian",
+          "value": "1040"
+        },
+        {
+          "label": "Englisch · English",
+          "value": "1033"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      },
+      "defaultValue": "1031"
+    },
+    {
+      "key": "kontingent",
+      "type": "select",
+      "label": "Speicherkontingent (GB) · Storage quota (GB)",
+      "values": [
+        {
+          "label": "10 GB",
+          "value": "10"
+        },
+        {
+          "label": "25 GB",
+          "value": "25"
+        },
+        {
+          "label": "50 GB",
+          "value": "50"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      },
+      "defaultValue": "10"
+    },
+    {
+      "key": "besitzer",
+      "type": "textfield",
+      "label": "Besitzerin oder Besitzer · Owner",
+      "description": "AD-Konto oder AD-Gruppe als DOMAENE\\name oder name@domaene. · An AD account or AD group as DOMAIN\\name or name@domain.",
+      "validate": {
+        "required": true,
+        "pattern": "^([^\\s\\\\]+\\\\[^\\\\]+|[^@\\s]+@[^@\\s]+)$"
+      }
+    },
+    {
+      "key": "stellvertretung",
+      "type": "textfield",
+      "label": "Stellvertretung · Deputy",
+      "description": "AD-Konto oder AD-Gruppe als DOMAENE\\name oder name@domaene. · An AD account or AD group as DOMAIN\\name or name@domain.",
+      "validate": {
+        "required": true,
+        "pattern": "^([^\\s\\\\]+\\\\[^\\\\]+|[^@\\s]+@[^@\\s]+)$"
+      }
+    }
+  ]
+}

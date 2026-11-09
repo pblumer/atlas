@@ -29,6 +29,14 @@
 // value, a worker's log — marks it `data-dt-detail`. Such a row is not data: the helper
 // never sorts it on its own, never opens it, and only hides it along with the row it
 // belongs to when a filter removes that row. Whether it is open stays the view's to say.
+//
+// A view that splits its rows into groups under heading rows marks each heading
+// `data-dt-group`. A heading is not data either: it keeps its place, the rows under it
+// sort among themselves and never past the next heading, and while a filter is set a
+// heading whose rows the filter all removed goes with them. A heading with no rows of
+// its own — a section title, or a note that a group is empty — always stays. While any
+// filter is set the table carries `dt-filtered`, so a view can show a match it would
+// otherwise keep folded away.
 
 import { t } from "./i18n.js";
 
@@ -200,44 +208,57 @@ export function enhanceTable(table, opts = {}) {
       // the data row above it, and whether it is open is the *view's* business, not ours.
       // Owning its `hidden` would force every collapsible detail open — this ran on every
       // navigation and again on every tbody rewrite, so a view could not keep one closed.
+      table.classList.toggle("dt-filtered", active);
+      // The rows fall into segments, one per group heading (data-dt-group) and one
+      // before the first; a table without headings is a single segment.
       const detailsOf = new Map();
+      const segments = [{ head: null, rows: [] }];
       let owner = null;
       for (const r of tbody.rows) {
         if (r.dataset.dtEmpty) continue;
+        if (r.hasAttribute("data-dt-group")) { segments.push({ head: r, rows: [] }); owner = null; continue; }
         if (r.hasAttribute("data-dt-detail")) { if (owner) detailsOf.get(owner).push(r); }
-        else { owner = r; detailsOf.set(r, []); }
+        else { owner = r; detailsOf.set(r, []); segments[segments.length - 1].rows.push(r); }
       }
       const rows = [...detailsOf.keys()];
       let visible = 0;
-      for (const r of rows) {
-        let show = true;
-        if (active) {
-          for (let i = 0; i < filters.length; i++) {
-            if (filters[i] && !cellVal(r, i, false).toLowerCase().includes(filters[i])) { show = false; break; }
+      for (const seg of segments) {
+        let segVisible = 0;
+        for (const r of seg.rows) {
+          let show = true;
+          if (active) {
+            for (let i = 0; i < filters.length; i++) {
+              if (filters[i] && !cellVal(r, i, false).toLowerCase().includes(filters[i])) { show = false; break; }
+            }
           }
+          r.hidden = !show;
+          // A detail of a row the filter removed goes with it; one whose row stays is left
+          // exactly as the view has it, open or closed.
+          if (!show) for (const d of detailsOf.get(r)) d.hidden = true;
+          if (show) segVisible++;
         }
-        r.hidden = !show;
-        // A detail of a row the filter removed goes with it; one whose row stays is left
-        // exactly as the view has it, open or closed.
-        if (!show) for (const d of detailsOf.get(r)) d.hidden = true;
-        if (show) visible++;
+        if (seg.head) seg.head.hidden = active && seg.rows.length > 0 && segVisible === 0;
+        visible += segVisible;
       }
 
       if (sort.col >= 0 && cols[sort.col] && cols[sort.col].sortable) {
         const dir = sort.dir === "asc" ? 1 : -1;
         const forceNum = cols[sort.col].type === "number";
-        const sorted = rows.slice().sort((a, b) => {
+        const byCol = (a, b) => {
           const va = cellVal(a, sort.col, true), vb = cellVal(b, sort.col, true);
           let c;
           if (forceNum || (isNumeric(va) && isNumeric(vb))) c = parseFloat(va) - parseFloat(vb);
           else c = va.localeCompare(vb, undefined, { numeric: true, sensitivity: "base" });
           return c * dir;
-        });
-        // A detail row travels with the row it details, or sorting scatters it under a
-        // stranger.
-        for (const r of sorted) {
-          tbody.appendChild(r);
-          for (const d of detailsOf.get(r)) tbody.appendChild(d);
+        };
+        // Each segment sorts within itself, under its own heading. A detail row travels
+        // with the row it details, or sorting scatters it under a stranger.
+        for (const seg of segments) {
+          if (seg.head) tbody.appendChild(seg.head);
+          for (const r of seg.rows.slice().sort(byCol)) {
+            tbody.appendChild(r);
+            for (const d of detailsOf.get(r)) tbody.appendChild(d);
+          }
         }
       }
 

@@ -220,7 +220,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				})},
 			}))}},
 		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
-			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
+			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store, and the document store unless ?documents=true asks for it (admin-only when auth is on) (ADR-0109, ADR-0543)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the whole-instance snapshot"}}},
 		{"POST", "/api/v1/restore/full", s.handleRestoreFull, apiOp{
 			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
@@ -339,7 +339,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
-			summary: "Deploy a BPMN model; the response carries warnings for references that will not resolve at runtime (an unconfigured worker)", tag: "Deployments", role: RoleModeler,
+			summary: "Deploy a BPMN model into an application: ?projectId= names it; without it the model inherits the application of the draft with its process id, else of the process's earlier versions, and a model with none of the three is refused with 400 (ADR-0544). The response carries warnings for references that will not resolve at runtime (an unconfigured worker)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
@@ -372,7 +372,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// before its application existed — stayed Ungrouped with a redeploy, and a
 		// version bump, the only way out.
 		{"PATCH", "/api/v1/processes/{key}", s.handleMoveProcess, apiOp{
-			summary: "File a deployed process under an application, or take it out of one (empty projectId means Ungrouped). Metadata only: the version, the model and everything running are untouched. Every version of the definition moves, and so do the other pools of a collaboration, because they are one drawing",
+			summary: "File a deployed process under another application (an empty projectId is refused: every process belongs to an application, ADR-0544). Metadata only: the version, the model and everything running are untouched. Every version of the definition moves, and so do the other pools of a collaboration, because they are one drawing",
 			tag:     "Processes", role: RoleModeler,
 			req:  jsonBody("Move", tObject()),
 			resp: jsonBody("What moved", tObject())}},
@@ -437,6 +437,27 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token); ?values=preview cuts every variable value longer than 512 bytes to its beginning and marks it {truncated, size, lines | shape, count} (values=full, the default, returns them whole). Answers {items, total, totalExact, truncated, nextCursor}: total is exact wherever a maintained counter knows it (one definition's halves, the engine's live total) and a floor otherwise", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tPage())}},
+		// The document store (ADR-0543): a file a
+		// process receives is kept here once and a variable holds a reference to it.
+		// Every signed-in identity, because the one uploading is whoever completes a task
+		// with a file field; who may *read* a document is decided per document — its
+		// uploader, or whoever may read an instance it entered (ADR-0275).
+		{"POST", "/api/v1/documents", s.handleUploadDocument, apiOp{
+			summary: "Upload one document — the raw request body is the file, ?name= its file name, Content-Type the type claimed; at most limits.Document (35 MiB by default). Answers the reference a variable holds: {$document, name, contentType (detected), size, sha256}. The document is pending, readable by its uploader only, until a variable naming it enters an instance; unused, it is removed after its time to live (24 h by default)", tag: "Documents", role: roleAny, status: http.StatusCreated,
+			req:  &bodySpec{mediaType: "application/octet-stream", desc: "The file's bytes", schema: map[string]any{"type": "string", "format": "binary"}},
+			resp: jsonBody("Document reference", tObject())}},
+		{"GET", "/api/v1/documents/{id}", s.handleDownloadDocument, apiOp{
+			summary: "Download a document under its detected type — 404 for an id that does not exist or that the caller may not read (its uploader, or whoever may read an instance it entered); 410 when the reference survived and the bytes did not (a restore from a snapshot taken without documents). A type a browser would run as a page is sent as an attachment; ?download=1 asks for one", tag: "Documents", role: roleAny,
+			resp: &bodySpec{mediaType: "application/octet-stream", desc: "The document's bytes", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"POST", "/api/v1/jobs/{key}/documents/{id}", s.handleJobDocument, apiOp{
+			summary: "Read, as the lease-holding worker, a document the job's instance was given — the bytes, under the detected type, with the file name in X-Atlas-Document-Name. Answers only for a document bound to the root of the job's instance and only while the caller holds the job's current lease; 404 for anything else, 410 when the bytes are gone (ADR-0543)", tag: "Documents", role: RoleOperator,
+			req: jsonBody("The holding worker id and the lease token its activation returned", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tInteger(),
+			}, "worker", "leaseToken")),
+			resp: &bodySpec{mediaType: "application/octet-stream", desc: "The document's bytes", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"GET", "/api/v1/documents/{id}/meta", s.handleDocumentMeta, apiOp{
+			summary: "A document's reference and state without its bytes — {reference, state (pending|bound), createdAt, backend, available}; the same access rule as the download", tag: "Documents", role: roleAny,
+			resp: jsonBody("Document metadata", tObject())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
@@ -505,7 +526,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
 		{"POST", "/api/v1/decision-deployments", s.handleDeployDecision, apiOp{
-			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application, ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
+			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application and is required (ADR-0544), ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
 			req:  xmlBody("DMN XML"),
 			resp: jsonBody("The deployment key and the version each of its decisions is now at", tObject())}},
 		// roleAny, like GET /api/v1/processes, which it is the decision counterpart of
@@ -860,7 +881,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Your start favourites", schemaObj(map[string]any{"processIds": tArray()}))}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
-			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
+			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants. ?projectId= names the application; a new draft needs one, and a filed draft cannot be taken out of its application (ADR-0544)", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/diagram-shortcuts", s.handleListDiagramShortcuts, apiOp{
 			summary: "The diagrams you marked as favourites and the ones you opened last, across the Modeler, Data and Panorama (ADR-0460). Always your own. A mark stores a kind and an id and grants nothing: each entry is resolved against the diagram's own scope on every read, a favourite you can no longer open comes back with available=false and no name so it can still be cleared, and a visit you can no longer open is left out", tag: "Drafts", role: roleAny,
 			resp: jsonBody("Your favourites and recent diagrams", schemaObj(map[string]any{
@@ -899,12 +920,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
 			}))}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
-			summary: "Move a draft to a project", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
+			summary: "Move a draft to another application (an empty projectId is refused, ADR-0544)", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
 			summary: "Delete a draft", tag: "Drafts", role: RoleModeler, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/imports/mim", s.handleImportMIM, apiOp{
-			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report)", tag: "Drafts", role: RoleModeler,
+			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report) into the application ?projectId= names, which is required (ADR-0544)", tag: "Drafts", role: RoleModeler,
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
@@ -981,7 +1002,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
-			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
+			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants. \"projectId\" names the application: a new form needs one, and a save without it keeps the one the form is in (ADR-0544)", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
 		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
@@ -1844,7 +1865,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a process application. Its artifacts are kept and become Not assigned (ADR-0034); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-0468). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
+			summary: "Delete a process application. Refused with 409 while it still holds processes, decisions, forms or drafts, which would then belong to no application: move them into another application first (ADR-0544); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-0468). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/applications/{id}/deletion-preview", s.handleApplicationDeletionPreview, apiOp{
 			summary: "What deleting an application with ?purge=true would remove — every deployed version with its running instances, decision deployments, drafts, forms, references and models — and what outside it would stop working: catalogue products binding its processes, order lines that could still start them, other applications' processes evaluating its decisions. Owner only (ADR-0468)", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Deletion preview", tObject())}},
@@ -1856,6 +1877,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Revoke a user's membership on an application (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Updated application", tObject())}},
 		{"POST", "/api/v1/applications/{id}/validate", s.handleValidateProject, apiOp{
 			summary: "Validate an application's artifacts", tag: "Applications", role: RoleModeler, resp: jsonBody("Validation result", tObject())}},
+		{"POST", "/api/v1/applications/{id}/adopt", s.handleAdoptArtifacts, apiOp{
+			summary: "File artifacts that belong to no application under this one: deployed processes (every version, and the other pools of a collaboration), drafts, forms, decision references (with their unfiled decision drafts), decision drafts and decision deployments. Only what belongs to no application — no tag, or an application that no longer exists — may be adopted; one that cannot refuses the whole request with 409 and nothing is written. Needs editor on the application and on each artifact (ADR-0544)", tag: "Applications", role: RoleModeler,
+			req: jsonBody("What to adopt", schemaObj(map[string]any{
+				"processes": tArray(), "drafts": tArray(), "forms": tArray(), "decisionReferences": tArray(),
+				"decisionDrafts": tArray(), "decisionDeployments": tArray(),
+			})),
+			resp: jsonBody("What was adopted", tObject())}},
+		{"GET", "/api/v1/unassigned", s.handleListUnassigned, apiOp{
+			summary: "List what belongs to no application and the caller may see — deployed processes with their version keys, drafts, forms, decision references, decision drafts and decision deployments — the inventory POST /api/v1/applications/{id}/adopt files from (ADR-0544)", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Unassigned artifacts", tObject())}},
 		{"POST", "/api/v1/applications/{id}/deploy", s.handleDeployProject, apiOp{
 			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0128)", tag: "Applications", role: RoleModeler, resp: jsonBody("Deploy result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/publish", s.handlePublishApplication, apiOp{
@@ -1909,11 +1940,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		// approves. Administration is an administrator's alone, from their own
 		// session; none of these routes lets anybody start anything.
 		{"GET", "/api/v1/applications/{id}/start-grants", s.startGrantAdmin.HandleList, apiOp{
-			summary: "Every process of an application that was ever granted for a self-service start, revoked ones included, by process id: the current revision, whether it is granted, and the user and group ids it names (ADR-0516). Admin only; refused with 403 on a server without authentication", tag: "Applications", role: RoleAdmin,
+			summary: "Every process of an application that was ever granted for a self-service start, revoked ones included, by process id: the current revision, whether it is granted, the user and group ids it names, and whether the process would be offered now — blockers, the codes the preview uses (empty: offered), with the newest version's definitionKey and version (ADR-0516). A process that cannot be resolved fails the list with 500 rather than reading as offered. Admin only; refused with 403 on a server without authentication", tag: "Applications", role: RoleAdmin,
 			resp: jsonBody("Start grants", schemaObj(map[string]any{"items": tArray()}, "items"))}},
 		{"GET", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleGet, apiOp{
-			summary: "One process's start grant within an application (ADR-0516). A process never granted answers revision 0 and an empty audience: nobody may start it, which is the default. 404 for an application that does not exist and has no grant record. Admin only", tag: "Applications", role: RoleAdmin,
-			resp: jsonBody("The start grant", schemaObj(map[string]any{"applicationId": tString(), "processId": tString(), "revision": tInteger(), "granted": tBool(), "userIds": tStrings(), "groupIds": tStrings(), "changedAt": tInteger(), "changedBy": tString()}, "applicationId", "processId", "revision", "granted", "userIds", "groupIds"))}},
+			summary: "One process's start grant within an application (ADR-0516), with whether the process would be offered now: blockers, the codes the preview uses (empty: offered), and the newest version's definitionKey and version, absent when none is deployed. A process never granted answers revision 0 and an empty audience: nobody may start it, which is the default. 404 for an application that does not exist and has no grant record. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant", schemaObj(map[string]any{"applicationId": tString(), "processId": tString(), "revision": tInteger(), "granted": tBool(), "userIds": tStrings(), "groupIds": tStrings(), "changedAt": tInteger(), "changedBy": tString(), "blockers": tStrings(), "definitionKey": tInteger(), "version": tInteger()}, "applicationId", "processId", "revision", "granted", "userIds", "groupIds", "blockers"))}},
 		{"PUT", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandlePut, apiOp{
 			summary: "Grant, or wholly replace, who may start a process of an application through the self-service routes (ADR-0516): explicit user ids and group ids of this server's directory, never names. expectedRevision is required (0 for a scope never granted) and a stale one answers 409 with currentRevision. The application must exist and not be a protected system application, the newest deployed version of the process must be filed under it, and every id must name an existing account or group; ids are sorted and must not repeat. The actor and the time are the server's: a body naming them is refused. Durable — written and fsynced — before the answer, and audited. Granting exactly the audience already granted writes nothing (changed false). Admin only, from their own signed-in session; 403 on a server without authentication. A grant is not the user role: a person also needs that role and a signed-in session", tag: "Applications", role: RoleAdmin,
 			req:  jsonBody("The audience", schemaObj(map[string]any{"userIds": tStrings(), "groupIds": tStrings(), "expectedRevision": tInteger(), "applicationId": tString(), "processId": tString()}, "expectedRevision")),
@@ -1927,6 +1958,43 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/preview", s.startGrantAdmin.HandlePreview, apiOp{
 			summary: "Whether one account (?userId=) or one group (?groupId=) would be offered a process for a self-service start now, and why not (ADR-0516): granted and matchedBy (user, group:<id>, from the directory's current membership), accountIssues (disabled, missing-user-role), and blockers on the process's newest version (application-missing, application-protected, not-deployed, newest-version-in-other-application, not-executable, inactive, trigger-only, constants-missing). Writes nothing. Admin only", tag: "Applications", role: RoleAdmin,
 			resp: jsonBody("The preview", tObject())}},
+
+		// Published process interfaces (ADR-0373): the small, versioned contract a
+		// process offers another domain, derived from a deployed definition and
+		// published as an act, with the right to read it (view) and to deliver to it
+		// (send) granted apart. A consumer reads the contract and never the elements
+		// behind it; the publishing application's members read the binding too.
+		{"GET", "/api/v1/published-interfaces", s.pubInterfaceSvc.HandleList, apiOp{
+			summary: "The published process interfaces the caller may see, by id — and only those: one the caller may not view is not listed (ADR-0373). Each with its latest contract version, whether that version is deprecated and available (unavailableReasons: definition-missing, definition-inactive, definition-in-other-application), its entry point names, public, and maySend. processId and applicationId only for the publishing application's members", tag: "Processes", role: roleAny,
+			resp: jsonBody("Published interfaces", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/published-interfaces/{id}", s.pubInterfaceSvc.HandleGet, apiOp{
+			summary: "One published interface with every contract version (ADR-0373): each version's contract — entry points (name, kind, starts, correlationKey, payload), returns (errors, escalations, reply messages) and terminal outcomes — whether it is deprecated, and whether it is available. Visible to anybody when public, to the view grant's audience and to the publishing application's members; 404 otherwise, as for one that does not exist. Only the members read each version's binding (definition and element ids), and only the application owner reads the grants", tag: "Processes", role: roleAny,
+			resp: jsonBody("The interface", tObject())}},
+		{"GET", "/api/v1/published-interfaces/{id}/versions/{version}", s.pubInterfaceSvc.HandleGetVersion, apiOp{
+			summary: "One contract version of a published interface (ADR-0373), visible as the interface is. A version is immutable; its binding may move to a newer definition that realizes the same contract", tag: "Processes", role: roleAny,
+			resp: jsonBody("The contract version", tObject())}},
+		{"GET", "/api/v1/published-interfaces/{id}/history", s.pubInterfaceSvc.HandleHistory, apiOp{
+			summary: "The audit of a published interface, newest first: every publish, rebind, deprecation and grant change with its revision, time and actor, and for a grant change the whole of both audiences it left (ADR-0373, ADR-0184). The publishing application owner's to read", tag: "Processes", role: RoleModeler,
+			resp: jsonBody("Audited changes", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/processes/{key}/interface-candidates", s.pubInterfaceSvc.HandleCandidates, apiOp{
+			summary: "What one deployed definition offers for publication as an interface (ADR-0373): every element a message can reach (message start, intermediate catch, receive task, event subprocess, message boundary) with its kind, whether it starts an instance, its message name, correlation key and the payload the model states (an information-model class, the names its output mappings read, or untyped); every root-scope end event as a terminal outcome; the error and escalation codes that can leave an instance uncaught; and the messages it throws. Also the interfaces this process already publishes. For the application's members", tag: "Processes", role: roleAny,
+			resp: jsonBody("Candidates", tObject())}},
+		{"POST", "/api/v1/published-interfaces/{id}/versions", s.pubInterfaceSvc.HandlePublish, apiOp{
+			summary: "Publish a new contract version of an interface, creating it on its first (ADR-0373). The body names the deployed definition (definitionKey), which of its elements are entry points and under what name ({name, elementId}), what every root-scope end event is called ({name, elementIds} — all of them, several may share one outcome of one kind), and which thrown messages are replies; kind, correlation key, payload, errors and escalations are derived, never typed. expectedRevision is required (0 for a new interface). The id is a lower-case slug fixed to the process. A contract equal to the newest version's is refused with 409 — rebind it instead. A commitment is refused: nothing measures one yet. Needs an editor's role on the definition's application and authentication; problems are answered as a list", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The selection", schemaObj(map[string]any{"definitionKey": tInteger(), "entryPoints": tArray(), "outcomes": tArray(), "replies": tStrings(), "expectedRevision": tInteger()}, "definitionKey", "entryPoints", "expectedRevision")),
+			resp: jsonBody("The interface as it now stands, and the version published", tObject())}},
+		{"PUT", "/api/v1/published-interfaces/{id}/versions/{version}/binding", s.pubInterfaceSvc.HandleRebind, apiOp{
+			summary: "Rebind one contract version to another deployed definition of the same process and application — the publisher's refactoring behind an unchanged contract (ADR-0373). The element mapping defaults to the current one; entryPoints and outcomes may give it anew where an element was renamed. The definition must realize exactly the version's contract; one that does not is refused with 409 and what differs, which is a new version. expectedRevision is required. Needs an editor's role", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The definition and, optionally, the new element mapping", schemaObj(map[string]any{"definitionKey": tInteger(), "entryPoints": tArray(), "outcomes": tArray(), "expectedRevision": tInteger()}, "definitionKey", "expectedRevision")),
+			resp: jsonBody("The interface as it now stands", tObject())}},
+		{"POST", "/api/v1/published-interfaces/{id}/versions/{version}/deprecation", s.pubInterfaceSvc.HandleDeprecate, apiOp{
+			summary: "Deprecate one contract version, with an optional note saying what to move to (ADR-0373, the vocabulary of ADR-0130). The version stays readable and deliverable; deprecating is not undone, and deprecating again answers 409. expectedRevision is required. Needs an editor's role", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The note", schemaObj(map[string]any{"note": tString(), "expectedRevision": tInteger()}, "expectedRevision")),
+			resp: jsonBody("The interface as it now stands", tObject())}},
+		{"PUT", "/api/v1/published-interfaces/{id}/grants", s.pubInterfaceSvc.HandleSetGrants, apiOp{
+			summary: "Wholly replace who may view and who may send to a published interface (ADR-0373): public (viewable without a grant; never implies send), view and send, each {userIds, groupIds} of this server's directory. The rights are separate: seeing a contract lets nobody deliver to it. Every id must exist; expectedRevision is required. Audited with both audiences. The application owner's act, from their own signed-in session. The send grant is what the peer endpoint of ADR-0372 will check; until it exists, it lets nobody deliver anything", tag: "Processes", role: RoleModeler,
+			req:  jsonBody("The grants", schemaObj(map[string]any{"public": tBool(), "view": tObject(), "send": tObject(), "expectedRevision": tInteger()}, "expectedRevision")),
+			resp: jsonBody("The interface as it now stands", tObject())}},
 
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
 			summary: "Receive a published application bundle from a peer atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,
@@ -2150,11 +2218,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Deleted", tObject())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
-			summary: "Create a DMN reference artifact", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
+			summary: "Create a DMN reference artifact in the application its projectId names, which is required (ADR-0544)", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
 		{"GET", "/api/v1/dmnrefs", s.handleListDmnRefs, apiOp{
 			summary: "List DMN reference artifacts", tag: "DMN References", role: RoleModeler, resp: jsonBody("References", tArray())}},
 		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleUpdateDmnRef, apiOp{
-			summary: "Update a DMN reference: move it to a project and/or rename it", tag: "DMN References", role: RoleModeler, req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
+			summary: "Update a DMN reference: move it to another application (an empty projectId is refused) and/or rename it", tag: "DMN References", role: RoleModeler, req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
 		{"GET", "/api/v1/dmnrefs/{id}/impact", s.handleDmnRefImpact, apiOp{
 			summary: "What deleting this DMN reference would break: the decisions its model provides, which of them no other reference provides, and the deployed definitions and drafts that could then not be deployed, each with its binding. A read that refuses nothing — the Console renders it in the delete confirm (ADR-0331)",
 			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Deletion impact", tObject())}},

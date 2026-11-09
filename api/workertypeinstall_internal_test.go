@@ -107,14 +107,14 @@ func installUpload(t *testing.T, url string, manifest, artifact []byte) (int, []
 
 // installServer serves a server keeping installed Worker Types, on a listener whose
 // address is known before the server is built, so a launched instance is told it.
-func installServer(t *testing.T, allowUnsigned bool) (*Server, *httptest.Server) {
+func installServer(t *testing.T, allowUnsigned bool, opts ...Option) (*Server, *httptest.Server) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	url := "http://" + ln.Addr().String()
-	srv, _ := newValidateServer(t, WithInstalledWorkerTypes(t.TempDir(), url, allowUnsigned))
+	srv, _ := newValidateServer(t, append([]Option{WithInstalledWorkerTypes(t.TempDir(), url, allowUnsigned)}, opts...)...)
 	ts := httptest.NewUnstartedServer(srv.Handler())
 	_ = ts.Listener.Close()
 	ts.Listener = ln

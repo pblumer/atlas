@@ -32,6 +32,7 @@ import (
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/logging"
+	"github.com/pblumer/atlas/workersdk"
 	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
@@ -244,9 +245,9 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if err != nil {
 				return Connectors{}, err
 			}
-			var docs mail.DocumentStore
+			var docs mail.DocumentStore = mailDocuments{}
 			if s3reg != nil {
-				docs = s3.Documents(s3reg)
+				docs = mailDocuments{objects: s3.Documents(s3reg)}
 			}
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJobWith(ctx, j, reg, docs)
@@ -506,6 +507,19 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Queries[compiler.ExchangeJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
 				return exchange.RunLookup(ctx, connector, q, reg)
 			}
+		case "sharepointserver":
+			reg, names, err := sharePointServerRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.SharePointServerJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunSharePointServerJob(ctx, j, reg)
+			})
 		case "googlecontacts":
 			reg, names, err := googleContactsRegistryFromEnv(env)
 			if err != nil {
@@ -633,20 +647,22 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 // (ldap, rest, soap, scim), it has nothing to reach (csv, script), or its address is
 // a fixed service the configuration does not name (teamsphone).
 var endpointKeys = map[string]struct{ prefix, field string }{
-	"ad":           {adDirEnvPrefix, "URL"},
-	"agent":        {agentEnvPrefix, "ENDPOINT"},
-	"clio":         {clioEnvPrefix, "ENDPOINT"},
-	"discord":      {discordEnvPrefix, "URL"},
-	"entra":        {entraEnvPrefix, "BASE_URL"},
-	"exchange":     {exchangeEnvPrefix, "URL"},
-	"googlesheets": {googleSheetsEnvPrefix, "ENDPOINT"},
-	"jira":         {jiraEnvPrefix, "URL"},
-	"mail":         {mailEnvPrefix, "ENDPOINT"},
-	"paperless":    {paperlessEnvPrefix, "URL"},
-	"remedy":       {remedyEnvPrefix, "ENDPOINT"},
-	"s3":           {s3EnvPrefix, "URL"},
-	"sharepoint":   {sharepointEnvPrefix, "ENDPOINT"},
-	"temis":        {temisEnvPrefix, "URL"},
+	"ad":       {adDirEnvPrefix, "URL"},
+	"agent":    {agentEnvPrefix, "ENDPOINT"},
+	"clio":     {clioEnvPrefix, "ENDPOINT"},
+	"discord":  {discordEnvPrefix, "URL"},
+	"entra":    {entraEnvPrefix, "BASE_URL"},
+	"exchange": {exchangeEnvPrefix, "URL"},
+
+	"sharepointserver": {sharePointServerEnvPrefix, "URL"},
+	"googlesheets":     {googleSheetsEnvPrefix, "ENDPOINT"},
+	"jira":             {jiraEnvPrefix, "URL"},
+	"mail":             {mailEnvPrefix, "ENDPOINT"},
+	"paperless":        {paperlessEnvPrefix, "URL"},
+	"remedy":           {remedyEnvPrefix, "ENDPOINT"},
+	"s3":               {s3EnvPrefix, "URL"},
+	"sharepoint":       {sharepointEnvPrefix, "ENDPOINT"},
+	"temis":            {temisEnvPrefix, "URL"},
 	// A People API base an operator behind a proxy names; empty for most, and then
 	// nothing is reported. A block of its own so the table above keeps its alignment.
 	"googlecontacts": {googleContactsEnvPrefix, "URL"},
@@ -711,7 +727,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
+	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "sharepointserver", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -922,7 +938,7 @@ func RunMailJobWith(ctx context.Context, j Job, reg *mail.Registry, docs mail.Do
 // with. It shares [csvimport.Run] with the in-process path, so the two cannot
 // disagree about defaults, validation, or what a headerless file's column list
 // means.
-func runCSV(_ context.Context, j Job) (map[string]any, error) {
+func runCSV(ctx context.Context, j Job) (map[string]any, error) {
 	if j.Connector == nil {
 		return nil, fmt.Errorf("csv: the job carried no resolved worker detail; is this server offloading the csv kind?")
 	}
@@ -933,6 +949,15 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 	var task csvimport.Job
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("csv: cannot read the resolved detail: %w", err)
+	}
+	// The source is an uploaded document the engine did not read: read it here, under
+	// this job's lease (ADR-0543).
+	if task.SourceDocument != "" && task.Source == "" {
+		data, _, err := workersdk.ReadDocument(ctx, task.SourceDocument)
+		if err != nil {
+			return nil, fmt.Errorf("csv: read document %s: %w", task.SourceDocument, err)
+		}
+		task.Source = string(data)
 	}
 	res, err := csvimport.Run(task)
 	if err != nil {
@@ -1131,4 +1156,24 @@ func announceADMock(mock *ad.MockDirectory, seed string) {
 		logging.Info(logging.ADMockPerformed, "ad mock directory",
 			slog.String("operation", op.Op), slog.String("dn", op.DN), slog.String("detail", op.Detail))
 	})
+}
+
+// mailDocuments is what a mail job on a Worker Instance hands documents to: the S3
+// Workers this host holds, for export-attachment, and Atlas's document store through the
+// job, for store-attachment (ADR-0543).
+type mailDocuments struct{ objects mail.DocumentStore }
+
+func (d mailDocuments) PutDocument(ctx context.Context, worker, bucket, key, contentType, disposition string, data []byte, metadata map[string]string) (map[string]any, error) {
+	if d.objects == nil {
+		return nil, fmt.Errorf("mail: this Worker Instance holds no S3 Worker, so it cannot reach %q", worker)
+	}
+	return d.objects.PutDocument(ctx, worker, bucket, key, contentType, disposition, data, metadata)
+}
+
+// HoldsObjectStores tells an export apart from a store-attachment: only the first needs
+// an S3 Worker.
+func (d mailDocuments) HoldsObjectStores() bool { return d.objects != nil }
+
+func (mailDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	return workersdk.UploadDocument(ctx, name, contentType, data)
 }

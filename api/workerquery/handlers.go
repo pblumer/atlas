@@ -78,6 +78,12 @@ func (s *Service) HandleActivate(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "type and worker are required: a query is leased by job type, to a named Worker Instance")
 		return
 	}
+	// An installed Worker Type's instance leases only the queries of its own types,
+	// as itself (ADR-0545).
+	if why := httpapi.InstanceRefusal(httpapi.PrincipalFrom(r.Context()), body.Worker, body.Type); why != "" {
+		httpapi.Error(w, http.StatusForbidden, why)
+		return
+	}
 	wait := time.Duration(body.WaitMs) * time.Millisecond
 	if wait > MaxPollWait {
 		wait = MaxPollWait
@@ -130,6 +136,12 @@ func (s *Service) HandleAnswer(w http.ResponseWriter, r *http.Request) {
 		if body.Error.RetryAfter < 0 || body.Error.RetryAfter > maxRetryAdvice {
 			body.Error.RetryAfter = 0
 		}
+	}
+	// It answers only as itself; the lease token, handed only by a poll of its own
+	// types, fences the rest.
+	if why := httpapi.InstanceRefusal(httpapi.PrincipalFrom(r.Context()), strings.TrimSpace(body.Worker), ""); why != "" {
+		httpapi.Error(w, http.StatusForbidden, why)
+		return
 	}
 	err := s.broker.Answer(r.PathValue("id"), strings.TrimSpace(body.Worker), body.LeaseToken,
 		Answer{Page: body.Page, Err: body.Error})

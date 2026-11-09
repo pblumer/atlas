@@ -27,6 +27,12 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // Returning an error leaves the job pending (retry, then an incident, ADR-0061); the
 // runner completes it only on success.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
+	return HandlerWith(store, lookup, reg, nil)
+}
+
+// HandlerWith is [Handler] with Atlas's document store within reach of the two document
+// operations, for the job's own process instance (docsFor answers it per instance).
+func HandlerWith(store state.Reader, lookup ProcessLookup, reg *Registry, docsFor func(instance uint64) DocumentStore) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -47,7 +53,11 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if err != nil {
 			return nil, err
 		}
-		result, err := Run(context.Background(), task, reg)
+		var docs DocumentStore
+		if docsFor != nil {
+			docs = docsFor(j.ProcessInstanceKey)
+		}
+		result, err := RunWith(context.Background(), task, reg, docs)
 		if err != nil {
 			return nil, err
 		}

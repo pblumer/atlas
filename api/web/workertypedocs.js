@@ -286,7 +286,7 @@ export const WORKER_TYPE_DOCS = {
 
   csv: {
     anchor: "runbook-csv", title: "workerDoc.csv.title",
-    checked: "2026-09",
+    checked: "2026-11",
     needs: "workerDoc.csv.needs",
     steps: [
       "workerDoc.csv.step1",
@@ -383,6 +383,17 @@ export const WORKER_TYPE_DOCS = {
     trap: "workerDoc.carddav.trap",
   },
 
+  sharepointserver: {
+    anchor: "runbook-sharepointserver", title: "SharePoint Server",
+    checked: "2026-11",
+    needs: "workerDoc.sharepointserver.needs",
+    steps: [
+      "workerDoc.sharepointserver.step1",
+      "workerDoc.sharepointserver.step2",
+      "workerDoc.sharepointserver.step3",
+    ],
+    trap: "workerDoc.sharepointserver.trap",
+  },
   wikiwikibangbang: {
     anchor: "runbook-wikiwikibangbang", title: "wikiwikibangbang",
     checked: "2026-10",

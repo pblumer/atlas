@@ -67,7 +67,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   single-instance view and in the replay's Variables tab. The harness cuts values the way
   `?values=preview` does, so the spec also holds that the overview asks for previews, that
   opening a cut value reads the instance whole by its key, and that the single-instance
-  view copies whole values.
+  view copies whole values. A variable that names a document
+  (ADR-0543) is a download link on the card, in the
+  single view and in the replay. `tasks-logo-upload.spec.mjs` holds that a file field
+  without a catalogue uploads its file as a document first and completes with the
+  reference under its own key, and that a failed upload leaves the task open.
 
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
@@ -103,6 +107,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   included) and what outside the application stops working, and is armed only once the
   application's name is typed; a refusal in the preview, or a caller who may not cancel
   instances, keeps it disarmed; Escape cancels.
+- **`modeler-home-applications.spec.mjs`**, **`application-deployments-processes.spec.mjs`** and
+  **`application-deployments-frozen.spec.mjs`**
+  ([ADR-0541](../docs/adr/0541-the-application-holds-its-deployments.md)):
+  the Modeler home is one folding table of applications with no deployed list of its own, and
+  its *Deployed* column counts each application's processes and paused ones and opens its
+  Deployments tab; that tab lists one row per process with the older versions folded under it,
+  pauses, resumes and deletes from the row's menu, marks a definition frozen on a decision version,
+  and has a counterpart under *Not assigned*. `live-process-heading.spec.mjs` covers the pause
+  switch in the Operations live view.
 - **`appearance.spec.mjs`**
   ([ADR-0507](../docs/adr/0507-ui-appearance-modes.md)):
   the light, dark and system appearance, a display preference kept with the account and
@@ -433,6 +446,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   toolbar — publishing a numbered version with the model's prose and a real PDF, the
   history reading newest first, and the per-version public link being minted and revoked.
   Drives the real `mountEditor` against a mock `api` that keeps the versions in memory.
+- **`instances-by-application.spec.mjs`** (ADR-0034 / ADR-0128): the **Instances overview
+  grouped by application** — the one list stays the default (one table, one row per process),
+  the "Nach Applikation" switch puts every process under its application in name order with
+  the not-assigned group last (a process filed nowhere and one whose application name the
+  server withholds both land there), each heading sums processes, running, incidents and
+  finished over every version and links to the application, the choice and a folded group
+  survive a reload and a Refresh, switching back restores the enhanced list, and a grouped
+  row's overflow menu still reaches its terminate confirmation. Drives the real app shell
+  against a routed mock of the processes, instance summary and incident summary.
 - **`incidents-ops.spec.mjs`** (ADR-0150 / ADR-0151): **incidents where the operator is**
   — the **live view** outlines and badges the element two parked tokens sit on, counts them
   in its toolbar, leads its variables panel with both instances' incidents, and resolves one
@@ -468,6 +490,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   badges are not what the placement dodges — must stay behind it, which the browser's own
   hit-testing answers. Only a browser knows any of this geometry: the card's height comes
   from its content through the CSS that lays it out.
+
+- **`variables-sections.spec.mjs`** ([ADR-0542](../docs/adr/0542-variables-by-provenance.md)):
+  the **Variables tab of a selected element**, on one round of a multi-instance task inside a
+  subprocess, beside a second subprocess (`variables-sections-harness.html`). The round's
+  variables must fall into *Input* (its counter and item, nothing else), *Output* (what it
+  wrote — including its answer, kept in the round's own scope — a rewritten value saying
+  what it was, a new one marked new) and a folded
+  *Environment*, grouped body → subprocess → process → constants, without the variable of the
+  subprocess running beside it, and with the body's collection saying that it reads
+  unfilled until the loop is done. A round still running must say it has no output yet; a name
+  the filter finds in the folded environment must show; sorting the table must keep every row
+  in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
+  nothing selected the tab must stay one list whose scope chip names the kind of scope.
 
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
@@ -1026,6 +1061,29 @@ node render-diagram.mjs ../conformance/models/standard-loop.bpmn \
 ```
 
 The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
+
+## Waiting for a mount: poll, do not await
+
+Do not write `await page.evaluate(() => window.__mountX())` for a mount that loads an
+editor. Playwright then awaits the mount's promise over the DevTools protocol for as long
+as the editor takes to load, and on the CI runner that promise was garbage-collected
+before it settled. The protocol answered "Promise was collected", and Playwright reported
+it as "Execution context was destroyed, most likely because of a navigation", although
+nothing navigated and the editor finished mounting. It never happened on a workstation,
+and it failed `formgen-editor-open` and `shown-version` in most CI runs.
+
+Start the mount and poll for it instead. `form-editor-harness.html` and
+`shown-version-harness.html` offer `window.__start(name, ...args)`, which begins a
+`__mount*` call and records its outcome in `window.__mountState`. The `mount(page, name,
+...args)` helper in `formgen-editor-open.spec.mjs` and `shown-version.spec.mjs` waits for
+that state with `waitForFunction` and rethrows a failed mount.
+
+Two diagnostics help when a test fails only on the runner. The e2e job uploads
+`e2e/test-results` as the `e2e-test-results` artifact whenever a test failed, including a
+first attempt that passed on retry: it holds the Playwright trace. And Playwright's
+`rewriteError` (`playwright-core/lib/server/chromium/crExecutionContext.js`) turns every
+protocol error that is not a page exception into "Execution context was destroyed".
+Logging `error.message` there names the real one.
 
 ## CI
 

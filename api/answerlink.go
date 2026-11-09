@@ -309,6 +309,12 @@ func (s *Server) handlePublicAnswerComplete(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A visitor on a public link is nobody the document store knows, so nothing they
+	// could name is theirs to use (ADR-0543).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// The form the task renders, read while the task is still the one the link opens.
 	formOf := func() (string, error) {
 		k, jv, err := s.openAnswerTask(l)

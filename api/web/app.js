@@ -42,6 +42,7 @@ import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 import { compareVersionsFlow } from "./version-comparison.js";
 import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
+import { openAdoptDialog } from "./adoptdialog.js";
 import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
@@ -137,22 +138,39 @@ export async function api(method, path, body, isXML) {
 // upload mislabelled by a browser is refused there, not here.
 //
 // The failure shape is api()'s, so a caller reports an upload the way it reports
-// everything else.
+// everything else. It answers the decoded body, or null for none — a document upload
+// answers the reference it stored.
 export async function apiBytes(method, path, file) {
   const res = await fetch(path, {
     method,
     body: file,
     headers: { "Content-Type": file.type || "application/octet-stream" },
   });
+  const text = await res.text();
+  let data = text;
+  try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
   if (!res.ok) {
-    const text = await res.text();
-    let data = text;
-    try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
     const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
   }
+  return data;
+}
+
+// fileFieldKeys lists the keys of a form schema's file pickers, in the order form-js
+// renders them, which is the order of the file inputs on the page.
+function fileFieldKeys(schema) {
+  const keys = [];
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "filepicker" && c.key) keys.push(c.key);
+      if (Array.isArray(c.components)) walk(c.components);
+    }
+  };
+  walk(schema && schema.components);
+  return keys;
 }
 
 export function toast(msg, kind) {
@@ -1107,6 +1125,11 @@ const WORKER_TYPES = [
     id: "entra", name: "Entra ID", kind: "Cloud directory",
     desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId} bundle with a client secret or a certificate lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "sharepointserver", name: "SharePoint Server", kind: "Site administration",
+    desc: "Administers site collections on a SharePoint Server farm (Subscription Edition, on-premises) from a process: create a team site, set owners, site administrators and the default groups, delete to the recycle bin, restore, and set the storage quota. Runs fixed PowerShell on a server of the farm, as the account the worker runs under, one process per job; no credential reaches Atlas.",
+    refs: "ADR-0540", status: "active", statusLabel: "configured below",
   },
   {
     id: "exchange", name: "Microsoft Exchange", kind: "Mailbox administration",
@@ -2515,6 +2538,7 @@ async function viewConsoleBackup() {
       authentication is enabled.</p>
       <div class="row" style="gap:12px; align-items:center; margin-top:8px">
         <a class="btn" href="/api/v1/backup/full" download>Download full snapshot (.tar.gz)</a>
+        <a class="btn neutral" href="/api/v1/backup/full?documents=true" download title="${esc(tr("backup.full.withDocumentsTitle"))}">${esc(tr("backup.full.withDocuments"))}</a>
       </div>
 
       <h3 style="margin:22px 0 6px">Restore full snapshot</h3>
@@ -3927,11 +3951,13 @@ function wireSections(root) {
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
 }
 
-// viewModelerHome is the application landscape: a clean table of process
-// applications (each a container of artifacts — the ADR-0034 project reframed by
-// ADR-0128) plus a collapsible list of deployed definitions. Artifact editing
-// happens inside an application (viewProjectDetail), which keeps this overview
-// tidy. "Create new" is a single dropdown.
+// viewModelerHome is the application landscape: one table of process applications
+// (each a container of artifacts — the ADR-0034 project reframed by ADR-0128), with
+// how many processes each has deployed. What is deployed, and what is done to it —
+// pause, delete, open — lives in the application's Deployments tab, the one place a
+// deployed process is listed in the Modeler
+// (ADR-0541). The table folds under its
+// heading like every other list (ADR-0505). "Create new" is a single dropdown.
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
@@ -3949,32 +3975,33 @@ async function viewModelerHome() {
         { label: tr("blueprint.browse"), icon: "📦", act: "browse-atlas-hub" },
       ])}
     </div>
-    <div class="card" style="padding:0; margin-top:14px">
+    <div id="home-applications">
+    ${sectionHead("home-applications", esc(tr("home.applications")), "")}
+    ${sectionBody("home-applications")}
+    <div class="card" style="padding:0">
       <table data-dt-key="projects">
-        <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("home.th.artifacts"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
-        <tbody id="proj-rows"><tr><td colspan="4" class="empty">${esc(tr("application.loading"))}</td></tr></tbody>
+        <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("home.th.artifacts"))}</th><th>${esc(tr("home.th.deployed"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
+        <tbody id="proj-rows"><tr><td colspan="5" class="empty">${esc(tr("application.loading"))}</td></tr></tbody>
       </table>
     </div>
-    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed" title="${esc(tr("home.deployedTitle"))}">${esc(tr("home.deployed"))}</button></h2>
-    <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
-      <div id="rows"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
+    </div>
     </div>`;
-  for (const t of view.querySelectorAll(".section-toggle"))
-    t.addEventListener("click", () => toggleSection(t.dataset.section, t));
-  const rows = document.getElementById("rows");
+  wireSections(view);
   const projRows = document.getElementById("proj-rows");
+  const countEl = view.querySelector("#home-applications .sec-head .muted");
 
   const renderProjects = async () => {
-    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [], procs = [];
     try {
-      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts, procs] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
         api("GET", "/api/v1/dmn-drafts"),
+        api("GET", "/api/v1/processes"),
       ]);
-    } catch (e) { projRows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`; return; }
+    } catch (e) { projRows.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
     // A decision that exists only as a draft is still one of the application's
@@ -3984,11 +4011,36 @@ async function viewModelerHome() {
     const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
     const ungrouped = all.filter((a) => !a.projectId || !known.has(a.projectId));
 
+    // What each application has deployed, counted in processes rather than versions:
+    // three versions of one process is one process somebody runs. A process counts as
+    // paused when its newest version is (ADR-0119), which is the version that would
+    // start anything by itself. A process filed under an application this list does
+    // not hold is not assigned, as its artifacts are.
+    const deployedIn = new Map();
+    for (const g of groupByProcess(procs || [])) {
+      const pid = g.latest.projectId && known.has(g.latest.projectId) ? g.latest.projectId : "";
+      const d = deployedIn.get(pid) || { processes: 0, paused: 0 };
+      d.processes++;
+      if (g.latest.active === false) d.paused++;
+      deployedIn.set(pid, d);
+    }
+    const deployedCell = (pid, href) => {
+      const d = deployedIn.get(pid);
+      if (!d) return `<td class="muted" data-sort="0">—</td>`;
+      const paused = d.paused
+        ? ` <span class="pill warn" title="${esc(tr("home.inactiveTitle"))}">${esc(trPlural("home.paused", d.paused))}</span>`
+        : "";
+      return `<td data-sort="${d.processes}"><a href="${href}/deployments" title="${esc(tr("home.deployedTitle"))}">${esc(trPlural("home.processes", d.processes))}</a>${paused}</td>`;
+    };
+
     const projectRow = (p) => {
       const n = countIn(p.id);
       const href = `#/modeler/p/${encodeURIComponent(p.id)}`;
       const owner = p.myRole === "owner";
-      const items = [{ label: tr("application.row.open"), icon: "→", href }];
+      const items = [
+        { label: tr("application.row.open"), icon: "→", href },
+        { label: tr("home.openDeployments"), icon: "⚙", href: `${href}/deployments` },
+      ];
       if (AUTH.enabled && owner) items.push({ label: tr("application.menu.share"), icon: "👤", act: "share", data: { id: p.id } });
       if (owner) items.push(
         { label: tr("home.rename"), icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
@@ -3998,18 +4050,22 @@ async function viewModelerHome() {
       return `<tr>
         <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
         <td class="muted">${n}</td>
+        ${deployedCell(p.id, href)}
         <td class="muted" data-sort="${p.updatedAt || 0}">${esc(fmtTime(p.updatedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
       </tr>`;
     };
-    const ungroupedRow = ungrouped.length ? `<tr>
+    const ungroupedRow = (ungrouped.length || deployedIn.has("")) ? `<tr>
         <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">${esc(tr("application.notAssigned"))}</a>
           <span class="muted" style="font-size:12px">· ${esc(tr("home.notInApplication"))}</span></div></td>
-        <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
+        <td class="muted">${ungrouped.length}</td>
+        ${deployedCell("", "#/modeler/p/ungrouped")}
+        <td class="muted">—</td><td></td>
       </tr>` : "";
 
+    if (countEl) countEl.textContent = trPlural("home.applications.count", projects.length);
     projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
-      `<tr><td colspan="4" class="empty">${tr("home.empty", { create: esc(tr("create.button")) })}</td></tr>`;
+      `<tr><td colspan="5" class="empty">${tr("home.empty", { create: esc(tr("create.button")) })}</td></tr>`;
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
@@ -4018,115 +4074,14 @@ async function viewModelerHome() {
   };
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
-    if (act === "import") importArtifact("", renderProjects);
-    if (act === "import-mim") importMIM("", renderProjects);
+    // An import files what it brings under an application, so it asks which first
+    // (ADR-0544).
+    if (act === "import") pickApplication(tr("application.pick.titleImport")).then((pid) => { if (pid) importArtifact(pid, renderProjects); });
+    if (act === "import-mim") pickApplication(tr("application.pick.titleImport")).then((pid) => { if (pid) importMIM(pid, renderProjects); });
     if (act === "import-source") importApplicationSource(renderProjects);
     if (act === "browse-atlas-hub") openBlueprintMarketplace({ call: packageCall, reload: renderProjects, notify: toast });
   });
-
-  // One deployed process = one row. A process may have several deployed versions;
-  // groupByProcess collapsed them, so the row shows the latest and a version count.
-  const deployRow = (g) => {
-    const older = g.versions.length > 1
-      ? ` <span class="muted">· ${esc(trPlural("home.versions", g.versions.length))}</span>` : "";
-    const label = g.latest.name || g.processId;
-    const sub = g.latest.name
-      ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-    // A deactivated definition stays deployed but does not auto-start new instances
-    // from its timer/message/signal start events (ADR-0119). Flag it and offer the
-    // inverse toggle.
-    const inactive = g.latest.active === false;
-    const frozen = frozenMark(g.latest);
-    const badge = (inactive
-      ? ` <span class="pill warn" title="${esc(tr("home.inactiveTitle"))}">${esc(tr("home.inactive"))}</span>`
-      : "") +
-      // A definition whose latest-bound decisions were frozen at its deploy does not
-      // do what its binding reads (ADR-0423), and this row is where its owner would
-      // redeploy it.
-      (frozen
-        ? ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`
-        : "");
-    const toggleLabel = tr(inactive ? "home.activate" : "home.deactivate");
-    const toggleTitle = tr(inactive ? "home.activateTitle" : "home.deactivateTitle");
-    return `<tr>
-      <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${starButton("process", g.processId)}${badge}${sub}</td>
-      <td>v${g.latest.version}${older}</td>
-      <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
-      <td style="text-align:right; white-space:nowrap">
-        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${esc(toggleTitle)}">${esc(toggleLabel)}</button>
-        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">${esc(tr("application.row.open"))}</a>
-        <button class="btn ghost danger" data-del="${esc(g.processId)}" title="${esc(tr("home.deleteTitle"))}">${esc(tr("common.delete"))}</button>
-      </td>
-    </tr>`;
-  };
-  const deployTable = (gs) => `<div class="card" style="padding:0">
-      <table class="no-enhance">
-        <thead><tr><th>${esc(tr("home.th.process"))}</th><th>${esc(tr("home.th.latest"))}</th><th>${esc(tr("deployments.th.deployed"))}</th><th></th></tr></thead>
-        <tbody>${gs.map(deployRow).join("")}</tbody>
-      </table>
-    </div>`;
-
-  const render = async () => {
-    try {
-      const [procs, projects] = await Promise.all([
-        api("GET", "/api/v1/processes"),
-        api("GET", "/api/v1/applications"),
-      ]);
-      const groups = groupByProcess(procs);
-      if (!groups.length) {
-        rows.innerHTML = `<p class="empty" style="padding:14px">
-          ${tr("home.nothingDeployed", { link: `<a href="#/modeler/new">${esc(tr("home.createDiagram"))}</a>` })}</p>`;
-        return;
-      }
-      // Group deployed definitions into the same project folders as design-time
-      // artifacts (ADR-0034): bucket by each process's projectId, ordering the
-      // buckets like the projects table above, then a trailing "Ungrouped" bucket for
-      // definitions with no (or an unknown) project. With no project at all, fall back
-      // to the plain flat table so a project-less install is unchanged.
-      const known = new Map(projects.map((p) => [p.id, p.name]));
-      const byProject = new Map();
-      for (const g of groups) {
-        const pid = g.latest.projectId && known.has(g.latest.projectId) ? g.latest.projectId : "";
-        if (!byProject.has(pid)) byProject.set(pid, []);
-        byProject.get(pid).push(g);
-      }
-      const buckets = [];
-      for (const p of projects) {
-        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📦", groups: byProject.get(p.id) });
-      }
-      if (byProject.has("")) buckets.push({ id: "ungrouped", name: tr("application.notAssigned"), icon: "🗂", groups: byProject.get("") });
-
-      if (buckets.length === 1 && buckets[0].id === "ungrouped") {
-        rows.innerHTML = deployTable(buckets[0].groups);
-      } else {
-        rows.innerHTML = buckets.map((b) => {
-          const sec = "dep-" + b.id;
-          const open = sectionState(sec);
-          return `<div style="margin-bottom:14px">
-            <h3 style="margin:0 0 8px; font-size:15px">
-              <button class="section-toggle" aria-expanded="${open}" data-section="${esc(sec)}">
-                <span class="mi-icon">${b.icon}</span>${esc(b.name)}
-                <span class="muted" style="font-weight:normal">· ${b.groups.length}</span>
-              </button>
-            </h3>
-            <div class="section-body" id="sec-${esc(sec)}"${open ? "" : " hidden"}>${deployTable(b.groups)}</div>
-          </div>`;
-        }).join("");
-        for (const t of rows.querySelectorAll(".section-toggle"))
-          t.addEventListener("click", () => toggleSection(t.dataset.section, t));
-      }
-      for (const b of rows.querySelectorAll("button[data-del]")) {
-        b.addEventListener("click", () => deleteProcess(b.dataset.del, groups, render));
-      }
-      for (const b of rows.querySelectorAll("button[data-toggle]")) {
-        b.addEventListener("click", () =>
-          toggleProcessActive(Number(b.dataset.toggle), b.dataset.active === "1", render));
-      }
-    } catch (e) {
-      rows.innerHTML = `<p class="empty" style="padding:14px">${esc(e.message)}</p>`;
-    }
-  };
-  await Promise.all([renderProjects(), render()]);
+  await renderProjects();
 }
 
 // viewProjectDetail is one project's workspace: a single unified table of its
@@ -4134,7 +4089,7 @@ async function viewModelerHome() {
 // per-row action menus, plus Deploy and project-level actions. id === "ungrouped"
 // shows artifacts that belong to no project (read-only container: no deploy or
 // project actions). This is the tidy, Camunda-style per-project view (ADR-0034).
-async function viewProjectDetail(id) {
+async function viewProjectDetail(id, pane = "artifacts") {
   const ungrouped = id === "ungrouped";
   view.innerHTML = `<div id="pd"><p class="muted">${esc(tr("application.loading"))}</p></div>`;
   const root = document.getElementById("pd");
@@ -4188,10 +4143,10 @@ async function viewProjectDetail(id) {
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [{
       label: tr("application.row.moveTo"), icon: "&#128450;",
-      items: [
-        { label: tr("application.notAssigned"), icon: currentPid ? "" : "•", act, data: { pid: "", key } },
-        ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
-      ],
+      // Not assigned is no destination: everything belongs to an application
+      // (ADR-0544).
+      items: projects.filter((p) => !p.protected && roleRank(p.myRole) >= 2)
+        .map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
     }];
 
     // star is the favourite mark for a stored diagram (diagram-shortcuts.js), empty for
@@ -4294,7 +4249,10 @@ async function viewProjectDetail(id) {
       fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
-    const createItems = [
+    // Nothing new is created outside an application
+    // (ADR-0544): Not assigned offers to file
+    // what is already there instead.
+    const createItems = ungrouped ? [] : [
       { header: tr("create.blank") },
       { label: tr("create.bpmn"), icon: "⚙", href: newDiagramHref },
       { label: tr("create.dmn"), icon: "▦", act: "newdec" },
@@ -4318,56 +4276,70 @@ async function viewProjectDetail(id) {
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
           ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy" title="${esc(tr("application.publishTitle"))}">${esc(tr("application.publish"))}</button>` : ""}
-          ${canWrite ? dropdown(tr("create.button"), "btn neutral", createItems) : ""}
+          ${ungrouped ? `<button class="btn" id="pd-adopt" title="${esc(tr("adopt.buttonTitle"))}">${esc(tr("adopt.button"))}</button>` : ""}
+          ${canWrite && createItems.length ? dropdown(tr("create.button"), "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
-      ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
+      <div class="tabs" id="pd-tabs">
         <button data-pane="artifacts" class="active" title="${esc(tr("application.tab.artifactsTitle"))}">${esc(tr("application.tab.artifacts"))}</button>
-        <button data-pane="deployments" title="${esc(tr("application.tab.deploymentsTitle"))}">${esc(tr("application.tab.deployments"))}</button>
-        <button data-pane="constants" title="${esc(tr("application.tab.constantsTitle"))}">${esc(tr("application.tab.constants"))}</button>
-      </div>`}
+        <button data-pane="deployments" title="${esc(tr(ungrouped ? "application.tab.deploymentsUngroupedTitle" : "application.tab.deploymentsTitle"))}">${esc(tr("application.tab.deployments"))}</button>
+        ${ungrouped ? "" : `<button data-pane="constants" title="${esc(tr("application.tab.constantsTitle"))}">${esc(tr("application.tab.constants"))}</button>`}
+      </div>
       <div id="pane-artifacts">
+        ${ungrouped ? `<p class="muted" style="padding:2px 2px 12px">${esc(tr("adopt.intro"))}</p>` : ""}
         <div class="card" style="padding:0">
           <table data-dt-key="project-artifacts">
             <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("application.th.type"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
             <tbody id="pd-rows">${bodyRows ||
-              `<tr><td colspan="4" class="empty">${canWrite
-                ? tr("application.empty.canWrite", { create: esc(tr("create.button")) })
+              `<tr><td colspan="4" class="empty">${ungrouped ? esc(tr("adopt.nothing"))
+                : canWrite ? tr("application.empty.canWrite", { create: esc(tr("create.button")) })
                 : esc(tr("application.empty.readOnly"))}</td></tr>`}</tbody>
           </table>
         </div>
       </div>
-      ${ungrouped ? "" : `<div id="pane-deployments" hidden>
-        <p class="muted" style="padding:2px 2px 12px">${esc(tr("deployments.intro"))}</p>
+      <div id="pane-deployments" hidden>
+        <p class="muted" style="padding:2px 2px 12px">${esc(tr(ungrouped ? "deployments.introUngrouped" : "deployments.intro"))}</p>
         <div id="pd-deployments"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
       </div>
-      <div id="pane-constants" hidden>
+      ${ungrouped ? "" : `<div id="pane-constants" hidden>
         <div id="pd-constants"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
       </div>`}`;
 
-    // Tabs: Artifacts (design-time) and Deployments (what's live for this
-    // application, ADR-0128). The deployments pane loads lazily on first open.
+    // Tabs: Artifacts (design-time), Deployments (what's live for this application,
+    // ADR-0128) and Constants. A pane loads lazily on its first open. The open tab is
+    // part of the address (#/modeler/p/{id}/deployments), so a link can land on it —
+    // the Modeler home's deployed column does — and a reload stays on it.
     const tabs = document.getElementById("pd-tabs");
     if (tabs) {
       let loadedDeployments = false;
       let loadedConstants = false;
-      tabs.addEventListener("click", (e) => {
-        const b = e.target.closest("button[data-pane]");
-        if (!b) return;
+      const show = (name) => {
+        const b = tabs.querySelector(`button[data-pane="${name}"]`) || tabs.querySelector("button[data-pane]");
         for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
-        document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
-        document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
-        document.getElementById("pane-constants").hidden = b.dataset.pane !== "constants";
+        for (const p of ["artifacts", "deployments", "constants"]) {
+          const el = document.getElementById("pane-" + p);
+          if (el) el.hidden = b.dataset.pane !== p;
+        }
         if (b.dataset.pane === "deployments" && !loadedDeployments) {
           loadedDeployments = true;
-          renderAppDeployments(id);
+          renderAppDeployments(id, { canWrite });
         }
         if (b.dataset.pane === "constants" && !loadedConstants) {
           loadedConstants = true;
           renderAppConstants(id);
         }
+        return b.dataset.pane;
+      };
+      tabs.addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-pane]");
+        if (!b) return;
+        const shown = show(b.dataset.pane);
+        // replaceState, not a hash change: the route would re-render the page.
+        const base = `#/modeler/p/${encodeURIComponent(id)}`;
+        try { history.replaceState(null, "", shown === "artifacts" ? base : `${base}/${shown}`); } catch { /* address stays */ }
       });
+      if (pane !== "artifacts") show(pane);
     }
 
     onMenuAction(root, (act, b) => {
@@ -4385,7 +4357,7 @@ async function viewProjectDetail(id) {
         case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
-        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
+        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render, ungrouped ? "" : id); break;
         case "delmodel": deleteStoredModel(b.dataset.handle, render); break;
         case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
@@ -4395,6 +4367,8 @@ async function viewProjectDetail(id) {
     });
     const deployBtn = document.getElementById("pd-deploy");
     if (deployBtn) deployBtn.addEventListener("click", () => publishApplication(id, render));
+    const adoptBtn = document.getElementById("pd-adopt");
+    if (adoptBtn) adoptBtn.addEventListener("click", () => adoptUnassigned(projects, render));
   };
   await render();
 }
@@ -4545,18 +4519,84 @@ async function renderHeldConstants(host, o) {
   });
 }
 
+// groupDeployedProcesses folds an application's deployed definitions into one entry per
+// process: its newest version, the older ones newest first, and the instances all of
+// them hold. A process is what somebody pauses, deletes or opens; its versions are
+// detail under it (ADR-0541). A count that is
+// not known (null) keeps the sum unknown rather than reading as nought.
+function groupDeployedProcesses(definitions) {
+  const byId = new Map();
+  for (const d of definitions || []) {
+    if (!byId.has(d.processId)) byId.set(d.processId, []);
+    byId.get(d.processId).push(d);
+  }
+  const sum = (vs, f) => vs.some((v) => v[f] == null) ? null : vs.reduce((n, v) => n + v[f], 0);
+  return [...byId.entries()].map(([processId, versions]) => {
+    versions.sort((a, b) => b.version - a.version);
+    return { processId, versions, latest: versions[0], running: sum(versions, "running"), finished: sum(versions, "finished") };
+  }).sort((a, b) => (a.latest.name || a.processId).localeCompare(b.latest.name || b.processId));
+}
+
+// ungroupedDeployments answers for the processes filed under no application what
+// GET /api/v1/applications/{id}/deployments answers for one: the same shape, built
+// from the process listing, so "Not assigned" has a Deployments tab like every
+// application. A process filed under an application the caller cannot see counts as
+// not assigned, as it did on the Modeler home. The instance counts come from the
+// operations summary, which only an operator may read; without it they are unknown
+// (null), not nought.
+async function ungroupedDeployments() {
+  const [procs, projects] = await Promise.all([
+    api("GET", "/api/v1/processes"),
+    api("GET", "/api/v1/applications"),
+  ]);
+  let counts = null;
+  if (mayUse("operator")) {
+    try {
+      counts = new Map(((await api("GET", "/api/v1/instances/summary")) || [])
+        .map((r) => [String(r.processDefKey), r]));
+    } catch { counts = null; }
+  }
+  const known = new Set((projects || []).map((p) => p.id));
+  const mine = (procs || []).filter((p) => !p.projectId || !known.has(p.projectId));
+  const newest = new Map();
+  for (const p of mine) newest.set(p.processId, Math.max(newest.get(p.processId) || 0, p.version));
+  const definitions = mine.map((p) => {
+    const c = counts && counts.get(String(p.key));
+    return {
+      key: p.key, processId: p.processId, name: p.name, version: p.version, deployedAt: p.deployedAt,
+      active: p.active !== false, current: p.version === newest.get(p.processId),
+      running: counts ? (c ? c.active || 0 : 0) : null,
+      finished: counts ? (c ? c.completed || 0 : 0) : null,
+      frozenDecisions: p.frozenDecisions,
+    };
+  });
+  const total = (f) => counts ? definitions.reduce((n, d) => n + d[f], 0) : null;
+  return {
+    id: "ungrouped", name: tr("application.notAssigned"), version: 0,
+    processes: newest.size, running: total("running"), finished: total("finished"), definitions,
+  };
+}
+
 // renderAppDeployments fills the Deployments tab: the application's published
-// version, its live definitions with per-definition instance counts, and its
-// release history (ADR-0128). One call each, both scoped to this application.
-async function renderAppDeployments(id) {
+// version, its deployed processes with their versions, instance counts and the
+// actions on them, and its release history (ADR-0128). It is the one place a
+// deployed process is paused, deleted or opened from its application
+// (ADR-0541). "ungrouped" is the processes filed
+// under no application: no releases, no targets.
+async function renderAppDeployments(id, { canWrite = false } = {}) {
   const host = document.getElementById("pd-deployments");
   if (!host) return;
-  let view, releases;
+  const ungrouped = id === "ungrouped";
+  const reload = () => renderAppDeployments(id, { canWrite });
+  let view, releases = [];
   try {
-    [view, releases] = await Promise.all([
-      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/deployments`),
-      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`),
-    ]);
+    if (ungrouped) view = await ungroupedDeployments();
+    else {
+      [view, releases] = await Promise.all([
+        api("GET", `/api/v1/applications/${encodeURIComponent(id)}/deployments`),
+        api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`),
+      ]);
+    }
   } catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
 
   // Two independent facts, shown as two pills rather than one merged "state":
@@ -4574,22 +4614,61 @@ async function renderAppDeployments(id) {
     return `<td>${life}${paused}</td>`;
   };
 
-  const defRow = (d) => `<tr${d.current ? "" : ' class="muted-row"'}>
-    <td><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || d.processId)}</b></a></div>
-      <div class="muted" style="font-size:12px; padding-left:26px">${esc(d.processId)}</div></td>
-    <td><span class="chip">v${d.version}</span></td>
+  const num = (n) => n == null ? "—" : String(n);
+  const pausedPill = (d) => d.active ? "" :
+    ` <span class="pill warn" title="${esc(tr("deployments.pausedTitle"))}">${esc(tr("deployments.paused"))}</span>`;
+  // An operator opens a version where its instances are; anybody else where its
+  // diagram is.
+  const operator = mayUse("operator");
+  const versionHref = (d) => operator ? `#/operations/p/${d.key}` : `#/modeler/d/${d.key}`;
+  const olderVersion = (d) => `<li><a href="${versionHref(d)}">v${d.version}</a>${pausedPill(d)}
+      <span class="muted">· ${esc(tr("deployments.version.counts", { running: num(d.running), finished: num(d.finished) }))}
+      · ${esc(fmtTime(d.deployedAt))}</span></li>`;
+  // The versions a process has had stay under its row: a superseded version keeps its
+  // running instances and is still somebody's to drain, but it is not a process of its
+  // own, so it does not get a row of its own.
+  const versionCell = (g) => {
+    const older = g.versions.slice(1);
+    const list = older.length
+      ? `<details class="fold-sub dep-versions"><summary class="muted">${esc(trPlural("deployments.olderVersions", older.length))}</summary>
+          <ul>${older.map(olderVersion).join("")}</ul></details>`
+      : "";
+    return `<td data-sort="${g.latest.version}" data-filter="v${g.latest.version}"><span class="chip">v${g.latest.version}</span>${list}</td>`;
+  };
+  const processRow = (g) => {
+    const d = g.latest;
+    const frozen = frozenMark(d);
+    // A definition whose latest-bound decisions were frozen at its deploy does not do
+    // what its binding reads (ADR-0423); this row is where its owner redeploys it.
+    const frozenPill = frozen
+      ? ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`
+      : "";
+    const inactive = d.active === false;
+    const items = [
+      { label: tr("deployments.row.openModeler"), icon: "✎", href: `#/modeler/d/${d.key}` },
+      ...(operator ? [
+        { label: tr("deployments.row.instances"), icon: "▶", href: `#/operations/p/${d.key}` },
+        { label: tr(inactive ? "home.activate" : "home.deactivate"), icon: inactive ? "▶" : "⏸",
+          act: "dep-toggle", data: { key: d.key, inactive: inactive ? "1" : "0" } },
+      ] : []),
+      ...(canWrite && mayUse("modeler") ? [
+        { sep: true },
+        { label: tr("common.delete"), icon: "🗑", act: "dep-delete", danger: true, data: { pid: g.processId } },
+      ] : []),
+    ];
+    return `<tr data-process="${esc(g.processId)}">
+    <td data-filter="${esc((d.name || "") + " " + g.processId)}"><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || g.processId)}</b></a>${starButton("process", g.processId)}${frozenPill}</div>
+      <div class="muted" style="font-size:12px; padding-left:26px">${esc(g.processId)}</div></td>
+    ${versionCell(g)}
     ${stateCell(d)}
-    <td class="muted">${d.running}</td>
-    <td class="muted">${d.finished}</td>
+    <td class="muted" data-sort="${g.running ?? -1}">${num(g.running)}</td>
+    <td class="muted" data-sort="${g.finished ?? -1}">${num(g.finished)}</td>
     <td class="muted" data-sort="${d.deployedAt || 0}">${esc(fmtTime(d.deployedAt))}</td>
+    <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
   </tr>`;
+  };
 
-  // Current versions first, then each process's superseded versions newest-first,
-  // so the versions that actually run head the table instead of being buried.
-  const orderedDefs = [...view.definitions].sort((a, b) =>
-    (b.current - a.current) ||
-    a.processId.localeCompare(b.processId) ||
-    (b.version - a.version));
+  const processes = groupDeployedProcesses(view.definitions);
 
   // Deployment targets (ADR-0129): what each peer server runs for this
   // application. Fetched separately from the local view because it makes an
@@ -4597,7 +4676,7 @@ async function renderAppDeployments(id) {
   // empty the rest of the page, so a failure here renders as an unreachable row.
   let targets = [];
   try {
-    targets = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/targets`);
+    if (!ungrouped) targets = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/targets`);
   } catch { /* best-effort: the local view still renders without the target section */ }
 
   const targetRow = (t) => {
@@ -4651,24 +4730,26 @@ async function renderAppDeployments(id) {
   host.innerHTML = `
     <div class="card" style="margin-bottom:16px">
       <div class="stats">
-        <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>${esc(tr("deployments.stat.published"))}</span></div>
+        ${ungrouped ? "" : `<div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>${esc(tr("deployments.stat.published"))}</span></div>`}
         <div class="stat"><b>${view.processes}</b><span>${esc(trPlural("deployments.stat.processes", view.processes))}</span></div>
-        <div class="stat"><b>${view.running}</b><span>${esc(tr("deployments.stat.running"))}</span></div>
-        <div class="stat"><b>${view.finished}</b><span>${esc(tr("deployments.stat.finished"))}</span></div>
+        <div class="stat"><b>${num(view.running)}</b><span>${esc(tr("deployments.stat.running"))}</span></div>
+        <div class="stat"><b>${num(view.finished)}</b><span>${esc(tr("deployments.stat.finished"))}</span></div>
       </div>
     </div>
-    ${sectionHead("appdep-definitions", esc(tr("deployments.definitions")), trPlural("deployments.definitions.count", orderedDefs.length))}
+    ${sectionHead("appdep-definitions", esc(tr("deployments.processes")), trPlural("deployments.processes.count", processes.length))}
     ${sectionBody("appdep-definitions")}
-    <div class="card" style="padding:0">
+    <div class="card" style="padding:0" id="pd-processes">
       <table>
-        <thead><tr><th>${esc(tr("deployments.th.definition"))}</th><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.state"))}</th><th>${esc(tr("deployments.th.running"))}</th><th>${esc(tr("deployments.th.finished"))}</th><th>${esc(tr("deployments.th.deployed"))}</th></tr></thead>
-        <tbody>${orderedDefs.map(defRow).join("") ||
-          `<tr><td colspan="6" class="empty">${tr("deployments.empty", { publish: esc(tr("application.publish")) })}</td></tr>`}</tbody>
+        <thead><tr><th>${esc(tr("deployments.th.process"))}</th><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.state"))}</th><th>${esc(tr("deployments.th.running"))}</th><th>${esc(tr("deployments.th.finished"))}</th><th>${esc(tr("deployments.th.deployed"))}</th><th></th></tr></thead>
+        <tbody>${processes.map(processRow).join("") ||
+          `<tr><td colspan="7" class="empty">${ungrouped
+            ? esc(tr("deployments.emptyUngrouped"))
+            : tr("deployments.empty", { publish: esc(tr("application.publish")) })}</td></tr>`}</tbody>
       </table>
     </div>
     </div>
     ${targetsSection}
-    ${sectionHead("appdep-releases", esc(tr("deployments.releases")), trPlural("deployments.releases.count", releases.length))}
+    ${ungrouped ? "" : `${sectionHead("appdep-releases", esc(tr("deployments.releases")), trPlural("deployments.releases.count", releases.length))}
     ${sectionBody("appdep-releases")}
     <div class="card" style="padding:0" id="pd-releases">
       <table>
@@ -4677,9 +4758,13 @@ async function renderAppDeployments(id) {
           `<tr><td colspan="5" class="empty">${esc(tr("deployments.releasesEmpty"))}</td></tr>`}</tbody>
       </table>
     </div>
-    </div>`;
+    </div>`}`;
 
   wireSections(host);
+  onMenuAction(host, (act, b) => {
+    if (act === "dep-toggle") toggleProcessActive(Number(b.dataset.key), b.dataset.inactive === "1", reload);
+    if (act === "dep-delete") deleteProcess(b.dataset.pid, processes, reload);
+  });
   for (const b of host.querySelectorAll("button[data-promote]"))
     b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
   for (const b of host.querySelectorAll("button[data-architecture]"))
@@ -5206,7 +5291,7 @@ function openShareModal(proj, users, degraded, reload) {
   renderBody();
 }
 
-// moveDraft reassigns a draft to a project (or to Ungrouped when projectId is "").
+// moveDraft reassigns a draft to another application.
 async function moveDraft(processId, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/drafts/${encodeURIComponent(processId)}`, { projectId });
@@ -5583,7 +5668,7 @@ function wireWorkerManagement(workers) {
       }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="sharepointserver">sharepointserver</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -6600,7 +6685,43 @@ function editDmnRef(ref) {
   location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
 }
 
-// moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
+// pickApplication asks which application something new goes into: every process,
+// decision and form belongs to one (ADR-0544).
+// Resolves to the application's id, or "" when the dialog is cancelled or there is
+// none the caller may write to.
+async function pickApplication(title) {
+  let apps = [];
+  try { apps = (await api("GET", "/api/v1/applications")) || []; } catch (e) { toast(e.message, "err"); return ""; }
+  const writable = apps.filter((p) => !p.protected && roleRank(p.myRole) >= 2)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!writable.length) { toast(tr("application.pick.none"), "err"); return ""; }
+  const picked = await openPickModal({
+    title, label: tr("application.pick.label"), hint: tr("application.pick.hint"), okLabel: tr("application.pick.ok"),
+    options: writable.map((p) => ({ value: p.id, label: p.name })),
+  });
+  return picked ? picked.option.value : "";
+}
+
+// routeIntoApplication sends a "new …" address that names no application to the same
+// address inside the one the author picks, or back to the Modeler home. prefix is the
+// part of path the application goes after.
+async function routeIntoApplication(path, prefix, title) {
+  const pid = await pickApplication(title);
+  const next = pid ? path.replace(prefix, `${prefix}/p/${encodeURIComponent(pid)}`) : "#/modeler";
+  location.replace(location.pathname + location.search + next);
+}
+
+// adoptUnassigned files what belongs to no application under one, many at once
+// (ADR-0544).
+async function adoptUnassigned(projects, reload) {
+  let unassigned;
+  try { unassigned = await api("GET", "/api/v1/unassigned"); } catch (e) { toast(e.message, "err"); return; }
+  const apps = (projects || []).filter((p) => !p.protected && roleRank(p.myRole) >= 2)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (await openAdoptDialog({ api, apps, unassigned, toast })) await reload();
+}
+
+// moveDmnRef reassigns a DMN reference to another application.
 async function moveDmnRef(id, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(id)}`, { projectId });
@@ -6613,11 +6734,15 @@ async function moveDmnRef(id, projectId, reload) {
 // (ADR-0330). It re-uses the existing
 // handle rather than re-uploading, so the model is *recovered* rather than copied —
 // a re-upload would file a second model under a suffixed handle (ADR-0222).
-async function referenceStoredModel(handle, suggested, reload) {
+async function referenceStoredModel(handle, suggested, reload, projectId = "") {
+  // The reference is filed under an application like everything else
+  // (ADR-0544); from Not assigned, it asks which.
+  const pid = projectId || await pickApplication(tr("application.pick.titleDecision"));
+  if (!pid) return;
   const name = (window.prompt(tr("artifact.ref.namePrompt"), suggested || handle) || "").trim();
   if (!name) return;
   try {
-    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: pid });
     toast(tr("artifact.ref.added", { name }), "ok");
   } catch (e) { toast(tr("artifact.ref.addFailed", { error: e.message }), "err"); return; }
   await reload();
@@ -6914,6 +7039,48 @@ function summarizeFromServer(rows) {
   return byProc;
 }
 
+// procTable is the Instances overview's table of process rows. The list draws one, and
+// grouping by application draws one per application (ADR-0034), so both arrangements
+// share the columns, the row markup and the shared sort and filter enhancer.
+function procTable(dtKey, body, tbodyId) {
+  return `<div class="card" style="padding:0">
+      <table data-dt-key="${esc(dtKey)}">
+        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Incidents</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
+        <tbody${tbodyId ? ` id="${esc(tbodyId)}"` : ""}>${body}</tbody>
+      </table>
+    </div>`;
+}
+
+// The Instances overview's arrangement, remembered per browser: "process" is the one
+// list it always had and stays the default; "application" groups the same rows under
+// the application each process is filed in.
+const OPS_GROUP_KEY = "atlas.ops.groupBy";
+function opsGroupMode() {
+  try { return localStorage.getItem(OPS_GROUP_KEY) === "application" ? "application" : "process"; } catch { return "process"; }
+}
+
+// groupByApplication buckets the overview's process groups by the application their
+// latest version is filed in — every version moves together (PATCH /processes/{key}),
+// so the latest speaks for them all. The buckets are ordered by name; a process filed
+// nowhere, or under an application whose name the server withholds (one deleted, or
+// one this person cannot read), goes to the trailing not-assigned bucket, as the
+// Modeler's deployed list files it.
+function groupByApplication(groups) {
+  const byApp = new Map();
+  const rest = [];
+  for (const g of groups) {
+    const id = g.latest.projectId;
+    const name = g.latest.applicationName;
+    if (!id || !name) { rest.push(g); continue; }
+    if (!byApp.has(id)) byApp.set(id, { id, name, groups: [] });
+    byApp.get(id).groups.push(g);
+  }
+  const buckets = [...byApp.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id));
+  if (rest.length) buckets.push({ id: "", name: tr("application.notAssigned"), groups: rest });
+  return buckets;
+}
+
 async function viewInstances() {
   view.innerHTML = `
     <div class="between">
@@ -6934,6 +7101,10 @@ async function viewInstances() {
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
         <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
       </form>
+      <div class="seg" id="inst-group" role="group" aria-label="${esc(tr("ops.group.label"))}">
+        <button type="button" data-group="process" title="${esc(tr("ops.group.processTitle"))}">${esc(tr("ops.group.process"))}</button>
+        <button type="button" data-group="application" title="${esc(tr("ops.group.applicationTitle"))}">${esc(tr("ops.group.application"))}</button>
+      </div>
     </div>
     <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
       <span class="ops-search">
@@ -6946,15 +7117,11 @@ async function viewInstances() {
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact), else the term is matched against variable names and values. A term is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not <code>MT-10001</code>. Widen it yourself with <code>*</code> for any run of characters and <code>?</code> for exactly one — <code>*MT-1*</code> for anything containing <code>MT-1</code> — and write <code>\\*</code> or <code>\\?</code> to search for those characters themselves. A variable the model declares <code>atlas:searchable</code> is found by index when the search is narrowed to one version.</p>
     <div id="var-panel" hidden></div>
     <div id="ops-inc-note"></div>
-    <div class="card" id="proc-card" style="padding:0">
-      <table data-dt-key="instances">
-        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Incidents</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div>`;
-  const tbody = document.getElementById("rows");
+    <div id="proc-card">${procTable("instances", '<tr><td colspan="7" class="empty">Loading…</td></tr>', "rows")}</div>`;
+  const procCard = document.getElementById("proc-card");
 
   let allGroups = [];
+  let loaded = false;
   let summary = new Map();
   let runningByDef = new Map();
   // Unresolved incidents per definition, for the per-process rows. Keys are
@@ -7028,93 +7195,183 @@ async function viewInstances() {
     };
   };
 
-  // renderRows draws the process rows. Narrowing them is the table's own business:
-  // the Process column's filter box searches name *and* process id (the row carries
-  // both in its data-filter), which is what the box above this list used to do — so
-  // this only builds the rows and their sort keys, and the shared enhancer sorts and
-  // filters them.
+  // rowHtml draws one process row — the same in the list and in an application's group.
+  const rowHtml = (g) => {
+    const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
+    const label = g.latest.name || g.processId;
+    const sub = g.latest.name
+      ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+    const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
+    // A deactivated definition stays deployed and keeps its running instances, but does
+    // not auto-start new ones from its timer/message/signal start events (ADR-0119).
+    // Flag it here too; the Activate/Deactivate toggle lives in the Modeler's Deployed list.
+    const inactiveBadge = g.latest.active === false
+      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      : "";
+    // Compact and non-wrapping: the latest version reads at a glance, the count of
+    // older ones is a small badge (the full phrasing lives in the tooltip), so the
+    // cell can't break mid-phrase in a narrow column.
+    const versions = (g.versions.length === 1
+      ? `v${g.latest.version}`
+      : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
+    const running = s.running
+      ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
+      : '<span class="muted">0</span>';
+    const collab = g.latest.collaborationKey
+      ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
+      : "";
+    // Row actions: one primary Open plus an overflow menu, so every row is the same
+    // height and the destructive bulk-terminate doesn't shout from each row (it is
+    // one click deeper, the same ⋯ pattern the Modeler's rows use).
+    const openHref = `#/operations/p/${g.latest.key}`;
+    const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+    // Reading what changed between two versions needs no role beyond seeing them
+    // (ADR-0530).
+    if (g.versions.length > 1) {
+      menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
+    }
+    if (s.running) {
+      // Migrating sits above terminating deliberately: both drain a version, but one
+      // keeps the work and the other discards it, and the one that keeps it should be
+      // the one an operator reaches first (ADR-0162).
+      if (g.versions.length > 1) {
+        menuItems.push({ sep: true }, { label: "Migrate running instances…", icon: "⇄", act: "migrate", data: { proc: g.processId } });
+      }
+      menuItems.push(
+        { sep: true },
+        { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
+      );
+    }
+    // Deleting finished instances for good is an administrator's, and offered only
+    // where there are some (ADR-0486). The
+    // dialog reads its own counts: the Finished column counts every instance that
+    // ever finished, including the ones already deleted.
+    if (s.finished && mayUse("admin")) {
+      menuItems.push(
+        { sep: true },
+        { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
+      );
+    }
+    // A running count says nothing about a token being *stuck*: an instance parked
+    // behind an incident is counted as running like any other (ADR-0151).
+    const inc = incidentCell(g);
+    return `<tr>
+      <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
+      <td data-sort="${g.versions.length}">${versions}</td>
+      <td data-sort="${s.running || 0}">${running}</td>
+      <td data-sort="${inc.total}">${inc.html}</td>
+      <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
+      <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
+      <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
+    </tr>`;
+  };
+
+  // groupHead is one application's heading in the grouped arrangement: its name, a
+  // link to its page, and what its processes hold summed over every version, so a
+  // folded group still says whether anything in it runs or is stuck.
+  const groupHead = (b, sec) => {
+    let running = 0, finished = 0, incidents = 0;
+    for (const g of b.groups) {
+      const s = summary.get(g.processId);
+      if (s) { running += s.running; finished += s.finished; }
+      incidents += incidentCell(g).total;
+    }
+    const parts = [esc(trPlural("ops.group.processes", b.groups.length))];
+    if (running) parts.push(`<span class="pill ok"><span class="dot"></span>${esc(trPlural("ops.versions.running", running))}</span>`);
+    if (incidents) parts.push(`<span class="pill err">&#9888; ${esc(trPlural("ops.versions.incidents", incidents))}</span>`);
+    if (finished) parts.push(esc(trPlural("ops.versions.finished", finished)));
+    const open = b.id
+      ? `<a class="small" href="#/modeler/p/${encodeURIComponent(b.id)}" title="${esc(tr("ops.group.openAppTitle"))}">${esc(tr("ops.group.openApp"))}</a>`
+      : "";
+    return `<div class="sec-head">
+        <h2><button class="section-toggle" aria-expanded="${sectionState(sec)}" data-section="${esc(sec)}"
+          title="${esc(tr("section.toggle"))}"><span class="mi-icon">${b.id ? "📦" : "🗂"}</span>${esc(b.name)}</button></h2>
+        <span class="muted small">${parts.join(" · ")}</span>${open}</div>`;
+  };
+
+  // renderList draws the one list of processes. Its table is built once and only its
+  // body is rewritten on a refresh, so the enhancer's sort and the text in its filter
+  // row stay as the operator left them.
+  const renderList = (empty) => {
+    let tbody = document.getElementById("rows");
+    if (!tbody) {
+      procCard.innerHTML = procTable("instances", "", "rows");
+      tbody = document.getElementById("rows");
+      enhanceViewTables();
+    }
+    tbody.innerHTML = empty || allGroups.map(rowHtml).join("");
+  };
+
+  // renderGrouped draws one folding section per application. While the same
+  // applications are shown, a refresh rewrites each heading and each table's body in
+  // place — for the reason renderList gives; a different set of applications redraws
+  // them all.
+  const renderGrouped = () => {
+    const buckets = groupByApplication(allGroups);
+    const secOf = (b) => "ops-app-" + (b.id || "unassigned");
+    const ids = buckets.map(secOf).join("\n");
+    const root = procCard.querySelector(".ops-app-groups");
+    if (root && root.dataset.ids === ids) {
+      root.querySelectorAll(":scope > .ops-app-group").forEach((el, i) => {
+        const b = buckets[i];
+        el.querySelector(":scope > .sec-head").outerHTML = groupHead(b, secOf(b));
+        el.querySelector("tbody").innerHTML = b.groups.map(rowHtml).join("");
+      });
+    } else {
+      procCard.innerHTML = `<div class="ops-app-groups">${buckets.map((b) => {
+        const sec = secOf(b);
+        return `<div class="ops-app-group">${groupHead(b, sec)}${sectionBody(sec)}${procTable("instances-by-app", b.groups.map(rowHtml).join(""))}</div></div>`;
+      }).join("")}</div>`;
+      procCard.querySelector(".ops-app-groups").dataset.ids = ids;
+      enhanceViewTables();
+    }
+    wireSections(procCard);
+  };
+
+  // renderRows draws the process rows in the arrangement the operator chose. Narrowing
+  // them is the table's own business: the Process column's filter box searches name
+  // *and* process id (the row carries both in its data-filter), which is what the box
+  // above this list used to do — so this only builds the rows and their sort keys, and
+  // the shared enhancer sorts and filters them.
   function renderRows() {
     if (!allGroups.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">
+      if (procCard.querySelector(".ops-app-groups")) procCard.innerHTML = "";
+      renderList(`<tr><td colspan="7" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
-        <a href="#/modeler">Modeler</a>.</td></tr>`;
-      return;
+        <a href="#/modeler">Modeler</a>.</td></tr>`);
+    } else if (groupMode === "application") {
+      if (document.getElementById("rows")) procCard.innerHTML = "";
+      renderGrouped();
+    } else {
+      if (procCard.querySelector(".ops-app-groups")) procCard.innerHTML = "";
+      renderList();
     }
-    tbody.innerHTML = allGroups.map((g) => {
-      const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
-      const label = g.latest.name || g.processId;
-      const sub = g.latest.name
-        ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-      const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
-      // A deactivated definition stays deployed and keeps its running instances, but does
-      // not auto-start new ones from its timer/message/signal start events (ADR-0119).
-      // Flag it here too; the Activate/Deactivate toggle lives in the Modeler's Deployed list.
-      const inactiveBadge = g.latest.active === false
-        ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
-        : "";
-      // Compact and non-wrapping: the latest version reads at a glance, the count of
-      // older ones is a small badge (the full phrasing lives in the tooltip), so the
-      // cell can't break mid-phrase in a narrow column.
-      const versions = (g.versions.length === 1
-        ? `v${g.latest.version}`
-        : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
-      const running = s.running
-        ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
-        : '<span class="muted">0</span>';
-      const collab = g.latest.collaborationKey
-        ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
-        : "";
-      // Row actions: one primary Open plus an overflow menu, so every row is the same
-      // height and the destructive bulk-terminate doesn't shout from each row (it is
-      // one click deeper, the same ⋯ pattern the Modeler's rows use).
-      const openHref = `#/operations/p/${g.latest.key}`;
-      const menuItems = [{ label: "Open", icon: "→", href: openHref }];
-      // Reading what changed between two versions needs no role beyond seeing them
-      // (ADR-0530).
-      if (g.versions.length > 1) {
-        menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
-      }
-      if (s.running) {
-        // Migrating sits above terminating deliberately: both drain a version, but one
-        // keeps the work and the other discards it, and the one that keeps it should be
-        // the one an operator reaches first (ADR-0162).
-        if (g.versions.length > 1) {
-          menuItems.push({ sep: true }, { label: "Migrate running instances…", icon: "⇄", act: "migrate", data: { proc: g.processId } });
-        }
-        menuItems.push(
-          { sep: true },
-          { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
-        );
-      }
-      // Deleting finished instances for good is an administrator's, and offered only
-      // where there are some (ADR-0486). The
-      // dialog reads its own counts: the Finished column counts every instance that
-      // ever finished, including the ones already deleted.
-      if (s.finished && mayUse("admin")) {
-        menuItems.push(
-          { sep: true },
-          { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
-        );
-      }
-      // A running count says nothing about a token being *stuck*: an instance parked
-      // behind an incident is counted as running like any other (ADR-0151).
-      const inc = incidentCell(g);
-      return `<tr>
-        <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
-        <td data-sort="${g.versions.length}">${versions}</td>
-        <td data-sort="${s.running || 0}">${running}</td>
-        <td data-sort="${inc.total}">${inc.html}</td>
-        <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
-      </tr>`;
-    }).join("");
     // Bound per render, because onMenuAction binds the buttons that exist *now* and the
     // assignment above just replaced every one of them. Bound once at mount, it found
     // only the "Loading…" row, and every row's migrate and terminate closed the menu
     // and did nothing else.
-    onMenuAction(tbody, onRowAction);
+    onMenuAction(procCard, onRowAction);
   }
+
+  let groupMode = opsGroupMode();
+  const groupSeg = document.getElementById("inst-group");
+  const reflectGroupMode = () => {
+    for (const b of groupSeg.querySelectorAll("button[data-group]")) {
+      const on = b.dataset.group === groupMode;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+  };
+  reflectGroupMode();
+  groupSeg.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-group]");
+    if (!b || b.dataset.group === groupMode) return;
+    groupMode = b.dataset.group;
+    try { localStorage.setItem(OPS_GROUP_KEY, groupMode); } catch { /* ignore */ }
+    reflectGroupMode();
+    // Before anything is loaded there is nothing to arrange: the load draws it.
+    if (loaded) renderRows();
+  });
 
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
@@ -7192,9 +7449,11 @@ async function viewInstances() {
       allGroups = groupByProcess(procs);
       summary = summarizeFromServer(rows);
       runningByDef = runningByDefinition(rows);
+      loaded = true;
       renderRows();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+      if (procCard.querySelector(".ops-app-groups")) procCard.innerHTML = "";
+      renderList(`<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`);
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -7210,7 +7469,6 @@ async function viewInstances() {
   // match, then render a per-instance results table (each matched variable
   // highlighted) in place of the per-process list. Clearing restores the list.
   const varPanel = document.getElementById("var-panel");
-  const procCard = document.getElementById("proc-card");
   const varClear = document.getElementById("var-clear");
   const varInput = document.getElementById("var-q");
   // needleOf mirrors the server's parse: an "=" makes it structured (the value
@@ -9839,11 +10097,28 @@ async function viewTasks(preselectKey) {
           return;
         }
       } else if (picked) {
-        // The other answer, unchanged: read the file as text and submit it as the
-        // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
-        // that upload a normal user-task step rather than a side-channel endpoint.
-        try { data.csvText = await picked.text(); }
-        catch (err) { toast(tr("tasks.complete.fileUnreadable", { error: err.message }), "err"); return; }
+        // Every other file becomes a document (ADR-0543):
+        // it is uploaded to the document store first, and the task is completed with the
+        // reference under the field's own key. The file itself never enters a variable —
+        // it used to be read as text into `csvText`, whatever the field was called, and
+        // every step afterwards rewrote it into the log. The CSV upload form names its
+        // field `csvText`, so the reference lands where the CSV import reads it.
+        //
+        // Before the completion and not after, as for the logo: a task completed while
+        // its file did not arrive is a process that believes it has one.
+        const keys = fileFieldKeys(state.mountedSchema);
+        const inputs = [...document.querySelectorAll("#task-form input[type=file]")];
+        try {
+          for (let i = 0; i < inputs.length; i++) {
+            const file = inputs[i].files && inputs[i].files[0];
+            const key = keys[i];
+            if (!file || !key) continue;
+            data[key] = await apiBytes("POST", "/api/v1/documents?name=" + encodeURIComponent(file.name || "document"), file);
+          }
+        } catch (err) {
+          toast(tr("tasks.complete.uploadFailed", { error: err.message }), "err");
+          return;
+        }
       }
       payload = { variables: data };
     }
@@ -10069,6 +10344,7 @@ async function viewTasks(preselectKey) {
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      state.mountedSchema = def.schema;
       state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
@@ -12184,7 +12460,7 @@ async function viewLive(key, instance) {
   // it marks are answered from the exported log rather than this store, and that is a
   // header. Pagination is not — it is in the body now
   // (ADR-0378).
-  await mod.mountLive(view, { api, apiRaw, toast, key, instance });
+  await mod.mountLive(view, { api, apiRaw, toast, key, instance, mayUse });
 }
 
 async function viewCollaboration(key) {
@@ -12602,10 +12878,19 @@ async function route() {
     }
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
-    const pd = path.match(/^#\/modeler\/p\/(.+)$/);
-    if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
+    const pd = path.match(/^#\/modeler\/p\/([^/]+)(?:\/(artifacts|deployments|constants))?$/);
+    if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]), pd[2] || "artifacts");
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
+    // A new diagram, form or decision is created inside an application, so an address
+    // that names none asks for one first (ADR-0544).
+    if (dnew && !dnew[1]) return await routeIntoApplication(path, "#/modeler/new", tr("application.pick.titleDiagram"));
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
+    if (/^#\/modeler\/form\/new(?!\/p\/)/.test(path)) {
+      return await routeIntoApplication(path, "#/modeler/form/new", tr("application.pick.titleForm"));
+    }
+    if (/^#\/modeler\/dmn\/new(?!\/p\/)/.test(path)) {
+      return await routeIntoApplication(path, "#/modeler/dmn/new", tr("application.pick.titleDecision"));
+    }
     // A form editor reached from a step in a diagram carries the way back as a
     // /from/{draft}/{element} tail (ADR-0465). It is
     // taken off before the form routes below are matched, so each keeps the shape it

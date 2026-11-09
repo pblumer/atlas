@@ -1,0 +1,96 @@
+{
+  "id": "atlas.sharepoint-server",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "SharePoint Server",
+  "author": "Atlas core",
+  "description": "Administer site collections on SharePoint Server (Subscription Edition, on-premises) from a process: create a team site, read and list sites, set owners, change site collection administrators and the default groups, delete to the recycle bin, restore, and set the storage quota. A Worker runs fixed PowerShell on a server of the farm as its service account, and no credential reaches Atlas.",
+  "engineCompat": ">=0.13",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "SharePoint Server",
+    "id": "atlas.sharepoint-server",
+    "appliesTo": [
+      "bpmn:ServiceTask"
+    ],
+    "properties": [
+      {
+        "label": "Worker",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:connector"
+        },
+        "description": "Name of the configured SharePoint Server Worker (Console → Workers). Its worker runs on a server of the farm."
+      },
+      {
+        "label": "Operation",
+        "type": "Dropdown",
+        "value": "get-site",
+        "binding": {
+          "type": "property",
+          "name": "atlas:operation"
+        },
+        "choices": [
+          {
+            "name": "Create a team site",
+            "value": "create-site"
+          },
+          {
+            "name": "Read a site",
+            "value": "get-site"
+          },
+          {
+            "name": "List sites",
+            "value": "list-sites"
+          },
+          {
+            "name": "Delete a site to the recycle bin",
+            "value": "delete-site"
+          },
+          {
+            "name": "Restore a deleted site",
+            "value": "restore-site"
+          },
+          {
+            "name": "Set owners",
+            "value": "set-site-owners"
+          },
+          {
+            "name": "Change site collection administrators",
+            "value": "update-site-admins"
+          },
+          {
+            "name": "Change a default group's members",
+            "value": "update-group-members"
+          },
+          {
+            "name": "Set the storage quota",
+            "value": "set-site-quota"
+          }
+        ]
+      },
+      {
+        "label": "Parameters",
+        "type": "Text",
+        "value": "{}",
+        "binding": {
+          "type": "property",
+          "name": "atlas:parameters"
+        },
+        "description": "A JSON object of the operation's parameters; a value starting with = is FEEL. A site is named by its leaf under the managed path, never by a URL."
+      },
+      {
+        "label": "Result variable",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:resultVariable"
+        },
+        "description": "Receives what a read, create or restore returned."
+      }
+    ]
+  }
+}

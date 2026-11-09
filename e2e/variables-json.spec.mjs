@@ -18,6 +18,9 @@ test.beforeEach(async ({ page }) => {
   await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
   await page.locator("#rp-tabs button[data-tab='variables']").click();
   await expect(page.locator("#tab-variables .vt tbody tr").first()).toBeVisible();
+  // The list the round iterates over is the task's environment, which a selected task
+  // folds away until the reader opens it; these tests are about the structures in it.
+  await page.locator("#tab-variables .v-env-toggle").click();
 });
 
 const cell = (page, name) => page.locator(`#tab-variables .vt tbody tr`, { has: page.locator(`td.c-name`, { hasText: name }) });

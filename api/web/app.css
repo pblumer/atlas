@@ -961,6 +961,20 @@ td.inc-msg { overflow-wrap: anywhere; min-width: 24ch; }
    wrap "Open replay" onto two lines. Toolbar buttons never wrap their label. */
 .ops-jump-go { flex: none; padding: 7px 12px; font-size: 15px; line-height: 1; }
 .ops-toolbar .btn, .ops-varsearch .btn { white-space: nowrap; }
+/* The Instances overview grouped by application: one folding section per application,
+   each with its own table. The tables share fixed column widths so that a column reads
+   down the page across groups as it does in the single list. */
+.ops-app-group + .ops-app-group { margin-top: 18px; }
+.ops-app-group > .sec-head { margin: 0 0 8px; }
+.ops-app-group > .sec-head h2 { font-size: 15px; }
+@media (min-width: 720px) {
+  .ops-app-groups table { table-layout: fixed; width: 100%; }
+  .ops-app-groups th:nth-child(1) { width: 30%; }
+  .ops-app-groups th:nth-child(2), .ops-app-groups th:nth-child(3),
+  .ops-app-groups th:nth-child(4), .ops-app-groups th:nth-child(5) { width: 10%; }
+  .ops-app-groups th:nth-child(6) { width: 15%; }
+  .ops-app-groups th:nth-child(7) { width: 15%; }
+}
 /* Variable-content instance search. */
 .ops-varsearch { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 .ops-varsearch .ops-search { flex: 1 1 320px; }
@@ -1243,21 +1257,6 @@ textarea::placeholder {
   padding: 0 6px; border-radius: 999px;
   color: var(--warn); background: var(--warn-soft);
 }
-/* A value the selected element itself wrote, on the Variables tab's Output side
-   (ADR-0159), so its own contribution stands out from what it inherited. */
-.c-changed {
-  font: 700 10px/1.6 system-ui, sans-serif; white-space: nowrap;
-  padding: 0 5px; border-radius: 999px;
-  color: var(--ok); background: var(--ok-soft, var(--accent-soft));
-}
-/* Input / Output switch in the replay Variables toolbar (ADR-0159). */
-.v-side { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
-.v-side-btn {
-  background: none; border: none; cursor: pointer; border-radius: 4px;
-  padding: 2px 8px; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted);
-}
-.v-side-btn:hover { color: var(--text); }
-.v-side-btn.active { background: var(--surface); color: var(--accent-text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 /* A step a person forced rather than one the engine drove (ADR-0159). It leads the
    Details tab's blocks because it changes how every other fact on the step reads. */
 .ops-manual {
@@ -2275,6 +2274,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    deployed (ADR-0251). Quiet on purpose: it is a caveat about
    the picture, not a state of the process. */
 .live-layout-note { margin-left: 8px; font-size: 11px; }
+/* The paused mark and the pause switch of the newest version (ADR-0119). */
+.live-active { margin-left: 8px; display: inline-flex; align-items: center; gap: 6px; }
+.live-active:empty { display: none; }
 /* The other versions of a live view's process that still run instances, so an operator
    sees where work is left without opening every version in the picker. */
 .live-other-versions { font-size: 12px; }
@@ -2578,6 +2580,17 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   flex: none; margin-left: 8px; color: var(--muted); font: 11px/1.6 system-ui, sans-serif;
 }
 .var-panel .vp-more-vars { margin-top: 4px; padding: 0 6px; font-size: 11px; }
+/* A variable that names a document: the file is in the document store, and the value is
+   a link to it (ADR-0543). */
+.vdoc { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; min-width: 0;
+  color: var(--accent-text); text-decoration: none; }
+.vdoc:hover .vdoc-name { text-decoration: underline; }
+.vdoc .vdoc-ic { flex: none; }
+.vdoc .vdoc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vdoc .vdoc-size { flex: none; color: var(--muted); font: 11px/1.6 system-ui, sans-serif; }
+.var-panel .vp-inst-vars .chip.vp-chip-doc { display: inline-flex; align-items: baseline; max-width: 100%;
+  white-space: nowrap; overflow: hidden; vertical-align: top; }
+.vars .vdoc-card .vdoc-link { margin: 6px 10px 8px; }
 
 /* Operator metadata for an instance — when it started, how long it ran (or has
    been running), and the message correlation key it began with — shown under the
@@ -3118,6 +3131,48 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .vt .c-act .vcopy { opacity: 0; }
 .vt tbody tr:hover .c-act .vcopy, .vt .c-act .vcopy:focus-visible { opacity: 1; }
 .vt .v-none { color: var(--muted); padding: 14px 12px; }
+
+/* A selected element's variables in three sections — Input, Output, Environment — each
+   under a heading row whose label takes the colour the diagram's in/out card gives it,
+   so the two surfaces read as one story. The environment is grouped by the scope that
+   holds a value, under lighter sub-headings, and folds away (closed by default). */
+.vt tbody tr.v-ghead, .vt tbody tr.v-gsub, .vt tbody tr.v-gnote { border-bottom: none; }
+.vt tbody tr.v-ghead:hover, .vt tbody tr.v-gsub:hover, .vt tbody tr.v-gnote:hover { background: none; }
+.vt tr.v-ghead td { padding: 14px 12px 6px; }
+.vt tbody tr.v-ghead:first-child td { padding-top: 6px; }
+.vt .v-glbl {
+  font: 700 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-text);
+}
+.vt .v-sec-out .v-glbl { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.vt .v-sec-env .v-glbl { background: color-mix(in srgb, var(--muted) 13%, var(--surface)); color: var(--muted); }
+.vt .v-ghint { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.vt .v-gcount {
+  margin-left: 8px; font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted);
+  padding: 0 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg);
+}
+.vt .v-env-toggle {
+  display: inline-flex; align-items: baseline; border: none; background: none; padding: 0; margin: 0;
+  cursor: pointer; color: inherit; font: inherit; text-align: left;
+}
+.vt .v-env-toggle .v-chev { width: 14px; color: var(--muted); font-size: 10px; }
+.vt .v-env-toggle:hover .v-ghint { color: var(--text); }
+.vt tr.v-gsub td { padding: 8px 12px 3px 30px; font: 600 11.5px/1.5 system-ui, sans-serif; color: var(--muted); }
+.vt tr.v-gnote td { padding: 3px 12px 8px 30px; color: var(--muted); font-style: italic; font-size: 12.5px; }
+.vt tbody tr.v-env:not(.v-gsub):not(.v-gnote) td.c-name { padding-left: 30px; }
+.vt tbody.v-env-collapsed tr.v-env { display: none; }
+.vt.dt-filtered tbody.v-env-collapsed tr.v-env:not([hidden]) { display: table-row; }
+/* What a value was before the element wrote it, or had become once it finished. */
+.vt .v-was { margin-top: 2px; font: 11.5px/1.4 ui-monospace, monospace; color: var(--muted); word-break: break-word; }
+/* A constant, and whose (ADR-0454/0456); a value that did not exist before the element
+   wrote it; one that appeared in reach only while the element ran. */
+.c-const, .c-new, .c-late {
+  font: 600 9.5px/1.6 system-ui, sans-serif; white-space: nowrap; vertical-align: middle;
+  padding: 0 6px; margin-left: 6px; border-radius: 999px;
+}
+.c-const { color: var(--accent-text); background: var(--accent-soft); }
+.c-new { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, var(--surface)); }
+.c-late { color: var(--muted); background: var(--surface); border: 1px solid var(--border); }
 
 /* Object/array value → a "···" button that opens the deep-inspect modal. */
 .vt .v-open {
@@ -4519,6 +4574,12 @@ tr[hidden] { display: none; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
 /* A button's label stays on one line; the note beside it is what gives way. */
 .modal-foot .btn { white-space: nowrap; }
+/* The adopt dialog (adoptdialog.js): one fieldset per kind, one checkbox per row. */
+.adopt-kind { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 10px; padding: 6px 12px 8px; }
+.adopt-kind legend { padding: 0 4px; font-weight: 600; }
+.adopt-list { list-style: none; margin: 0; padding: 0; }
+.adopt-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; cursor: pointer; }
+.adopt-row.muted { cursor: default; }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
 /* The catalogue page (catalog-admin.js pageSection): one <details> per step — products,
@@ -8530,3 +8591,9 @@ button.im-problem:hover { background: var(--accent-soft); }
   .hub-stop[data-state="active"] .hub-dot, .hub-stop[data-state="active"]::after { animation: none; }
   .hub-stop[data-state="active"]::after { display: none; }
 }
+
+/* An application's Deployments tab: a process's older versions fold under its version
+   chip, one line each (ADR-0541). */
+details.dep-versions { margin-top: 4px; font-size: 12px; }
+details.dep-versions ul { margin: 4px 0 0; padding-left: 16px; }
+details.dep-versions li { margin: 2px 0; white-space: nowrap; }

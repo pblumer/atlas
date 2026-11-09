@@ -54,6 +54,7 @@ import (
 	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/policy"
+	"github.com/pblumer/atlas/api/pubinterface"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
 	"github.com/pblumer/atlas/api/startgrant"
@@ -350,6 +351,10 @@ type Server struct {
 	// directorySync holds one record: where the Entra mirror resumes from and how
 	// many runs have written (ADR-0332).
 	directorySync *directorySyncStore
+	// pubInterfaces holds the published process interfaces of ADR-0373 — contracts,
+	// their bindings and their view and send grants. Run-loop owned; the engine never
+	// reads it.
+	pubInterfaces *pubinterface.Store
 	// inventoryLoads holds one record per target system: whether a commissioning
 	// load has ever been applied for it, and what the loads amounted to
 	// (ADR-0333). The inventory itself cannot answer
@@ -366,9 +371,12 @@ type Server struct {
 	// them. It answers the question the journal beside it cannot — not "is this
 	// record true" but "is this right still needed", which only a person can say.
 	recertifications *recertifyStore
-	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
-	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
+	apiTokens        *apiTokenIndex // in-memory hash->token index, same discipline as the deploy one
+	// instanceCreds are the secrets installed Worker Types' instances are launched
+	// with, in memory only (instancecredential.go).
+	instanceCreds *instanceCredentials
+	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions   map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -433,6 +441,9 @@ type Server struct {
 	// startGrantAdmin serves the administration of ADR-0516's process-scoped start
 	// grants over startGrants, on the run loop.
 	startGrantAdmin *startgrant.Service
+	// pubInterfaceSvc serves ADR-0373's published interfaces over pubInterfaces, on
+	// the run loop.
+	pubInterfaceSvc *pubinterface.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
@@ -723,6 +734,12 @@ type Server struct {
 	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
 	s3Registry *s3.Registry
 
+	// docCfg is where this installation keeps documents, and docState the document
+	// store, opened on first use (documents.go,
+	// ADR-0543).
+	docCfg   documentConfig
+	docState documentState
+
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
@@ -950,6 +967,12 @@ type Server struct {
 	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
 	// mounted; read-only thereafter.
 	docsEnabled bool
+
+	// applicationRequired refuses a process, decision or form that would be created,
+	// deployed or moved outside an application
+	// (ADR-0544). Copied from
+	// applicationRequiredByDefault when the server is built; read-only thereafter.
+	applicationRequired bool
 
 	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
 	// off with --catalogue=false / WithoutCatalogue
@@ -1665,6 +1688,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	pubInterfaces, err := pubinterface.NewStore(filepath.Join(dataDir, "published-interfaces"))
+	if err != nil {
+		return nil, err
+	}
 	apiTokenStore, err := newAPITokenStore(filepath.Join(dataDir, "api-tokens"))
 	if err != nil {
 		return nil, err
@@ -1859,10 +1886,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		releases:          releases,
 		grantAudit:        grantAudit,
 		startGrants:       startGrants,
+		pubInterfaces:     pubInterfaces,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
 		apiTokens:         newAPITokenIndex(),
+		instanceCreds:     newInstanceCredentials(),
 		oauthClientStore:  oauthClientStore,
 		oauthClients:      newOAuthClientIndex(),
 		oauthGrantStore:   oauthGrantStore,
@@ -1916,6 +1945,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
 		readyTimeout:      readyTimeoutDefault,
+
+		applicationRequired: applicationRequiredByDefault,
 	}
 	// The retention sweep reads its eligibility cutoff from the system clock by
 	// default; the options below may replace it (withClock) for a deterministic
@@ -2127,6 +2158,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// read per request: the options that turn it on are applied below.
 	s.startGrantAdmin = startgrant.NewService(s.runLoop, s.startGrants, s.startGrantDirectory(),
 		s.startGrantTarget, func() bool { return s.authEnabled }, func() int64 { return time.Now().Unix() })
+	// Published interfaces (ADR-0373) check the deployed definition, the caller's role
+	// on its application and the directory in the same loop turn that writes them.
+	s.pubInterfaceSvc = pubinterface.NewService(s.runLoop, s.pubInterfaces, s.pubInterfaceHost(),
+		func() bool { return s.authEnabled }, func() int64 { return time.Now().Unix() })
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the
@@ -2233,6 +2268,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
 	s.startGrantAdmin.Limits = s.budgets()
+	s.pubInterfaceSvc.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
@@ -2473,7 +2509,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// records is ingested and validated on the engine with the file arriving through a
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
-	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler { return csvimport.Handler(rd, s.processLookup) })
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		// A source variable may name an uploaded document rather than hold its text
+		// (ADR-0543).
+		return csvimport.HandlerWithDocuments(rd, s.processLookup, s.readDocumentBytes)
+	})
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
 	// writing the extracted values into the task's result variable as a JSON array.
@@ -2695,6 +2735,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// processor and its bounded, resumable cursor.
 	s.wg.Add(1)
 	go s.retentionSweeper(s.retentionInterval)
+	// The document store's sweep removes uploads nobody used within their time to live
+	// and documents whose instances history retention removed. It reads state through a
+	// view, off the run loop, and touches nothing until the store exists.
+	s.wg.Add(1)
+	go s.documentSweeper(documentSweepInterval)
 	// Recovery checkpoints bound restart time (ADR-0131). Off unless a cadence is
 	// configured. Unlike the pollers above, this one's actual work happens *on* the run
 	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
@@ -3325,7 +3370,15 @@ func WithWorkerHistory(connector, scope string) Option {
 // Handlers read through a [state.ReadView] taken while the loop is held, so each
 // round sees one coherent state rather than whatever the writer has reached since —
 // the guarantee they used to get for free by running on the writer itself.
-func (s *Server) drive() error {
+func (s *Server) drive() error { return s.driveThen(nil) }
+
+// driveThen is drive with afterDurable run once, right after the first RunUntilIdle
+// has made the caller's command durable and before any worker is handed a job it
+// unblocked. It is where a route binds the documents its command carried
+// (ADR-0543): bound later, a worker could already
+// be asked to read a document its instance does not hold yet.
+func (s *Server) driveThen(afterDurable func()) error {
+	var pendingBinds []jobBind
 	for {
 		var (
 			jobs []job.Job
@@ -3352,6 +3405,14 @@ func (s *Server) drive() error {
 		if err != nil {
 			return err
 		}
+		// The caller's command, and the previous round's completions, are durable now:
+		// RunUntilIdle above wrote them.
+		if afterDurable != nil {
+			afterDurable()
+			afterDurable = nil
+		}
+		s.bindJobOutputs(pendingBinds)
+		pendingBinds = nil
 		if len(jobs) == 0 {
 			return nil
 		}
@@ -3380,6 +3441,17 @@ func (s *Server) drive() error {
 			}
 			if sealErr := s.encipherJobVars(outcomes[i].Job.Key, outcomes[i].Completion.Outputs); sealErr != nil {
 				outcomes[i].Err = sealErr
+			}
+		}
+		// A worker's output may name a document it stored (an S3 get-document); it is
+		// bound to the job's instance once the completion is durable, which is the next
+		// round's RunUntilIdle (ADR-0543).
+		for i := range outcomes {
+			if outcomes[i].Err != nil {
+				continue
+			}
+			if ids := documentRefsOf(outcomes[i].Completion.Outputs); len(ids) > 0 {
+				pendingBinds = append(pendingBinds, jobBind{ids: ids, instance: outcomes[i].Job.ProcessInstanceKey})
 			}
 		}
 		s.driveMu.Lock()

@@ -298,6 +298,11 @@ test("a form created for a user task is linked when the author comes back", asyn
 
   await page.locator("#f-form-new").click();
   await expect.poll(() => hash(page)).toBe("#/modeler/form/new/for/reise/Task_review/from/reise/Task_review");
+  // The diagram belongs to no application, and a new form has to: the author is asked
+  // which, and the address carries it on, the way back included
+  // (ADR-0544).
+  await page.locator(".modal [data-ok]").click();
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/new/p/app-1/for/reise/Task_review/from/reise/Task_review");
   await formEditorReady(page);
   await expect(page.locator("#form-back")).toHaveAttribute("href", "#/modeler/draft/reise");
 
@@ -410,6 +415,9 @@ test("a repair form's new form stays plain, and still finds its way back", async
   await expect(page.locator("#f-form-new")).toHaveAttribute("href", "#/modeler/form/new");
   await page.locator("#f-form-new").click();
   await expect.poll(() => hash(page)).toBe("#/modeler/form/new/from/reise/Activity_charge");
+  // Asked for the application, as every new form is.
+  await page.locator(".modal [data-ok]").click();
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/new/p/app-1/from/reise/Activity_charge");
   await formEditorReady(page);
   await expect(page.locator("#form-back")).toHaveAttribute("href", "#/modeler/draft/reise");
   expect(page.__errors).toEqual([]);
