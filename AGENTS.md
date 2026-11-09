@@ -133,6 +133,9 @@ api/        HTTP API, web UI, command submission and queries
               whose stages they perform, with the realisation edge resolved at read
               time and the gap report computed against what this server runs
               (ADR-0305)
+  pubinterface/ A process's published interface: the contract derived from a deployed
+              definition, its versions and bindings, and the view and send grants
+              (ADR-0373)
   formlookup/ A task form's remote data sources: the directory field's schema, the
               provider registry, the task-bound lookup route and the check before
               completion (ADR-0473)
@@ -188,6 +191,7 @@ Atlas supervises is an operator's choice, not the model's (ADR-0164/0168):
 connector/rest/        HTTP REST outbound (ADR-0067)
 connector/mail/        Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
 connector/sharepoint/  SharePoint lists and document libraries via Graph (ADR-0141), and its mockup (ADR-0484)
+connector/sharepointserver/ SharePoint Server (on-premises) site administration through farm PowerShell (ADR-0540)
 connector/remedy/      BMC Remedy AR System (ADR-0106)
 connector/jira/        Atlassian Jira issues (ADR-0201)
 connector/googlesheets/ Google Sheets and Drive (ADR-0235)

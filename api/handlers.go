@@ -40,6 +40,7 @@ import (
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/sharepointserver"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/teamsphone"
@@ -7306,6 +7307,17 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "operation": j.Operation, "cmdlet": j.Cmdlet,
 			"parameters": j.Parameters, "maxResults": j.MaxResults,
 			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.SharePointServerJobTypeIndex:
+		// The operation and its evaluated parameters travel, and the codes the process
+		// catches (ADR-0461); the web application and the account are the worker's.
+		j, err := sharepointserver.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "sharepointserver", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "parameters": j.Parameters,
+			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.TeamsPhoneJobTypeIndex:
 		// The operation and its values travel; the tenant's app certificate does not

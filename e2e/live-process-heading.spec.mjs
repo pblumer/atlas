@@ -62,3 +62,31 @@ test("falls back to the process ID when there is no name", async ({ page }) => {
   await expect(title).toHaveText("identitaet");
   expect(errors).toEqual([]);
 });
+
+// Pausing automatic starts (ADR-0119) is offered where an operator watches the process
+// (ADR-0541): the heading says when the version is
+// paused, and the newest version carries the switch for an operator.
+test("an operator pauses and resumes the newest version from the heading", async ({ page }) => {
+  const { errors } = await open(page, 1440, "Identitäts-Lebenszyklus");
+  const host = page.locator("#live-active");
+  await expect(host.locator(".pill")).toHaveCount(0);
+  await host.locator("#live-pause").click();
+  await expect(host.locator(".pill.warn")).toHaveText("pausiert");
+  await expect(host.locator("#live-pause")).toHaveText("Aktivieren");
+  const calls = await page.evaluate(() => window.__calls);
+  expect(calls).toContainEqual(expect.objectContaining({ method: "PUT", body: { active: false } }));
+  await host.locator("#live-pause").click();
+  await expect(host.locator(".pill")).toHaveCount(0);
+  await expect(host.locator("#live-pause")).toHaveText("Deaktivieren");
+  expect(errors).toEqual([]);
+});
+
+test("a paused version says so, and only an operator gets the switch", async ({ page }) => {
+  await page.goto("/live-instance-search-harness.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate(() => { window.__active = false; window.__mayUse = (role) => role !== "operator"; });
+  await page.evaluate(() => window.__mountLive());
+  const host = page.locator("#live-active");
+  await expect(host.locator(".pill.warn")).toHaveText("pausiert");
+  await expect(host.locator("#live-pause")).toHaveCount(0);
+});

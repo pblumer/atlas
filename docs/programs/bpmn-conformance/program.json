@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-08",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Review CON0 normative exclusions and statement-level denominator in issue #1615; verify CON1 Python/Go CI report drift guards and accept PR before marking either slice complete. CON2 fixture implementation remains blocked until CON1 acceptance.",
+  "next_action": "Review and merge verified CON2–CON4 test oracles, while formally closing outstanding CON0 normative scope and CON1 acceptance. Do not mark CON2–CON4 complete merely because CI is green: per-clause reviewer sign-off, explicit remaining family coverage, and independent reference expansion are open. Combined CON2–CON4 integration exception requested by programme owner; deliver in one bounded PR and keep acceptance per-slice.",
   "slices": [
     {
       "id": "CON0",
@@ -53,39 +53,62 @@
     {
       "id": "CON2",
       "title": "Supported semantics and negative diagnostic fixtures",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON1"
       ],
-      "issues": [],
-      "prs": [],
-      "note": "Add specification-reviewed scenarios for supported variants and exact diagnostic-code negatives for unsupported/invalid combinations."
+      "issues": [
+        1619
+      ],
+      "prs": [
+        1622
+      ],
+      "note": "CON2 implemented subset in combined branch: execution outcomes for exclusive event race, parallel/inclusive joins and boundary paths; exact rule/severity/element diagnostic tests for unsupported variants, plus explicit Complex Gateway rejection. No hidden spec-wide support claim. Owner review of clauses, other valid variants and CI pending.",
+      "evidence": [
+        "../../../conformance/normative_oracles_test.go"
+      ]
     },
     {
       "id": "CON3",
       "title": "Full-state and mid-flight recovery oracles",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON1"
       ],
-      "issues": [],
-      "prs": [],
-      "note": "Add deterministic restart-at-wait checkpoints and full persisted-state comparison across jobs, timers, subscriptions, incidents, scopes and compensation."
+      "issues": [
+        1620
+      ],
+      "prs": [
+        1622
+      ],
+      "note": "CON3 implemented six deterministic mid-flight checkpoints: activatable job, message, timer, incident, event-based competing waits and noninterrupting boundary. Restart via WAL into a fresh state; compare durable process, element, job, timers, incidents, variables and subscription counter; repeat Recover and continue. Remaining full-state families/child scopes, checkpoint compaction and failover scenarios require owner review and follow-ups.",
+      "evidence": [
+        "../../../conformance/recovery_midflight_test.go"
+      ]
     },
     {
       "id": "CON4",
       "title": "Independent differential validation and portable TCK",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON1",
         "CON2"
       ],
-      "issues": [],
-      "prs": [],
-      "note": "Extend reference translations beyond four cases, review expectations independently and run an explicit non-skipping differential CI job."
+      "issues": [
+        1621
+      ],
+      "prs": [
+        1622
+      ],
+      "note": "CON4 expanded independent bpmn-engine translations from four to five control-flow models; enforce non-skipping pinned npm reference CI, compare atlas and portable TCK expected projection. Separate Node/version and executable-dialect limitations remain. Full normative differential breadth and portability acceptance pending.",
+      "evidence": [
+        "../../../conformance/differential/differential_test.go",
+        "../../../conformance/differential/reference/models/linear-independent.bpmn",
+        "../../../.github/workflows/ci.yml"
+      ]
     },
     {
       "id": "CON5",

@@ -141,6 +141,11 @@ var connectorCompilers = []connectorCompiler{
 		compile: compileExchangeConnectorTask,
 	},
 	{
+		present: func(st xmlServiceTask) bool { return st.SharePointServer != nil },
+		retries: func(st xmlServiceTask) string { return st.SharePointServer.Retries },
+		compile: compileSharePointServerConnectorTask,
+	},
+	{
 		present: func(st xmlServiceTask) bool { return st.TeamsPhone != nil },
 		retries: func(st xmlServiceTask) string { return st.TeamsPhone.Retries },
 		compile: compileTeamsPhoneConnectorTask,

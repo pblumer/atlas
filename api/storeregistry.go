@@ -150,6 +150,7 @@ var persistentStores = []storeEntry{
 	{name: "oauth-clients", class: classCredential, why: "registered OAuth clients"},
 	{name: "oauth-grants", class: classCredential, why: "standing OAuth authorizations"},
 	{name: "grant-audit", class: classCredential, why: "the trail of who was granted what"},
+	{name: "published-interfaces", class: classCredential, why: "the process interfaces this installation publishes (ADR-0373): contracts bound to this installation's definition keys, and the view and send grants on them. A send grant lets another domain drive work in, so like a start grant it is a standing permission a portable export must never confer"},
 	{name: "start-grants", class: classCredential, why: "installation-specific process-scoped mayStart grants and immutable admin audit; portable exports must never confer permissions"},
 	{name: "targets", class: classCredential, why: "where workers send, and what they authenticate with"},
 	{name: "identity", class: classCredential, why: "the external accounts people linked and the delegated connections they authorize, with the Workers each owner allowed. Standing permissions to act as a person: whether a restore carries or revokes them is an operator's decision. The refresh credentials are not here but in the vault, so a restore of this without the vault leaves every connection asking its owner to sign in again"},

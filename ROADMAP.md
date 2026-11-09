@@ -25,7 +25,7 @@ The skeleton that proves the three pillars fit together end to end.
 
 The control-flow basics most real models use.
 
-- 🚧 **BPMN 2.x Conformance (CON) programme — CON0/CON1 implementation in review**: [programme plan](docs/planning/bpmn-conformance-program.md), [source baseline](docs/planning/bpmn-conformance-baseline.md), [normative inventory seed](docs/planning/bpmn-conformance-feature-inventory.md), [implementation runbook](docs/planning/bpmn-conformance-implementation-runbook.md), and [operational manifest](docs/programs/bpmn-conformance/program.json). CON0 audits OMG BPMN 2.0.2 against the implemented compiler/engine and tests; CON1–CON5 deliver truthful cataloguing, executable/negative/recovery/differential evidence and reporting; CON6 addresses separately approved engine gaps. **Current 34 registered features / 9 patterns and "Gaps: None" are registry-local figures, not proof of complete OMG coverage.** The provisional [machine-readable normative candidate register](conformance/registry/registry.json) and [generated separate coverage report](conformance/NORMATIVE_COVERAGE.md) hold 105 candidate rows, a 13×8 event legality matrix and 43 independent WCP identifiers, **without an approved denominator or any OMG conformance claim**. CON0 reviewer sign-off and CON1 CI/PR acceptance are still outstanding.
+- 🚧 **BPMN 2.x Conformance (CON) programme — CON2–CON4 test implementation in review**: [programme plan](docs/planning/bpmn-conformance-program.md), [source baseline](docs/planning/bpmn-conformance-baseline.md), [normative inventory seed](docs/planning/bpmn-conformance-feature-inventory.md), [implementation runbook](docs/planning/bpmn-conformance-implementation-runbook.md), and [operational manifest](docs/programs/bpmn-conformance/program.json). CON0 audits OMG BPMN 2.0.2 against the implemented compiler/engine and tests; CON1–CON5 deliver truthful cataloguing, executable/negative/recovery/differential evidence and reporting; CON6 addresses separately approved engine gaps. **Current 34 registered features / 9 patterns and "Gaps: None" are registry-local figures, not proof of complete OMG coverage.** The provisional [machine-readable normative candidate register](conformance/registry/registry.json) and [generated separate coverage report](conformance/NORMATIVE_COVERAGE.md) hold 105 candidate rows, a 13×8 event legality matrix and 43 independent WCP identifiers, **without an approved denominator or any OMG conformance claim**. CON0 normative scope/denominator sign-off and explicit CON1 programme acceptance are still outstanding. The [CON2 exact execution/negative diagnostics](conformance/normative_oracles_test.go), [CON3 midflight replay and continuation](conformance/recovery_midflight_test.go) and [CON4 independent five-model differential](conformance/differential/differential_test.go) have now been implemented as reviewed **subset** candidates in PR #1622, with a mandatory non-skipping reference-engine CI job; broader normative semantics, full-state family proof and cross-engine translations are still open.
 
 - ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
   `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
@@ -663,6 +663,10 @@ The control-flow basics most real models use.
   record's open question), Exchange mailbox contacts through Microsoft Graph, and no
   capability claim yet — the two contact Worker Types are not declared interchangeable
   ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  **SharePoint Server farms are a Worker Type too**
+  (ADR-0540): a service task marked
+  `<atlas:sharepointServerConnector>` creates and administers site collections on an
+  on-premises farm through a worker on that farm; not yet walked on a real farm.
   **wikiwikibangbang wikis are a Worker Type too**
   ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)): a
   service task marked `<atlas:wikiwikibangbangConnector connector operation …>` opens,
@@ -1444,7 +1448,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   form-js, the ArchiMate/UML/Panorama canvases and the screenshot contract. The
   company/catalogue accent theme is not a dark mode.
 - ✅ **Instance management** view: Operations lists running process instances
-  (process, version, tokens, status) and links each to its live diagram.
+  (process, version, tokens, status) and links each to its live diagram. Beside the
+  one list of processes, the overview can group the same rows by the application each
+  process is filed in, one folding section per application with its summed counts;
+  the list stays the default and the browser remembers the choice.
 - ✅ **Multi-token replay & causal token lineage**
   ([ADR-0065](docs/adr/0065-multi-token-process-replay.md)): element-instance
   events now carry a durable token id, an optional parent token id, and the

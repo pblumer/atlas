@@ -13,6 +13,35 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A process can publish an interface, not its model.** A deployed definition's message
+  entry points can be published as a small, versioned contract another domain binds to
+  (ADR-0373): `GET /api/v1/processes/{key}/interface-candidates` derives what a definition
+  offers — every element a message reaches (message start, intermediate catch, receive task,
+  event subprocess, message boundary) with its kind, correlation key and the payload the model
+  states, every root-scope end, and the error and escalation codes that can leave an instance —
+  and `POST /api/v1/published-interfaces/{id}/versions` publishes a selection of them under
+  contract-level names. A version is immutable; `PUT …/versions/{version}/binding` moves it to a
+  newer definition that realizes the same contract, so renaming an element no longer breaks a
+  consumer, and `POST …/deprecation` marks it deprecated. View and send are granted apart by the
+  application owner (`PUT …/grants`, audited); a consumer holding view reads the contract and
+  never the element ids, message names or process behind it, and `public` never implies send.
+  `GET /api/v1/published-interfaces` lists only what the caller may see. Three MCP tools read
+  them. Not yet: a commitment is refused because nothing measures one, and the send grant waits
+  for the peer endpoint of ADR-0372.
+- **The Instances overview can group its processes by application.** A switch above the list
+  offers "Liste" and "Nach Applikation". The list stays the default and unchanged; grouped, each
+  application folds away under a heading that sums its processes' running, stuck and finished
+  instances over every version and links to the application, and a process filed under no
+  application — or under one this person cannot read — sits in the trailing "Nicht zugeordnet"
+  group, as in the Modeler's deployed list. Every group keeps the list's sorting, filter row and
+  row actions, and the browser remembers the arrangement and each folded group.
+- **The SharePoint Server Worker administers team sites on an on-premises farm.** A new Worker Type `sharepointserver`
+  (`<atlas:sharepointServerConnector>`, ADR-0540) creates a site collection with its
+  default groups, reads and lists sites, sets owners, changes site collection administrators and the default
+  groups with AD accounts or AD groups, deletes a site to the recycle bin, restores it, and sets the storage
+  quota. The worker runs on a server of the farm and starts fixed PowerShell for each job, so no model authors a
+  cmdlet and no credential reaches Atlas; refusals a process can act on are BPMN errors. The example
+  `m365-dienste` adds the product «Teamwebsite» to the on-premises catalogue when a SharePoint Server is built.
 - **The M365 test environment can build a SharePoint Server Subscription Edition farm.** `deploy/opentofu/m365-devenv` gains
   `enable_sharepoint_server` (off by default): a VM `sp01` joined to the test forest, built from
   Microsoft's SharePoint image, with SQL Server Developer on the same machine, a single-server
@@ -120,6 +149,20 @@ _Changed_ / _Removed_ for each version.
   `application`, `server`) on its variables, and no longer lets a multi-instance subprocess's
   body and one of its iterations overwrite each other's same-named variables
   ([ADR-draft-variables-by-provenance](docs/adr/draft-variables-by-provenance.md)).
+- **An application lists what it has deployed; the Modeler home lists applications.** The
+  Modeler home's *Deployed* list is gone: the same processes were also listed in each
+  application's *Deployments* tab and under *Operations › Instances*, and pausing or deleting
+  one was offered only on the home page. The home page is now one table of applications that
+  folds under its heading like every other list, with a column saying how many processes each
+  has deployed and how many of them are paused, linking to its Deployments tab
+  (`#/modeler/p/{id}/deployments`, a new address for the tab). The Deployments tab lists one row
+  per process instead of one per version: its newest version with the older ones folded under it,
+  its state, the instances all its versions hold, the mark for a definition frozen on a decision
+  version, and a menu to open it in the Modeler, see its instances, pause or resume its automatic
+  starts, or delete it. *Not assigned* gains a Deployments tab of its own, so the home page names
+  it once. The Operations live view says when a definition is paused and gives an operator the
+  pause switch on the newest version. `GET /api/v1/applications/{id}/deployments` now carries
+  each definition's `frozenDecisions`. ADR-0541.
 - **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
   the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
   "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact

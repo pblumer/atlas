@@ -40,6 +40,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Discord: &xmlDiscordConnector{}},
 		{S3: &xmlS3Connector{}},
 		{Exchange: &xmlExchangeConnector{}},
+		{SharePointServer: &xmlSharePointServerConnector{}},
 		{TeamsPhone: &xmlTeamsPhoneConnector{}},
 		{GoogleContacts: &xmlGoogleContactsConnector{}},
 		{CardDAV: &xmlCardDAVConnector{}},
