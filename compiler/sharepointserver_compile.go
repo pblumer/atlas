@@ -10,7 +10,7 @@ import (
 
 // compileSharePointServerConnectorTask compiles an <atlas:sharepointServerConnector>
 // task: one site administration step through a Worker on the farm
-// (ADR-draft-sharepoint-server-worker). The table is the catalog's, read directly, so
+// (ADR-0540). The table is the catalog's, read directly, so
 // a deploy enforces the very rows the worker applies.
 func compileSharePointServerConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.SharePointServer

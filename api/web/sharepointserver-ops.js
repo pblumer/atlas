@@ -1,5 +1,5 @@
 // sharepointserver-ops.js — what the Modeler knows about the SharePoint Server Worker's
-// operations (ADR-draft-sharepoint-server-worker): each operation's label, which
+// operations (ADR-0540): each operation's label, which
 // parameters it requires and takes, and what it returns.
 //
 // A copy of connector/sharepointserver/catalog, because the panel runs in a browser; it

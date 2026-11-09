@@ -224,7 +224,7 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// SharePoint Server is provisioned for an operator who supervises the kind by
 		// hand on a farm server; it is deliberately not in the default-supervised list,
 		// because a worker beside Atlas has no farm to reach
-		// (ADR-draft-sharepoint-server-worker).
+		// (ADR-0540).
 		connectorKindSharePointServer: s.sharePointServerWorkerEnv,
 		// Teams Phone is Entra's shape: a tenant in the Console, its app certificate in a
 		// vault bundle, and a supervised worker with no vault of its own — so the engine

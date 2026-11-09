@@ -19,7 +19,7 @@ const (
 
 // sharePointServerWorkerEnv renders the web applications a supervised SharePoint Server
 // worker needs, one set of variables per Worker the store holds
-// (ADR-draft-sharepoint-server-worker). The kind is off by default because the cmdlets
+// (ADR-0540). The kind is off by default because the cmdlets
 // exist only on a farm server; this is what `--supervise-connector sharepointserver`
 // on such a server reads. It reads the Worker store, so it takes the run loop (I3).
 func (s *Server) sharePointServerWorkerEnv() []string {

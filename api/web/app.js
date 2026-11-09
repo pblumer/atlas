@@ -1111,7 +1111,7 @@ const WORKER_TYPES = [
   {
     id: "sharepointserver", name: "SharePoint Server", kind: "Site administration",
     desc: "Administers site collections on a SharePoint Server farm (Subscription Edition, on-premises) from a process: create a team site, set owners, site administrators and the default groups, delete to the recycle bin, restore, and set the storage quota. Runs fixed PowerShell on a server of the farm, as the account the worker runs under, one process per job; no credential reaches Atlas.",
-    refs: "ADR-draft-sharepoint-server-worker", status: "active", statusLabel: "configured below",
+    refs: "ADR-0540", status: "active", statusLabel: "configured below",
   },
   {
     id: "exchange", name: "Microsoft Exchange", kind: "Mailbox administration",

@@ -77,7 +77,7 @@ const (
 	// organization in the Console and the supervised worker is provisioned from it.
 	connectorKindExchange = "exchange"
 	// connectorKindSharePointServer is the SharePoint Server Worker Type
-	// (ADR-draft-sharepoint-server-worker): its endpoint is the web application, and the
+	// (ADR-0540): its endpoint is the web application, and the
 	// optional settings hold no credential, since the worker runs as an account on the
 	// farm. Worker-only, and never supervised: the cmdlets exist only on a farm server.
 	connectorKindSharePointServer = "sharepointserver"

@@ -721,7 +721,7 @@ Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, 
 ## SharePoint Server (Worker)
 
 Baut die Variable `enable_sharepoint_server` eine Farm, startet `onprem/install-sharepoint-worker.sh`
-den Worker `ucc_sharepoint_onprem` (Typ `sharepointserver`, ADR-draft-sharepoint-server-worker) auf dem Server
+den Worker `ucc_sharepoint_onprem` (Typ `sharepointserver`, ADR-0540) auf dem Server
 selbst, mit einem Token für 7 Tage wie beim Exchange-Worker. Das Skript liest
 `tofu output -json sharepoint_server`; das Passwort des Dienstkontos (`runbook_account`) kommt aus der
 Ausgabe `sharepoint_runbook_password` oder aus `SHAREPOINT_WORKER_PASSWORD`. Danach:

@@ -1,6 +1,6 @@
 // Package catalog is the SharePoint Server Worker's operation table: which parameters
 // a model must and may author for each low-code operation, and how each value is
-// checked (ADR-draft-sharepoint-server-worker).
+// checked (ADR-0540).
 //
 // It imports nothing of Atlas's for the reason Exchange's catalog does: the compiler
 // (deploy-time checks) and connector/sharepointserver (call-time checks) read the same

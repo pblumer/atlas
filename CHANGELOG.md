@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **The SharePoint Server Worker administers team sites on an on-premises farm.** A new Worker Type `sharepointserver`
-  (`<atlas:sharepointServerConnector>`, ADR-draft-sharepoint-server-worker) creates a site collection with its
+  (`<atlas:sharepointServerConnector>`, ADR-0540) creates a site collection with its
   default groups, reads and lists sites, sets owners, changes site collection administrators and the default
   groups with AD accounts or AD groups, deletes a site to the recycle bin, restores it, and sets the storage
   quota. The worker runs on a server of the farm and starts fixed PowerShell for each job, so no model authors a

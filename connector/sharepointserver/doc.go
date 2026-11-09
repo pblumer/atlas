@@ -1,6 +1,6 @@
 // Package sharepointserver administers site collections on SharePoint Server
 // (Subscription Edition, on-premises) on behalf of a BPMN service task
-// (ADR-draft-sharepoint-server-worker).
+// (ADR-0540).
 //
 // # Why it is not the sharepoint Worker Type
 //

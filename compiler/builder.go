@@ -548,7 +548,7 @@ const WikiwikibangbangJobType = "io.atlas.wikiwikibangbang"
 const WikiwikibangbangJobTypeIndex int32 = 38
 
 // SharePointServerJobType is the reserved job type a SharePoint Server task carries
-// (ADR-draft-sharepoint-server-worker). Nothing in the engine subscribes to it: the
+// (ADR-0540). Nothing in the engine subscribes to it: the
 // cmdlets exist only on a server of the farm, so the job waits for a worker there.
 const SharePointServerJobType = "io.atlas.sharepointserver"
 
@@ -1886,7 +1886,7 @@ func (b *Builder) AddExchangeConnectorTask(cfg ExchangeConfig) int32 {
 }
 
 // SharePointServerConfig is the deploy-time configuration of a SharePoint Server task
-// (ADR-draft-sharepoint-server-worker). Op is a row of
+// (ADR-0540). Op is a row of
 // connector/sharepointserver/catalog and Parameters the authored parameter object.
 type SharePointServerConfig struct {
 	Worker     string

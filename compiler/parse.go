@@ -2452,7 +2452,7 @@ type xmlServiceTask struct {
 	// or Exchange Server organization a *worker* holds the credential for.
 	Exchange *xmlExchangeConnector `xml:"extensionElements>exchangeConnector"`
 	// SharePointServer, when present, marks this service task a SharePoint Server task
-	// (ADR-draft-sharepoint-server-worker): one site administration step on a farm whose
+	// (ADR-0540): one site administration step on a farm whose
 	// worker runs on that farm.
 	SharePointServer *xmlSharePointServerConnector `xml:"extensionElements>sharepointServerConnector"`
 	// TeamsPhone, when present, marks this service task a Microsoft Teams Phone task

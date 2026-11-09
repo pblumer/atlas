@@ -1168,7 +1168,7 @@ type ConnectorTaskDetail struct {
 	ExchangeMaxResults    int32
 
 	// SharePoint Server fields (JobType == SharePointServerJobType,
-	// ADR-draft-sharepoint-server-worker). SharePointServerOp is the interned operation —
+	// ADR-0540). SharePointServerOp is the interned operation —
 	// a row of connector/sharepointserver/catalog — and SharePointServerParameters the
 	// authored parameter object, compiled from the model's JSON template to one FEEL
 	// context at deploy (I5).

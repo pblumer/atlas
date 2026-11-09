@@ -429,7 +429,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// A SharePoint Server task administers a site collection on a farm
-		// (ADR-draft-sharepoint-server-worker). Worker-only because the work is PowerShell
+		// (ADR-0540). Worker-only because the work is PowerShell
 		// only a farm server can run; the record exists so a deploy can check the name and
 		// the Console can show the web application.
 		name:           connectorKindSharePointServer,

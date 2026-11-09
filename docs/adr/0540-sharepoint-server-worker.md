@@ -1,4 +1,4 @@
-# ADR-DRAFT: SharePoint Server is a Worker Type of its own
+# ADR-0540: SharePoint Server is a Worker Type of its own
 
 - **Status:** Accepted
 - **Implementation:** Landed
