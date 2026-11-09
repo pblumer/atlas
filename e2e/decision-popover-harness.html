@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas decision popover e2e harness</title>
+    <!-- Drives the real api/web/dmn-trace.js and app.css: the hover card (.dec-pop)
+         that shows which rule of a decision table fired, as Operations → Decisions,
+         the live view and the instance replay draw it. The card takes no pointer
+         events, so nothing in it can be scrolled to: what does not fit is lost. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="dec-pop" id="dec-pop" hidden></div>
+    <script type="module">
+      import { renderTraceTable, placeTracePop } from "/dmn-trace.js";
+      window.__renderTraceTable = renderTraceTable;
+      window.__placeTracePop = placeTracePop;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

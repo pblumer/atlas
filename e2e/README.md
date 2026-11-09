@@ -594,6 +594,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   preview search made-up people and ask no directory, while the canvas shows the field without
   searching; and a directory field saved as a textfield is converted into a select on request.
   `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+- **`decision-popover.spec.mjs`**: the hover card that shows a decision table's trace
+  (`.dec-pop`, drawn by `api/web/dmn-trace.js` in Operations → Decisions, the live view and
+  the instance replay). The card takes no pointer events, so nothing in it can be scrolled
+  to: a wide table — a long list of literals in one cell, a long input expression — stays
+  inside the card at 1536 and 800 px, a table too tall for either side of its row is kept
+  inside the window, and a card that fits above its row is still drawn above it.
 - **`form-decision-options.spec.mjs`**
   ([ADR-0511](../docs/adr/0511-form-options-from-a-decision.md)):
   a field whose options come from a deployed decision. In the form editor, Decision (DMN) is an
