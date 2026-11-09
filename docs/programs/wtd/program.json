@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../adr/0535-worker-types-as-distributed-artifacts.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "WTD3: owner review of the per-release credential (ADR-0545, merged in #1646); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: decide the rule for new built-in Worker Types (ADR-0540 SharePoint Server landed on the old path).",
+  "next_action": "WTD3: owner review of the per-release credential (ADR-0545, merged in #1646); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: decide whether a second create-site of SharePoint Server should succeed (it ends in SITE_EXISTS today).",
   "slices": [
     {
       "id": "WTD1",
@@ -81,7 +81,7 @@
         1596,
         1605
       ],
-      "note": "On main: spec.configuration as JSON Schema with writeOnly secrets as vault references and ATLAS_WORKER_CONFIG (#1596); the required idempotency/effect declaration per operation and idempotencyKey atlas:<node id>:<job key>, stable across retries and incident resolution (#1605, ADR-0538 Partial). Open: validate-config, check-connection and diagnostics as worker queries; binding a task to one configured Worker; the per-job credential broker for installed types; migrating built-in types, smallest server half first. Migrating a built-in type touches stored configuration of existing installations and needs the owner's decision first. ADR-0540 (SharePoint Server, 2026-11-09) landed as a built-in type without manifest or idempotency declaration and adds to this slice's backlog.",
+      "note": "On main: spec.configuration as JSON Schema with writeOnly secrets as vault references and ATLAS_WORKER_CONFIG (#1596); the required idempotency/effect declaration per operation and idempotencyKey atlas:<node id>:<job key>, stable across retries and incident resolution (#1605, ADR-0538 Partial). Open: validate-config, check-connection and diagnostics as worker queries; binding a task to one configured Worker; the per-job credential broker for installed types; migrating built-in types, smallest server half first. Migrating a built-in type touches stored configuration of existing installations and needs the owner's decision first. Rule for new built-in types accepted 2026-11-09 (ADR-draft-new-built-in-worker-types-ship-a-manifest): each ships a manifest with the declaration, guarded in api/releasedkinds.go; SharePoint Server (ADR-0540) has one, 31 earlier kinds owe theirs. Not decided: a date after which new types are only artifacts.",
       "evidence": [
         "../../../workertype/configuration_test.go",
         "../../../workersdk/launch_test.go",

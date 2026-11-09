@@ -240,6 +240,13 @@ directory gains the document store. Four changes can break what worked against 0
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A new built-in Worker Type declares what a second delivery does.** Every new built-in
+  Worker Type ships a manifest stating each operation's idempotency and effect, as an
+  installed one must; `go test ./api` refuses one without it, and the 31 kinds released
+  before are listed and owe theirs. SharePoint Server has one: its operations are safe to
+  deliver twice, with one caveat now recorded — a second `create-site` after a first that
+  finished ends in `SHAREPOINT_SERVER_SITE_EXISTS`, not in success
+  (ADR-draft-new-built-in-worker-types-ship-a-manifest).
 - **An installed Worker Type works only its own job types.** An artifact installed with
   `POST /api/v1/worker-types/installed` used to be launched with the server's internal
   worker credential, which reaches every job type. Its instance now gets a credential of
