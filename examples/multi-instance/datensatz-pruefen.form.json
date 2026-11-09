@@ -1,0 +1,73 @@
+{
+  "type": "default",
+  "id": "mi-csv-datensatz-pruefen",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Datensatz prüfen\n\nEine Aufgabe pro CSV-Datensatz (parallele Multi-Instance). Bitte die Angaben prüfen und entscheiden."
+    },
+    {
+      "key": "personalnummer",
+      "type": "textfield",
+      "label": "Personalnummer",
+      "disabled": true
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname",
+      "disabled": true
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname",
+      "disabled": true
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail",
+      "disabled": true
+    },
+    {
+      "key": "abteilung",
+      "type": "textfield",
+      "label": "Abteilung",
+      "disabled": true
+    },
+    {
+      "key": "rolle",
+      "type": "textfield",
+      "label": "Rolle",
+      "disabled": true
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid",
+      "values": [
+        {
+          "label": "In Ordnung",
+          "value": "ok"
+        },
+        {
+          "label": "Korrektur nötig",
+          "value": "korrektur"
+        },
+        {
+          "label": "Ablehnen",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung"
+    }
+  ]
+}

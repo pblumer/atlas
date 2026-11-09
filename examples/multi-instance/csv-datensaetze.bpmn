@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MI-Beispiel: CSV-Datensätze prüfen — eine hochgeladene CSV-Datei wird zu einer Liste,
+  und je Datensatz entsteht eine Aufgabe (parallele Multi-Instance über einen User Task).
+
+  Start → "CSV hochladen" (User Task, Datei-Auswahl → csvText)
+        → "CSV einlesen"  (atlas:csvConnector, Semikolon, Kopfzeile → rows, rowCount)
+        → "Datensatz prüfen" (parallel, eine Aufgabe je Zeile → pruefungen)
+        → "Entscheide zählen" (Script Task → zusammenfassung)
+        → Ende
+
+  Testdatei: beispiel-datensaetze.csv (15 Datensätze, zwei davon mit fehlerhafter E-Mail).
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" id="defs_mi_csv" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="mi_sample_csv_datensaetze" name="MI-Beispiel: CSV-Datensätze prüfen" isExecutable="true">
+    <bpmn:documentation>Eine CSV-Datei hochladen und je Datensatz eine Aufgabe "Datensatz prüfen" erzeugen. In Operations erscheint die Aufgabe als eine eingeklappte Zeile mit der Anzahl Ausführungen; aufgeklappt zeigt sie jede Zeile der Datei als eigene Runde.
+
+Erwartet wird Semikolon als Trennzeichen (so speichert Excel in der Schweiz) und die Kopfzeile personalnummer;vorname;nachname;email;abteilung;rolle. Die Testdatei examples/multi-instance/beispiel-datensaetze.csv hat 15 Datensätze; P-1008 und P-1011 haben absichtlich eine fehlerhafte E-Mail-Adresse.
+
+Es braucht keinen konfigurierten Worker: Der CSV-Connector läuft im Server.</bpmn:documentation>
+    <bpmn:startEvent id="start" name="Import gestartet">
+      <bpmn:outgoing>f_start_hochladen</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="hochladen" name="CSV hochladen">
+      <bpmn:documentation>Formular mi-csv-upload mit einer Datei-Auswahl: Die Tasks-App legt den Inhalt der Datei als Text in csvText ab. Erwartete Kopfzeile: personalnummer;vorname;nachname;email;abteilung;rolle</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="mi-csv-upload" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_hochladen</bpmn:incoming>
+      <bpmn:outgoing>f_hochladen_einlesen</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="einlesen" name="CSV einlesen">
+      <bpmn:documentation>Liest csvText mit Semikolon als Trennzeichen und schreibt rows (eine Liste von Kontexten) und rowCount. Ohne columns-Angabe wird jede Spalte der Kopfzeile zu einem Feld vom Typ Text.
+
+Falle: Eine Datei mit Komma als Trennzeichen wird hier nicht abgelehnt, sondern liest sich als eine einzige Spalte – jede Zeile hat dann nur ein Feld, und alle Formularfelder bleiben leer.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:csvConnector source="csvText" delimiter=";" hasHeader="true" resultVariable="rows" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_hochladen_einlesen</bpmn:incoming>
+      <bpmn:outgoing>f_einlesen_pruefen</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="pruefen" name="Datensatz prüfen">
+      <bpmn:documentation>Parallele Multi-Instance über rows, gebunden an row: eine Aufgabe je Datensatz (Formular mi-csv-datensatz-pruefen). Die Felder der Zeile werden per Input-Mapping einzeln bereitgestellt, weil das Formular flache Variablen anzeigt. Die Aufgabe schreibt entscheid ("ok", "korrektur", "abgelehnt") und bemerkung; je Runde landet {personalnummer, name, entscheid, bemerkung} in pruefungen.
+
+Parallel, weil die Datensätze unabhängig sind: Mehrere Personen können gleichzeitig prüfen. Bräuchte eine Zeile das Ergebnis der vorigen, müsste die Multi-Instance sequenziell sein.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="mi-csv-datensatz-pruefen" />
+        <zeebe:ioMapping>
+          <zeebe:input source="= row.personalnummer" target="personalnummer" />
+          <zeebe:input source="= row.vorname" target="vorname" />
+          <zeebe:input source="= row.nachname" target="nachname" />
+          <zeebe:input source="= row.email" target="email" />
+          <zeebe:input source="= row.abteilung" target="abteilung" />
+          <zeebe:input source="= row.rolle" target="rolle" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_einlesen_pruefen</bpmn:incoming>
+      <bpmn:outgoing>f_pruefen_zusammenfassen</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= rows" inputElement="row" outputCollection="pruefungen" outputElement="= {personalnummer: row.personalnummer, name: row.vorname + &quot; &quot; + row.nachname, entscheid: entscheid, bemerkung: bemerkung}" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:userTask>
+    <bpmn:scriptTask id="zusammenfassen" name="Entscheide zählen">
+      <bpmn:documentation>Zählt die Entscheide aus pruefungen und schreibt zusammenfassung = {total, ok, korrektur, abgelehnt}. Im Filter steht item.entscheid und nicht bloss entscheid: so ist eindeutig das Feld des Listenelements gemeint.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= {total: count(pruefungen), ok: count(pruefungen[item.entscheid = &quot;ok&quot;]), korrektur: count(pruefungen[item.entscheid = &quot;korrektur&quot;]), abgelehnt: count(pruefungen[item.entscheid = &quot;abgelehnt&quot;])}" resultVariable="zusammenfassung" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_pruefen_zusammenfassen</bpmn:incoming>
+      <bpmn:outgoing>f_zusammenfassen_ende</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="ende" name="Import abgeschlossen">
+      <bpmn:incoming>f_zusammenfassen_ende</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_start_hochladen" sourceRef="start" targetRef="hochladen" />
+    <bpmn:sequenceFlow id="f_hochladen_einlesen" sourceRef="hochladen" targetRef="einlesen" />
+    <bpmn:sequenceFlow id="f_einlesen_pruefen" sourceRef="einlesen" targetRef="pruefen" />
+    <bpmn:sequenceFlow id="f_pruefen_zusammenfassen" sourceRef="pruefen" targetRef="zusammenfassen" />
+    <bpmn:sequenceFlow id="f_zusammenfassen_ende" sourceRef="zusammenfassen" targetRef="ende" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram_mi_csv">
+    <bpmndi:BPMNPlane id="plane_mi_csv" bpmnElement="mi_sample_csv_datensaetze">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="150" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="225" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="hochladen_di" bpmnElement="hochladen"><dc:Bounds x="250" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="einlesen_di" bpmnElement="einlesen"><dc:Bounds x="400" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen"><dc:Bounds x="550" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zusammenfassen_di" bpmnElement="zusammenfassen"><dc:Bounds x="700" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <dc:Bounds x="862" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="828" y="225" width="104" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_hochladen_di" bpmnElement="f_start_hochladen"><di:waypoint x="186" y="200" /><di:waypoint x="250" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_hochladen_einlesen_di" bpmnElement="f_hochladen_einlesen"><di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_einlesen_pruefen_di" bpmnElement="f_einlesen_pruefen"><di:waypoint x="500" y="200" /><di:waypoint x="550" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_pruefen_zusammenfassen_di" bpmnElement="f_pruefen_zusammenfassen"><di:waypoint x="650" y="200" /><di:waypoint x="700" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_zusammenfassen_ende_di" bpmnElement="f_zusammenfassen_ende"><di:waypoint x="800" y="200" /><di:waypoint x="862" y="200" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

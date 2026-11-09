@@ -1,0 +1,16 @@
+personalnummer;vorname;nachname;email;abteilung;rolle
+P-1001;Anna;Meier;anna.meier@example.ch;Finanzen;Sachbearbeitung
+P-1002;Luca;Keller;luca.keller@example.ch;Informatik;Entwicklung
+P-1003;Sophie;Brunner;sophie.brunner@example.ch;Personal;Leitung
+P-1004;Noah;Huber;noah.huber@example.ch;Informatik;Betrieb
+P-1005;Mia;Schmid;mia.schmid@example.ch;Verkauf;Aussendienst
+P-1006;Leon;Gerber;leon.gerber@example.ch;Logistik;Disposition
+P-1007;Lena;Frei;lena.frei@example.ch;Finanzen;Controlling
+P-1008;Elias;Moser;elias.moser@example;Informatik;Entwicklung
+P-1009;Emma;Widmer;emma.widmer@example.ch;Marketing;Kommunikation
+P-1010;Jonas;Zimmermann;jonas.zimmermann@example.ch;Verkauf;Innendienst
+P-1011;Laura;Steiner;;Personal;Rekrutierung
+P-1012;David;Baumann;david.baumann@example.ch;Logistik;Lager
+P-1013;Julia;Fischer;julia.fischer@example.ch;Rechtsdienst;Beratung
+P-1014;Matteo;Graf;matteo.graf@example.ch;Informatik;Sicherheit
+P-1015;Chiara;Roth;chiara.roth@example.ch;Geschäftsleitung;Assistenz

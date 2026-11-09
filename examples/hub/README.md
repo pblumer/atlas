@@ -26,6 +26,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `umsysteme` | Beispiele: Umsysteme | Google Sheets, Jira, MS SQL, SharePoint |
 | `identitaet` | Beispiele: Identität & Verzeichnis | 17 Entra, AD and Exchange examples |
 | `bewerbermanagement` | Bewerbermanagement | the handbook's workshop |
+| `multi-instance` | Beispiel: Multi-Instance | parallel, sequential and terminated loops, one task per CSV row |
 | `mitarbeitereintritt` | Lehrgang: Mitarbeitereintritt | the handbook's guiding case |
 | `onboarding-tutorial` | Onboarding | the handbook's end-to-end tutorial |
 | `verwaltung-dienstleistungen` | Beispiel: Dienstleistungen der Verwaltung | shop package with two catalogues |

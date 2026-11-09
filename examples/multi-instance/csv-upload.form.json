@@ -1,0 +1,19 @@
+{
+  "type": "default",
+  "id": "mi-csv-upload",
+  "components": [
+    {
+      "type": "text",
+      "text": "# CSV hochladen\n\nErwartet wird eine CSV-Datei mit **Semikolon** als Trennzeichen und dieser Kopfzeile:\n\n`personalnummer;vorname;nachname;email;abteilung;rolle`\n\nPro Datensatz entsteht anschliessend eine Aufgabe **Datensatz prüfen**."
+    },
+    {
+      "key": "csvText",
+      "type": "filepicker",
+      "label": "CSV-Datei",
+      "accept": ".csv,text/csv",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

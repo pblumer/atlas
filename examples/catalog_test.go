@@ -166,6 +166,13 @@ var catalogSources = []catalogSource{
 		Files: []string{"pruefe-datensaetze.bpmn", "pruefe-datensaetze.dmn",
 			"csv-upload-form.json", "row-correction-form.json"},
 	},
+	// Built to exercise the grouped multi-instance rows in the Operations history: a
+	// parallel script loop, a parallel user-task loop that a rejection cuts short and a
+	// rework step runs a second time, a sequential service-task loop, and a CSV upload
+	// that becomes one task per record. No Start button: the sequential loop parks on a
+	// job no worker takes, and the CSV run waits for its upload.
+	{ID: "multi-instance", App: "Beispiel: Multi-Instance", Dir: "multi-instance",
+		Main: "multi-instance/bestellpositionen.bpmn"},
 	{ID: "onboarding", App: "Onboarding", Dir: "onboarding"},
 	// No Start: every service task in it calls Atlas's own API, which needs an
 	// operator token under ATLAS_CONNECTOR_ATLAS_TOKEN. A reader without one would
@@ -353,6 +360,12 @@ var formDisplayNames = map[string]string{
 	"off-sperren":           "Offboarding – Sperren",
 	"rev-start":             "Zugriffs-Review – Start",
 	"rev-pruefen":           "Zugriffs-Review – Prüfen",
+
+	// examples/multi-instance
+	"mi-position-freigeben":       "Multi-Instance – Position freigeben",
+	"mi-bestellung-ueberarbeiten": "Multi-Instance – Bestellung überarbeiten",
+	"mi-csv-upload":               "Multi-Instance – CSV hochladen",
+	"mi-csv-datensatz-pruefen":    "Multi-Instance – Datensatz prüfen",
 }
 
 // --- the served shape ---

@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MI-Beispiel: Bestellpositionen — drei Arten von Multi-Instance in einem Modell,
+  gebaut, um die gruppierte Multi-Instance-Darstellung der Operations-Historie zu
+  prüfen (eine eingeklappte Zeile je Body-Ausführung, aufklappbar je Runde).
+
+  Start → "Position bewerten"        parallel, Script Task      (alle Runden abgeschlossen)
+        → "Position freigeben"       parallel, User Task        (Abbruchbedingung → abgebrochene Runden)
+        → (X) "Position abgelehnt?"
+            ja   → "Bestellung überarbeiten" → zurück zu "Position freigeben"  (zweite Body-Ausführung)
+            nein → "Lieferant benachrichtigen"  sequenziell, Service Task (ein Job je Runde, Incident möglich)
+        → Ende
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="defs_mi_sample" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="mi_sample_bestellpositionen" name="MI-Beispiel: Bestellpositionen" isExecutable="true">
+    <bpmn:documentation>Drei Arten von Multi-Instance in einem Modell, um die gruppierte Darstellung in der Operations-Historie auszuprobieren: Jede Ausführung eines Multi-Instance-Elements erscheint dort als eine eingeklappte Zeile mit der Anzahl Runden, die sich aufklappen lässt.
+
+Startvariablen: positionen (Liste von {artikel, menge, preis}, vier Positionen vorbelegt) und szenario (freier Text, um mehrere Testinstanzen auseinanderzuhalten).
+
+Was man damit sieht:
+- "Position bewerten": parallel, alle Runden schliessen sofort ab.
+- "Position freigeben": parallel mit Abbruchbedingung; eine Ablehnung bricht die offenen Runden ab, der Rücksprung erzeugt eine zweite, separat gruppierte Ausführung desselben Elements.
+- "Lieferant benachrichtigen": sequenziell; ohne Worker bleibt jeder Job offen. In Operations von Hand abschliessen oder fehlschlagen lassen – ein Incident auf einer Runde bleibt am eingeklappten Eintrag sichtbar.</bpmn:documentation>
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="szenario" type="string" default="manuell" />
+        <atlas:startVariable name="positionen" type="json" required="true" default="[ {&quot;artikel&quot;: &quot;Notebook&quot;, &quot;menge&quot;: 2, &quot;preis&quot;: 1450}, {&quot;artikel&quot;: &quot;Monitor&quot;, &quot;menge&quot;: 4, &quot;preis&quot;: 320}, {&quot;artikel&quot;: &quot;Dockingstation&quot;, &quot;menge&quot;: 3, &quot;preis&quot;: 210}, {&quot;artikel&quot;: &quot;Headset&quot;, &quot;menge&quot;: 5, &quot;preis&quot;: 89} ]" />
+      </atlas:startForm>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="start" name="Bestellung eingegangen">
+      <bpmn:outgoing>f_start_bewerten</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="bewerten" name="Position bewerten">
+      <bpmn:documentation>Parallele Multi-Instance über positionen, gebunden an pos: berechnet je Position betrag = menge × preis und sammelt {artikel, betrag} in bewertungen.
+
+Parallel, weil keine Position die andere braucht. Das Ergebnis ist trotzdem in Eingangsreihenfolge: jede Runde schreibt an ihren eigenen Platz in der Output-Collection, egal in welcher Reihenfolge sie fertig wird.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= pos.menge * pos.preis" resultVariable="betrag" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_bewerten</bpmn:incoming>
+      <bpmn:outgoing>f_bewerten_freigeben</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= positionen" inputElement="pos" outputCollection="bewertungen" outputElement="= {artikel: pos.artikel, betrag: betrag}" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:scriptTask>
+    <bpmn:userTask id="freigeben" name="Position freigeben">
+      <bpmn:documentation>Parallele Multi-Instance: eine Aufgabe je Position (Formular mi-position-freigeben). Die Aufgabe schreibt entscheid ("freigegeben" oder "abgelehnt"), das in entscheide gesammelt wird.
+
+Abbruchbedingung = entscheid = "abgelehnt": Sie wird nach jeder abgeschlossenen Runde über deren Variablen geprüft. Trifft sie zu, werden die noch offenen Runden abgebrochen – in der Historie als "abgebrochen" gezählt. Ihre Plätze in entscheide bleiben null; das Gateway danach muss das aushalten.
+
+Falle: Der Betrag kommt hier als = pos.menge * pos.preis und nicht als = bewertungen[loopCounter].betrag. In FEEL ist ein Ausdruck in eckigen Klammern, der keine Zahl ist, ein Filter – loopCounter wird dann gegen jedes Listenelement gelesen, und das Ergebnis ist eine leere Liste statt des Betrags.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="mi-position-freigeben" />
+        <zeebe:ioMapping>
+          <zeebe:input source="= pos.artikel" target="artikel" />
+          <zeebe:input source="= pos.menge" target="menge" />
+          <zeebe:input source="= pos.preis" target="preis" />
+          <zeebe:input source="= pos.menge * pos.preis" target="betrag" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_bewerten_freigeben</bpmn:incoming>
+      <bpmn:incoming>f_ueberarbeiten_freigeben</bpmn:incoming>
+      <bpmn:outgoing>f_freigeben_gw</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= positionen" inputElement="pos" outputCollection="entscheide" outputElement="= entscheid" />
+        </bpmn:extensionElements>
+        <bpmn:completionCondition xsi:type="bpmn:tFormalExpression">= entscheid = "abgelehnt"</bpmn:completionCondition>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gw_abgelehnt" name="Position abgelehnt?" default="f_gw_lieferant">
+      <bpmn:documentation>Liest entscheide. Abgebrochene Runden haben dort null; "some … satisfies" übergeht sie, ein Vergleich mit null ist nie wahr.</bpmn:documentation>
+      <bpmn:incoming>f_freigeben_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_lieferant</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_ueberarbeiten</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="ueberarbeiten" name="Bestellung überarbeiten">
+      <bpmn:documentation>Nach einer Ablehnung: die Bestellung überarbeiten (Formular mi-bestellung-ueberarbeiten, schreibt korrektur). Danach läuft "Position freigeben" ein zweites Mal. Das ist eine neue Ausführung desselben Elements; die Historie zeigt sie als eigene Zeile und mischt ihre Runden nicht mit denen der ersten.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="mi-bestellung-ueberarbeiten" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_ueberarbeiten</bpmn:incoming>
+      <bpmn:outgoing>f_ueberarbeiten_freigeben</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="lieferant" name="Lieferant benachrichtigen">
+      <bpmn:documentation>Sequenzielle Multi-Instance: ein Job vom Typ mi-beispiel-lieferant je Position, immer nur einer aktiv; die nächste Runde beginnt erst, wenn die vorige abgeschlossen ist. Sequenziell, weil ein Lieferant die Positionen nacheinander bestätigt – und weil man so in der Historie eine Runde nach der anderen entstehen sieht.
+
+Kein Worker ist vorgesehen: Der Job bleibt offen. In Operations lässt er sich von Hand abschliessen (Weiter) oder fehlschlagen lassen (Incident). Der Job erhält artikel und menge als Eingaben.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="mi-beispiel-lieferant" />
+        <zeebe:ioMapping>
+          <zeebe:input source="= pos.artikel" target="artikel" />
+          <zeebe:input source="= pos.menge" target="menge" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_lieferant</bpmn:incoming>
+      <bpmn:outgoing>f_lieferant_ende</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= positionen" inputElement="pos" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="ende" name="Bestellung ausgelöst">
+      <bpmn:incoming>f_lieferant_ende</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_start_bewerten" sourceRef="start" targetRef="bewerten" />
+    <bpmn:sequenceFlow id="f_bewerten_freigeben" sourceRef="bewerten" targetRef="freigeben" />
+    <bpmn:sequenceFlow id="f_freigeben_gw" sourceRef="freigeben" targetRef="gw_abgelehnt" />
+    <bpmn:sequenceFlow id="f_gw_lieferant" name="nein" sourceRef="gw_abgelehnt" targetRef="lieferant" />
+    <bpmn:sequenceFlow id="f_gw_ueberarbeiten" name="ja" sourceRef="gw_abgelehnt" targetRef="ueberarbeiten">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= some e in entscheide satisfies e = "abgelehnt"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_ueberarbeiten_freigeben" sourceRef="ueberarbeiten" targetRef="freigeben" />
+    <bpmn:sequenceFlow id="f_lieferant_ende" sourceRef="lieferant" targetRef="ende" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram_mi_sample">
+    <bpmndi:BPMNPlane id="plane_mi_sample" bpmnElement="mi_sample_bestellpositionen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="150" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="126" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bewerten_di" bpmnElement="bewerten">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="freigeben_di" bpmnElement="freigeben">
+        <dc:Bounds x="410" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_abgelehnt_di" bpmnElement="gw_abgelehnt" isMarkerVisible="true">
+        <dc:Bounds x="575" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="553" y="145" width="94" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lieferant_di" bpmnElement="lieferant">
+        <dc:Bounds x="700" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <dc:Bounds x="862" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="836" y="225" width="88" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ueberarbeiten_di" bpmnElement="ueberarbeiten">
+        <dc:Bounds x="550" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_bewerten_di" bpmnElement="f_start_bewerten">
+        <di:waypoint x="186" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_bewerten_freigeben_di" bpmnElement="f_bewerten_freigeben">
+        <di:waypoint x="350" y="200" /><di:waypoint x="410" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_freigeben_gw_di" bpmnElement="f_freigeben_gw">
+        <di:waypoint x="510" y="200" /><di:waypoint x="575" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_lieferant_di" bpmnElement="f_gw_lieferant">
+        <di:waypoint x="625" y="200" /><di:waypoint x="700" y="200" />
+        <bpmndi:BPMNLabel><dc:Bounds x="650" y="182" width="22" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ueberarbeiten_di" bpmnElement="f_gw_ueberarbeiten">
+        <di:waypoint x="600" y="225" /><di:waypoint x="600" y="310" />
+        <bpmndi:BPMNLabel><dc:Bounds x="608" y="258" width="12" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ueberarbeiten_freigeben_di" bpmnElement="f_ueberarbeiten_freigeben">
+        <di:waypoint x="550" y="350" /><di:waypoint x="460" y="350" /><di:waypoint x="460" y="240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_lieferant_ende_di" bpmnElement="f_lieferant_ende">
+        <di:waypoint x="800" y="200" /><di:waypoint x="862" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

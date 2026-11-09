@@ -1645,6 +1645,214 @@
       ]
     },
     {
+      "id": "multi-instance",
+      "path": "multi-instance",
+      "app": "Beispiel: Multi-Instance",
+      "processes": [
+        {
+          "processId": "mi_sample_bestellpositionen",
+          "name": "MI-Beispiel: Bestellpositionen",
+          "file": "multi-instance/bestellpositionen.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  MI-Beispiel: Bestellpositionen — drei Arten von Multi-Instance in einem Modell,\n  gebaut, um die gruppierte Multi-Instance-Darstellung der Operations-Historie zu\n  prüfen (eine eingeklappte Zeile je Body-Ausführung, aufklappbar je Runde).\n\n  Start → \"Position bewerten\"        parallel, Script Task      (alle Runden abgeschlossen)\n        → \"Position freigeben\"       parallel, User Task        (Abbruchbedingung → abgebrochene Runden)\n        → (X) \"Position abgelehnt?\"\n            ja   → \"Bestellung überarbeiten\" → zurück zu \"Position freigeben\"  (zweite Body-Ausführung)\n            nein → \"Lieferant benachrichtigen\"  sequenziell, Service Task (ein Job je Runde, Incident möglich)\n        → Ende\n--\u003e\n\u003cbpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\" xmlns:atlas=\"http://atlas/schema/1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" id=\"defs_mi_sample\" targetNamespace=\"http://atlas/bpmn\"\u003e\n  \u003cbpmn:process id=\"mi_sample_bestellpositionen\" name=\"MI-Beispiel: Bestellpositionen\" isExecutable=\"true\"\u003e\n    \u003cbpmn:documentation\u003eDrei Arten von Multi-Instance in einem Modell, um die gruppierte Darstellung in der Operations-Historie auszuprobieren: Jede Ausführung eines Multi-Instance-Elements erscheint dort als eine eingeklappte Zeile mit der Anzahl Runden, die sich aufklappen lässt.\n\nStartvariablen: positionen (Liste von {artikel, menge, preis}, vier Positionen vorbelegt) und szenario (freier Text, um mehrere Testinstanzen auseinanderzuhalten).\n\nWas man damit sieht:\n- \"Position bewerten\": parallel, alle Runden schliessen sofort ab.\n- \"Position freigeben\": parallel mit Abbruchbedingung; eine Ablehnung bricht die offenen Runden ab, der Rücksprung erzeugt eine zweite, separat gruppierte Ausführung desselben Elements.\n- \"Lieferant benachrichtigen\": sequenziell; ohne Worker bleibt jeder Job offen. In Operations von Hand abschliessen oder fehlschlagen lassen – ein Incident auf einer Runde bleibt am eingeklappten Eintrag sichtbar.\u003c/bpmn:documentation\u003e\n    \u003cbpmn:extensionElements\u003e\n      \u003catlas:startForm\u003e\n        \u003catlas:startVariable name=\"szenario\" type=\"string\" default=\"manuell\" /\u003e\n        \u003catlas:startVariable name=\"positionen\" type=\"json\" required=\"true\" default=\"[ {\u0026quot;artikel\u0026quot;: \u0026quot;Notebook\u0026quot;, \u0026quot;menge\u0026quot;: 2, \u0026quot;preis\u0026quot;: 1450}, {\u0026quot;artikel\u0026quot;: \u0026quot;Monitor\u0026quot;, \u0026quot;menge\u0026quot;: 4, \u0026quot;preis\u0026quot;: 320}, {\u0026quot;artikel\u0026quot;: \u0026quot;Dockingstation\u0026quot;, \u0026quot;menge\u0026quot;: 3, \u0026quot;preis\u0026quot;: 210}, {\u0026quot;artikel\u0026quot;: \u0026quot;Headset\u0026quot;, \u0026quot;menge\u0026quot;: 5, \u0026quot;preis\u0026quot;: 89} ]\" /\u003e\n      \u003c/atlas:startForm\u003e\n    \u003c/bpmn:extensionElements\u003e\n    \u003cbpmn:startEvent id=\"start\" name=\"Bestellung eingegangen\"\u003e\n      \u003cbpmn:outgoing\u003ef_start_bewerten\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:startEvent\u003e\n    \u003cbpmn:scriptTask id=\"bewerten\" name=\"Position bewerten\"\u003e\n      \u003cbpmn:documentation\u003eParallele Multi-Instance über positionen, gebunden an pos: berechnet je Position betrag = menge × preis und sammelt {artikel, betrag} in bewertungen.\n\nParallel, weil keine Position die andere braucht. Das Ergebnis ist trotzdem in Eingangsreihenfolge: jede Runde schreibt an ihren eigenen Platz in der Output-Collection, egal in welcher Reihenfolge sie fertig wird.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:script expression=\"= pos.menge * pos.preis\" resultVariable=\"betrag\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_start_bewerten\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_bewerten_freigeben\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:multiInstanceLoopCharacteristics isSequential=\"false\"\u003e\n        \u003cbpmn:extensionElements\u003e\n          \u003czeebe:loopCharacteristics inputCollection=\"= positionen\" inputElement=\"pos\" outputCollection=\"bewertungen\" outputElement=\"= {artikel: pos.artikel, betrag: betrag}\" /\u003e\n        \u003c/bpmn:extensionElements\u003e\n      \u003c/bpmn:multiInstanceLoopCharacteristics\u003e\n    \u003c/bpmn:scriptTask\u003e\n    \u003cbpmn:userTask id=\"freigeben\" name=\"Position freigeben\"\u003e\n      \u003cbpmn:documentation\u003eParallele Multi-Instance: eine Aufgabe je Position (Formular mi-position-freigeben). Die Aufgabe schreibt entscheid (\"freigegeben\" oder \"abgelehnt\"), das in entscheide gesammelt wird.\n\nAbbruchbedingung = entscheid = \"abgelehnt\": Sie wird nach jeder abgeschlossenen Runde über deren Variablen geprüft. Trifft sie zu, werden die noch offenen Runden abgebrochen – in der Historie als \"abgebrochen\" gezählt. Ihre Plätze in entscheide bleiben null; das Gateway danach muss das aushalten.\n\nFalle: Der Betrag kommt hier als = pos.menge * pos.preis und nicht als = bewertungen[loopCounter].betrag. In FEEL ist ein Ausdruck in eckigen Klammern, der keine Zahl ist, ein Filter – loopCounter wird dann gegen jedes Listenelement gelesen, und das Ergebnis ist eine leere Liste statt des Betrags.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:formDefinition formId=\"mi-position-freigeben\" /\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"= pos.artikel\" target=\"artikel\" /\u003e\n          \u003czeebe:input source=\"= pos.menge\" target=\"menge\" /\u003e\n          \u003czeebe:input source=\"= pos.preis\" target=\"preis\" /\u003e\n          \u003czeebe:input source=\"= pos.menge * pos.preis\" target=\"betrag\" /\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_bewerten_freigeben\u003c/bpmn:incoming\u003e\n      \u003cbpmn:incoming\u003ef_ueberarbeiten_freigeben\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_freigeben_gw\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:multiInstanceLoopCharacteristics isSequential=\"false\"\u003e\n        \u003cbpmn:extensionElements\u003e\n          \u003czeebe:loopCharacteristics inputCollection=\"= positionen\" inputElement=\"pos\" outputCollection=\"entscheide\" outputElement=\"= entscheid\" /\u003e\n        \u003c/bpmn:extensionElements\u003e\n        \u003cbpmn:completionCondition xsi:type=\"bpmn:tFormalExpression\"\u003e= entscheid = \"abgelehnt\"\u003c/bpmn:completionCondition\u003e\n      \u003c/bpmn:multiInstanceLoopCharacteristics\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:exclusiveGateway id=\"gw_abgelehnt\" name=\"Position abgelehnt?\" default=\"f_gw_lieferant\"\u003e\n      \u003cbpmn:documentation\u003eLiest entscheide. Abgebrochene Runden haben dort null; \"some … satisfies\" übergeht sie, ein Vergleich mit null ist nie wahr.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:incoming\u003ef_freigeben_gw\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_gw_lieferant\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:outgoing\u003ef_gw_ueberarbeiten\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:userTask id=\"ueberarbeiten\" name=\"Bestellung überarbeiten\"\u003e\n      \u003cbpmn:documentation\u003eNach einer Ablehnung: die Bestellung überarbeiten (Formular mi-bestellung-ueberarbeiten, schreibt korrektur). Danach läuft \"Position freigeben\" ein zweites Mal. Das ist eine neue Ausführung desselben Elements; die Historie zeigt sie als eigene Zeile und mischt ihre Runden nicht mit denen der ersten.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:formDefinition formId=\"mi-bestellung-ueberarbeiten\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_gw_ueberarbeiten\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_ueberarbeiten_freigeben\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:serviceTask id=\"lieferant\" name=\"Lieferant benachrichtigen\"\u003e\n      \u003cbpmn:documentation\u003eSequenzielle Multi-Instance: ein Job vom Typ mi-beispiel-lieferant je Position, immer nur einer aktiv; die nächste Runde beginnt erst, wenn die vorige abgeschlossen ist. Sequenziell, weil ein Lieferant die Positionen nacheinander bestätigt – und weil man so in der Historie eine Runde nach der anderen entstehen sieht.\n\nKein Worker ist vorgesehen: Der Job bleibt offen. In Operations lässt er sich von Hand abschliessen (Weiter) oder fehlschlagen lassen (Incident). Der Job erhält artikel und menge als Eingaben.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"mi-beispiel-lieferant\" /\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"= pos.artikel\" target=\"artikel\" /\u003e\n          \u003czeebe:input source=\"= pos.menge\" target=\"menge\" /\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_gw_lieferant\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_lieferant_ende\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:multiInstanceLoopCharacteristics isSequential=\"true\"\u003e\n        \u003cbpmn:extensionElements\u003e\n          \u003czeebe:loopCharacteristics inputCollection=\"= positionen\" inputElement=\"pos\" /\u003e\n        \u003c/bpmn:extensionElements\u003e\n      \u003c/bpmn:multiInstanceLoopCharacteristics\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:endEvent id=\"ende\" name=\"Bestellung ausgelöst\"\u003e\n      \u003cbpmn:incoming\u003ef_lieferant_ende\u003c/bpmn:incoming\u003e\n    \u003c/bpmn:endEvent\u003e\n    \u003cbpmn:sequenceFlow id=\"f_start_bewerten\" sourceRef=\"start\" targetRef=\"bewerten\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_bewerten_freigeben\" sourceRef=\"bewerten\" targetRef=\"freigeben\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_freigeben_gw\" sourceRef=\"freigeben\" targetRef=\"gw_abgelehnt\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_gw_lieferant\" name=\"nein\" sourceRef=\"gw_abgelehnt\" targetRef=\"lieferant\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_gw_ueberarbeiten\" name=\"ja\" sourceRef=\"gw_abgelehnt\" targetRef=\"ueberarbeiten\"\u003e\n      \u003cbpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\"\u003e= some e in entscheide satisfies e = \"abgelehnt\"\u003c/bpmn:conditionExpression\u003e\n    \u003c/bpmn:sequenceFlow\u003e\n    \u003cbpmn:sequenceFlow id=\"f_ueberarbeiten_freigeben\" sourceRef=\"ueberarbeiten\" targetRef=\"freigeben\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_lieferant_ende\" sourceRef=\"lieferant\" targetRef=\"ende\" /\u003e\n  \u003c/bpmn:process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"diagram_mi_sample\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane_mi_sample\" bpmnElement=\"mi_sample_bestellpositionen\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"150\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"126\" y=\"225\" width=\"84\" height=\"27\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"bewerten_di\" bpmnElement=\"bewerten\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"freigeben_di\" bpmnElement=\"freigeben\"\u003e\n        \u003cdc:Bounds x=\"410\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"gw_abgelehnt_di\" bpmnElement=\"gw_abgelehnt\" isMarkerVisible=\"true\"\u003e\n        \u003cdc:Bounds x=\"575\" y=\"175\" width=\"50\" height=\"50\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"553\" y=\"145\" width=\"94\" height=\"14\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"lieferant_di\" bpmnElement=\"lieferant\"\u003e\n        \u003cdc:Bounds x=\"700\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ende_di\" bpmnElement=\"ende\"\u003e\n        \u003cdc:Bounds x=\"862\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"836\" y=\"225\" width=\"88\" height=\"27\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ueberarbeiten_di\" bpmnElement=\"ueberarbeiten\"\u003e\n        \u003cdc:Bounds x=\"550\" y=\"310\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_start_bewerten_di\" bpmnElement=\"f_start_bewerten\"\u003e\n        \u003cdi:waypoint x=\"186\" y=\"200\" /\u003e\u003cdi:waypoint x=\"250\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_bewerten_freigeben_di\" bpmnElement=\"f_bewerten_freigeben\"\u003e\n        \u003cdi:waypoint x=\"350\" y=\"200\" /\u003e\u003cdi:waypoint x=\"410\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_freigeben_gw_di\" bpmnElement=\"f_freigeben_gw\"\u003e\n        \u003cdi:waypoint x=\"510\" y=\"200\" /\u003e\u003cdi:waypoint x=\"575\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_gw_lieferant_di\" bpmnElement=\"f_gw_lieferant\"\u003e\n        \u003cdi:waypoint x=\"625\" y=\"200\" /\u003e\u003cdi:waypoint x=\"700\" y=\"200\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"650\" y=\"182\" width=\"22\" height=\"14\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_gw_ueberarbeiten_di\" bpmnElement=\"f_gw_ueberarbeiten\"\u003e\n        \u003cdi:waypoint x=\"600\" y=\"225\" /\u003e\u003cdi:waypoint x=\"600\" y=\"310\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"608\" y=\"258\" width=\"12\" height=\"14\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_ueberarbeiten_freigeben_di\" bpmnElement=\"f_ueberarbeiten_freigeben\"\u003e\n        \u003cdi:waypoint x=\"550\" y=\"350\" /\u003e\u003cdi:waypoint x=\"460\" y=\"350\" /\u003e\u003cdi:waypoint x=\"460\" y=\"240\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_lieferant_ende_di\" bpmnElement=\"f_lieferant_ende\"\u003e\n        \u003cdi:waypoint x=\"800\" y=\"200\" /\u003e\u003cdi:waypoint x=\"862\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/bpmn:definitions\u003e"
+        },
+        {
+          "processId": "mi_sample_csv_datensaetze",
+          "name": "MI-Beispiel: CSV-Datensätze prüfen",
+          "file": "multi-instance/csv-datensaetze.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  MI-Beispiel: CSV-Datensätze prüfen — eine hochgeladene CSV-Datei wird zu einer Liste,\n  und je Datensatz entsteht eine Aufgabe (parallele Multi-Instance über einen User Task).\n\n  Start → \"CSV hochladen\" (User Task, Datei-Auswahl → csvText)\n        → \"CSV einlesen\"  (atlas:csvConnector, Semikolon, Kopfzeile → rows, rowCount)\n        → \"Datensatz prüfen\" (parallel, eine Aufgabe je Zeile → pruefungen)\n        → \"Entscheide zählen\" (Script Task → zusammenfassung)\n        → Ende\n\n  Testdatei: beispiel-datensaetze.csv (15 Datensätze, zwei davon mit fehlerhafter E-Mail).\n--\u003e\n\u003cbpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\" xmlns:atlas=\"http://atlas/schema/1.0\" id=\"defs_mi_csv\" targetNamespace=\"http://atlas/bpmn\"\u003e\n  \u003cbpmn:process id=\"mi_sample_csv_datensaetze\" name=\"MI-Beispiel: CSV-Datensätze prüfen\" isExecutable=\"true\"\u003e\n    \u003cbpmn:documentation\u003eEine CSV-Datei hochladen und je Datensatz eine Aufgabe \"Datensatz prüfen\" erzeugen. In Operations erscheint die Aufgabe als eine eingeklappte Zeile mit der Anzahl Ausführungen; aufgeklappt zeigt sie jede Zeile der Datei als eigene Runde.\n\nErwartet wird Semikolon als Trennzeichen (so speichert Excel in der Schweiz) und die Kopfzeile personalnummer;vorname;nachname;email;abteilung;rolle. Die Testdatei examples/multi-instance/beispiel-datensaetze.csv hat 15 Datensätze; P-1008 und P-1011 haben absichtlich eine fehlerhafte E-Mail-Adresse.\n\nEs braucht keinen konfigurierten Worker: Der CSV-Connector läuft im Server.\u003c/bpmn:documentation\u003e\n    \u003cbpmn:startEvent id=\"start\" name=\"Import gestartet\"\u003e\n      \u003cbpmn:outgoing\u003ef_start_hochladen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:startEvent\u003e\n    \u003cbpmn:userTask id=\"hochladen\" name=\"CSV hochladen\"\u003e\n      \u003cbpmn:documentation\u003eFormular mi-csv-upload mit einer Datei-Auswahl: Die Tasks-App legt den Inhalt der Datei als Text in csvText ab. Erwartete Kopfzeile: personalnummer;vorname;nachname;email;abteilung;rolle\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:formDefinition formId=\"mi-csv-upload\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_start_hochladen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_hochladen_einlesen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:serviceTask id=\"einlesen\" name=\"CSV einlesen\"\u003e\n      \u003cbpmn:documentation\u003eLiest csvText mit Semikolon als Trennzeichen und schreibt rows (eine Liste von Kontexten) und rowCount. Ohne columns-Angabe wird jede Spalte der Kopfzeile zu einem Feld vom Typ Text.\n\nFalle: Eine Datei mit Komma als Trennzeichen wird hier nicht abgelehnt, sondern liest sich als eine einzige Spalte – jede Zeile hat dann nur ein Feld, und alle Formularfelder bleiben leer.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003catlas:csvConnector source=\"csvText\" delimiter=\";\" hasHeader=\"true\" resultVariable=\"rows\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_hochladen_einlesen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_einlesen_pruefen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:userTask id=\"pruefen\" name=\"Datensatz prüfen\"\u003e\n      \u003cbpmn:documentation\u003eParallele Multi-Instance über rows, gebunden an row: eine Aufgabe je Datensatz (Formular mi-csv-datensatz-pruefen). Die Felder der Zeile werden per Input-Mapping einzeln bereitgestellt, weil das Formular flache Variablen anzeigt. Die Aufgabe schreibt entscheid (\"ok\", \"korrektur\", \"abgelehnt\") und bemerkung; je Runde landet {personalnummer, name, entscheid, bemerkung} in pruefungen.\n\nParallel, weil die Datensätze unabhängig sind: Mehrere Personen können gleichzeitig prüfen. Bräuchte eine Zeile das Ergebnis der vorigen, müsste die Multi-Instance sequenziell sein.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:formDefinition formId=\"mi-csv-datensatz-pruefen\" /\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"= row.personalnummer\" target=\"personalnummer\" /\u003e\n          \u003czeebe:input source=\"= row.vorname\" target=\"vorname\" /\u003e\n          \u003czeebe:input source=\"= row.nachname\" target=\"nachname\" /\u003e\n          \u003czeebe:input source=\"= row.email\" target=\"email\" /\u003e\n          \u003czeebe:input source=\"= row.abteilung\" target=\"abteilung\" /\u003e\n          \u003czeebe:input source=\"= row.rolle\" target=\"rolle\" /\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_einlesen_pruefen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_pruefen_zusammenfassen\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:multiInstanceLoopCharacteristics isSequential=\"false\"\u003e\n        \u003cbpmn:extensionElements\u003e\n          \u003czeebe:loopCharacteristics inputCollection=\"= rows\" inputElement=\"row\" outputCollection=\"pruefungen\" outputElement=\"= {personalnummer: row.personalnummer, name: row.vorname + \u0026quot; \u0026quot; + row.nachname, entscheid: entscheid, bemerkung: bemerkung}\" /\u003e\n        \u003c/bpmn:extensionElements\u003e\n      \u003c/bpmn:multiInstanceLoopCharacteristics\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:scriptTask id=\"zusammenfassen\" name=\"Entscheide zählen\"\u003e\n      \u003cbpmn:documentation\u003eZählt die Entscheide aus pruefungen und schreibt zusammenfassung = {total, ok, korrektur, abgelehnt}. Im Filter steht item.entscheid und nicht bloss entscheid: so ist eindeutig das Feld des Listenelements gemeint.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:script expression=\"= {total: count(pruefungen), ok: count(pruefungen[item.entscheid = \u0026quot;ok\u0026quot;]), korrektur: count(pruefungen[item.entscheid = \u0026quot;korrektur\u0026quot;]), abgelehnt: count(pruefungen[item.entscheid = \u0026quot;abgelehnt\u0026quot;])}\" resultVariable=\"zusammenfassung\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_pruefen_zusammenfassen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_zusammenfassen_ende\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:scriptTask\u003e\n    \u003cbpmn:endEvent id=\"ende\" name=\"Import abgeschlossen\"\u003e\n      \u003cbpmn:incoming\u003ef_zusammenfassen_ende\u003c/bpmn:incoming\u003e\n    \u003c/bpmn:endEvent\u003e\n    \u003cbpmn:sequenceFlow id=\"f_start_hochladen\" sourceRef=\"start\" targetRef=\"hochladen\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_hochladen_einlesen\" sourceRef=\"hochladen\" targetRef=\"einlesen\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_einlesen_pruefen\" sourceRef=\"einlesen\" targetRef=\"pruefen\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_pruefen_zusammenfassen\" sourceRef=\"pruefen\" targetRef=\"zusammenfassen\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"f_zusammenfassen_ende\" sourceRef=\"zusammenfassen\" targetRef=\"ende\" /\u003e\n  \u003c/bpmn:process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"diagram_mi_csv\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane_mi_csv\" bpmnElement=\"mi_sample_csv_datensaetze\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"150\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"128\" y=\"225\" width=\"80\" height=\"14\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"hochladen_di\" bpmnElement=\"hochladen\"\u003e\u003cdc:Bounds x=\"250\" y=\"160\" width=\"100\" height=\"80\" /\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"einlesen_di\" bpmnElement=\"einlesen\"\u003e\u003cdc:Bounds x=\"400\" y=\"160\" width=\"100\" height=\"80\" /\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"pruefen_di\" bpmnElement=\"pruefen\"\u003e\u003cdc:Bounds x=\"550\" y=\"160\" width=\"100\" height=\"80\" /\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"zusammenfassen_di\" bpmnElement=\"zusammenfassen\"\u003e\u003cdc:Bounds x=\"700\" y=\"160\" width=\"100\" height=\"80\" /\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ende_di\" bpmnElement=\"ende\"\u003e\n        \u003cdc:Bounds x=\"862\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"828\" y=\"225\" width=\"104\" height=\"14\" /\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_start_hochladen_di\" bpmnElement=\"f_start_hochladen\"\u003e\u003cdi:waypoint x=\"186\" y=\"200\" /\u003e\u003cdi:waypoint x=\"250\" y=\"200\" /\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_hochladen_einlesen_di\" bpmnElement=\"f_hochladen_einlesen\"\u003e\u003cdi:waypoint x=\"350\" y=\"200\" /\u003e\u003cdi:waypoint x=\"400\" y=\"200\" /\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_einlesen_pruefen_di\" bpmnElement=\"f_einlesen_pruefen\"\u003e\u003cdi:waypoint x=\"500\" y=\"200\" /\u003e\u003cdi:waypoint x=\"550\" y=\"200\" /\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_pruefen_zusammenfassen_di\" bpmnElement=\"f_pruefen_zusammenfassen\"\u003e\u003cdi:waypoint x=\"650\" y=\"200\" /\u003e\u003cdi:waypoint x=\"700\" y=\"200\" /\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_zusammenfassen_ende_di\" bpmnElement=\"f_zusammenfassen_ende\"\u003e\u003cdi:waypoint x=\"800\" y=\"200\" /\u003e\u003cdi:waypoint x=\"862\" y=\"200\" /\u003e\u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/bpmn:definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "mi-bestellung-ueberarbeiten",
+          "name": "Multi-Instance – Bestellung überarbeiten",
+          "file": "multi-instance/bestellung-ueberarbeiten.form.json",
+          "schema": {
+            "type": "default",
+            "id": "mi-bestellung-ueberarbeiten",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Bestellung überarbeiten\n\nMindestens eine Position wurde abgelehnt. Nach dem Abschliessen dieser Aufgabe läuft **Position freigeben** ein zweites Mal. In der Operations-Historie erscheint diese zweite Ausführung als eigene, separat gruppierte Zeile."
+              },
+              {
+                "key": "korrektur",
+                "type": "textarea",
+                "label": "Was wurde angepasst?",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "mi-csv-upload",
+          "name": "Multi-Instance – CSV hochladen",
+          "file": "multi-instance/csv-upload.form.json",
+          "schema": {
+            "type": "default",
+            "id": "mi-csv-upload",
+            "components": [
+              {
+                "type": "text",
+                "text": "# CSV hochladen\n\nErwartet wird eine CSV-Datei mit **Semikolon** als Trennzeichen und dieser Kopfzeile:\n\n`personalnummer;vorname;nachname;email;abteilung;rolle`\n\nPro Datensatz entsteht anschliessend eine Aufgabe **Datensatz prüfen**."
+              },
+              {
+                "key": "csvText",
+                "type": "filepicker",
+                "label": "CSV-Datei",
+                "accept": ".csv,text/csv",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "mi-csv-datensatz-pruefen",
+          "name": "Multi-Instance – Datensatz prüfen",
+          "file": "multi-instance/datensatz-pruefen.form.json",
+          "schema": {
+            "type": "default",
+            "id": "mi-csv-datensatz-pruefen",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Datensatz prüfen\n\nEine Aufgabe pro CSV-Datensatz (parallele Multi-Instance). Bitte die Angaben prüfen und entscheiden."
+              },
+              {
+                "key": "personalnummer",
+                "type": "textfield",
+                "label": "Personalnummer",
+                "disabled": true
+              },
+              {
+                "key": "vorname",
+                "type": "textfield",
+                "label": "Vorname",
+                "disabled": true
+              },
+              {
+                "key": "nachname",
+                "type": "textfield",
+                "label": "Nachname",
+                "disabled": true
+              },
+              {
+                "key": "email",
+                "type": "textfield",
+                "label": "E-Mail",
+                "disabled": true
+              },
+              {
+                "key": "abteilung",
+                "type": "textfield",
+                "label": "Abteilung",
+                "disabled": true
+              },
+              {
+                "key": "rolle",
+                "type": "textfield",
+                "label": "Rolle",
+                "disabled": true
+              },
+              {
+                "key": "entscheid",
+                "type": "radio",
+                "label": "Entscheid",
+                "values": [
+                  {
+                    "label": "In Ordnung",
+                    "value": "ok"
+                  },
+                  {
+                    "label": "Korrektur nötig",
+                    "value": "korrektur"
+                  },
+                  {
+                    "label": "Ablehnen",
+                    "value": "abgelehnt"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "bemerkung",
+                "type": "textarea",
+                "label": "Bemerkung"
+              }
+            ]
+          }
+        },
+        {
+          "id": "mi-position-freigeben",
+          "name": "Multi-Instance – Position freigeben",
+          "file": "multi-instance/position-freigeben.form.json",
+          "schema": {
+            "type": "default",
+            "id": "mi-position-freigeben",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Position freigeben\n\nDiese Aufgabe ist eine von mehreren parallelen Ausführungen (eine je Bestellposition). Wird eine Position **abgelehnt**, greift die Abbruchbedingung: Die übrigen offenen Freigaben werden abgebrochen, und die Bestellung geht zur Überarbeitung."
+              },
+              {
+                "key": "artikel",
+                "type": "textfield",
+                "label": "Artikel",
+                "disabled": true
+              },
+              {
+                "key": "menge",
+                "type": "number",
+                "label": "Menge",
+                "disabled": true
+              },
+              {
+                "key": "preis",
+                "type": "number",
+                "label": "Preis (CHF)",
+                "disabled": true
+              },
+              {
+                "key": "betrag",
+                "type": "number",
+                "label": "Betrag (CHF)",
+                "disabled": true
+              },
+              {
+                "key": "entscheid",
+                "type": "radio",
+                "label": "Entscheid",
+                "values": [
+                  {
+                    "label": "Freigeben",
+                    "value": "freigegeben"
+                  },
+                  {
+                    "label": "Ablehnen",
+                    "value": "abgelehnt"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "bemerkung",
+                "type": "textarea",
+                "label": "Bemerkung"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "onboarding",
       "path": "onboarding",
       "app": "Onboarding",

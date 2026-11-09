@@ -1,0 +1,57 @@
+{
+  "type": "default",
+  "id": "mi-position-freigeben",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Position freigeben\n\nDiese Aufgabe ist eine von mehreren parallelen Ausführungen (eine je Bestellposition). Wird eine Position **abgelehnt**, greift die Abbruchbedingung: Die übrigen offenen Freigaben werden abgebrochen, und die Bestellung geht zur Überarbeitung."
+    },
+    {
+      "key": "artikel",
+      "type": "textfield",
+      "label": "Artikel",
+      "disabled": true
+    },
+    {
+      "key": "menge",
+      "type": "number",
+      "label": "Menge",
+      "disabled": true
+    },
+    {
+      "key": "preis",
+      "type": "number",
+      "label": "Preis (CHF)",
+      "disabled": true
+    },
+    {
+      "key": "betrag",
+      "type": "number",
+      "label": "Betrag (CHF)",
+      "disabled": true
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid",
+      "values": [
+        {
+          "label": "Freigeben",
+          "value": "freigegeben"
+        },
+        {
+          "label": "Ablehnen",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung"
+    }
+  ]
+}

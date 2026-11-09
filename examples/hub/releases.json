@@ -243,6 +243,12 @@
       "version": "1.0.17",
       "digest": "sha256:f0eec88635ad021adb8994b6edd89a0f6e28ec8cfaea82fd7c93568e1ca3a6f7",
       "minAtlas": "0.24.0-0"
+    },
+    {
+      "bundle": "multi-instance",
+      "version": "1.0.0",
+      "digest": "sha256:9baa853091d5328b94418aa6076457a707244c071671c34c1cc33c9ab350a3a3",
+      "minAtlas": "0.24.0-0"
     }
   ]
 }

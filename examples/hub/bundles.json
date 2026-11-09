@@ -36,6 +36,11 @@
       "examples": ["bewerbermanagement"]
     },
     {
+      "id": "multi-instance",
+      "tags": ["multi-instance", "csv"],
+      "examples": ["multi-instance"]
+    },
+    {
       "id": "mitarbeitereintritt",
       "tags": ["handbuch", "leitfall", "personal"],
       "examples": ["lehrgang"]

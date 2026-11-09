@@ -13,6 +13,13 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Multi-instance example for the grouped Operations history.** `examples/multi-instance`
+  (application «Beispiel: Multi-Instance», hub bundle `multi-instance` 1.0.0) has two models:
+  «MI-Beispiel: Bestellpositionen» with a parallel script-task loop, a parallel user-task loop
+  whose completion condition terminates the open rounds and whose rework path runs it a second
+  time, and a sequential service-task loop whose jobs no worker takes; and «MI-Beispiel:
+  CSV-Datensätze prüfen», which turns an uploaded semicolon CSV into one task per row, with a
+  sample file of 15 records. Handbook card `bsp-multi-instance`.
 - **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
   products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
   (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form

@@ -1,0 +1,18 @@
+{
+  "type": "default",
+  "id": "mi-bestellung-ueberarbeiten",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Bestellung überarbeiten\n\nMindestens eine Position wurde abgelehnt. Nach dem Abschliessen dieser Aufgabe läuft **Position freigeben** ein zweites Mal. In der Operations-Historie erscheint diese zweite Ausführung als eigene, separat gruppierte Zeile."
+    },
+    {
+      "key": "korrektur",
+      "type": "textarea",
+      "label": "Was wurde angepasst?",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">48</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">49</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">48</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">49</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2732,10 +2732,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="card">
           <b><span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span></b>
           <p class="lead" data-l="de">Kein Worker, kein Zugang, kein Internet. Installieren, starten, in Operations
-            zusehen. Das gilt für <span data-count="examples-runnable">16</span> der Beispiele – darunter jedes, das
+            zusehen. Das gilt für <span data-count="examples-runnable">17</span> der Beispiele – darunter jedes, das
             etwas Grundsätzliches erklärt.</p>
           <p class="lead" data-l="en">No worker, no credential, no internet. Install it, start it, watch it in
-            Operations. That holds for <span data-count="examples-runnable">16</span> of the examples – including every
+            Operations. That holds for <span data-count="examples-runnable">17</span> of the examples – including every
             one that explains something fundamental.</p>
         </div>
         <div class="card">
@@ -2832,6 +2832,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">CSV hochladen, jede Zeile prüfen, Fehler korrigieren lassen</td><td data-l="en">Upload a CSV, check every row, have errors corrected</td>
             <td><span class="tag ok">–</span></td>
             <td data-l="de">CSV-Import, Multi-Instance-Subprozess, Korrekturschleife</td><td data-l="en">CSV import, multi-instance subprocess, correction loop</td></tr>
+          <tr><td><a href="#bsp-multi-instance">Multi-Instance</a></td>
+            <td data-l="de">Bestellpositionen freigeben, CSV-Datensätze einzeln prüfen</td><td data-l="en">Approve order items, check CSV records one by one</td>
+            <td><span class="tag ok">–</span></td>
+            <td data-l="de">Parallele und sequenzielle Multi-Instance, Abbruchbedingung, Rücksprung</td><td data-l="en">Parallel and sequential multi-instance, completion condition, way back</td></tr>
           <tr><td><a href="#bsp-onboarding">Onboarding</a></td>
             <td data-l="de">Neue Kolleg:innen lernen atlas, indem atlas sie führt</td><td data-l="en">New colleagues learn atlas by being guided through it by atlas</td>
             <td><span class="tag ok">–</span></td>
@@ -2964,9 +2968,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td data-l="de">Event-Subprozess</td><td data-l="en">Event subprocess</td>
             <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td></tr>
           <tr><td data-l="de">Multi-Instance, parallel</td><td data-l="en">Multi-instance, parallel</td>
-            <td><a href="#bsp-pruefe-datensaetze" data-l="de">Datensätze</a><a href="#bsp-pruefe-datensaetze" data-l="en">Records</a>, <a href="#bsp-entra-rezertifizierung" data-l="de">Rezertifizierung</a><a href="#bsp-entra-rezertifizierung" data-l="en">Recertification</a></td></tr>
+            <td><a href="#bsp-pruefe-datensaetze" data-l="de">Datensätze</a><a href="#bsp-pruefe-datensaetze" data-l="en">Records</a>, <a href="#bsp-entra-rezertifizierung" data-l="de">Rezertifizierung</a><a href="#bsp-entra-rezertifizierung" data-l="en">Recertification</a>, <a href="#bsp-multi-instance">Multi-Instance</a></td></tr>
           <tr><td data-l="de">Multi-Instance, seriell</td><td data-l="en">Multi-instance, sequential</td>
-            <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td></tr>
+            <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a>, <a href="#bsp-multi-instance">Multi-Instance</a></td></tr>
           <tr><td data-l="de">Call-Activity (eigenständiger Teilprozess)</td><td data-l="en">Call activity (a standalone subprocess)</td>
             <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td></tr>
           <tr><td data-l="de">Signal (werfen und fangen)</td><td data-l="en">Signal (throw and catch)</td>
@@ -3972,6 +3976,90 @@ carla@example.org,admins,GOLD</code></pre></li>
             <li data-l="en"><b>Large files.</b> The content travels as a process variable. For a few hundred rows
               that is exactly right; for a hundred thousand the file belongs in storage and only its reference in the
               instance.</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-multi-instance">
+        <h4><span class="rz-emoji" aria-hidden="true">🔁</span>
+          <span data-l="de">Multi-Instance: parallel, sequenziell, abgebrochen und pro CSV-Zeile</span><span data-l="en">Multi-instance: parallel, sequential, cut short and per CSV row</span></h4>
+        <p class="bsp-tags">
+          <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
+          <span class="tag">Multi-Instance</span><span class="tag">CSV</span><span class="tag">Operations</span>
+          <span class="tag">examples/multi-instance/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Eine Bestellung hat mehrere Positionen, ein Import mehrere Datensätze, und jede Position
+              oder jeder Datensatz braucht denselben Arbeitsschritt. Das Beispiel zeigt die Fälle, die dabei im
+              Alltag vorkommen: Alle Positionen laufen gleichzeitig durch, eine Ablehnung stoppt die übrigen
+              Freigaben, die Bestellung wird überarbeitet und erneut freigegeben, und ein Lieferant bestätigt die
+              Positionen nacheinander. Das zweite Modell macht aus einer hochgeladenen CSV-Datei eine Aufgabe pro
+              Zeile.</p>
+            <p data-l="en">An order has several items, an import several records, and every item or record needs
+              the same work step. The example shows the cases that come up in practice: all items run at the same
+              time, a rejection stops the remaining approvals, the order is reworked and approved again, and a
+              supplier confirms the items one after the other. The second model turns an uploaded CSV file into
+              one task per row.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de"><b>MI-Beispiel: Bestellpositionen</b> hat drei Multi-Instance-Elemente über
+              <code>positionen</code>: einen parallelen <b>Script-Task</b>, einen parallelen <b>User-Task</b> mit der
+              Abbruchbedingung <code>entscheid = "abgelehnt"</code> und einen sequenziellen <b>Service-Task</b> vom
+              Job-Typ <code>mi-beispiel-lieferant</code>, für den es keinen Worker gibt. Der Rücksprung über
+              «Bestellung überarbeiten» lässt die Freigabe ein zweites Mal laufen.
+              <b>MI-Beispiel: CSV-Datensätze prüfen</b> liest die Datei mit dem <code>atlas:csvConnector</code>
+              (Semikolon, Kopfzeile) zu <code>rows</code> und erzeugt je Zeile eine Aufgabe «Datensatz prüfen».
+              In <b>Operations</b> erscheint jede Ausführung eines solchen Elements als eine eingeklappte Zeile mit
+              der Anzahl Ausführungen; aufgeklappt zeigt sie jede Runde.</p>
+            <p data-l="en"><b>MI-Beispiel: Bestellpositionen</b> has three multi-instance elements over
+              <code>positionen</code>: a parallel <b>script task</b>, a parallel <b>user task</b> with the completion
+              condition <code>entscheid = "abgelehnt"</code>, and a sequential <b>service task</b> of job type
+              <code>mi-beispiel-lieferant</code>, which no worker serves. The way back through «Bestellung
+              überarbeiten» runs the approval a second time. <b>MI-Beispiel: CSV-Datensätze prüfen</b> reads the
+              file with the <code>atlas:csvConnector</code> (semicolon, header row) into <code>rows</code> and
+              creates one «Datensatz prüfen» task per row. In <b>Operations</b> every execution of such an element
+              shows as one collapsed row with the number of executions; expanded, it shows every round.</p>
+          </div>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b> und starte <b>MI-Beispiel: Bestellpositionen</b> in der <a href="/#/tasks/start">Tasks-App → <i>Start process</i></a>. Es entstehen vier Aufgaben «Position freigeben».</span><span data-l="en">Click <b>⬇ Install</b> and start <b>MI-Beispiel: Bestellpositionen</b> in the <a href="/#/tasks/start">Tasks app → <i>Start process</i></a>. Four «Position freigeben» tasks appear.</span></li>
+            <li><span data-l="de">Gib eine Position frei und lehne eine zweite ab. Die zwei offenen Aufgaben verschwinden, und «Bestellung überarbeiten» erscheint. Schliesse sie ab: Die Freigabe läuft ein zweites Mal. Gib diesmal alle vier frei.</span><span data-l="en">Approve one item and reject a second one. The two open tasks disappear and «Bestellung überarbeiten» appears. Complete it: the approval runs a second time. This time approve all four.</span></li>
+            <li><span data-l="de">Öffne die Instanz in <b>Operations</b>. «Lieferant benachrichtigen» wartet auf einen Job. Schliesse ihn von Hand ab oder lass ihn fehlschlagen, um einen Incident zu sehen. In der Historie hat jedes Multi-Instance-Element eine eingeklappte Zeile, die erste Freigabe zählt zwei abgebrochene Ausführungen, und die zweite Freigabe ist eine eigene Zeile.</span><span data-l="en">Open the instance in <b>Operations</b>. «Lieferant benachrichtigen» waits for a job. Complete it by hand, or fail it to see an incident. In the history every multi-instance element has one collapsed row, the first approval counts two terminated executions, and the second approval is a row of its own.</span></li>
+            <li><span data-l="de">Für die CSV-Variante starte <b>MI-Beispiel: CSV-Datensätze prüfen</b> und lade <a href="https://github.com/pblumer/atlas/blob/main/examples/multi-instance/beispiel-datensaetze.csv"><code>beispiel-datensaetze.csv</code></a> hoch (15 Datensätze, Semikolon). Es entstehen 15 Aufgaben; P-1008 und P-1011 haben absichtlich eine fehlerhafte E-Mail-Adresse.</span><span data-l="en">For the CSV variant, start <b>MI-Beispiel: CSV-Datensätze prüfen</b> and upload <a href="https://github.com/pblumer/atlas/blob/main/examples/multi-instance/beispiel-datensaetze.csv"><code>beispiel-datensaetze.csv</code></a> (15 records, semicolon). Fifteen tasks appear; P-1008 and P-1011 have a wrong e-mail address on purpose.</span></li>
+          </ol>
+        </div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Selbst anpassen</span><span data-l="en">Make it yours</span></summary>
+          <ul>
+            <li data-l="de"><b>Parallel oder sequenziell?</b> Parallel, solange die Runden unabhängig sind. Sequenziell,
+              sobald eine Runde das Ergebnis der vorigen braucht oder die Reihenfolge fachlich zählt.</li>
+            <li data-l="en"><b>Parallel or sequential?</b> Parallel while the rounds are independent. Sequential as soon
+              as one round needs the result of the previous one or the order matters.</li>
+            <li data-l="de"><b>Abgebrochene Runden hinterlassen null.</b> Greift die Abbruchbedingung, bleiben die Plätze
+              der abgebrochenen Runden in <code>entscheide</code> leer. Was danach die Liste liest, muss das
+              aushalten; <code>some e in entscheide satisfies …</code> tut es.</li>
+            <li data-l="en"><b>Terminated rounds leave null.</b> When the completion condition holds, the slots of the
+              terminated rounds in <code>entscheide</code> stay empty. Whatever reads the list afterwards has to cope;
+              <code>some e in entscheide satisfies …</code> does.</li>
+            <li data-l="de"><b>Eckige Klammern sind ein Filter.</b> <code>bewertungen[loopCounter]</code> liefert in FEEL
+              eine leere Liste und nicht das Element der Runde. Rechne den Wert in der Runde aus oder lies ihn aus dem
+              Element, das die Runde ohnehin bekommt (<code>pos</code>).</li>
+            <li data-l="en"><b>Square brackets are a filter.</b> <code>bewertungen[loopCounter]</code> gives an empty
+              list in FEEL, not the round's element. Compute the value in the round, or read it from the element the
+              round gets anyway (<code>pos</code>).</li>
+            <li data-l="de"><b>Trennzeichen.</b> Das CSV-Modell erwartet Semikolon. Eine Datei mit Komma wird nicht
+              abgelehnt, sondern als eine einzige Spalte gelesen. Passe <code>delimiter</code> am Task «CSV einlesen»
+              an deine Dateien an.</li>
+            <li data-l="en"><b>Delimiter.</b> The CSV model expects a semicolon. A comma-separated file is not refused;
+              it is read as one single column. Set <code>delimiter</code> on the «CSV einlesen» task to match your
+              files.</li>
           </ul>
         </details>
       </div>
@@ -14338,7 +14426,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">48</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">48</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">49</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">49</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>
