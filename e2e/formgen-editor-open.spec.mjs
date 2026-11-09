@@ -9,6 +9,17 @@
 // the dialog, really preselects, and really applies what comes back.
 import { test, expect } from "@playwright/test";
 
+// mount starts a harness mount and waits for it by polling window.__mountState, not by
+// awaiting the mount's promise inside page.evaluate — the harness says why: that
+// promise, held across the DevTools protocol while the editor loads, was collected on
+// the CI runner and failed the test as "Execution context was destroyed".
+async function mount(page, name, ...args) {
+  await page.evaluate(([n, a]) => window.__start(n, ...a), [name, args]);
+  await page.waitForFunction(() => window.__mountState && window.__mountState.done);
+  const error = await page.evaluate(() => window.__mountState.error);
+  if (error) throw new Error(`${name} failed: ${error}`);
+}
+
 test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -18,7 +29,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("the generator opens on the step that sent the author here", async ({ page }) => {
-  await page.evaluate(() => window.__mountGenerate());
+  await mount(page, "__mountGenerate");
 
   // No second button to find: the dialog is up, on the process and the step the link
   // named, with the cursor in the one field the author still has to fill.
@@ -45,7 +56,7 @@ test("the generator opens on the step that sent the author here", async ({ page 
 });
 
 test("the dialog closes back to a usable editor when it is dismissed", async ({ page }) => {
-  await page.evaluate(() => window.__mountGenerate());
+  await mount(page, "__mountGenerate");
   await expect(page.locator(".fg-modal")).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -63,7 +74,7 @@ test("the dialog closes back to a usable editor when it is dismissed", async ({ 
 });
 
 test("with no AI Worker the editor simply opens, as the link always did", async ({ page }) => {
-  await page.evaluate(() => window.__mountGenerate([]));
+  await mount(page, "__mountGenerate", []);
 
   await expect(page.locator(".form-editor")).toBeVisible();
   await expect(page.locator(".fg-modal")).toHaveCount(0);

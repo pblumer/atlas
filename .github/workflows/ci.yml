@@ -507,3 +507,19 @@ jobs:
       - name: Run browser e2e tests
         working-directory: e2e
         run: npm test
+
+      # A failure that only happens on the runner cannot be diagnosed from the log alone:
+      # "Execution context was destroyed" names no cause, and the same test passes on a
+      # workstation. Playwright keeps a trace of every failed attempt (trace:
+      # retain-on-failure) — DOM, network, console and every navigation — so keep it.
+      # Not only when the job fails: a test that passes on its retry is reported flaky
+      # and the job goes green, and its failed first attempt is the trace worth reading.
+      # test-results/ holds nothing else, so a clean run uploads nothing.
+      - name: Upload e2e traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
