@@ -14927,6 +14927,7 @@ export async function mountDiagramPreview(container, xml) {
     throw e;
   }
   try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+  try { drawDataStateLabels(viewer); } catch { /* best-effort [state] captions */ }
   return { destroy() { try { viewer.destroy(); } catch { /* already gone */ } } };
 }
 
