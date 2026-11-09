@@ -27,12 +27,13 @@ BPMN portability stops at the executable extensions. Atlas speaks the `zeebe:`
 dialect and FEEL; no other engine does. So each reference model under
 [`reference/models/`](reference/models/) is a **hand-translation** that keeps the
 same element ids and control flow but expresses scripts and conditions in the
-reference's dialect (JavaScript). Only pure control-flow scenarios are translated so
-far:
+reference's dialect (JavaScript). Five pure control-flow scenarios are independently translated and run under an
+explicit **non-skipping CI gate**:
 
 | Scenario | Semantics cross-checked |
 |----------|-------------------------|
 | `sequence` | plain token flow |
+| `linear-independent` | serial independent scripts (metamorphic partner of parallel split) |
 | `exclusive-gateway` | data-based XOR + default flow |
 | `parallel-independent` | AND fork and synchronizing join |
 | `inclusive-gateway` | OR multi-choice split + synchronizing merge |
@@ -55,6 +56,13 @@ The live comparison is behind the `differential` build tag, so the default
 cd conformance/differential/reference && npm ci && cd -
 go test -tags differential ./conformance/differential/
 ```
+
+CI installs the pinned `bpmn-engine` dependency and runs the tagged test with
+`ATLAS_DIFFERENTIAL_REQUIRED=1`; missing Node/npm dependencies then **fail**
+instead of skipping. Each outcome is compared with both atlas and the
+checked-in portable `conformance/tck/cases/<scenario>/expected.json` projection.
+The five translated cases cover a **small control-flow subset only**, not
+independent conformance of the other task/event families.
 
 Without the tag, `go test ./conformance/differential/` runs only the pure
 projection unit tests (no Node required) — those are what the coverage gate sees.

@@ -12787,7 +12787,7 @@ function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
 // definition is shown, and an instance picker either aggregates every instance's
 // tokens on the diagram or isolates a single one. The selected instance's
 // variables are listed below the diagram.
-export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
+export async function mountLive(root, { api, apiRaw, toast, key, instance, mayUse = () => true }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -12875,6 +12875,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           <span class="live-process-version">${esc(versionLabel)}</span>
         </div>
         ${layoutNote}${frozenNote}
+        <span class="live-active" id="live-active"></span>
         <span class="muted live-other-versions" id="other-versions" hidden></span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
@@ -12908,6 +12909,40 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       </div>
       ${valueWindowHTML()}
     </div>`;
+
+  // Pausing automatic starts (ADR-0119) is an operator's intervention on a running
+  // process, so it is offered where the operator watches it, beside the Modeler's
+  // Deployments tab (ADR-0541). Only the newest
+  // version starts anything by itself, so only it gets the switch; an older version
+  // that was paused still says so.
+  {
+    const host = root.querySelector("#live-active");
+    let active = currentVersion ? currentVersion.active !== false : true;
+    const newest = versions.length > 0 && versions[0].key === key;
+    const canPause = newest && mayUse("operator");
+    const draw = () => {
+      const pill = active ? ""
+        : `<span class="pill warn" title="${esc(tr("home.inactiveTitle"))}">${esc(tr("deployments.paused"))}</span>`;
+      const btn = canPause
+        ? ` <button type="button" class="btn ghost sm" id="live-pause" title="${esc(tr(active ? "home.deactivateTitle" : "home.activateTitle"))}">${esc(tr(active ? "home.deactivate" : "home.activate"))}</button>`
+        : "";
+      host.innerHTML = pill + btn;
+    };
+    draw();
+    host.addEventListener("click", async (e) => {
+      const btn = e.target.closest("#live-pause");
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        await api("PUT", `/api/v1/processes/${key}/active`, { active: !active });
+        active = !active;
+        toast(tr(active ? "home.process.activated" : "home.process.deactivated"), "ok");
+      } catch (err) {
+        toast(tr("home.process.toggleFailed", { error: err.message }), "err");
+      }
+      draw();
+    });
+  }
 
   // Switching version loads a different deployed definition, so re-route to its
   // live view (a full remount — the diagram itself changes).

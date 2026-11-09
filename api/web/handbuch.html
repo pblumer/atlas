@@ -11826,15 +11826,18 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <code>operator</code>). Pausiert heisst: die Version startet <b>keine neuen Instanzen mehr von selbst</b> –
         aus einem Zeit-, Nachrichten- oder Signal-Start-Event. Ein <b>ausdrücklicher</b> Start über die API oder die
         Oberfläche bleibt möglich, und laufende Instanzen laufen unberührt weiter. Es wirkt je Version, nicht je
-        Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole trägt die pausierte Version im
-        Modeler die Marke <i>Inaktiv</i> und einen Knopf <i>Aktivieren</i> / <i>Deaktivieren</i>.</p>
+        Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole schaltest du das im Reiter <i>Deployments</i>
+        der Applikation (Menü <i>⋯</i> der Prozesszeile: <i>Aktivieren</i> / <i>Deaktivieren</i>) oder in der
+        Live-Ansicht unter Operations; beide zeigen die pausierte Version mit der Marke <i>pausiert</i>, die Spalte
+        <i>Deployt</i> auf der Startseite des Modelers zählt sie.</p>
       <p data-l="en">A deployed version can be <b>paused</b> without deleting it
         (<code>PUT /api/v1/processes/{key}/active</code> with <code>{"active":false}</code>, role
         <code>operator</code>). Paused means the version <b>no longer starts new instances on its own</b> – from a
         timer, message or signal start event. An <b>explicit</b> start over the API or the UI still works, and
         running instances continue untouched. It applies per version, not per process id; a new version starts
-        active regardless. In the Console the paused version carries an <i>Inactive</i> badge in the Modeler and an
-        <i>Activate</i> / <i>Deactivate</i> button.</p>
+        active regardless. In the Console you switch it in the application's <i>Deployments</i> tab
+        (the process row's <i>⋯</i> menu: <i>Activate</i> / <i>Deactivate</i>) or in the Operations live view; both
+        show the paused version with a <i>paused</i> badge, and the Modeler home's <i>Deployed</i> column counts it.</p>
 
       <h3 data-l="de">Eine Version oder eine ganze Applikation löschen</h3><h3 data-l="en">Deleting a version or a whole application</h3>
       <p data-l="de">Eine deployte Version löschst du mit <code>DELETE /api/v1/processes/{key}</code> (Rolle
@@ -11844,14 +11847,14 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         Version trotzdem; dafür brauchst du zusätzlich <code>operator</code>, sobald Instanzen laufen. Ein
         Katalogprodukt, das den Prozess bindet, lässt sich danach nicht mehr bestellen, und die Rückgabe einer
         bestehenden Position schlägt fehl, bis der Prozess wieder deployt ist. Ein geschützter Systemprozess lässt
-        sich nie löschen. Im Modeler zeigt <i>Löschen</i> den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
+        sich nie löschen. Im Reiter <i>Deployments</i> der Applikation löscht <i>Löschen</i> einen Prozess mit allen Versionen, zeigt den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
       <p data-l="en">You delete a deployed version with <code>DELETE /api/v1/processes/{key}</code> (role
         <code>modeler</code>). Atlas refuses while instances of the version are running, while an order line can
         still start the process, or while the current catalogue release binds it – and says which of these applies.
         With <code>?force=true</code> Atlas cancels the running instances and deletes the version anyway; that also
         needs <code>operator</code> as soon as instances are running. A catalogue product that binds the process can
         no longer be ordered afterwards, and returning an existing line fails until the process is deployed again. A
-        protected system process can never be deleted. In the Modeler, <i>Delete</i> shows the reason for a refusal
+        protected system process can never be deleted. In the application's <i>Deployments</i> tab, <i>Delete</i> removes a process with all its versions, shows the reason for a refusal
         and offers the forced delete.</p>
       <p data-l="de">Beim Löschen einer Applikation wählst du: Entweder bleibt ihr Inhalt erhalten und erscheint
         unter <i>Nicht zugeordnet</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen

@@ -103,6 +103,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   included) and what outside the application stops working, and is armed only once the
   application's name is typed; a refusal in the preview, or a caller who may not cancel
   instances, keeps it disarmed; Escape cancels.
+- **`modeler-home-applications.spec.mjs`**, **`application-deployments-processes.spec.mjs`** and
+  **`application-deployments-frozen.spec.mjs`**
+  ([ADR-0541](../docs/adr/0541-the-application-holds-its-deployments.md)):
+  the Modeler home is one folding table of applications with no deployed list of its own, and
+  its *Deployed* column counts each application's processes and paused ones and opens its
+  Deployments tab; that tab lists one row per process with the older versions folded under it,
+  pauses, resumes and deletes from the row's menu, marks a definition frozen on a decision version,
+  and has a counterpart under *Not assigned*. `live-process-heading.spec.mjs` covers the pause
+  switch in the Operations live view.
 - **`appearance.spec.mjs`**
   ([ADR-0507](../docs/adr/0507-ui-appearance-modes.md)):
   the light, dark and system appearance, a display preference kept with the account and
@@ -433,6 +442,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   toolbar — publishing a numbered version with the model's prose and a real PDF, the
   history reading newest first, and the per-version public link being minted and revoked.
   Drives the real `mountEditor` against a mock `api` that keeps the versions in memory.
+- **`instances-by-application.spec.mjs`** (ADR-0034 / ADR-0128): the **Instances overview
+  grouped by application** — the one list stays the default (one table, one row per process),
+  the "Nach Applikation" switch puts every process under its application in name order with
+  the not-assigned group last (a process filed nowhere and one whose application name the
+  server withholds both land there), each heading sums processes, running, incidents and
+  finished over every version and links to the application, the choice and a folded group
+  survive a reload and a Refresh, switching back restores the enhanced list, and a grouped
+  row's overflow menu still reaches its terminate confirmation. Drives the real app shell
+  against a routed mock of the processes, instance summary and incident summary.
 - **`incidents-ops.spec.mjs`** (ADR-0150 / ADR-0151): **incidents where the operator is**
   — the **live view** outlines and badges the element two parked tokens sit on, counts them
   in its toolbar, leads its variables panel with both instances' incidents, and resolves one

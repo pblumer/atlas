@@ -111,10 +111,10 @@
       };
 
       const api = async (method, url, body) => {
-        if (method !== "GET") return {};
+        if (method !== "GET") { (window.__calls ||= []).push({ method, url, body }); return {}; }
         if (url === "/api/v1/processes") {
           return [{ key: DEF, processId: "identitaet",
-            name: window.__processName ?? "Identitäts-Lebenszyklus", version: 2 }];
+            name: window.__processName ?? "Identitäts-Lebenszyklus", version: 2, active: window.__active ?? true }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances/search")) {
@@ -185,7 +185,8 @@
       // __rows exposes the store's own instances so a test can arrange one.
       window.__rows = () => activeRows.concat(doneRows);
 
-      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      // __mayUse stands in for the Console's role check; unset, every role is held.
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF, mayUse: window.__mayUse || (() => true) });
       window.__ready = true;
     </script>
   </body>

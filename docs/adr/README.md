@@ -628,6 +628,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0538](0538-operations-declare-idempotency-and-effect.md) | Every operation declares its idempotency and effect, jobs carry an idempotency key, and atlas warns where a duplicate can do harm | Accepted | Partial |
 | [0539](0539-blueprint-architecture-preview.md) | An atlas hub release shows its architecture sketch and its process models before it is installed | Accepted | Landed |
 | [0540](0540-sharepoint-server-worker.md) | SharePoint Server is a Worker Type of its own | Accepted | Landed |
+| [0541](0541-the-application-holds-its-deployments.md) | An application's deployed processes are listed in the application, not on the Modeler home | Accepted | Landed |
 
 ## The two states of a record
 
