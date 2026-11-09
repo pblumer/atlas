@@ -8,6 +8,7 @@ import (
 
 	"github.com/pblumer/atlas/api/archsketch"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/compiler"
 )
 
@@ -41,6 +42,81 @@ import (
 // is a fault worth saying, and it is recorded as unread rather than drawn as a process
 // that offers and needs nothing.
 func (s *Server) architectureSnapshot(appID string, members []releaseMember, takenAt int64) *archsketch.Snapshot {
+	procs := make([]sketchProcess, 0, len(members))
+	for _, m := range members {
+		if m.Kind != "process" {
+			continue
+		}
+		p := sketchProcess{ID: m.Ref, Version: m.ArtifactVer}
+		if d := s.deployments[m.Key]; d != nil && d.cp != nil {
+			p.Name, p.CP = d.Name, d.cp
+		}
+		procs = append(procs, p)
+	}
+	var handles func(int32) bool
+	if s.jobRunner != nil {
+		handles = s.jobRunner.Handles
+	}
+	l := logicalSketch(procs, takenAt, handles, func(processID string) (string, string, bool) {
+		target := s.latestDeploymentByProcessID(processID)
+		if target == nil || target.ProjectID == "" {
+			return "", "", false
+		}
+		if target.ProjectID == appID {
+			return "", "", true
+		}
+		name := ""
+		if proj, ok, err := s.projects.Get(target.ProjectID); err == nil && ok {
+			name = proj.Name
+		}
+		return target.ProjectID, name, false
+	})
+	snap := l.snap
+	received := map[string]bool{}
+	for _, e := range snap.EntryPoints {
+		received[e.Name] = true
+	}
+	snap.Physical = s.physicalPart(l.shipped, received, snap.Dependencies, l.placement)
+	snap.Data = s.dataPart(appID, l.data, snap.Dependencies)
+	snap.Business = s.businessPart(l.business, l.shipped)
+	snap.Strategy = s.strategyPart(appID, l.shipped, snap.Dependencies)
+	snap.Coupling = s.couplingPart(appID, l.coupling, snap.EntryPoints)
+	snap.Normalize()
+	return snap
+}
+
+// sketchProcess is one process a snapshot reads: its id and version, and its
+// compiled form, nil when it could not be read.
+type sketchProcess struct {
+	ID      string
+	Version int32
+	Name    string
+	CP      *compiler.CompiledProcess
+}
+
+// logicalParts is what logicalSketch answers: the snapshot with its model-bound
+// facts, and the raw parts the installation-bound readers complete.
+type logicalParts struct {
+	snap      *archsketch.Snapshot
+	shipped   map[string]bool
+	placement map[[2]string]string
+	data      *archsketch.Data
+	business  *archsketch.Business
+	coupling  *archsketch.Coupling
+}
+
+// logicalSketch is what a snapshot records from the process models alone — the parts
+// that are the same wherever the models are read: the processes, the messages they
+// receive, the workers, job types, decisions and calls they name, and the raw data,
+// business and coupling facts the installation-bound parts complete. It reads nothing
+// but its arguments, so a release on the run loop and an atlas hub package off it
+// (blueprintarchitecture.go) draw the same models the same way.
+//
+// handles says whether this server runs a job type in its own process (nil: none
+// does); callTarget names the application a called process lives in, and inside when
+// that is the snapshot's own application, which makes the call no way out of it.
+func logicalSketch(procs []sketchProcess, takenAt int64, handles func(int32) bool,
+	callTarget func(processID string) (appID, appName string, inside bool)) logicalParts {
 	snap := &archsketch.Snapshot{
 		FormatVersion:  archsketch.FormatVersion,
 		MappingVersion: archsketch.MappingVersion,
@@ -49,32 +125,23 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 		EntryPoints:    []archsketch.EntryPoint{},
 		Dependencies:   []archsketch.Dependency{},
 	}
-	shipped := map[string]bool{}
-	placement := map[[2]string]string{}
-	data := &archsketch.Data{}
-	business := &archsketch.Business{}
-	coupling := &archsketch.Coupling{}
-	for _, m := range members {
-		if m.Kind == "process" {
-			shipped[m.Ref] = true
-		}
+	out := logicalParts{snap: snap, shipped: map[string]bool{}, placement: map[[2]string]string{},
+		data: &archsketch.Data{}, business: &archsketch.Business{}, coupling: &archsketch.Coupling{}}
+	for _, p := range procs {
+		out.shipped[p.ID] = true
 	}
-	for _, m := range members {
-		if m.Kind != "process" {
-			continue
-		}
-		proc := archsketch.Process{ProcessID: m.Ref, Version: m.ArtifactVer}
-		d := s.deployments[m.Key]
-		if d == nil || d.cp == nil {
+	for _, m := range procs {
+		proc := archsketch.Process{ProcessID: m.ID, Version: m.Version}
+		if m.CP == nil {
 			proc.Unread = true
 			snap.Processes = append(snap.Processes, proc)
 			continue
 		}
-		proc.Name = d.Name
+		proc.Name = m.Name
 		snap.Processes = append(snap.Processes, proc)
-		cp := d.cp
+		cp := m.CP
 		use := func(elementID string) []archsketch.Use {
-			return []archsketch.Use{{ProcessID: m.Ref, ElementID: elementID}}
+			return []archsketch.Use{{ProcessID: m.ID, ElementID: elementID}}
 		}
 
 		for _, r := range cp.MessageReceipts() {
@@ -100,9 +167,9 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 				// Who opens the connection to the target is decided by where this
 				// server runs the work: an in-process handler connects itself, and any
 				// other job is leased by a worker process (ADR-0164, ADR-0168).
-				placement[[2]string{dep.Name, kind}] = archsketch.PlacementWorker
-				if s.jobRunner != nil && s.jobRunner.Handles(ref.JobType) {
-					placement[[2]string{dep.Name, kind}] = archsketch.PlacementEngine
+				out.placement[[2]string{dep.Name, kind}] = archsketch.PlacementWorker
+				if handles != nil && handles(ref.JobType) {
+					out.placement[[2]string{dep.Name, kind}] = archsketch.PlacementEngine
 				}
 			}
 			snap.Dependencies = append(snap.Dependencies, dep)
@@ -121,39 +188,27 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 		}
 
 		for _, ref := range cp.CallActivities() {
-			if shipped[ref.CalledProcessId] {
+			if out.shipped[ref.CalledProcessId] {
 				// A call between two processes of this release stays inside the
 				// application; it is not a way out of it.
 				continue
 			}
 			dep := archsketch.Dependency{Kind: archsketch.DependencyCall, Name: ref.CalledProcessId, UsedBy: use(ref.ElementId)}
-			if target := s.latestDeploymentByProcessID(ref.CalledProcessId); target != nil && target.ProjectID != "" {
-				if target.ProjectID == appID {
+			if callTarget != nil {
+				appID, appName, inside := callTarget(ref.CalledProcessId)
+				if inside {
 					continue
 				}
-				dep.TargetApplicationID = target.ProjectID
-				if proj, ok, err := s.projects.Get(target.ProjectID); err == nil && ok {
-					dep.TargetApplication = proj.Name
-				}
+				dep.TargetApplicationID, dep.TargetApplication = appID, appName
 			}
 			snap.Dependencies = append(snap.Dependencies, dep)
 		}
 
-		collectData(data, cp, m.Ref)
-		collectBusiness(business, cp, m.Ref, d.Name)
-		collectNames(coupling, cp, m.Ref)
+		collectData(out.data, cp, m.ID)
+		collectBusiness(out.business, cp, m.ID, m.Name)
+		collectNames(out.coupling, cp, m.ID)
 	}
-	received := map[string]bool{}
-	for _, e := range snap.EntryPoints {
-		received[e.Name] = true
-	}
-	snap.Physical = s.physicalPart(shipped, received, snap.Dependencies, placement)
-	snap.Data = s.dataPart(appID, data, snap.Dependencies)
-	snap.Business = s.businessPart(business, shipped)
-	snap.Strategy = s.strategyPart(appID, shipped, snap.Dependencies)
-	snap.Coupling = s.couplingPart(appID, coupling, snap.EntryPoints)
-	snap.Normalize()
-	return snap
+	return out
 }
 
 // physicalPart records what this installation has in place for the release, now.
@@ -331,6 +386,13 @@ func (s *Server) dataPart(appID string, d *archsketch.Data, deps []archsketch.De
 	if err != nil {
 		return nil
 	}
+	return completeData(d, deps, vocab)
+}
+
+// completeData is dataPart's reading of the raw data facts against an information
+// model's vocabulary — whichever models it was built from: the application's stored
+// ones for a release, the ones a package carries for an atlas hub preview.
+func completeData(d *archsketch.Data, deps []archsketch.Dependency, vocab *infomodel.Vocabulary) *archsketch.Data {
 	for i := range d.Stores {
 		if st, ok := vocab.Store(d.Stores[i].Name); ok {
 			d.Stores[i].Class = st.Class
