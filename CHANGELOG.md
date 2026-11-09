@@ -201,6 +201,14 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A round of a multi-instance names what it produced.** The replay's Output of one round —
+  and the diagram's in/out card — now lists what the round wrote into its own scope, such as a
+  script's result variable or a person's answer on the form, where it said "wrote nothing" for
+  every round. The timeline adds those values to the round's `writes` with `scopeKind`
+  `local`; an operator's correction of a local is not included. The body's output collection
+  still reads unfilled until the loop finishes, because its per-round element writes are not
+  part of the history (ADR-0296); the Environment now says so on the collection
+  ([ADR-0542](docs/adr/0542-variables-by-provenance.md)).
 - **A wide decision table fits its hover card.** The card that shows which rule fired —
   in Operations → Decisions, the live view and the instance replay — held every cell to one
   line inside a 480 px card, so a table with a long list of literals or a long input

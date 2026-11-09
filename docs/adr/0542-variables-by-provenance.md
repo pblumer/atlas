@@ -88,6 +88,7 @@ carries what it had become.
   `loopBody`. It is also part of the key the timeline folds variables by, so a
   multi-instance subprocess's body and one of its iterations — two scopes under one
   element id — no longer overwrite each other's same-named variables.
+- `scopeKind` `local` on a value an element wrote into its own scope (see below).
 - `constant` on a process-scope variable the model's constants occupy: `process` for a
   process constant, `application` or `server` for the namespace the installation fills.
 
@@ -102,14 +103,32 @@ Both are additive and omitted when empty.
   can still not tell from the tab which of the reachable values a task actually read.
   The scope chain is read from the diagram on screen; for an element that is not on it
   (a migrated instance's removed element) every live scope is shown rather than guessed.
-- **Follow-ups / risks to watch:** a round of a multi-instance shows no output. Its
-  result lands in the round's own scope, which the timeline does not fold, and the
-  body's output collection reads `[null, …]` in every round's snapshot until the body
-  completes and the filled collection appears at the process scope (observed on a
-  sequential script-task loop). The round's Output therefore says "wrote nothing" for a
-  round that produced a value. Folding a round's own scope into its writes would close
-  that. Recording reads — statically from FEEL expressions and form fields, or from a
-  worker that declares the variables it fetches — is the open question above.
+  A multi-instance body's collection reads unfilled until its loop finishes (see below).
+- **Follow-ups / risks to watch:** recording reads — statically from FEEL expressions
+  and form fields, or from a worker that declares the variables it fetches — is the
+  open question above.
+
+### What a round of a multi-instance wrote
+
+A round keeps its result — a script's result variable, a person's answer on the form —
+in its own scope until the body collects the output element from it (ADR-0077). The
+timeline read that scope only for the round's inputs, so every round's Output said
+"wrote nothing", including the round whose answer then appeared in the collection.
+
+- **Writes include the element's own scope.** The scan of an element instance's own
+  scope, which already ran for its inputs, keeps every other value the element itself
+  wrote there (its producer key, ADR-0219) and adds it to the step's `writes` with
+  `scopeKind` `local`. An operator's correction of a local is not the element's output
+  and is not included. A loop body and a subprocess are left out: their scopes are
+  folded and attributed already. No extra scan, and nothing for an element without
+  inputs or a loop.
+- **The body's collection stays as recorded.** Its per-round element writes are not
+  part of the history, by ADR-0296's decision that a snapshot per round makes the
+  timeline grow with the square of the count. It reads `[null, …]` in every round's
+  snapshot until the loop finishes. The Environment says so on the collection, and
+  points to each round's Output, instead of letting an empty list read as rounds that
+  produced nothing. Recording the element writes would answer it at its source; that is
+  ADR-0296's decision to revisit, not this record's.
 
 ## Pros and cons of the options
 
@@ -129,4 +148,4 @@ Both are additive and omitted when empty.
 ## Links
 
 - amends ADR-0159 (its Input/Output switch on the Variables tab)
-- relates to ADR-0068, ADR-0074, ADR-0077, ADR-0133, ADR-0161, ADR-0219, ADR-0454, ADR-0456
+- relates to ADR-0068, ADR-0074, ADR-0077, ADR-0133, ADR-0161, ADR-0219, ADR-0296, ADR-0454, ADR-0456
