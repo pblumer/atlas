@@ -2025,22 +2025,20 @@ async function viewConsoleDashboard() {
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
         }</span>
-        <h1>${signedInName() ? `Welcome, ${esc(signedInName())}` : "Welcome to atlas"}</h1>
+        <h1>${signedInName() ? tr("dashboard.welcome.titleNamed", { name: esc(signedInName()) }) : esc(tr("dashboard.welcome.title"))}</h1>
         <span id="welcome-version" class="welcome-version muted"></span>
       </div>
-      <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
-      from a single self-contained binary. This Console manages deployments and shows engine health;
-      the Modeler lets you design and deploy BPMN models in the browser.</p>
+      <p class="muted">${tr("dashboard.welcome.intro")}</p>
       <ol class="steps">
-        <li><b>Model a process</b> — open the Modeler and draw a BPMN diagram, or import existing XML.</li>
-        <li><b>Deploy</b> — make a model runnable straight from the editor, and optionally start an instance in one step with <b>Deploy &amp; run</b>.</li>
-        <li><b>Watch it execute</b> — tokens move through the engine and land as durable events.</li>
+        <li>${tr("dashboard.welcome.step.model")}</li>
+        <li>${tr("dashboard.welcome.step.deploy")}</li>
+        <li>${tr("dashboard.welcome.step.watch")}</li>
       </ol>
       <div class="row">
-        <a class="btn" href="#/modeler">Open Modeler</a>
-        <a class="btn ghost" href="#/console/engine">View engine</a>
-        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
-        <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
+        <a class="btn" href="#/modeler">${esc(tr("dashboard.welcome.openModeler"))}</a>
+        <a class="btn ghost" href="#/console/engine">${esc(tr("dashboard.welcome.viewEngine"))}</a>
+        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">${esc(tr("dashboard.welcome.handbook"))}</a>
+        <button type="button" class="btn ghost" data-system-overview title="${esc(tr("dashboard.welcome.systemOverviewTitle"))}">${esc(tr("dashboard.welcome.systemOverview"))}</button>
       </div>
       </div>
       <img class="welcome-art" src="welcome.svg" alt="" width="480" height="320" />
@@ -2048,15 +2046,15 @@ async function viewConsoleDashboard() {
     <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
       <div class="card">
-        <div class="between"><h2>Deployments</h2><a href="#/modeler">View all</a></div>
-        <p id="dep-summary" class="muted">Loading…</p>
-        <a class="btn neutral" href="#/modeler/new">New diagram</a>
+        <div class="between"><h2>${esc(tr("dashboard.deployments.title"))}</h2><a href="#/modeler">${esc(tr("dashboard.deployments.viewAll"))}</a></div>
+        <p id="dep-summary" class="muted">${esc(tr("dashboard.deployments.loading"))}</p>
+        <a class="btn neutral" href="#/modeler/new">${esc(tr("dashboard.deployments.newDiagram"))}</a>
       </div>
       <div class="card">
-        <div class="between"><h2>Engine</h2><a href="#/operations">Instances</a></div>
+        <div class="between"><h2>${esc(tr("dashboard.engine.title"))}</h2><a href="#/operations">${esc(tr("dashboard.engine.instances"))}</a></div>
         <div class="stats" style="margin-top:6px">
-          <div class="stat"><b id="s-pi">0</b><span>active process instances</span></div>
-          <div class="stat"><b id="s-ei">0</b><span>active element instances</span></div>
+          <div class="stat"><b id="s-pi">0</b><span>${esc(tr("dashboard.engine.activeProcessInstances"))}</span></div>
+          <div class="stat"><b id="s-ei">0</b><span>${esc(tr("dashboard.engine.activeElementInstances"))}</span></div>
         </div>
       </div>
     </div>
@@ -2117,8 +2115,8 @@ async function viewConsoleDashboard() {
       api("GET", "/api/v1/stats"),
     ]);
     document.getElementById("dep-summary").textContent = procs.length
-      ? `${procs.length} process definition${procs.length === 1 ? "" : "s"} deployed.`
-      : "No processes deployed yet.";
+      ? trPlural("dashboard.deployments.count", procs.length)
+      : tr("dashboard.deployments.none");
     document.getElementById("s-pi").textContent = stats.activeProcessInstances;
     document.getElementById("s-ei").textContent = stats.activeElementInstances;
   } catch (e) { toast(e.message, "err"); }
