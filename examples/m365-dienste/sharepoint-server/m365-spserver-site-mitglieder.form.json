@@ -1,0 +1,68 @@
+{
+  "type": "default",
+  "id": "m365-spserver-site-mitglieder",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Mitglieder ändern · Change the members**"
+    },
+    {
+      "key": "gruppe",
+      "type": "select",
+      "label": "Gruppe · Group",
+      "values": [
+        {
+          "label": "Mitglieder · Members",
+          "value": "members"
+        },
+        {
+          "label": "Besitzer · Owners",
+          "value": "owners"
+        },
+        {
+          "label": "Besucher · Visitors",
+          "value": "visitors"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      },
+      "defaultValue": "members"
+    },
+    {
+      "key": "aenderung",
+      "type": "select",
+      "label": "Änderung · Change",
+      "values": [
+        {
+          "label": "Hinzufügen · Add",
+          "value": "hinzufuegen"
+        },
+        {
+          "label": "Entfernen · Remove",
+          "value": "entfernen"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      },
+      "defaultValue": "hinzufuegen"
+    },
+    {
+      "key": "konto",
+      "type": "textfield",
+      "label": "Konto oder Gruppe · Account or group",
+      "description": "AD-Konto oder AD-Gruppe als DOMAENE\\name oder name@domaene. · An AD account or AD group as DOMAIN\\name or name@domain.",
+      "validate": {
+        "required": true,
+        "pattern": "^([^\\s\\\\]+\\\\[^\\\\]+|[^@\\s]+@[^@\\s]+)$"
+      }
+    }
+  ]
+}

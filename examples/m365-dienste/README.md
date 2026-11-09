@@ -489,6 +489,28 @@ Laut Microsofts Dokumentation braucht ein Postfach für Litigation Hold eine Liz
 Online Plan 2 (in E3 und E5 enthalten) oder das Add-on Exchange Online Archiving, und eine
 Aufbewahrung wirkt erst bis zu 60 Minuten nach dem Setzen.
 
+## Die Teamwebsite auf SharePoint Server (On-Premises)
+
+Das Produkt **Teamwebsite** (`m365-spserver-site`, Unterordner `sharepoint-server/`) gibt es nur in der
+On-Premises-Variante, im Katalog `cat-m365-onprem`: Es steht nicht in `atlas.json` und `katalog.json`, sondern
+in `sharepoint-server/produkt.json`, und `build_onprem` in `install-m365-dienste.py` nimmt es dazu, wenn
+ein SharePoint Server gebaut ist.
+
+- **Bestellung:** Titel, URL (`/sites/<url>`, `M365Namensregel` mit `NAME_PREFIX`), Sprache, Kontingent,
+  Besitzer und Stellvertretung als AD-Konto. Genehmigt wird wie bei der Online-Teamwebsite.
+- **Aktionen:** Besitzer ändern (Personen), Mitglieder ändern (AD-Konten oder AD-Gruppen, Standardgruppen
+  Besitzer, Mitglieder, Besucher), Speicherkontingent setzen, Website löschen (Papierkorb),
+  Wiederherstellen, und die Rückgabe.
+- **Worker:** `ucc_sharepoint_onprem` (Typ `sharepointserver`), Endpoint ist die Webanwendung
+  `http://sp01.atlastest.internal`.
+- **Inventar:** Die Website trägt Position und Produkt in ihren Eigenschaften `atlas.*`; `list-sites` liest
+  sie. SharePoint Online und die Liste «Site-Inventar» braucht dieses Produkt nicht.
+- **Daten:** Datenobjekte `Katalogposition` und `SharePoint-Server-Site` mit Zuständen nach ADR-0058.
+
+**Nicht geprüft:** Das Produkt ist noch nie gegen eine Farm gelaufen; der Prozess und die Formulare sind nur
+kompiliert, und der Worker ist nur gegen eine nachgebaute Farm in PowerShell 7 getestet. Siehe den Abschnitt
+«SharePoint Server (Worker)» im Devenv-README.
+
 ## Die SharePoint-Teamwebsite
 
 Das Produkt `m365-sharepoint-site` bietet, was ein Self-Service-Portal für SharePoint mit den

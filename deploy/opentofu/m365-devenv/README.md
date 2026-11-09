@@ -716,6 +716,31 @@ Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, 
 -target=azurerm_dev_test_global_vm_shutdown_schedule.exchange
 -target=azurerm_network_interface_security_group_association.exchange`.
 
+
+## SharePoint Server (Worker)
+
+Baut die Variable `enable_sharepoint_server` eine Farm, startet `onprem/install-sharepoint-worker.sh`
+den Worker `ucc_sharepoint_onprem` (Typ `sharepointserver`, ADR-draft-sharepoint-server-worker) auf dem Server
+selbst, mit einem Token für 7 Tage wie beim Exchange-Worker. Das Skript liest
+`tofu output -json sharepoint_server`; das Passwort des Dienstkontos (`runbook_account`) kommt aus der
+Ausgabe `sharepoint_runbook_password` oder aus `SHAREPOINT_WORKER_PASSWORD`. Danach:
+
+```bash
+./onprem/install-sharepoint-worker.sh
+python3 scripts/install-m365-dienste.py --cafile out/caddy-root.crt
+```
+
+Das Installationsskript nimmt das Produkt «Teamwebsite» nur in den Katalog `cat-m365-onprem` auf, wenn
+`sharepoint_server.enabled` wahr ist (`--no-sharepoint-server` lässt es weg); ohne Exchange Server entsteht
+der Katalog dann nur mit diesem Produkt. In Atlas braucht der Worker kein Zugangsdatum, weil die Cmdlets als
+Dienstkonto laufen.
+
+**Nicht geprüft:** Weder `install-sharepoint-worker.sh` noch `sharepoint-worker.ps1` noch das Produkt sind
+an einer Farm gelaufen. Die Cmdlets stammen aus der Dokumentation von Microsoft, die nur Versionen bis 2019
+nennt. Nicht an einem Server bestätigt sind `CreateDefaultAssociatedGroups`, `EnsureUser` für AD-Gruppen und
+das Laden der Befehle (`Add-PSSnapin` oder `Import-Module SharePointServer`) unter Subscription Edition. Eine
+Ausgabe `sharepoint_runbook_password` gibt es im Zweig `feat/devenv-sharepoint-server` noch nicht.
+
 ## Lizenzen
 
 Lizenzen kann OpenTofu nicht kaufen. Mit `license_sku_ids` weist das Projekt freie
@@ -805,6 +830,8 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 | `scripts/wait-exchange.sh` | von Hand | verfolgt die Installation auf `exch01` über den Run Command (`WAIT_MINUTES`, Vorgabe 150) |
 | `onprem/install-worker.sh` | von Hand nach `wait-exchange.sh` | startet `ucc_exchange_onprem` auf `exch01` (Token 7 Tage) |
 | `onprem/exchange-worker.ps1` | `install-worker.sh` über den Run Command | lädt `atlas.exe`, schreibt `C:\Atlas\worker.json`, Starttask als Dienstkonto |
+| `onprem/install-sharepoint-worker.sh` | von Hand nach dem Bau der Farm | startet `ucc_sharepoint_onprem` auf dem SharePoint-Server (Token 7 Tage) |
+| `onprem/sharepoint-worker.ps1` | `install-sharepoint-worker.sh` über den Run Command | wie der Exchange-Worker, Typ `sharepointserver` |
 | `onprem/run-smoke.py` | von Hand | Rauchtest `exchange-onprem-smoke.bpmn` gegen `exch01` |
 | `scripts/shared-tenant-setup.ps1` | von Hand nach `tofu apply`, geteilter Tenant | Rechte in Exchange und SharePoint, Liste «Site-Inventar» (`-Part`) |
 | `scripts/install-m365-dienste.py` | von Hand | `examples/m365-dienste` und seine Exchange-Server-Variante einspielen |
