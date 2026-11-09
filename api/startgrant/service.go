@@ -62,6 +62,24 @@ const (
 	BlockConstantsMissing     = "constants-missing"
 )
 
+// AllBlockers is every blocker code, in the order a person reads them. The Console
+// says each one in words and its tests hold every code to the catalogue, so a code
+// added here without a message fails the build rather than showing as an id.
+var AllBlockers = []string{
+	BlockApplicationMissing, BlockApplicationProtected, BlockNotDeployed, BlockOtherApplication,
+	BlockNotExecutable, BlockInactive, BlockTriggerOnly, BlockConstantsMissing,
+}
+
+// Account issue codes the preview answers for an account that holds a grant but
+// would still not be offered the process.
+const (
+	IssueDisabled        = "disabled"
+	IssueMissingUserRole = "missing-user-role"
+)
+
+// AllAccountIssues is every account issue code, for the same reason as AllBlockers.
+var AllAccountIssues = []string{IssueDisabled, IssueMissingUserRole}
+
 // Target is what the server knows, now, about one application/process pair.
 type Target struct {
 	ApplicationFound     bool
@@ -751,10 +769,10 @@ func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if acct.Disabled {
-				res.AccountIssues = append(res.AccountIssues, "disabled")
+				res.AccountIssues = append(res.AccountIssues, IssueDisabled)
 			}
 			if !acct.SelfService {
-				res.AccountIssues = append(res.AccountIssues, "missing-user-role")
+				res.AccountIssues = append(res.AccountIssues, IssueMissingUserRole)
 			}
 			if granted {
 				if contains(c.Grant.UserIDs, subject) {
