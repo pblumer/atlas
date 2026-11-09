@@ -11,7 +11,8 @@ Entwicklungsumgebung für die Microsoft-Worker von atlas auf und entfernt sie mi
   bereits in der Console eingerichtet sind und von atlas selbst betrieben werden,
   Anmeldung der Testpersonen über Entra ID (OpenID Connect);
 - optional einen **Active-Directory-Domänencontroller** im selben Netz und dazu einen
-  **Exchange Server SE** für das On-Premises-Backend des Exchange-Workers.
+  **Exchange Server SE** für das On-Premises-Backend des Exchange-Workers und eine
+  **SharePoint-Server-SE-Farm** mit SQL Server Developer auf einer VM.
 
 Danach spielen zwei Skripte die Beispiele `examples/m365-dienste` und
 `examples/lizenzmanagement` passend zum Tenant ein (siehe «Beispiele einspielen»).
@@ -716,6 +717,89 @@ Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, 
 -target=azurerm_dev_test_global_vm_shutdown_schedule.exchange
 -target=azurerm_network_interface_security_group_association.exchange`.
 
+
+## SharePoint Server (Worker)
+
+Baut die Variable `enable_sharepoint_server` eine Farm, startet `onprem/install-sharepoint-worker.sh`
+den Worker `ucc_sharepoint_onprem` (Typ `sharepointserver`, ADR-0540) auf dem Server
+selbst, mit einem Token für 7 Tage wie beim Exchange-Worker. Das Skript liest
+`tofu output -json sharepoint_server`; das Passwort des Dienstkontos (`runbook_account`) kommt aus der
+Ausgabe `sharepoint_runbook_password` oder aus `SHAREPOINT_WORKER_PASSWORD`. Danach:
+
+```bash
+./onprem/install-sharepoint-worker.sh
+python3 scripts/install-m365-dienste.py --cafile out/caddy-root.crt
+```
+
+Das Installationsskript nimmt das Produkt «Teamwebsite» nur in den Katalog `cat-m365-onprem` auf, wenn
+`sharepoint_server.enabled` wahr ist (`--no-sharepoint-server` lässt es weg); ohne Exchange Server entsteht
+der Katalog dann nur mit diesem Produkt. In Atlas braucht der Worker kein Zugangsdatum, weil die Cmdlets als
+Dienstkonto laufen.
+
+**Nicht geprüft:** Weder `install-sharepoint-worker.sh` noch `sharepoint-worker.ps1` noch das Produkt sind
+an einer Farm gelaufen. Die Cmdlets stammen aus der Dokumentation von Microsoft, die nur Versionen bis 2019
+nennt. Nicht an einem Server bestätigt sind `CreateDefaultAssociatedGroups`, `EnsureUser` für AD-Gruppen und
+das Laden der Befehle (`Add-PSSnapin` oder `Import-Module SharePointServer`) unter Subscription Edition. Eine
+Ausgabe `sharepoint_runbook_password` gibt es im Zweig `feat/devenv-sharepoint-server` noch nicht.
+## SharePoint Server (optional)
+
+Mit `enable_sharepoint_server = true` (braucht `enable_ad_dc`) entsteht eine SharePoint Server
+Subscription Edition als Einzelserver-Farm:
+
+- VM `<umgebung>-sp` (`sharepoint_server_vm_size`, Vorgabe `Standard_D4s_v5` mit 4 Kernen und
+  16 GB, dem Minimum von Microsoft für diese Rolle; 256-GB-Platte), Azure-Image
+  `MicrosoftSharePoint:MicrosoftSharePointServer:spse`, Name `sp01.<ad_domain_name>`, interne
+  Adresse `10.42.0.12`, DNS über den Domänencontroller. Von aussen erreichbar ist sie nicht,
+  ausser mit `ad_allow_rdp` per RDP für `ad_allowed_cidrs`; die öffentliche Adresse dient den
+  Downloads.
+- `scripts/sharepoint-setup.ps1` installiert unbeaufsichtigt in vier Phasen mit Neustarts:
+  Domänenbeitritt; Prüfung des Images und AD-PowerShell; die Konten `svc-sp-farm-<zufall>`,
+  `svc-sp-app-<zufall>` und `svc-sp-run-<zufall>` in `OU=AtlasTest` und SQL Server 2022
+  Developer vom Download bei Microsoft; zuletzt die Farm (`New-SPConfigurationDatabase`,
+  Rolle `SingleServerFarm`), die Zentraladministration auf Port 9999, die Webanwendung
+  `http://sp01.<ad_domain_name>` mit einer Websitesammlung an der Wurzel und die Rechte des
+  Runbook-Kontos (lokaler Administrator, `Add-SPShellAdmin`, zweiter Besitzer der
+  Websitesammlung). Die Passwörter erzeugt OpenTofu (`random_password.sharepoint`); sie stehen
+  in keinem Protokoll.
+- `scripts/wait-sharepoint.sh` verfolgt die Installation über den Run Command von Azure (kein
+  eingehender Port nötig, `WAIT_MINUTES`, Vorgabe 240) und zeigt bei einem Fehler das Ende des
+  Protokolls (`C:\AtlasSetup\sharepoint-phase<N>.log`).
+- `tofu output sharepoint_server` nennt VM, Webanwendung und Runbook-Konto, aber kein Passwort.
+
+**180 Tage ohne Produktschlüssel.** SharePoint läuft als Testversion und braucht keinen
+Produktschlüssel; nach 180 Tagen ist die Farm abgelaufen. Dann die VM neu aufbauen oder einen
+Schlüssel eintragen. SQL Server Developer ist nur für Entwicklung und Tests lizenziert.
+
+**Automatische Abschaltung.** Die VM stoppt täglich zur Zeit von `ad_auto_shutdown_time` in UTC,
+zusammen mit dem Domänencontroller, ohne den sie nicht arbeitet. Die Variable darf deshalb nicht
+leer sein, sonst lehnt der Plan die VM ab. Trifft die Abschaltung eine laufende Installation,
+setzt die Phase beim nächsten Start neu an; dazu auch den Domänencontroller starten.
+
+**Nur gezielt anwenden.** Diese Umgebung darf für den SharePoint Server ausschliesslich mit
+`-target` auf genau diese Ressourcen angewendet werden. Ein Apply ohne `-target` kann die
+bestehenden VMs `atlas`, `dc` und `exch` verändern:
+
+```bash
+tofu apply \
+  -target=terraform_data.sharepoint_guard \
+  -target=random_password.sharepoint \
+  -target=azurerm_network_security_group.sharepoint \
+  -target=azurerm_public_ip.sharepoint \
+  -target=azurerm_network_interface.sharepoint \
+  -target=azurerm_network_interface_security_group_association.sharepoint \
+  -target=azurerm_windows_virtual_machine.sharepoint \
+  -target=azurerm_virtual_machine_extension.sharepoint_setup \
+  -target=azurerm_dev_test_global_vm_shutdown_schedule.sharepoint
+```
+
+Der Plan dazu zeigt auch die Abhängigkeiten (Ressourcengruppe, Subnetz, Domänencontroller); bei
+diesen darf keine Änderung stehen. Eine spätere Änderung am Setup-Skript ersetzt die VM nicht und
+startet die Erweiterung nicht erneut.
+
+Das Image verlangt nach allem, was öffentlich dazu zu finden ist, keinen Marketplace-Plan. Vor
+dem ersten Apply lässt sich das prüfen; `null` heisst, dass kein Plan nötig ist:
+`az vm image show --urn MicrosoftSharePoint:MicrosoftSharePointServer:spse:1.0.0 --query plan`.
+
 ## Lizenzen
 
 Lizenzen kann OpenTofu nicht kaufen. Mit `license_sku_ids` weist das Projekt freie
@@ -759,6 +843,9 @@ Massgebend ist der [Azure-Preisrechner](https://azure.microsoft.com/pricing/calc
 
 Der optionale Exchange Server (`Standard_D4s_v5`, Windows, 256-GB-Platte) ist nicht
 geschätzt; er hat doppelt so viele Kerne und doppelt so viel Speicher wie der Domänencontroller.
+Dasselbe gilt für den optionalen SharePoint Server (gleiche Grösse und Platte): Die VM kostet nur
+im laufenden Zustand, Platte und öffentliche IP-Adresse auch abgeschaltet; dazu kommt keine
+Lizenz für SharePoint (180-Tage-Testversion) oder SQL Server Developer.
 
 **Microsoft-365-Lizenzen** sind nicht eingerechnet. Ein Tenant aus dem Developer Program
 oder ein Testabonnement kostet nichts; gekaufte Lizenzen (z. B. Microsoft 365 E3/E5 je
@@ -800,11 +887,15 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 | `scripts/assign-licenses.sh` | OpenTofu (`license_sku_ids`) | Lizenzen der Testpersonen über `az rest` |
 | `scripts/ad-setup.ps1` | Custom Script Extension des Domänencontrollers | AD DS, `OU=AtlasService` mit Bind-Konto, `OU=AtlasTest` mit Testpersonen und Testgruppe, LDAPS-Zertifikat |
 | `scripts/exchange-setup.ps1` | Custom Script Extension von `exch01` | Exchange Server SE in vier Phasen, Dienstkonto, Postfächer der Testpersonen |
+| `scripts/sharepoint-setup.ps1` | Custom Script Extension von `sp01` | Domänenbeitritt, Konten in `OU=AtlasTest`, SQL Server Developer, SharePoint-Farm mit Webanwendung und Websitesammlung |
+| `scripts/wait-sharepoint.sh` | von Hand | verfolgt die Installation auf `sp01` über den Run Command (`WAIT_MINUTES`, Vorgabe 240) |
 | `scripts/wait-atlas.sh` | von Hand nach `tofu apply` | wartet auf `/healthz` und `/var/lib/atlas-setup.done` (`WAIT_MINUTES`, Vorgabe 30); Exit 1 mit Protokollauszug bei Zeitüberschreitung |
 | `scripts/wait-ad.sh` | von Hand | wartet auf LDAPS mit dem Zertifikat aus `out/` und, mit `ldapwhoami`, auf die Anmeldung des Bind-Kontos (Passwort über eine Datei) |
 | `scripts/wait-exchange.sh` | von Hand | verfolgt die Installation auf `exch01` über den Run Command (`WAIT_MINUTES`, Vorgabe 150) |
 | `onprem/install-worker.sh` | von Hand nach `wait-exchange.sh` | startet `ucc_exchange_onprem` auf `exch01` (Token 7 Tage) |
 | `onprem/exchange-worker.ps1` | `install-worker.sh` über den Run Command | lädt `atlas.exe`, schreibt `C:\Atlas\worker.json`, Starttask als Dienstkonto |
+| `onprem/install-sharepoint-worker.sh` | von Hand nach dem Bau der Farm | startet `ucc_sharepoint_onprem` auf dem SharePoint-Server (Token 7 Tage) |
+| `onprem/sharepoint-worker.ps1` | `install-sharepoint-worker.sh` über den Run Command | wie der Exchange-Worker, Typ `sharepointserver` |
 | `onprem/run-smoke.py` | von Hand | Rauchtest `exchange-onprem-smoke.bpmn` gegen `exch01` |
 | `scripts/shared-tenant-setup.ps1` | von Hand nach `tofu apply`, geteilter Tenant | Rechte in Exchange und SharePoint, Liste «Site-Inventar» (`-Part`) |
 | `scripts/install-m365-dienste.py` | von Hand | `examples/m365-dienste` und seine Exchange-Server-Variante einspielen |
@@ -902,6 +993,8 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
   einem echten Tenant». Ein zweiter Durchlauf von Grund auf mit diesen Korrekturen steht aus.
 - **Exchange Server (on-premises)** ist optional (`enable_exchange_onprem`, Abschnitt
   «Exchange Server (optional)») und einmal am 2026-11-03 installiert und mit dem Rauchtest geprüft.
+- **SharePoint Server** ist optional und noch nie gegen Azure gelaufen: Die OpenTofu-Logik ist
+  nur mit gemockten Providern geprüft, `sharepoint-setup.ps1` nur auf seine Syntax.
 - **Teams Phone:** Rufnummern, Calling Plans und Direct Routing richtet das Projekt nicht
   ein. Ob `Connect-MicrosoftTeams` über `User.ReadWrite.All` hinaus Graph-Berechtigungen
   verlangt, ist nicht geprüft (`teamsphone_graph_permissions`).

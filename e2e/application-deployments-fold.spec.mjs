@@ -59,7 +59,7 @@ test("each list of the Deployments tab folds away, and stays folded", async ({ p
   }
   // A folded section still says what it holds.
   const heads = page.locator("#pd-deployments .sec-head");
-  await expect(heads.nth(0)).toContainText("2 Definitionen");
+  await expect(heads.nth(0)).toContainText("1 Prozess");
   await expect(heads.nth(1)).toContainText("1 Ziel");
   await expect(heads.nth(2)).toContainText("3 Releases");
 

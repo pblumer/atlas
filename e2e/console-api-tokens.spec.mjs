@@ -411,7 +411,7 @@ test("the dashboard says nothing when no token is about to expire", async ({ pag
 
 test("a non-administrator's dashboard does not ask for the tokens at all", async ({ page }) => {
   await boot(page, { me: MODELLER, tokens: [...LISTED, SOON] });
-  await expect(page.locator("#view h1").first()).toContainText("Welcome");
+  await expect(page.locator("#view h1").first()).toContainText("Willkommen");
   expect(await page.evaluate(() => window.__listReads || 0)).toBe(0);
   await expect(page.locator("#api-tokens-expiring")).toHaveCount(0);
 });

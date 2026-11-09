@@ -33,6 +33,26 @@ function tarGz(files) {
   blocks.push(Buffer.alloc(1024));
   return zlib.gzipSync(Buffer.concat(blocks));
 }
+// The server's own sketch of the package and the models it carries
+// (ADR-0539). The sketch is plain SVG; a model whose
+// name is markup must arrive as text.
+const sketchSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80"><title>Architecture sketch — Purchase 1.0.0 (atlas hub)</title><rect width="200" height="80" fill="#b5ffff"/></svg>';
+const purchaseBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" id="d" targetNamespace="x">
+  <bpmn:process id="purchase" isExecutable="true">
+    <bpmn:startEvent id="Start"/><bpmn:userTask id="Approve" name="Approve purchase"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Approve"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="dia"><bpmndi:BPMNPlane id="plane" bpmnElement="purchase">
+    <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="100" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Approve_di" bpmnElement="Approve"><dc:Bounds x="200" y="78" width="100" height="80"/></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+const diagrams = { blueprintId: release.blueprintId, version: release.version, digest, processes: [
+  { processId: "purchase", name: '<img src=x onerror="alert(1)">', path: "processes/purchase.bpmn", xml: purchaseBPMN },
+] };
+
 const pkg = tarGz([["atlas.json", JSON.stringify({
   formatVersion: 1, key: "purchase", name: "Purchase", processes: [], forms: [], decisions: [],
 })]]);
@@ -50,12 +70,13 @@ const healthyWay = (indexBody, extra = {}) => [
     releases: indexBody.releases.length, compatible: indexBody.releases.length, ...extra },
 ];
 
-async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview, indexBody = index, way = null } = {}) {
+async function stubRegistry(page, { status = 200, downloadStatus = 200, downloadBody = null, previewBody = preview, previewFailure = null, indexBody = index, way = null, sketchStatus = 200 } = {}) {
   const requests = [];
   await page.route("**/api/v1/blueprints**", async (route) => {
     const request = route.request();
-    const path = new URL(request.url()).pathname;
-    requests.push({ path, ifMatch: request.headers()["if-match"] });
+    const url = new URL(request.url());
+    const path = url.pathname;
+    requests.push({ path, ifMatch: request.headers()["if-match"], digest: url.searchParams.get("digest"), layers: url.searchParams.get("layers") });
     if (path === "/api/v1/blueprints/connection") {
       await route.fulfill(status === 200
         ? { status: 200, contentType: "application/x-ndjson", body: (way || healthyWay(indexBody)).map((l) => JSON.stringify(l)).join("\n") + "\n" }
@@ -64,11 +85,19 @@ async function stubRegistry(page, { status = 200, downloadStatus = 200, previewB
       await route.fulfill({ status, contentType: "application/json",
         body: JSON.stringify(status === 200 ? indexBody : { error: "Registry not configured" }) });
     } else if (path.endsWith("/preview")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(previewBody) });
+      await route.fulfill(previewFailure
+        ? { status: 502, contentType: "application/json", body: JSON.stringify(previewFailure) }
+        : { status: 200, contentType: "application/json", body: JSON.stringify(previewBody) });
+    } else if (path.endsWith("/architecture.svg")) {
+      await route.fulfill(sketchStatus === 200
+        ? { status: 200, contentType: "image/svg+xml", body: sketchSVG }
+        : { status: sketchStatus, contentType: "application/json", body: JSON.stringify({ error: "Digest changed since preview" }) });
+    } else if (path.endsWith("/diagrams")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(diagrams) });
     } else if (path.endsWith("/package")) {
       await route.fulfill(downloadStatus === 200
         ? { status: 200, contentType: "application/gzip", body: pkg }
-        : { status: downloadStatus, contentType: "application/json", body: JSON.stringify({ error: "Digest changed" }) });
+        : { status: downloadStatus, contentType: "application/json", body: JSON.stringify(downloadBody || { error: "Digest changed" }) });
     } else {
       await route.fulfill({ status: 404, body: "not found" });
     }
@@ -115,7 +144,7 @@ test("untrusted catalogue and offered product names cannot inject markup", async
   await page.evaluate(() => window.__open());
   await page.locator('[data-preview="0"]').click();
   await expect(page.locator(".modal-ov")).toContainText(hostile);
-  await expect(page.locator(".modal-ov img")).toHaveCount(0);
+  await expect(page.locator(".modal-ov img:not([data-sketch-img])")).toHaveCount(0);
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
 });
 
@@ -279,4 +308,83 @@ test("the station being waited on counts up while the others wait", async ({ pag
   await expect(connect).toContainText("Zeitlimit 5 s je Adresse");
   await expect(connect.locator("[data-wait]")).not.toHaveText("wartet … 0 ms", { timeout: 3000 });
   await expect(page.locator('#route [data-stage="tls"]')).toHaveAttribute("data-state", "pending");
+});
+
+test("the preview shows the server's sketch of the previewed package and draws its models read-only", async ({ page }) => {
+  const requests = await stubRegistry(page);
+  await page.evaluate(() => window.__open());
+  await page.locator('[data-preview="0"]').click();
+  const sketch = page.locator("[data-sketch-img]");
+  await expect(sketch).toBeVisible();
+  await expect.poll(() => sketch.evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+  const read = requests.filter((r) => r.path.endsWith("/architecture.svg"));
+  expect(read).toHaveLength(1);
+  expect(read[0].digest).toBe(digest);
+  expect(read[0].layers).toBe("application,business,data");
+  expect(requests.filter((r) => r.path.endsWith("/diagrams"))).toHaveLength(0);
+
+  await page.locator("[data-show-diagrams]").click();
+  await expect(page.locator("[data-diagram] .djs-container")).toBeVisible();
+  await expect(page.locator("[data-diagram]")).toContainText("Approve purchase");
+  await expect(page.locator('[data-diagram-pick="0"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-diagram-pick="0"]')).toContainText("<img src=x");
+  await expect(page.locator('.modal-ov img[src="x"]')).toHaveCount(0);
+  const models = requests.filter((r) => r.path.endsWith("/diagrams"));
+  expect(models).toHaveLength(1);
+  expect(models[0].digest).toBe(digest);
+  expect(requests.filter((r) => r.path.endsWith("/package"))).toHaveLength(0);
+  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+});
+
+test("a sketch the server refuses is said in place and leaves the preview usable", async ({ page }) => {
+  await stubRegistry(page, { sketchStatus: 412 });
+  await page.evaluate(() => window.__open());
+  await page.locator('[data-preview="0"]').click();
+  await expect(page.locator("[data-sketch-failed]")).toContainText("Digest changed since preview");
+  await expect(page.locator("[data-sketch-img]")).toHaveCount(0);
+  await expect(page.locator("[data-install]")).toBeEnabled();
+});
+
+test("a preview the registry could not serve says where the way ended and why, and checks it again", async ({ page }) => {
+  const requests = await stubRegistry(page, { previewFailure: {
+    error: "trusted Blueprint registry is unavailable or invalid (stopped at tls: unknown_authority)",
+    registryHost: "registry.example.org",
+    station: { stage: "tls", ok: false, ms: 40, cause: "unknown_authority", issuer: "Fortinet CA <script>",
+      error: "tls: failed to verify certificate: x509: certificate signed by unknown authority" },
+  } });
+  await page.evaluate(() => window.__open());
+  await page.locator('[data-preview="0"]').click();
+  const ov = page.locator(".modal-ov");
+  await expect(ov.locator("[data-stopped]")).toHaveText(
+    "Blueprint konnte nicht geladen werden. Der Weg zum atlas hub endete bei «TLS-Handshake»: Zertifikat nicht vertrauenswürdig.");
+  // The server's English sentence is not what a person reads.
+  await expect(ov).not.toContainText("unavailable or invalid");
+  const finding = ov.locator(".hub-finding");
+  await expect(finding).toHaveAttribute("data-cause", "unknown_authority");
+  await expect(finding).toContainText("«Fortinet CA <script>»");
+  await expect(finding).toContainText("registry.example.org von der Inspektion ausgenommen");
+  await expect(finding).toContainText("HTTPS_PROXY wird nicht verwendet");
+  await expect(finding).toContainText("certificate signed by unknown authority");
+  await expect(ov.locator("script")).toHaveCount(0);
+  // Checking again draws the whole way from the start.
+  await ov.locator("[data-retry]").click();
+  await expect(ov.locator(".hub-connected summary")).toContainText("Verbunden mit registry.example.org");
+  expect(requests.filter((r) => r.path === "/api/v1/blueprints/connection")).toHaveLength(2);
+  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+});
+
+test("a package that differs from the signed index is named as such, not as a network fault", async ({ page }) => {
+  await stubRegistry(page, { downloadStatus: 502, downloadBody: {
+    error: "Blueprint package download or signature/digest verification failed (stopped at package: package_mismatch)",
+    registryHost: "registry.example.org",
+    station: { stage: "package", ok: false, ms: 12, cause: "package_mismatch" },
+  } });
+  await page.evaluate(() => window.__open());
+  await page.locator('[data-preview="0"]').click();
+  await expect(page.locator("[data-install]")).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("[data-install]").click();
+  await expect(page.locator("#result")).toHaveText(
+    "err: Import fehlgeschlagen: Der Weg zum atlas hub endete bei «Paket herunterladen und prüfen»: Paket weicht vom signierten Index ab.");
+  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
 });

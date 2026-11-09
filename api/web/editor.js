@@ -14,6 +14,7 @@ import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
+import { sharepointServerOperationOptions, sharepointServerParametersPlaceholder, sharepointServerParametersHint, sharepointServerResultType, sharepointServerResultShape } from "./sharepointserver-ops.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
@@ -49,7 +50,7 @@ import { attachShownVersion } from "./shown-version.js";
 // The document behind the diagram as text, corrected in place and applied back onto the
 // canvas — the bar menu's "XML source", shared with the decision editor.
 import { openXmlSource, closeXmlSource } from "./xml-source.js";
-import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderTraceTable, placeTracePop, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
@@ -4401,6 +4402,34 @@ const SERVICE_TASK_KINDS = [
         hint: (v) => "Nimmt auf, was Graph zurückgibt. " + entraResultShape(v.operation) +
           " Der Wert ist zur Laufzeit unter Operations → Instanz → Variablen sichtbar und im Modell als =" +
           (v.resultVariable ? v.resultVariable : "konto") + ".<feld> referenzierbar. Leer lassen, um ihn zu verwerfen.",
+      },
+    ],
+  },
+  {
+    id: "sharepointserver", name: "SharePoint Server", group: "Applications", desc: "Administer site collections on SharePoint Server (Subscription Edition, on-premises): create a team site, read and list sites, set owners, change site administrators and the default groups, delete to the recycle bin, restore, and set the storage quota. The worker runs on a server of the farm.",
+    // A building block on SharePoint teal: the on-premises farm, beside the online Worker.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><path d="M3.5 4h9v2h-9zM3.5 7h4v5h-4zM8.5 7h4v5h-4z" fill="#fff"/></svg>`,
+    ext: "atlas:SharepointServerConnector",
+    fields: [
+      { group: "Farm" },
+      {
+        key: "connector", label: "Worker", datalist: "sharepointserver", placeholder: "sp_farm",
+        hint: "The configured SharePoint Server Worker, by its name under Workers in the Console. Its endpoint is the web application and its worker runs on a server of the farm, as an account that may administer it; there is no credential in the Worker or the model.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: sharepointServerOperationOptions(),
+      },
+      {
+        key: "parameters", label: "Parameters", type: "json", rows: 8,
+        placeholder: (v) => sharepointServerParametersPlaceholder(v.operation || "get-site"),
+        hint: (v) => sharepointServerParametersHint(v.operation || "get-site"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", resultType: (v) => sharepointServerResultType(v.operation || "get-site"), placeholder: "site",
+        hint: (v) => sharepointServerResultShape(v.operation || "get-site"),
       },
     ],
   },
@@ -12786,7 +12815,7 @@ function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
 // definition is shown, and an instance picker either aggregates every instance's
 // tokens on the diagram or isolates a single one. The selected instance's
 // variables are listed below the diagram.
-export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
+export async function mountLive(root, { api, apiRaw, toast, key, instance, mayUse = () => true }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -12874,6 +12903,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           <span class="live-process-version">${esc(versionLabel)}</span>
         </div>
         ${layoutNote}${frozenNote}
+        <span class="live-active" id="live-active"></span>
         <span class="muted live-other-versions" id="other-versions" hidden></span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
@@ -12907,6 +12937,40 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       </div>
       ${valueWindowHTML()}
     </div>`;
+
+  // Pausing automatic starts (ADR-0119) is an operator's intervention on a running
+  // process, so it is offered where the operator watches it, beside the Modeler's
+  // Deployments tab (ADR-0541). Only the newest
+  // version starts anything by itself, so only it gets the switch; an older version
+  // that was paused still says so.
+  {
+    const host = root.querySelector("#live-active");
+    let active = currentVersion ? currentVersion.active !== false : true;
+    const newest = versions.length > 0 && versions[0].key === key;
+    const canPause = newest && mayUse("operator");
+    const draw = () => {
+      const pill = active ? ""
+        : `<span class="pill warn" title="${esc(tr("home.inactiveTitle"))}">${esc(tr("deployments.paused"))}</span>`;
+      const btn = canPause
+        ? ` <button type="button" class="btn ghost sm" id="live-pause" title="${esc(tr(active ? "home.deactivateTitle" : "home.activateTitle"))}">${esc(tr(active ? "home.deactivate" : "home.activate"))}</button>`
+        : "";
+      host.innerHTML = pill + btn;
+    };
+    draw();
+    host.addEventListener("click", async (e) => {
+      const btn = e.target.closest("#live-pause");
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        await api("PUT", `/api/v1/processes/${key}/active`, { active: !active });
+        active = !active;
+        toast(tr(active ? "home.process.activated" : "home.process.deactivated"), "ok");
+      } catch (err) {
+        toast(tr("home.process.toggleFailed", { error: err.message }), "err");
+      }
+      draw();
+    });
+  }
 
   // Switching version loads a different deployed definition, so re-route to its
   // live view (a full remount — the diagram itself changes).
@@ -14406,10 +14470,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
       tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     decPop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - decPop.offsetHeight - 10;
-    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
-    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(decPop, row.getBoundingClientRect());
   };
   const hideDecPop = () => { decPop.hidden = true; };
   varPanel.addEventListener("pointerover", (e) => {
@@ -14940,6 +15001,29 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // of "what is inside this box" without leaving the task. `onInstance` is called with
 // the instance now on screen whenever that changes, so what the Tasks pane shows
 // beside the diagram (its variables) follows it.
+// mountDiagramPreview draws one BPMN model read-only into container: an atlas hub
+// package's model, before anything of it is installed
+// (ADR-0539). The container is expected to carry the
+// tp-canvas class, which hides the palette, the context pad and the inline editor, so
+// the model reads as a diagram; nothing drawn here is saved anywhere. The XML is the
+// package's own text, parsed by bpmn-js into shapes whose labels are text, never
+// markup. Answers a handle whose destroy() releases the canvas.
+export async function mountDiagramPreview(container, xml) {
+  const lib = await loadBpmn();
+  container.innerHTML = "";
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  try {
+    await viewer.importXML(String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    try { viewer.destroy(); } catch { /* already gone */ }
+    throw e;
+  }
+  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+  try { drawDataStateLabels(viewer); } catch { /* best-effort [state] captions */ }
+  return { destroy() { try { viewer.destroy(); } catch { /* already gone */ } } };
+}
+
 export async function mountTaskProcess(container, { api, instanceKey, activeElementId, onInstance }) {
   let viewer = null;
   let destroyed = false;
@@ -17718,10 +17802,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
       tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     decPop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - decPop.offsetHeight - 10;
-    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
-    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(decPop, row.getBoundingClientRect());
   };
   const hideDecPop = () => { decPop.hidden = true; };
   decEl.addEventListener("pointerover", (e) => {

@@ -93,13 +93,60 @@ func WithBlueprintRegistry(source *blueprintregistry.PublicClient) Option {
 	return func(s *Server) { s.blueprints = source }
 }
 
-// logRegistryUnavailable tells the operator why the registry could not answer.
-// The caller's response stays generic on purpose: it names neither the network
-// nor the registry's answer to whoever asked. Without this line nobody could tell
-// a firewall from a proxy, a TLS interception or a wrong pinned key.
+// logRegistryUnavailable tells the operator why the registry could not answer,
+// with the error text a caller who is not an administrator is never sent. Without
+// this line nobody could tell a firewall from a proxy, a TLS interception or a
+// wrong pinned key in the log.
 func logRegistryUnavailable(err error) {
 	logging.Warn(logging.HubRegistryUnavailable, "atlas hub registry could not be read", slog.String("error", err.Error()))
 }
+
+// registryFailure is the answer a caller gets when the registry could not serve
+// its request: 502, and where the way ended — the station and its cause, in the
+// message an agent reads and as the station the Console explains, with the facts
+// that station established and the registry's host name. That is what the
+// connection route shows anybody who may list the hub; the error text, which can
+// name this network's resolver or addresses, is an administrator's only (ADR-0499
+// amendments e and f). An error that names no station keeps the plain message.
+func (s *Server) registryFailure(w http.ResponseWriter, r *http.Request, msg string, err error) {
+	logRegistryUnavailable(err)
+	step, ok := blueprintregistry.Stopped(err)
+	if !ok {
+		httpapi.Error(w, http.StatusBadGateway, msg)
+		return
+	}
+	station := registryStation{Step: step}
+	if step.Err != nil && s.isAdmin(r) {
+		station.Error = step.Err.Error()
+	}
+	body := registryFailureBody{
+		Error:   msg + " (stopped at " + step.Stage + ": " + step.Cause + ")",
+		Station: station,
+	}
+	if traced, ok := s.blueprints.(tracedBlueprintSource); ok {
+		body.RegistryHost = traced.Host()
+	}
+	httpapi.JSON(w, http.StatusBadGateway, body)
+}
+
+// registryFailureBody keeps the error envelope: "error" at the top, the station it
+// stopped at beside it.
+type registryFailureBody struct {
+	Error        string          `json:"error"`
+	Station      registryStation `json:"station"`
+	RegistryHost string          `json:"registryHost,omitempty"`
+}
+
+// registryStation is a stopped station as the connection route sends it, without
+// its type: the Step's own fields, and the error text for an administrator.
+type registryStation struct {
+	blueprintregistry.Step
+	Error string `json:"error,omitempty"`
+}
+
+// registryUnavailable is the sentence a failed index load answers with, before
+// the station it stopped at.
+const registryUnavailable = "trusted Blueprint registry is unavailable or invalid"
 
 func (s *Server) requireBlueprints(w http.ResponseWriter) bool {
 	w.Header().Set("Cache-Control", "no-store")
@@ -116,8 +163,7 @@ func (s *Server) handleListBlueprints(w http.ResponseWriter, r *http.Request) {
 	}
 	index, err := s.blueprints.LoadIndex(r.Context())
 	if err != nil {
-		logRegistryUnavailable(err)
-		httpapi.Error(w, http.StatusBadGateway, "trusted Blueprint registry is unavailable or invalid")
+		s.registryFailure(w, r, registryUnavailable, err)
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, index)
@@ -136,8 +182,7 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	}
 	index, err := s.blueprints.LoadIndex(r.Context())
 	if err != nil {
-		logRegistryUnavailable(err)
-		httpapi.Error(w, http.StatusBadGateway, "trusted Blueprint registry is unavailable or invalid")
+		s.registryFailure(w, r, registryUnavailable, err)
 		return blueprintregistry.Release{}, nil, false
 	}
 	found := false
@@ -159,8 +204,7 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	// revoked release is never silently replaced by an untrusted package.
 	release, bytes, err := s.blueprints.Fetch(r.Context(), id, version)
 	if err != nil {
-		logRegistryUnavailable(err)
-		httpapi.Error(w, http.StatusBadGateway, "Blueprint package download or signature/digest verification failed")
+		s.registryFailure(w, r, "Blueprint package download or signature/digest verification failed", err)
 		return blueprintregistry.Release{}, nil, false
 	}
 	if !blueprintregistry.Compatible(release.Atlas, Version) {

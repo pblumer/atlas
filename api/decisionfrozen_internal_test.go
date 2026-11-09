@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 )
 
@@ -140,5 +141,52 @@ func TestAVersionListingTellsAFrozenHolderFromAChosenOne(t *testing.T) {
 	}
 	if bindings[frozen] != pinBindingLatest || bindings[fixed] != pinBindingVersion || len(bindings) != 2 {
 		t.Fatalf("pinnedBy = %+v, want %d as %q and %d as %q", rows[0].PinnedBy, frozen, pinBindingLatest, fixed, pinBindingVersion)
+	}
+}
+
+// TestAnApplicationsDeploymentsMarkAFrozenDefinition: the Deployments tab of an
+// application is where its owner pauses, deletes and redeploys a process now that the
+// Modeler home no longer lists deployed processes (ADR-0541),
+// so the mark that says a definition evaluates a frozen decision rides that view too —
+// on the frozen definition and on no other.
+func TestAnApplicationsDeploymentsMarkAFrozenDefinition(t *testing.T) {
+	dir := t.TempDir()
+	first := bootDecisionStack(t, dir)
+	appID, v1 := publishDecisionApp(t, first.x, "Order Management", "eligibility", eligibilityDMN("approve"))
+	v1Key := v1.Decisions[0].Key
+
+	frozen := deployProcess(t, first.x, eligibilityProcess("frozen", "latest"))
+	following := deployProcess(t, first.x, eligibilityProcess("following", "latest"))
+	for _, key := range []uint64{frozen, following} {
+		if code, b := first.x.do(http.MethodPatch, "/api/v1/processes/"+strconv.FormatUint(key, 10),
+			`{"projectId":"`+appID+`"}`); code != http.StatusOK {
+			t.Fatalf("file %d under the application: %d %s", key, code, b)
+		}
+	}
+	first.shutdown()
+
+	freezeDeployment(t, dir, frozen, "eligibility", v1Key)
+
+	second := bootDecisionStack(t, dir)
+	defer second.shutdown()
+
+	code, b := second.x.do(http.MethodGet, "/api/v1/applications/"+appID+"/deployments", "")
+	if code != http.StatusOK {
+		t.Fatalf("application deployments: %d %s", code, b)
+	}
+	var view applicationDeploymentsResp
+	if err := json.Unmarshal(b, &view); err != nil {
+		t.Fatalf("decode deployments: %v (%s)", err, b)
+	}
+	byKey := map[uint64]applicationDefinition{}
+	for _, d := range view.Definitions {
+		byKey[d.Key] = d
+	}
+	want := frozenDecisionResp{DecisionID: "eligibility", Key: v1Key, Version: 1, LatestKey: v1Key, LatestVersion: 1}
+	if got := byKey[frozen].FrozenDecisions; len(got) != 1 || got[0] != want {
+		t.Fatalf("frozen definition in its application's deployments: frozenDecisions = %+v, want [%+v]", got, want)
+	}
+	if d, ok := byKey[following]; !ok || len(d.FrozenDecisions) != 0 {
+		t.Fatalf("following definition in its application's deployments: listed %v, frozenDecisions = %+v, want listed and none", ok, d.FrozenDecisions)
 	}
 }

@@ -547,6 +547,16 @@ const WikiwikibangbangJobType = "io.atlas.wikiwikibangbang"
 // so it is always 38.
 const WikiwikibangbangJobTypeIndex int32 = 38
 
+// SharePointServerJobType is the reserved job type a SharePoint Server task carries
+// (ADR-0540). Nothing in the engine subscribes to it: the
+// cmdlets exist only on a server of the farm, so the job waits for a worker there.
+const SharePointServerJobType = "io.atlas.sharepointserver"
+
+// SharePointServerJobTypeIndex is the interned index SharePointServerJobType is
+// guaranteed to occupy in every compiled process: NewBuilder reserves it fortieth, so
+// it is always 39.
+const SharePointServerJobTypeIndex int32 = 39
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -596,6 +606,8 @@ var reservedJobTypes = []string{
 	CardDAVJobType,        // 37
 
 	WikiwikibangbangJobType, // 38
+
+	SharePointServerJobType, // 39
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1869,6 +1881,38 @@ func (b *Builder) AddExchangeConnectorTask(cfg ExchangeConfig) int32 {
 		ExchangeParameters:    cfg.Parameters,
 		ExchangeParametersVar: b.intern(cfg.ParametersVar),
 		ExchangeMaxResults:    cfg.MaxResults,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// SharePointServerConfig is the deploy-time configuration of a SharePoint Server task
+// (ADR-0540). Op is a row of
+// connector/sharepointserver/catalog and Parameters the authored parameter object.
+type SharePointServerConfig struct {
+	Worker     string
+	Op         string
+	Parameters RestExpr
+	ResultVar  string
+	Retries    int32
+}
+
+// AddSharePointServerConnectorTask adds a SharePoint Server task and returns its element
+// id. Like an Exchange task it creates a job on activation and waits for a worker.
+func (b *Builder) AddSharePointServerConnectorTask(cfg SharePointServerConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:                    b.intern(SharePointServerJobType),
+		Connector:                  b.intern(cfg.Worker),
+		Subject:                    -1, // not a clio task
+		EventType:                  -1,
+		ClioQuery:                  -1,
+		ReduceSpec:                 -1,
+		Method:                     -1, // an operation, not an HTTP method, is authored
+		Auth:                       -1, // the worker's own account does the work
+		ResultVar:                  b.intern(cfg.ResultVar),
+		Retries:                    cfg.Retries,
+		SharePointServerOp:         b.intern(cfg.Op),
+		SharePointServerParameters: cfg.Parameters,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

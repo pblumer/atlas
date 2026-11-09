@@ -34,6 +34,40 @@ _Changed_ / _Removed_ for each version.
   document a personal variable names is enciphered under the data subject's key and becomes
   unreadable with an erasure. Operations and the replay show a reference as a download link
   (ADR-draft-a-file-is-a-document-not-a-variable).
+- **The Instances overview can group its processes by application.** A switch above the list
+  offers "Liste" and "Nach Applikation". The list stays the default and unchanged; grouped, each
+  application folds away under a heading that sums its processes' running, stuck and finished
+  instances over every version and links to the application, and a process filed under no
+  application — or under one this person cannot read — sits in the trailing "Nicht zugeordnet"
+  group, as in the Modeler's deployed list. Every group keeps the list's sorting, filter row and
+  row actions, and the browser remembers the arrangement and each folded group.
+- **The SharePoint Server Worker administers team sites on an on-premises farm.** A new Worker Type `sharepointserver`
+  (`<atlas:sharepointServerConnector>`, ADR-0540) creates a site collection with its
+  default groups, reads and lists sites, sets owners, changes site collection administrators and the default
+  groups with AD accounts or AD groups, deletes a site to the recycle bin, restores it, and sets the storage
+  quota. The worker runs on a server of the farm and starts fixed PowerShell for each job, so no model authors a
+  cmdlet and no credential reaches Atlas; refusals a process can act on are BPMN errors. The example
+  `m365-dienste` adds the product «Teamwebsite» to the on-premises catalogue when a SharePoint Server is built.
+- **The M365 test environment can build a SharePoint Server Subscription Edition farm.** `deploy/opentofu/m365-devenv` gains
+  `enable_sharepoint_server` (off by default): a VM `sp01` joined to the test forest, built from
+  Microsoft's SharePoint image, with SQL Server Developer on the same machine, a single-server
+  farm, a web application at `http://sp01.<domain>` and a root site collection, set up unattended
+  by `scripts/sharepoint-setup.ps1` and followed by `scripts/wait-sharepoint.sh`. It shuts down
+  every night with the domain controller, and a test now fails for any VM of the environment
+  without a shutdown schedule. SharePoint runs as a 180-day evaluation; apply it to a running
+  environment only with the `-target` list in the README.
+- **The atlas hub preview shows the application's architecture sketch and its process diagrams.**
+  Before a release is installed, the server derives its architecture sketch from the process
+  models of the verified package (ADR-0539): the messages its
+  processes receive, the workers, job types, decisions and calls they name, their data objects
+  and personal data, the roles of their user tasks and the names they throw and catch — drawn
+  by the same code as a release's sketch, marked as a package preview and stamped with the
+  Blueprint, its version and digest. Endpoints, capabilities, catalogue products and coupled
+  applications belong to an installation and are listed as not shown. The Console's hub preview
+  shows the sketch and, on request, draws each BPMN model read-only. New routes
+  `GET /api/v1/blueprints/{id}/releases/{version}/architecture`, `…/architecture.svg` and
+  `…/diagrams`, each bound by `?digest=` to the previewed package; new MCP tool
+  `atlas_hub_release_architecture`. A release's own sketch is unchanged.
 - **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
   products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
   (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form
@@ -106,6 +140,20 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **An application lists what it has deployed; the Modeler home lists applications.** The
+  Modeler home's *Deployed* list is gone: the same processes were also listed in each
+  application's *Deployments* tab and under *Operations › Instances*, and pausing or deleting
+  one was offered only on the home page. The home page is now one table of applications that
+  folds under its heading like every other list, with a column saying how many processes each
+  has deployed and how many of them are paused, linking to its Deployments tab
+  (`#/modeler/p/{id}/deployments`, a new address for the tab). The Deployments tab lists one row
+  per process instead of one per version: its newest version with the older ones folded under it,
+  its state, the instances all its versions hold, the mark for a definition frozen on a decision
+  version, and a menu to open it in the Modeler, see its instances, pause or resume its automatic
+  starts, or delete it. *Not assigned* gains a Deployments tab of its own, so the home page names
+  it once. The Operations live view says when a definition is paused and gives an operator the
+  pause switch on the newest version. `GET /api/v1/applications/{id}/deployments` now carries
+  each definition's `frozenDecisions`. ADR-0541.
 - **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
   the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
   "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact
@@ -134,11 +182,27 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
-- **Why the atlas hub registry could not be read is in the server log.** The Console still
-  says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
+- **A wide decision table fits its hover card.** The card that shows which rule fired —
+  in Operations → Decisions, the live view and the instance replay — held every cell to one
+  line inside a 480 px card, so a table with a long list of literals or a long input
+  expression ran out past the card's edge over the page beneath it, where nothing could
+  scroll to it. The card now grows to 760 px, never wider than the window, its cells wrap, and it is
+  kept inside the window vertically too: a table too tall for either side of its row is no
+  longer placed off the bottom of the screen.
+- **The Console's landing page follows the chosen language.** The welcome card — its introduction, the three first steps, the buttons and the System Overview tooltip — and the Deployments and Engine tiles under it were written in English in `app.js` and stayed English whatever language was set. They now come from the message catalogue (`dashboard.*` in `api/web/locales/`), so a Console set to German greets with «Willkommen bei atlas» and English stays as it was.
+- **Why the atlas hub registry could not be read is in the server log.** The server now logs
   the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
   an HTTP status or a signature no pinned key made — so an operator can tell a firewall from
   a wrong key.
+- **A hub preview, package or import that cannot reach the registry says where and why.** These
+  routes and the listing answered every registry failure with one sentence, "trusted Blueprint
+  registry is unavailable or invalid"; only the connection check named the cause. Their 502 now
+  names the station the way ended at and its cause — the name, the TCP connection, TLS, the
+  index, the signature or the package itself — in the message an agent reads over MCP and as a
+  `station` object. The Console's hub dialog explains it as the connection check does, with what
+  the cause usually means and a button to check the whole way again. A package whose bytes
+  differ from the signed index is named as such, not as a network fault. The error text is still
+  shown to administrators only.
 - **A package import names why the target refused the publish.** When the publish step of a
   Console package or hub import was refused — for example because a process uses a Worker
   operation the target's build does not know yet — the import reported only "HTTP 409". It now

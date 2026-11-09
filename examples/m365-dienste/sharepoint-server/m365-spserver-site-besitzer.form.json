@@ -1,0 +1,30 @@
+{
+  "type": "default",
+  "id": "m365-spserver-site-besitzer",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Besitzer ändern · Change the owners**\n\nBesitzer der Websitesammlung sind Personen, keine Gruppen. · The owners of a site collection are people, not groups."
+    },
+    {
+      "key": "neuerBesitzer",
+      "type": "textfield",
+      "label": "Neue Besitzerin oder neuer Besitzer · New owner",
+      "description": "AD-Konto oder AD-Gruppe als DOMAENE\\name oder name@domaene. · An AD account or AD group as DOMAIN\\name or name@domain.",
+      "validate": {
+        "required": true,
+        "pattern": "^([^\\s\\\\]+\\\\[^\\\\]+|[^@\\s]+@[^@\\s]+)$"
+      }
+    },
+    {
+      "key": "neueStellvertretung",
+      "type": "textfield",
+      "label": "Neue Stellvertretung · New deputy",
+      "description": "AD-Konto oder AD-Gruppe als DOMAENE\\name oder name@domaene. · An AD account or AD group as DOMAIN\\name or name@domain.",
+      "validate": {
+        "required": true,
+        "pattern": "^([^\\s\\\\]+\\\\[^\\\\]+|[^@\\s]+@[^@\\s]+)$"
+      }
+    }
+  ]
+}

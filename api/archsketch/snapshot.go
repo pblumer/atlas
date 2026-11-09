@@ -20,6 +20,7 @@ package archsketch
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 )
 
@@ -82,6 +83,12 @@ type Snapshot struct {
 	// Coupling is how the release meets other applications through names, and the
 	// event feed; part of the application layer, absent before format version 7.
 	Coupling *Coupling `json:"coupling,omitempty"`
+	// Packaged is set on a snapshot derived from a package's process models before any
+	// installation read them (an atlas hub preview, ADR-0539).
+	// It has no physical, strategy or peer facts, and nothing in it says what an
+	// installation holds: the renderings word every "here" accordingly. A release's
+	// snapshot never sets it.
+	Packaged bool `json:"packaged,omitempty"`
 
 	// shown is the layer selection a rendering of this value draws, and recorded the
 	// layers the stored snapshot held before the selection narrowed it; both are set
@@ -303,6 +310,28 @@ type Meta struct {
 	Application   string
 	ReleaseID     string
 	Version       int32
+	// Blueprint, when set, says the snapshot was derived from an atlas hub package
+	// before any installation read it (ADR-0539), not
+	// recorded with a release: ReleaseID and Version are then empty, and the
+	// renderings name the package instead.
+	Blueprint *BlueprintOrigin
+}
+
+// BlueprintOrigin names the atlas hub release a preview sketch was derived from: the
+// Blueprint, its version and the digest of the exact package bytes it read.
+type BlueprintOrigin struct {
+	ID      string
+	Version string
+	Digest  string
+}
+
+// versionLabel is how a rendering names what it was drawn from beside the
+// application: a release's number, or a Blueprint's version.
+func (m Meta) versionLabel() string {
+	if m.Blueprint != nil {
+		return "Blueprint " + m.Blueprint.Version
+	}
+	return fmt.Sprintf("Release v%d", m.Version)
 }
 
 // NotShown is what a rendering of this snapshot lists as absent, in this order. A
@@ -352,6 +381,15 @@ func (s Snapshot) NotShown() []string {
 		if o := c.Omitted; o != (CouplingOmitted{}) {
 			gaps = append(gaps, "beyond the snapshot's bounds: "+o.text())
 		}
+	}
+	if s.Packaged {
+		// A package no installation has read leaves out everything the installation's
+		// own registers would add; the list says which, because the reader of a
+		// preview is deciding whether to install.
+		gaps = append(gaps,
+			"the capabilities and value streams the application realises: an installation's capability register holds them",
+			"the catalogue products its processes carry out, as an installation's catalogues publish them",
+			"the applications on the installation at the other end of a message or signal, and the Atlas node itself")
 	}
 	if st := s.Strategy; st != nil {
 		gaps = append(gaps, "a capability's owner beyond name and role, and who confirmed or edited it")

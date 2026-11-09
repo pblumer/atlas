@@ -57,6 +57,7 @@ var connectorJobTypes = map[string][]string{
 	"carddav":        {compiler.CardDAVJobType},
 
 	"wikiwikibangbang": {compiler.WikiwikibangbangJobType},
+	"sharepointserver": {compiler.SharePointServerJobType},
 	// Two job types, one kind: create-item keeps the one it always had, and every other
 	// operation rides its own so an older worker is never handed one (ADR-0141, amended).
 	"sharepoint": {compiler.SharePointJobType, compiler.SharePointOpsJobType},
@@ -121,6 +122,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_CARDDAV_CONNECTORS":          "verkauf",
 			"ATLAS_CARDDAV_VERKAUF_URL":         "https://dav.example.ch/",
 			"ATLAS_CARDDAV_VERKAUF_CREDENTIALS": `{"username":"u","password":"p"}`,
+		}
+	case "sharepointserver":
+		return map[string]string{
+			"ATLAS_SHAREPOINTSERVER_CONNECTORS": "farm",
+			"ATLAS_SHAREPOINTSERVER_FARM_URL":   "http://sp01.example.ch",
 		}
 	case "wikiwikibangbang":
 		return map[string]string{

@@ -383,6 +383,17 @@ export const WORKER_TYPE_DOCS = {
     trap: "workerDoc.carddav.trap",
   },
 
+  sharepointserver: {
+    anchor: "runbook-sharepointserver", title: "SharePoint Server",
+    checked: "2026-11",
+    needs: "workerDoc.sharepointserver.needs",
+    steps: [
+      "workerDoc.sharepointserver.step1",
+      "workerDoc.sharepointserver.step2",
+      "workerDoc.sharepointserver.step3",
+    ],
+    trap: "workerDoc.sharepointserver.trap",
+  },
   wikiwikibangbang: {
     anchor: "runbook-wikiwikibangbang", title: "wikiwikibangbang",
     checked: "2026-10",

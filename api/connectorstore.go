@@ -76,6 +76,11 @@ const (
 	// builds no client from it; the record exists so an operator can add an
 	// organization in the Console and the supervised worker is provisioned from it.
 	connectorKindExchange = "exchange"
+	// connectorKindSharePointServer is the SharePoint Server Worker Type
+	// (ADR-0540): its endpoint is the web application, and the
+	// optional settings hold no credential, since the worker runs as an account on the
+	// farm. Worker-only, and never supervised: the cmdlets exist only on a farm server.
+	connectorKindSharePointServer = "sharepointserver"
 	// connectorKindTeamsPhone is the Microsoft Teams Phone Worker Type
 	// (ADR-0463): voice apps and their resource accounts,
 	// provisioned by fixed PowerShell on the worker host. A record holds a

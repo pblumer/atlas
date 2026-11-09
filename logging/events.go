@@ -129,8 +129,9 @@ var (
 	HubRegistryKeysPinned = newEvent("hub.registry_keys_pinned")
 	// HubRegistryUnavailable is a request the atlas hub registry could not answer:
 	// the index or a package could not be fetched or did not verify. The caller is
-	// told only that; the cause — DNS, a refused or filtered connection, TLS, an HTTP
-	// status, a signature that no pinned key made — is in this WARN, for the operator.
+	// told the station the way ended at and its cause (ADR-0499 amendment f); the
+	// error text — which can name this network's resolver or addresses — reaches
+	// only an administrator there, and is in this WARN for the operator.
 	HubRegistryUnavailable = newEvent("hub.registry_unavailable")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
