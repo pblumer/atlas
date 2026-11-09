@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 func recipientQuery(v string) lookup.Query {

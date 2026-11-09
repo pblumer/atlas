@@ -1,0 +1,636 @@
+{
+  "name": "Informationstransfer",
+  "documentation": "Informationsmodell des Beispiels informationstransfer: ein Transferauftrag zwischen zwei Konten des Active Directory und was dabei übergeht – Postfach (Adresse, Inhalt, Kontingent), Cloud-Konto (Hard Match), Gruppenmitgliedschaften, Rufnummer und Kürzel. Konten und Postfächer sind personenbezogen und im Prozess versiegelt; die Engine kennt nur Wahrheitswerte über sie und Objekt-IDs.",
+  "classes": [
+    {
+      "id": "cls-szenario",
+      "name": "Szenario",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "documentation": "Wofür übertragen wird: die Variante des Produkts.",
+      "literals": [
+        "internalisierung",
+        "externalisierung",
+        "amtswechsel",
+        "abteilungswechsel"
+      ],
+      "x": 40,
+      "y": 40
+    },
+    {
+      "id": "cls-transferauftrag",
+      "name": "Transferauftrag",
+      "stereotype": "businessObject",
+      "documentation": "Eine Position des Produkts it-informationstransfer: Szenario, die gewählten Optionen und die beiden Konten (als Anmeldenamen, versiegelt). Gehalten von der Instanz von proc_it_transfer; ihr Protokoll nennt das Ergebnis je Ressource.",
+      "attributes": [
+        {
+          "name": "auftrag",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "orderId/positionId."
+        },
+        {
+          "name": "szenario",
+          "type": "Szenario",
+          "multiplicity": "1"
+        },
+        {
+          "name": "optionen",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Die Ja/Nein-Antworten des Bestellformulars."
+        },
+        {
+          "name": "protokoll",
+          "type": "string",
+          "multiplicity": "0..1"
+        }
+      ],
+      "identity": [
+        "auftrag"
+      ],
+      "x": 300,
+      "y": 40,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Bestellt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Geprüft",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entschieden",
+            "x": 360,
+            "y": 40
+          },
+          {
+            "name": "Ausgeführt",
+            "x": 520,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Abgelehnt",
+            "x": 680,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-transferauftrag-1",
+            "from": "Bestellt",
+            "to": "Geprüft"
+          },
+          {
+            "id": "t-transferauftrag-2",
+            "from": "Geprüft",
+            "to": "Entschieden"
+          },
+          {
+            "id": "t-transferauftrag-3",
+            "from": "Geprüft",
+            "to": "Abgelehnt"
+          },
+          {
+            "id": "t-transferauftrag-4",
+            "from": "Entschieden",
+            "to": "Abgelehnt"
+          },
+          {
+            "id": "t-transferauftrag-5",
+            "from": "Entschieden",
+            "to": "Ausgeführt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-benutzerkonto",
+      "name": "Benutzerkonto",
+      "stereotype": "businessObject",
+      "documentation": "Ein Konto im Active Directory, Quelle oder Ziel eines Transfers. Personenbezogen; im Prozess versiegelt.",
+      "attributes": [
+        {
+          "name": "sAMAccountName",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "userPrincipalName",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "anzeigename",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "mail",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "kuerzel",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "extensionAttribute10 (Annahme des Pakets)."
+        },
+        {
+          "name": "vermerk",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "extensionAttribute15: «Ressourcen transferiert <Datum> (Auftrag …)»."
+        }
+      ],
+      "identity": [
+        "sAMAccountName"
+      ],
+      "x": 620,
+      "y": 40,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Ressourcen transferiert",
+            "x": 200,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-benutzerkonto-1",
+            "from": "Aktiv",
+            "to": "Ressourcen transferiert"
+          },
+          {
+            "id": "t-benutzerkonto-2",
+            "from": "Ressourcen transferiert",
+            "to": "Aktiv"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-postfach",
+      "name": "Postfach",
+      "stereotype": "businessObject",
+      "documentation": "Das Postfach eines Kontos auf dem Exchange Server oder in Exchange Online, mit Adressen und Kontingenten. Personenbezogen.",
+      "attributes": [
+        {
+          "name": "primaerAdresse",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "adressen",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "EmailAddresses, SMTP: ist die primäre."
+        },
+        {
+          "name": "kontingent",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ProhibitSendReceiveQuota."
+        },
+        {
+          "name": "exchangeGuid",
+          "type": "string",
+          "multiplicity": "0..1"
+        }
+      ],
+      "identity": [
+        "primaerAdresse"
+      ],
+      "x": 940,
+      "y": 40,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Deaktiviert",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-postfach-1",
+            "from": "Aktiv",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-postfach-2",
+            "from": "Aktiv",
+            "to": "Deaktiviert"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-cloudkonto",
+      "name": "CloudKonto",
+      "stereotype": "businessObject",
+      "documentation": "Ein Konto in Entra ID mit seinen Cloud-Ressourcen (Teams, OneDrive, SharePoint). Der Prozess kennt es nur über seine Objekt-ID.",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "onPremisesImmutableId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Source Anchor: base64 des ObjectGUID."
+        },
+        {
+          "name": "onPremisesSyncEnabled",
+          "type": "boolean",
+          "multiplicity": "0..1"
+        }
+      ],
+      "identity": [
+        "id"
+      ],
+      "x": 620,
+      "y": 420,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Gelöscht",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Endgültig gelöscht",
+            "x": 360,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Wiederhergestellt",
+            "x": 520,
+            "y": 40
+          },
+          {
+            "name": "Hart verknüpft",
+            "x": 680,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-cloudkonto-1",
+            "from": "Aktiv",
+            "to": "Gelöscht"
+          },
+          {
+            "id": "t-cloudkonto-2",
+            "from": "Gelöscht",
+            "to": "Endgültig gelöscht"
+          },
+          {
+            "id": "t-cloudkonto-3",
+            "from": "Gelöscht",
+            "to": "Wiederhergestellt"
+          },
+          {
+            "id": "t-cloudkonto-4",
+            "from": "Wiederhergestellt",
+            "to": "Hart verknüpft"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-gruppenmitgliedschaft",
+      "name": "Gruppenmitgliedschaft",
+      "stereotype": "businessObject",
+      "documentation": "Eine direkte Mitgliedschaft in einer manuellen Gruppe (AD unter AD_GRUPPEN_OU oder zugewiesene Cloud-Gruppe).",
+      "attributes": [
+        {
+          "name": "gruppe",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "DN oder Objekt-ID der Gruppe."
+        },
+        {
+          "name": "mitglied",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "DN oder Objekt-ID des Mitglieds."
+        }
+      ],
+      "identity": [
+        "gruppe",
+        "mitglied"
+      ],
+      "x": 940,
+      "y": 420,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Übertragen",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          }
+        ],
+        "transitions": []
+      }
+    },
+    {
+      "id": "cls-rufnummer",
+      "name": "Rufnummer",
+      "stereotype": "businessObject",
+      "documentation": "Eine Telefonnummer in Teams Phone (Direct Routing).",
+      "attributes": [
+        {
+          "name": "nummer",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "E.164."
+        }
+      ],
+      "identity": [
+        "nummer"
+      ],
+      "x": 1260,
+      "y": 40,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Zugewiesen",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entzogen",
+            "x": 200,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-rufnummer-1",
+            "from": "Zugewiesen",
+            "to": "Entzogen"
+          },
+          {
+            "id": "t-rufnummer-2",
+            "from": "Entzogen",
+            "to": "Zugewiesen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-kuerzel",
+      "name": "Kuerzel",
+      "stereotype": "businessObject",
+      "documentation": "Das Kürzel eines Kontos, wenn Atlas es generiert (KUERZEL_HERKUNFT = generiert).",
+      "attributes": [
+        {
+          "name": "wert",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 1260,
+      "y": 420,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Zugewiesen",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entzogen",
+            "x": 200,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-kuerzel-1",
+            "from": "Zugewiesen",
+            "to": "Entzogen"
+          },
+          {
+            "id": "t-kuerzel-2",
+            "from": "Entzogen",
+            "to": "Zugewiesen"
+          }
+        ]
+      }
+    }
+  ],
+  "associations": [
+    {
+      "id": "assoc-1",
+      "name": "überträgt von",
+      "kind": "association",
+      "from": {
+        "classId": "cls-transferauftrag",
+        "role": "transfer",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-benutzerkonto",
+        "role": "quelle",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-2",
+      "name": "überträgt auf",
+      "kind": "association",
+      "from": {
+        "classId": "cls-transferauftrag",
+        "role": "transferZiel",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-benutzerkonto",
+        "role": "ziel",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-3",
+      "name": "hat",
+      "kind": "association",
+      "from": {
+        "classId": "cls-benutzerkonto",
+        "role": "konto",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-postfach",
+        "role": "postfach",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-4",
+      "name": "wird synchronisiert als",
+      "kind": "association",
+      "from": {
+        "classId": "cls-benutzerkonto",
+        "role": "konto",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-cloudkonto",
+        "role": "cloudKonto",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-5",
+      "name": "ist Mitglied über",
+      "kind": "association",
+      "from": {
+        "classId": "cls-benutzerkonto",
+        "role": "mitglied",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-gruppenmitgliedschaft",
+        "role": "mitgliedschaften",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-6",
+      "name": "hält",
+      "kind": "association",
+      "from": {
+        "classId": "cls-benutzerkonto",
+        "role": "inhaber",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-rufnummer",
+        "role": "rufnummern",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-7",
+      "name": "trägt",
+      "kind": "association",
+      "from": {
+        "classId": "cls-benutzerkonto",
+        "role": "konto",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-kuerzel",
+        "role": "kuerzel",
+        "multiplicity": "0..1"
+      }
+    }
+  ],
+  "stores": [
+    {
+      "id": "store-1",
+      "name": "Active Directory: Konten",
+      "documentation": "Die Konten unter AD_PERSONEN_OU mit Anzeigename, Mail, UPN, Kürzel und Vermerk.",
+      "class": "Benutzerkonto",
+      "worker": "ad_verzeichnis",
+      "mode": "read",
+      "x": 40,
+      "y": 800
+    },
+    {
+      "id": "store-2",
+      "name": "Active Directory: Gruppen",
+      "documentation": "Die manuellen Gruppen unter AD_GRUPPEN_OU und ihre direkten Mitglieder.",
+      "class": "Gruppenmitgliedschaft",
+      "worker": "ad_verzeichnis",
+      "mode": "read",
+      "x": 300,
+      "y": 800
+    },
+    {
+      "id": "store-3",
+      "name": "Exchange Server: Empfaenger",
+      "documentation": "Die Postfächer auf dem Exchange Server (POSTFACH_SYSTEM = exchange-server).",
+      "class": "Postfach",
+      "worker": "ucc_exchange_onprem",
+      "mode": "read",
+      "x": 560,
+      "y": 800
+    },
+    {
+      "id": "store-4",
+      "name": "Exchange Online: Empfaenger",
+      "documentation": "Die Postfächer in Exchange Online (POSTFACH_SYSTEM = exchange-online).",
+      "class": "Postfach",
+      "worker": "ucc_exchange",
+      "mode": "read",
+      "x": 820,
+      "y": 800
+    },
+    {
+      "id": "store-5",
+      "name": "Entra ID: Konten",
+      "documentation": "Die Cloud-Konten, gefunden über ihre UPN (innerhalb NAME_PREFIX).",
+      "class": "CloudKonto",
+      "worker": "ucc_entra",
+      "mode": "read",
+      "x": 1080,
+      "y": 800
+    },
+    {
+      "id": "store-6",
+      "name": "Entra ID: Gruppen",
+      "documentation": "Die direkten Mitgliedschaften eines Cloud-Kontos (memberOf).",
+      "class": "Gruppenmitgliedschaft",
+      "worker": "ucc_entra",
+      "mode": "read",
+      "x": 1340,
+      "y": 800
+    },
+    {
+      "id": "store-7",
+      "name": "Teams Phone: Rufnummern",
+      "documentation": "Die zugewiesenen Telefonnummern.",
+      "class": "Rufnummer",
+      "worker": "ucc_teams",
+      "mode": "read",
+      "x": 1600,
+      "y": 800
+    }
+  ]
+}

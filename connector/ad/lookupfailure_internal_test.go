@@ -6,7 +6,7 @@ import (
 
 	goldap "github.com/go-ldap/ldap/v3"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // lookupFailure hands on nothing but a code: a lookup error as it is, a refusal by the

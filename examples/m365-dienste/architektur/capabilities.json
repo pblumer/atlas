@@ -49,6 +49,11 @@
     {
       "capability": "m365-messaging",
       "kind": "process",
+      "processId": "proc_m365_kalender"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
       "processId": "proc_m365_verteiler"
     },
     {
@@ -130,6 +135,11 @@
       "capability": "m365-zusammenarbeit",
       "kind": "process",
       "processId": "proc_m365_sharepoint_site"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_sichtbarkeit_nachfuehren"
     },
     {
       "capability": "m365-zusammenarbeit",

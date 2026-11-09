@@ -621,6 +621,10 @@ func (s *Server) apiRoutes() []apiRoute {
 				// What the worker serves with its own configuration (ADR-0168), and where
 				// each of those connects, as scheme://host:port (ADR-0471).
 				"connectors": tArray(), "endpoints": tObject(),
+				// The handshake (ADR-0535 §3): the Worker protocol major version, absent
+				// meaning 1, and the Worker Type the instance runs. Every answer carries
+				// the accepted versions in X-Atlas-Worker-Protocol.
+				"protocol": tInteger(), "workerType": tObject(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		// The Worker protocol's second message kind: a query a Worker Instance answers
@@ -630,6 +634,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Lease the form lookups waiting for a Worker this Worker Instance holds, optionally long-polling — the query twin of the job pull; nothing about a query is durable", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Job type, worker id, the Workers this instance holds, batch size, and how long to wait", schemaObj(map[string]any{
 				"type": tString(), "worker": tString(), "connectors": tArray(), "maxQueries": tInteger(), "waitMs": tInteger(),
+				"protocol": tInteger(), "workerType": tObject(),
 			}, "type", "worker")),
 			resp: jsonBody("The leased queries", tObject())}},
 		{"POST", "/api/v1/worker-queries/{id}/answer", s.workerQueries.HandleAnswer, apiOp{
@@ -1796,6 +1801,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
 			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Trusted Blueprint index", tObject())}},
+		{"GET", "/api/v1/blueprints/connection", s.handleBlueprintConnection, apiOp{
+			summary: "Load the signed Blueprint index as GET /api/v1/blueprints does and stream each station of the way there as it is passed or where it stops — name resolved, TCP connection, TLS handshake, index read, signature verified — one JSON object per line: a start line, a line per station with its timing, facts and, on failure, a cause from a fixed vocabulary (the error text only for an administrator), and a done line carrying the verified index and how many releases this atlas may install; returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
+			resp: &bodySpec{mediaType: "application/x-ndjson", schema: tString(), desc: "One JSON object per line: start, a step per station, done"}}},
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/preview", s.handleBlueprintPreview, apiOp{
 			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, catalogue IDs, offered products and home-catalogue ownership, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Verified Blueprint preview", tObject())}},
@@ -2181,6 +2189,36 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/worker-types", s.handleConnectorKinds, apiOp{
 			summary: "List available Worker Types and where this server runs them", tag: "Workers", role: roleAny,
 			resp: jsonBody("Worker Type placements", schemaObj(map[string]any{"kinds": tArray()}))}},
+		// Installed Worker Type artifacts (ADR-0535, migration step 3): verified by
+		// digest at install and before every launch, run by the supervisor with an
+		// allowlisted environment. Unsigned artifacts are refused unless the server was
+		// started with --allow-unsigned-worker-types, for development only.
+		{"GET", "/api/v1/worker-types/installed", s.handleListInstalledWorkerTypes, apiOp{
+			summary: "List the Worker Type artifacts installed on this server, with their digest, origin and signature state (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("Installed releases, this server's platform and whether unsigned artifacts are admitted", tObject())}},
+		{"POST", "/api/v1/worker-types/installed", s.handleInstallWorkerType, apiOp{
+			summary: "Install a Worker Type artifact: the manifest and the executable for this server's platform, verified against the manifest's sha256 before anything is kept, then started under the supervisor (admin-only; unsigned artifacts only with --allow-unsigned-worker-types)", tag: "Workers", role: RoleAdmin,
+			req: &bodySpec{mediaType: "multipart/form-data", desc: "The manifest part first, then the artifact part", schema: schemaObj(map[string]any{
+				"manifest": tString(), "artifact": tString(),
+			}, "manifest", "artifact")},
+			resp: jsonBody("The installed release", tObject())}},
+		{"DELETE", "/api/v1/worker-types/installed/{id}/{version}", s.handleRemoveInstalledWorkerType, apiOp{
+			summary: "Stop and remove an installed Worker Type release (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("The removed release", tObject())}},
+		// Configured Workers of an installed Worker Type (ADR-0535 §4): settings checked
+		// against the manifest's JSON Schema, secrets only as vault entry names.
+		{"GET", "/api/v1/worker-types/installed/{id}/workers", s.handleListInstalledWorkers, apiOp{
+			summary: "List the configured Workers of an installed Worker Type; secrets appear only as the vault entries that hold them (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("Configured Workers", tObject())}},
+		{"PUT", "/api/v1/worker-types/installed/{id}/workers/{name}", s.handlePutInstalledWorker, apiOp{
+			summary: "Create or replace a configured Worker of an installed Worker Type: config is checked against every installed release's schema, each secret property names a vault entry under secrets, and the type's instances restart with it (admin-only)", tag: "Workers", role: RoleAdmin,
+			req: jsonBody("Settings and, per secret property, the vault entry holding it", schemaObj(map[string]any{
+				"config": tObject(), "secrets": tObject(),
+			})),
+			resp: jsonBody("The configured Worker", tObject())}},
+		{"DELETE", "/api/v1/worker-types/installed/{id}/workers/{name}", s.handleDeleteInstalledWorker, apiOp{
+			summary: "Remove a configured Worker of an installed Worker Type; its instances restart without it (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("The removed Worker", tObject())}},
 
 		// The legacy /connectors routes remain compatibility aliases during the ADR-0203
 		// migration. They bind to the same handlers and stores, so no second source

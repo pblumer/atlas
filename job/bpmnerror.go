@@ -3,6 +3,8 @@ package job
 import (
 	"errors"
 	"strings"
+
+	"github.com/pblumer/atlas/workersdk"
 )
 
 // BPMNError is how a handler ends a job in a BPMN error instead of a result
@@ -13,19 +15,13 @@ import (
 //
 // It is for an answer the process has a path for — an account that already exists, a
 // recipient that does not — not for a fault: anything else a handler returns fails the
-// job and is retried as before. The out-of-process worker's type is this one under
-// another name (worker.BPMNError), so a handler shared by both paths says it once.
-type BPMNError struct {
-	Code    string
-	Message string
-}
-
-func (e *BPMNError) Error() string {
-	if e.Message == "" {
-		return "BPMN error " + e.Code
-	}
-	return "BPMN error " + e.Code + ": " + e.Message
-}
+// job and is retried as before.
+//
+// It is the Worker protocol's type (workersdk.BPMNError) under this package's name, so
+// a handler shared by the in-process runner and an out-of-process worker says it once.
+// The type lives in workersdk because that package may import nothing of the engine;
+// this one may import it, since workersdk is a leaf.
+type BPMNError = workersdk.BPMNError
 
 // thrownError returns the BPMN error err carries, its code trimmed, if it carries one
 // with a code. One without a code names nothing a catch could match and the engine

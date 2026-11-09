@@ -83,6 +83,10 @@ type Needs struct {
 	ServerConstants []string `json:"serverConstants"`
 }
 
+// ErrSignatureMismatch is an index whose detached signature no pinned key made:
+// the bytes arrived, but not from the publisher this server trusts.
+var ErrSignatureMismatch = errors.New("registry signature does not match the pinned key")
+
 // VerifySignedIndex authenticates exact JSON bytes against an operator-pinned
 // Ed25519 key, and only then decodes a bounded, strict registry v1 manifest.
 // The signature file is RFC 4648 base64 without whitespace or wrapping.
@@ -103,7 +107,7 @@ func VerifySignedIndex(raw, signatureFile []byte, trustedPublicKey ed25519.Publi
 		return zero, errors.New("registry detached signature is invalid base64")
 	}
 	if !ed25519.Verify(trustedPublicKey, raw, signature[:]) {
-		return zero, errors.New("registry signature does not match the pinned key")
+		return zero, ErrSignatureMismatch
 	}
 	if !utf8.Valid(raw) {
 		return zero, errors.New("registry index is not valid UTF-8")
@@ -140,13 +144,17 @@ func VerifySignedIndexWithAny(raw, signatureFile []byte, trusted []ed25519.Publi
 	if len(trusted) == 0 || len(trusted) > MaxPinnedKeys {
 		return Index{}, nil, fmt.Errorf("registry needs 1..%d pinned keys", MaxPinnedKeys)
 	}
+	// A key whose signature matched and whose manifest then failed says more than a
+	// key that never matched: that error is the one returned, whichever key came last.
 	var lastErr error
 	for _, key := range trusted {
 		index, err := VerifySignedIndex(raw, signatureFile, key)
 		if err == nil {
 			return index, key, nil
 		}
-		lastErr = err
+		if lastErr == nil || errors.Is(lastErr, ErrSignatureMismatch) {
+			lastErr = err
+		}
 	}
 	return Index{}, nil, lastErr
 }

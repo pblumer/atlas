@@ -12,9 +12,9 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
-	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/worker"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // A name field's live check (ADR-0519), end to end: a stored form names an Entra and a

@@ -1,0 +1,115 @@
+{
+  "publish": true,
+  "catalogs": [
+    {
+      "id": "cat-it-identity",
+      "texts": {
+        "de": "Informationstransfer",
+        "en": "Resource transfer"
+      },
+      "rank": 720,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "it-informationstransfer"
+      ],
+      "groups": [
+        "{{zielgruppe}}"
+      ],
+      "edges": []
+    }
+  ],
+  "products": [
+    {
+      "id": "it-informationstransfer",
+      "homeCatalog": "cat-it-identity",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Informationstransfer",
+        "en": "Resource transfer"
+      },
+      "descriptions": {
+        "de": "Ressourcen eines bisherigen Kontos (Quelle) auf ein neues Konto (Ziel) übertragen: bei Internalisierung, Externalisierung, Amts- oder Abteilungswechsel. Wählbar sind Primäradresse und UPN, Postfachinhalt, Postfachkontingent, Telefonnummer, Berechtigungen (manuelle Gruppen), Kürzel und – nur bei Internalisierung – das Entra-ID-Konto. Eine Regel prüft die Kombination, Identity Management genehmigt, jede Löschung wird unmittelbar davor freigegeben. Danach trägt die Quelle den Vermerk «Ressourcen transferiert».",
+        "en": "Transfer the resources of a previous account (source) to a new account (target): on internalisation, externalisation, change of office or department. Choose the primary address and UPN, mailbox content, mailbox quota, phone number, access rights (manual groups), short code and – on internalisation only – the Entra ID account. A rule checks the combination, Identity Management approves, every deletion is released right before it. Afterwards the source is marked \"resources transferred\"."
+      },
+      "variants": [
+        {
+          "id": "internalisierung",
+          "texts": {
+            "de": "Internalisierung (extern → intern)",
+            "en": "Internalisation (external → internal)"
+          }
+        },
+        {
+          "id": "externalisierung",
+          "texts": {
+            "de": "Externalisierung (intern → extern)",
+            "en": "Externalisation (internal → external)"
+          }
+        },
+        {
+          "id": "amtswechsel",
+          "texts": {
+            "de": "Amtswechsel",
+            "en": "Change of office"
+          }
+        },
+        {
+          "id": "abteilungswechsel",
+          "texts": {
+            "de": "Abteilungswechsel",
+            "en": "Change of department"
+          }
+        }
+      ],
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_it_transfer",
+      "configForm": "it-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "it.transfer.ausfuehren",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "it.transfer.abschliessen",
+          "effect": "deprovision",
+          "triggers": [
+            "operator"
+          ],
+          "labels": {
+            "de": "Transfer abschliessen",
+            "en": "Close the transfer"
+          }
+        }
+      ],
+      "commandedBy": [
+        "beispiel-informationstransfer"
+      ],
+      "keywords": [
+        "Informationstransfer",
+        "Transfer",
+        "Internalisierung",
+        "Externalisierung",
+        "Amtswechsel",
+        "Abteilungswechsel",
+        "Mailbox",
+        "Postfach",
+        "UPN",
+        "Hard Match",
+        "Entra"
+      ],
+      "category": "identitaet-transfer",
+      "categoryTexts": {
+        "de": "Identitäten",
+        "en": "Identities"
+      }
+    }
+  ]
+}

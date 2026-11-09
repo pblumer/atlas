@@ -49,6 +49,11 @@
       "path": "hr-eintritt.bpmn"
     },
     {
+      "id": "proc_m365_kalender",
+      "name": "Exchange: Zusätzlicher Kalender",
+      "path": "kalender.bpmn"
+    },
+    {
       "id": "proc_m365_konto_hybrid",
       "name": "Microsoft 365: Konto (hybrid) anlegen",
       "path": "konto-hybrid.bpmn"
@@ -107,6 +112,11 @@
       "id": "proc_m365_sharepoint_site",
       "name": "SharePoint: Team Site",
       "path": "sharepoint-site.bpmn"
+    },
+    {
+      "id": "proc_m365_sichtbarkeit_nachfuehren",
+      "name": "Microsoft 365: Sichtbarkeit nachführen",
+      "path": "sichtbarkeit-nachfuehren.bpmn"
     },
     {
       "id": "proc_m365_team",
@@ -224,6 +234,16 @@
       "id": "m365-governance-befund",
       "name": "m365-governance-befund",
       "path": "m365-governance-befund.form.json"
+    },
+    {
+      "id": "m365-kalender-berechtigung",
+      "name": "m365-kalender-berechtigung",
+      "path": "m365-kalender-berechtigung.form.json"
+    },
+    {
+      "id": "m365-kalender-bestellung",
+      "name": "m365-kalender-bestellung",
+      "path": "m365-kalender-bestellung.form.json"
     },
     {
       "id": "m365-konto-hybrid-bestellung",
@@ -399,6 +419,16 @@
       "id": "m365-sharepoint-site-pruefen",
       "name": "m365-sharepoint-site-pruefen",
       "path": "m365-sharepoint-site-pruefen.form.json"
+    },
+    {
+      "id": "m365-sichtbarkeit",
+      "name": "m365-sichtbarkeit",
+      "path": "m365-sichtbarkeit.form.json"
+    },
+    {
+      "id": "m365-sichtbarkeit-nachfuehren",
+      "name": "m365-sichtbarkeit-nachfuehren",
+      "path": "m365-sichtbarkeit-nachfuehren.form.json"
     },
     {
       "id": "m365-team-bestellung",

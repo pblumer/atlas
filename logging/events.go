@@ -127,6 +127,11 @@ var (
 	// registry keys the operator pinned (ADR-0499). One key is INFO; two are a
 	// WARN, because two are meant only for the length of a key rotation.
 	HubRegistryKeysPinned = newEvent("hub.registry_keys_pinned")
+	// HubRegistryUnavailable is a request the atlas hub registry could not answer:
+	// the index or a package could not be fetched or did not verify. The caller is
+	// told only that; the cause — DNS, a refused or filtered connection, TLS, an HTTP
+	// status, a signature that no pinned key made — is in this WARN, for the operator.
+	HubRegistryUnavailable = newEvent("hub.registry_unavailable")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is

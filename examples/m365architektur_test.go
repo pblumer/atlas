@@ -23,7 +23,7 @@ const m365Dir = "m365-dienste"
 
 // architectureDirs are the packages that carry an architecture in format 4. The
 // Lizenzmanagement (examples/lizenzmanagement) follows the layout m365-dienste set.
-var architectureDirs = []string{m365Dir, lzDir}
+var architectureDirs = []string{m365Dir, lzDir, itDir}
 
 func m365InfoModel(t *testing.T) infomodel.Model { return infoModelOf(t, m365Dir) }
 

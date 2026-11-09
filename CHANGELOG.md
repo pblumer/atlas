@@ -13,6 +13,187 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
+  products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
+  (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form
+  `m365-sichtbarkeit`: the new visibility and a reason), asked for by the holder or an operator
+  without an approval of its own, like the products' other changes. The lifecycle process finds the
+  group under its alias with `NAME_PREFIX`, sets `visibility` to `Private` or `Public` through the
+  Entra Worker's `update-group` and answers `completed`, or `rejected` when no single group is
+  found. A position freezes its product's actions when it is ordered (ADR-0429), and rebinding
+  (ADR-0427) does not move lifecycle positions, so a team or site ordered earlier does not offer
+  the action; for those the new operator process `sichtbarkeit-nachfuehren.bpmn` («Microsoft 365:
+  Sichtbarkeit nachführen», started from the Console with the alias and the visibility) changes a
+  group whose description names its catalogue position. m365-dienste relocked with Go 1.26.6.
+- **The M365 example offers an additional calendar.** `examples/m365-dienste` has a new
+  product «Zusätzlicher Kalender» (`m365-kalender`, in `cat-m365-mitarbeitende` and
+  `cat-m365-ucc`): a shared mailbox kept for its calendar, named by `M365Namensregel` with the
+  new object type `kalender` (`KAL-<Name>`, `kal-<name>`, `NAME_PREFIX` in front), visible in the
+  address book so Outlook finds it under «Add calendar › From directory», and tagged like every
+  catalogue object. Reading and editing go through two hidden mail-enabled security groups that
+  hold `Reviewer` and `Editor` on the calendar folder, whose name is read per mailbox language;
+  the order form's lists of people become their members inside the Exchange worker, because the
+  engine may not loop over personal data. The owner gets `Editor` directly. Actions: grant and
+  revoke a permission (person and level), and return the calendar, which removes mailbox and
+  groups. The approval is the owner's manager, as for the shared mailbox, and the Exchange
+  Server variant of the test environment (`install-m365-dienste.py`) copies the product.
+- **The atlas hub dialog shows the way to the registry, station by station.** Instead of
+  waiting on "Verifying trusted registry…", the dialog draws the real load as a route from this
+  server to the hub — name resolution, TCP connection on 443, TLS handshake, index, signature —
+  with a running timer on the station being waited on, each station's time and what it
+  established (addresses, TLS version and certificate issuer, size, key fingerprint). Where the
+  way ends it names the cause and what it usually means: a firewall that drops or rejects, a
+  name that resolves to an internal address, a TLS inspection, a redirect, a wrong pinned key.
+  Administrators also read the error text. Once connected the route folds into one line above
+  the listing, and a release this atlas is too old for says which version it needs and is not
+  previewed. New route: `GET /api/v1/blueprints/connection` (ADR-0499, amendment e).
+- **Every job carries an idempotency key, and every Worker Type operation says what a repeat
+  does.** A leased job's `idempotencyKey` (`atlas:<node id>:<job key>`) is the same for every
+  delivery of one task execution — a retry, a redelivery after a lease ran out, the retry an
+  incident's resolve starts — so a worker can hand it to a target that filters duplicates. A Worker
+  Type manifest must now declare, per operation, its `idempotency` (`natural`, `key`, `check` or
+  `none`) and its `effect` (`reversible` or `irreversible`), so a possible repeated effect is a
+  stated fact rather than an assumption.
+- **An installed Worker Type is configured from its own schema.** A Worker Type's manifest carries
+  its configuration as a JSON Schema whose `writeOnly` properties are secrets. An administrator
+  configures Workers of an installed type under `/api/v1/worker-types/installed/{id}/workers`: the
+  settings are checked against the schema, each secret is given only as the name of a vault entry,
+  and the API never shows its value. The launched instance receives every configured Worker with its
+  secrets resolved (`ATLAS_WORKER_CONFIG`, read by `workersdk.LaunchConfig`) and restarts when one
+  changes.
+- **Worker Types can be installed as verified artifacts.** An administrator uploads a Worker Type's
+  manifest and its executable for the server's platform to `POST /api/v1/worker-types/installed`;
+  the server checks the executable against the manifest's sha256, keeps it content-addressed in the
+  data directory, and its supervisor starts it at once — and checks the digest again before every
+  start, refusing a file altered on disk. A launched Worker Type gets the server's address, its own
+  id, the server token and its verified identity, and nothing else of the server's environment.
+  Signatures are not verified yet, so installing needs a server started with
+  `--allow-unsigned-worker-types`, for development only. `examples/workertypes/echo` is the
+  smallest such Worker Type, built against `workersdk` alone.
+- **atlas-workers, the worker-only executable.** Release archives and the container image ship
+  `atlas-workers` beside `atlas`: the out-of-process worker without the server, the engine, the web
+  UI or the MCP server (35 MB against 88 MB on linux/amd64). It takes exactly the flags and
+  variables of `atlas worker`. A server finding it beside its own binary starts its supervised
+  workers with it; `ATLAS_WORKERS_BINARY=self` keeps the server's own binary, a path names another.
+- **Worker Instances say which protocol they speak and which Worker Type they run.** Every job
+  and query poll carries the Worker protocol version and, when known, the Worker Type's id,
+  version and artifact digest; the Workers view shows them per instance. A server refuses a
+  protocol version it does not speak with the versions it does, and names them on every answer
+  in `X-Atlas-Worker-Protocol`; a worker from before this names none and is served as version 1.
+  `atlas worker` reports an identity from `ATLAS_WORKER_TYPE_ID`, `ATLAS_WORKER_TYPE_VERSION`
+  and `ATLAS_WORKER_TYPE_DIGEST`. The protocol itself is now written down for other languages in
+  `docs/contracts/worker-protocol/v1`.
+
+### Changed
+- **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
+  the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
+  "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact
+  table, *Create new* ("Regel (DMN)", "Prozess (BPMN)"), validating and publishing an application,
+  adding, moving and deleting one, and deleting an application. The type column of an
+  application's artifacts reads "Prozess" (was "Diagramm") and "Regel", and the notation pill
+  (BPMN, DMN, FORM) moved from the name column into it. The MCP tool descriptions say "rule" and
+  keep "decision reference" in brackets, so an agent finds the term both ways; tool names, the
+  HTTP routes and the API's own error messages are unchanged. "Entscheidung" / "decision" stays
+  the DMN term for a decision inside a model.
+- **The replay names a multi-instance activity once below the diagram.** The token row under
+  an instance replay listed one chip per token, so a multi-instance task with 200 iterations
+  filled the screen with 200 identical "Token … — Datensatz prüfen" lines and pushed the diagram
+  out of view. A multi-instance activity holding more than one token is now one chip with its
+  token count and its parallel or sequential marker; its row in the instance history still counts
+  and opens the iterations. Joins, races and standard loops keep one chip per token.
+- **An opened entry of "My services" is laid out in sections.** It starts with the product's name,
+  its pie and how it stands. Then come its parts, each with where it stands now (held, on its way,
+  no longer held, not held, not chosen) and the basket control for what can be added; its possible
+  events; and its orders. The newest order and any still moving are shown; settled older ones
+  wait behind "Show earlier orders".
+- **The Worker SDK depends on nothing of atlas.** The form-lookup wire shape moved from
+  `connector/lookup` to `workersdk/lookup`, and the protocol client's own warnings go to a
+  logger the Worker Type chooses (`workersdk.Options.Logger`, the default logger when unset)
+  with the same `event=worker.poll_failed` as before. A Worker Type built outside this
+  repository now pulls in only `workersdk` and the standard library; a test keeps it so.
+
+### Fixed
+- **Why the atlas hub registry could not be read is in the server log.** The Console still
+  says only "trusted Blueprint registry is unavailable or invalid", but the server now logs
+  the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
+  an HTTP status or a signature no pinned key made — so an operator can tell a firewall from
+  a wrong key.
+- **A package import names why the target refused the publish.** When the publish step of a
+  Console package or hub import was refused — for example because a process uses a Worker
+  operation the target's build does not know yet — the import reported only "HTTP 409". It now
+  shows the server's reason, the same message a manual publish shows.
+- **"My services" no longer says "being set up" about parts nobody is providing.** An entry whose
+  missing parts were given back, withdrawn or never delivered, with nothing on its way, read
+  "being set up: 4 of 7 ready". It now reads "incomplete: 4 of 7 held", and the status filter has
+  "incomplete" of its own. Its pie stays the share held. A position the order found "already held"
+  says so as it stands now when the part has been given back since.
+
+## [0.24.0] — 2026-11-05
+
+**The shop becomes one place to follow what one holds.** "My services" and "My orders" are
+one screen that lists, per Marktleistung and per person, what is held and what was ordered,
+with its provisioning state, its possible events and the orders and tasks behind it. A product
+and an entry have an address of their own that can be sent or bookmarked, the shop reads its
+data again while it is in view, and it loads faster: it asks for the newest release of each
+catalogue only, from a small index, instead of every release on every load.
+
+**A catalogue's old releases can be pruned**, every one that is neither the newest nor named
+by an order, after a preview that says which go and why the others stay. A catalogue content
+refresh runs in the background and reports its progress, so an agent no longer publishes a
+catalogue half way through its refresh.
+
+**Licences are managed against a contract.** A new example, `examples/lizenzmanagement`,
+keeps Microsoft 365 licence contracts per customer and project, checks every licence order of
+`m365-dienste` against them without two orders taking the last seat, compares them daily with
+the tenant and bills per WBS element. The Entra Worker reads the tenant's licence stock
+(`list-subscribed-skus`, ADR-0531), and the Exchange Worker creates room lists and sets a
+room's Places metadata, so a meeting room of `m365-dienste` appears in Outlook's Room Finder
+(ADR-0532).
+
+**The Modeler steps between a process's versions and restores one as the draft**, with a
+warning when the draft it replaces holds work that is not deployed (ADR-0533).
+
+**Every app has a symbol**, shown in the app drawer, the top bar and the handbook, and the
+Console's welcome card greets the person signed in by name. The top bar stays in view while a
+page scrolls.
+
+Nothing in the log, the state or a deployment's format changed; 0.24.0 replaces 0.23.1 in
+place.
+
+### Added
+- **Example: resource transfer between two accounts.** A new example package,
+  `examples/informationstransfer` (application «Beispiel: Informationstransfer», hub bundle
+  `informationstransfer`), moves the resources of a previous account to a new one on
+  internalisation, externalisation or a change of office or department, modelled on BIT's
+  «Transfer Resources»: primary address and UPN (with the `transfered.` prefix on the source, or
+  none when the content moves too), mailbox content, mailbox quota (only when the source has more,
+  compared in KB), Teams Phone number, direct manual group memberships in AD and Entra ID, the short
+  code, and on internalisation the Entra ID account by a hard match on `onPremisesImmutableId`. A
+  COLLECT decision table tells the orderer which combinations the scenario refuses and why, Identity
+  Management approves, every deletion is released by a person right before it, the Entra transfer
+  stays off until `ENTRA_TRANSFER = ein`, and the source is finally marked «Ressourcen transferiert».
+  Mailboxes live on Exchange Server or Exchange Online (`POSTFACH_SYSTEM`); what a platform cannot
+  do (moving content inside Exchange Online, Entra Connect, the telephony records) is a task. Accounts
+  and mailboxes stay sealed: the comparisons run in the AD Worker's search filters. The M365 devenv
+  installs it with `scripts/install-informationstransfer.py`.
+- **Worker operations for moving one account's resources to another.** Entra Worker:
+  `list-user-groups` lists the groups a user is a direct member of (always an advanced query),
+  `restore-user` takes a deleted user back out of the recycle bin and `permanently-delete-user`
+  removes one for good; an id not in the recycle bin fails the job (`Directory.Read.All`,
+  `User.DeleteRestore.All`). Exchange Worker, Exchange Server only: `disable-mailbox` disconnects a
+  mailbox and `restore-mailbox-content` copies a disconnected mailbox's content into another mailbox
+  (`New-MailboxRestoreRequest`, `AllowLegacyDNMismatch` set by the Worker). The AD Worker returns
+  `objectGUID`, `objectSid` and `mS-DS-ConsistencyGuid` as base64 of their bytes; for `objectGUID`
+  that is Entra's `onPremisesImmutableId` (ADR-0534).
+- **The Modeler steps between a process's versions and restores one as the draft.** Arrows on
+  either side of the editor bar's version chip open the version before or after the one shown, the
+  draft after the newest, and the chip's panel lists every version with who deployed it and when.
+  A version's panel offers **Restore as draft**: a dialog reads the draft against the newest
+  version and warns, with its differences, when replacing it loses something that is not deployed;
+  confirming saves the version as the draft and reopens the editor on it, so the next Deploy runs it
+  as a new version. Leaving through the arrows or the list keeps unsaved work as every other door
+  out of the editor does
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
 - **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
   one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
   `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is
@@ -51,7 +232,6 @@ _Changed_ / _Removed_ for each version.
   (`api/web/module-icons.js`); `scripts/brand/modules.py` writes their copies under
   `docs/brand/icons/modules/` and `scripts/brand/welcome.py` draws the rocket, and a test
   holds both to the drawing. On a phone the card leaves the picture out.
-
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
   come — running or done, total and finished products, and refreshed, refused or skipped per product. A second
@@ -95,16 +275,7 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Changed
-- **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
-  the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
-  "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact
-  table, *Create new* ("Regel (DMN)", "Prozess (BPMN)"), validating and publishing an application,
-  adding, moving and deleting one, and deleting an application. The type column of an
-  application's artifacts reads "Prozess" (was "Diagramm") and "Regel", and the notation pill
-  (BPMN, DMN, FORM) moved from the name column into it. The MCP tool descriptions say "rule" and
-  keep "decision reference" in brackets, so an agent finds the term both ways; tool names, the
-  HTTP routes and the API's own error messages are unchanged. "Entscheidung" / "decision" stays
-  the DMN term for a decision inside a model.
+- **An import replaces a decision model other applications use only when you name it.** A model whose handle a decision outside the application resolves no longer refuses the import after the dialog. The plan lists it with `sharedWith`, naming the decisions and applications that change with it, and only a named `overwrite` replaces it, never `overwrite=*` and never its being behind (ADR-0467). Replacing it needs the editor role on those applications, and a protected application's decision is never changed. The Console's import dialog shows the decisions, starts the box unticked and leaves it out of "Tick all". `atlas import --overwrite all` leaves it undecided, and `atlas_hub_import_release` describes the rule.
 - **The Console's welcome card greets the person signed in by name.** Its heading reads
   "Welcome, Tina Muster" — the display name where one is set, else the username, as the
   account menu shows them — instead of "Welcome to atlas". With sign-in off there is
@@ -131,6 +302,13 @@ _Changed_ / _Removed_ for each version.
   the corner of a product page in the tile layout.
 
 ### Fixed
+- **"Tick all" in the import dialog takes artifacts another application holds as well.** It also takes their content, and "Tick none" clears both. Each row now names the artifact's kind and name and says what happens to it as its boxes stand: replaced, kept, moved from which application into which, or left behind. The dialog names the application it imports into. The import button waits, with the reason beside it, until every artifact another application holds is taken, since the server refuses the package without them. A failed hub import is reported as "Import failed" rather than "Could not load Blueprint".
+- **Saving a version over its draft moves the editor onto the draft.** A version opened in the
+  Modeler and saved onto its process's existing draft (the overwrite Save offers) left the session
+  addressing the version: the address still named it, and Deploy said the draft would be left
+  alone although it had just been replaced. The session now addresses the draft, as after the
+  first save of a version
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
 - **The test environment installs the AD services with its own directory.** `examples/ad-dienste`
   went into the M365 test environment with the example DNs of its tables
   (`…,DC=contoso,DC=local`), so the domain controller answered with an LDAP referral and the order
@@ -188,6 +366,12 @@ apart.
   before; only a revoke changes what its links are signed over.
 
 ### Changed
+- **The Worker protocol client is its own package, free of the engine.** Leasing, completing,
+  failing and throwing a job, answering form lookups and asking before acting now live in
+  `workersdk`, which imports nothing of the engine — not `job`, not `state`, so not the storage
+  engine either — and a test holds it to that. It is the first step of the Worker SDK that Worker
+  Types built outside this repository will depend on. Package `worker` keeps every old name as an
+  alias, so `atlas worker` and code written against `worker.New` behave as before.
 - **A part of a Marktleistung opens its description from the product page.** In the tile layout's product
   page, each included or optional part listed under the scope is a button that opens the part's own
   description in the same panel as the "i", over the page; closing it leaves the reader where they were.
@@ -18195,7 +18379,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0

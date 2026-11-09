@@ -215,6 +215,22 @@ test("a package asks what the directory cannot answer, plans everything at once,
   expect(page.__errors).toEqual([]);
 });
 
+test("a publish the target refuses names its reason, not a bare status, and imports no catalogue", async ({ page }) => {
+  const reason = 'draft "p" does not compile: compiler: entra task "t" has an unknown operation "list-user-groups"';
+  const routes = {
+    "POST /api/v1/applications/source?dryRun=true": { status: 200, data: { created: true, applicationId: "", artifacts: [] } },
+    "POST /api/v1/catalogs/import/answers": { status: 200, data: { document: { catalogs: [{ id: "c" }], products: [] } } },
+    "POST /api/v1/catalogs/import?dryRun=true": { status: 200, data: { artifacts: [] } },
+    "POST /api/v1/applications/source": { status: 200, data: { created: true, applicationId: "a1", name: "K", artifacts: [] } },
+    "GET /api/v1/applications/a1/releases": { status: 200, data: [] },
+    // As handlePublishApplication answers a bundle that does not compile.
+    "POST /api/v1/applications/a1/publish": { status: 409, data: { id: "a1", name: "K", deployed: false, reason } },
+  };
+  page.evaluate(([b, r]) => window.__importPackage(b, r), [shopPackage, routes]);
+  await expect(result(page)).toHaveText("failed: die Veröffentlichung: " + reason);
+  expect((await page.evaluate(() => window.__calls)).map((c) => c.key)).not.toContain("POST /api/v1/catalogs/import");
+});
+
 test("a source tree is a package without a shop: nothing is asked, nothing published", async ({ page }) => {
   const tree = tarGz([["atlas.json", JSON.stringify({ formatVersion: 1, key: "k", name: "K" })]]);
   const routes = {
@@ -249,7 +265,7 @@ test("a process another application holds is taken only when ticked, its content
         heldBy: { id: "h1", name: "Patrick's <Stuff>" } },
       { ref: "process:p2", status: "elsewhere", outcome: "undecided", compared: "unchanged" },
     ] } },
-    "POST /api/v1/applications/source?keep=process%3Ap1&adopt=process%3Ap1": { status: 200,
+    "POST /api/v1/applications/source?keep=process%3Ap1&adopt=process%3Ap1%2Cprocess%3Ap2": { status: 200,
       data: { applicationId: "a1", name: "K", artifacts: [] } },
   };
   page.evaluate(([b, r]) => window.__importPackage(b, r), [tree, routes]);
@@ -261,12 +277,58 @@ test("a process another application holds is taken only when ticked, its content
   await expect(choices.locator('.import-adopt[value="process:p1"]')).not.toBeChecked();
   // Only a changed one asks about its content too.
   await expect(choices.locator(".import-adopt-content")).toHaveCount(1);
+  // Untaken, the server would refuse the package: the import waits, and says why.
+  await expect(choices.locator("[data-ok]")).toBeDisabled();
+  await expect(choices.locator(".import-blocked")).toBeVisible();
+  await expect(choices.locator(".import-adopt-content")).toBeDisabled();
   await choices.locator('.import-adopt[value="process:p1"]').check();
+  await expect(choices.locator('.import-adopt[value="process:p1"]').locator("xpath=ancestor::li"))
+    .toContainText("mit dem Inhalt dieses Servers");
+  await expect(choices.locator("[data-ok]")).toBeDisabled();
+  await choices.locator('.import-adopt[value="process:p2"]').check();
+  await expect(choices.locator("[data-ok]")).toBeEnabled();
   await choices.locator("[data-ok]").click();
   await expect(result(page)).toHaveText("done: ");
   expect((await page.evaluate(() => window.__calls)).map((c) => c.key)).toEqual([
     "POST /api/v1/applications/source?dryRun=true",
-    "POST /api/v1/applications/source?keep=process%3Ap1&adopt=process%3Ap1",
+    "POST /api/v1/applications/source?keep=process%3Ap1&adopt=process%3Ap1%2Cprocess%3Ap2",
+  ]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("tick all takes what another application holds, but never a model other applications use", async ({ page }) => {
+  const tree = tarGz([["atlas.json", JSON.stringify({ formatVersion: 1, key: "k", name: "K" })]]);
+  const routes = {
+    "POST /api/v1/applications/source?dryRun=true": { status: 200, data: { created: true, applicationId: "", name: "Beispiele: Personal", artifacts: [
+      { ref: "application:k", status: "new", outcome: "created" },
+      { ref: "process:p1", name: "P1", status: "elsewhere", outcome: "undecided", compared: "changed",
+        heldBy: { id: "h1", name: "Archiv" } },
+      { ref: "form:f1", name: "F1", status: "changed", outcome: "undecided" },
+      { ref: "model:noten", name: "noten", status: "changed", outcome: "undecided",
+        sharedWith: [{ decision: "d9", name: "Notenschluessel", application: { id: "x", name: "Pruefung" } }] },
+    ] } },
+    "POST /api/v1/applications/source?overwrite=form%3Af1%2Cprocess%3Ap1&keep=model%3Anoten&adopt=process%3Ap1": { status: 200,
+      data: { applicationId: "a1", name: "K", artifacts: [] } },
+  };
+  page.evaluate(([b, r]) => window.__importPackage(b, r), [tree, routes]);
+
+  const choices = page.locator(".import-choices");
+  await expect(choices).toContainText("Beispiele: Personal");
+  // The shared model names the decision that changes with it, and starts unticked.
+  const sharedRow = choices.locator(".import-shared");
+  await expect(sharedRow).toContainText("Entscheidung «Notenschluessel» in «Pruefung»");
+  await choices.locator("[data-all]").click();
+  await expect(choices.locator('.import-pick[value="form:f1"]')).toBeChecked();
+  await expect(choices.locator('.import-adopt[value="process:p1"]')).toBeChecked();
+  await expect(choices.locator('.import-adopt-content[value="process:p1"]')).toBeChecked();
+  await expect(choices.locator('.import-pick[value="model:noten"]')).not.toBeChecked();
+  await expect(choices.locator('.import-pick[value="form:f1"]').locator("xpath=ancestor::li"))
+    .toContainText("wird durch die Fassung des Pakets ersetzt");
+  await choices.locator("[data-ok]").click();
+  await expect(result(page)).toHaveText("done: ");
+  expect((await page.evaluate(() => window.__calls)).map((c) => c.key)).toEqual([
+    "POST /api/v1/applications/source?dryRun=true",
+    "POST /api/v1/applications/source?overwrite=form%3Af1%2Cprocess%3Ap1&keep=model%3Anoten&adopt=process%3Ap1",
   ]);
   expect(page.__errors).toEqual([]);
 });

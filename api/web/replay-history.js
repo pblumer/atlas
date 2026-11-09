@@ -32,3 +32,31 @@ export function groupReplayHistory(steps) {
   }
   return { children, parents };
 }
+
+// foldLegendTokens groups the tokens of one frame for the chip row under the replay's
+// diagram. A multi-instance activity holds its body's token and one token per running
+// iteration, all on the same shape: listing each as its own chip names the same task
+// two hundred times and pushes the diagram off the screen, while the history row of
+// the body already counts the iterations and opens them. So every multi-instance
+// element holding more than one token becomes one entry carrying its tokens, at the
+// place of its first token; everything else — a join's arrivals, a race, a standard
+// loop's body and round — stays one chip per token, in the order it arrived.
+// Entries are { token } or { elementId, tokens }.
+export function foldLegendTokens(tokens, isMultiInstance) {
+  const entries = [];
+  const groups = new Map();
+  for (const token of tokens) {
+    if (!isMultiInstance(token.elementId)) {
+      entries.push({ token });
+      continue;
+    }
+    let group = groups.get(token.elementId);
+    if (!group) {
+      group = { elementId: token.elementId, tokens: [] };
+      groups.set(token.elementId, group);
+      entries.push(group);
+    }
+    group.tokens.push(token);
+  }
+  return entries.map((e) => (e.tokens && e.tokens.length === 1 ? { token: e.tokens[0] } : e));
+}

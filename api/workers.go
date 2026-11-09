@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/workerproto"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/jobtype"
@@ -57,13 +58,19 @@ type workerStat struct {
 	// exactly like a worker that is not there. That difference is the whole of
 	// "is anybody serving this?", and reading the wrong one reports a healthy
 	// idle queue as unserved (api/processlookup.go).
-	Serves    []string `json:"serves,omitempty"`
-	FirstSeen int64    `json:"firstSeen"`
-	LastSeen  int64    `json:"lastSeen"`
-	Leased    int64    `json:"leased"`
-	Pulled    int64    `json:"pulled"`
-	Completed int64    `json:"completed"`
-	Failed    int64    `json:"failed"`
+	Serves []string `json:"serves,omitempty"`
+	// Protocol is the Worker protocol major version the worker last reported, 1 for a
+	// client from before the handshake; WorkerType the Worker Type it reported running,
+	// nil when it reported none (ADR-0535 §3). Both are replaced on every poll, so an
+	// instance upgraded underneath the server shows its new version at once.
+	Protocol   int                   `json:"protocol,omitempty"`
+	WorkerType *workerproto.Identity `json:"workerType,omitempty"`
+	FirstSeen  int64                 `json:"firstSeen"`
+	LastSeen   int64                 `json:"lastSeen"`
+	Leased     int64                 `json:"leased"`
+	Pulled     int64                 `json:"pulled"`
+	Completed  int64                 `json:"completed"`
+	Failed     int64                 `json:"failed"`
 }
 
 // workerRegistry accumulates what the workers endpoint reports.
@@ -130,6 +137,23 @@ func (r *workerRegistry) holdsConnectors(worker string, names []string, endpoint
 			st.Endpoints[name] = e
 		}
 	}
+}
+
+// identifies records the handshake of a worker's latest poll: the protocol version it
+// speaks and the Worker Type it runs. Like holdsConnectors it replaces rather than
+// merges — the report is what the instance is now.
+func (r *workerRegistry) identifies(worker string, protocol int, wt *workerproto.Identity) {
+	if protocol == 0 {
+		protocol = 1
+	}
+	st := r.seen(worker)
+	st.Protocol = protocol
+	if wt == nil {
+		st.WorkerType = nil
+		return
+	}
+	id := *wt
+	st.WorkerType = &id
 }
 
 // Bounds on what one poll may report, so a misbehaving worker cannot grow the

@@ -1,6 +1,6 @@
 # ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
-- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package"; and a target keeps a table of what another installation's names mean there — see "The target remembers what a name means". Amended 2026-11-03: an artifact another existing application holds is planned as `elsewhere` and moves into the importing application only when the caller adopts it by name — see "Another application's artifact is adopted, never taken")
+- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package"; and a target keeps a table of what another installation's names mean there — see "The target remembers what a name means". Amended 2026-11-03: an artifact another existing application holds is planned as `elsewhere` and moves into the importing application only when the caller adopts it by name — see "Another application's artifact is adopted, never taken". Amended 2026-11-05: a decision model that decisions outside the application resolve is no longer refused outright; the plan names those decisions, and the model is replaced only when the caller names it under overwrite and may edit their applications — see "A model other applications use is replaced only when named")
 - **Implementation:** Landed
 - **Date:** 2026-10-20
 - **Deciders:** Atlas maintainers
@@ -452,6 +452,36 @@ Considered and set aside:
   original on another.
 - **`adopt=*`.** It would turn one click into taking everything another application holds that
   a package happens to name.
+
+### A model other applications use is replaced only when named (amended 2026-11-05)
+
+"A handle the target holds with other content … is refused while a decision outside the
+application resolves it" protected the other decision, but left no way forward when the person
+wants the package's model. The atlas hub acceptance test hit it with the bundle "Beispiele:
+Personal & Mitarbeitende": its model `notenschluessel` exists on atlas.blumer.cloud with other
+content, and the decision "Notenschluessel" of another application uses it. Worse, the refusal
+came only after the dialog, when the person had already ticked everything.
+
+- **The plan names it.** Such a model carries `sharedWith`: each decision outside the
+  application that resolves the handle, with its application (named only for a caller who may
+  see it, like `heldBy`).
+- **Only a named overwrite replaces it.** `overwrite=*` does not, and neither does its being
+  behind: both leave it undecided, so the import stops with 409 and the plan until somebody
+  names it under `overwrite` or `keep`. The Console's dialog shows the decisions that change with
+  it, starts its box unticked and leaves it out of "Tick all". `atlas import --overwrite all`
+  leaves it undecided, and the MCP tool says the same.
+- **Consent is the editor role.** A named overwrite needs the editor role on every application
+  whose decision resolves the model, as adopting does (404 without detail otherwise). A
+  protected application's decision is never changed (403). Keeping this server's model remains
+  the way through.
+
+Considered and set aside:
+
+- **Never replacing it.** The package's decisions would then run on another model than the one
+  they were written for, and a sample would behave other than its documentation says.
+- **Installing the package's model under a new handle** and pointing only the package's decisions
+  at it. Every later import and export would have to carry the rename, and two models with one
+  meaning would drift apart silently.
 
 ### Why not the others
 

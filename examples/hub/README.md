@@ -32,6 +32,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `m365-dienste` | Beispiel: Microsoft-365-Dienste | shop package |
 | `ad-dienste` | Beispiel: Active-Directory-Dienste | shop package |
 | `lizenzmanagement` | Beispiel: Lizenzmanagement | shop package; works with `m365-dienste` |
+| `informationstransfer` | Beispiel: Informationstransfer | shop package |
 
 Rules, checked by `go test ./cmd/atlas`:
 
@@ -160,6 +161,22 @@ An index signed by either key is accepted. More than two keys, or one key twice,
 server at startup. At startup the server logs the pinned fingerprints as event
 `hub.registry_keys_pinned`: as INFO for one key, and as a WARN for two, so a rotation that
 was never finished does not go unnoticed.
+
+When the registry cannot be read, the Console says only "trusted Blueprint registry is
+unavailable or invalid". The server logs the cause as a WARN with event
+`hub.registry_unavailable`: a DNS failure, a refused or timed-out connection, a TLS error,
+an HTTP status or a signature no pinned key made. The client connects directly to the
+registry on port 443: it ignores `HTTPS_PROXY`, follows no redirect and refuses a
+registry whose name resolves to a private address. A network that reaches the internet only
+through a proxy therefore cannot read the registry.
+
+The Console's atlas hub dialog shows the same load station by station
+(`GET /api/v1/blueprints/connection`, ADR-0499 amendment e): the name resolved, the TCP
+connection, the TLS handshake with the certificate's issuer, the index, the signature with the
+fingerprint of the key that matched. Where the way ends it names the cause and what it
+usually means: a connection nobody answers is a firewall that drops, a refused one a firewall
+that rejects, an unknown certificate issuer a TLS inspection, a signature no pinned key made a
+wrong `ATLAS_BLUEPRINT_REGISTRY_KEY`. Administrators also see the error text.
 
 ### The fixed announcement channel
 
@@ -328,6 +345,13 @@ application that holds it, and the import stops until somebody decides (ADR-0467
   replaces this server's.
 - With `atlas import`, name it with `--adopt process:ID`. At a terminal the command asks.
 - Over MCP, pass it in `adopt`, only as the person decided.
+
+**Decision models other applications use.** A bundle's model can exist on the server
+with other content, while a decision of another application uses it. The plan then names that
+decision. The model is replaced only when somebody ticks it on its own, never by "Tick all".
+With `atlas import`, name it with `--overwrite model:HANDLE`; over MCP, pass it in `overwrite`.
+Replacing it changes that decision too and needs the editor role on its application. Leaving it
+unticked keeps this server's model (ADR-0467 amendment 2026-11-05).
 
 Adopting needs the editor role on the application the artifact leaves. There is no "adopt
 all". Artifacts of a *deleted* application do not block the import: they read as Ungrouped

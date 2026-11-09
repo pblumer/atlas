@@ -34,8 +34,8 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
-	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // Member is the component member that makes a textfield an availability field.

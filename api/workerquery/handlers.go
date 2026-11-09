@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/api/workerproto"
+	"github.com/pblumer/atlas/workersdk/lookup"
+	"github.com/pblumer/atlas/workertype"
 )
 
 // MaxPollWait bounds one long poll, as maxJobPollWait bounds a job poll. It stays
@@ -51,9 +53,25 @@ func (s *Service) HandleActivate(w http.ResponseWriter, r *http.Request) {
 		Connectors []string `json:"connectors"`
 		MaxQueries int      `json:"maxQueries"`
 		WaitMs     int64    `json:"waitMs"`
+		// The handshake, as on the job poll (ADR-0535 §3): absent is protocol 1. The
+		// Worker Type is checked for shape here and recorded by the job poll, which
+		// owns the Workers view.
+		Protocol   int                   `json:"protocol,omitempty"`
+		WorkerType *workerproto.Identity `json:"workerType,omitempty"`
 	}
+	w.Header().Set(workerproto.Header, workerproto.HeaderValue)
 	if !decode(w, r, s.maxBody, &body) {
 		return
+	}
+	if err := workerproto.Check(body.Protocol); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if wt := body.WorkerType; wt != nil {
+		if err := workertype.CheckIdentity(wt.ID, wt.Version, wt.Digest); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	body.Type, body.Worker = strings.TrimSpace(body.Type), strings.TrimSpace(body.Worker)
 	if body.Type == "" || body.Worker == "" {

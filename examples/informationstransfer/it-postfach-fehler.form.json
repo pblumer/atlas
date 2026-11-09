@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "it-postfach-fehler",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Wiederherstellung prüfen · Check the restore**\n\nDie Wiederherstellung des Postfachinhalts ist gescheitert, angehalten oder dauert zu lange. · The restore failed, is suspended or takes too long.\n\nAnforderung · Request: atlas-it-{{orderId}}-{{positionId}}, Stand · status: {{wiederherstellung[1].Status}}\n\nPrüfen mit `Get-MailboxRestoreRequest -Name <Name> | Get-MailboxRestoreRequestStatistics -IncludeReport`, beheben oder neu anstossen und abschliessen lassen. Das abgetrennte Quellpostfach liegt bis zum Ablauf der Aufbewahrung in der Datenbank."
+    },
+    {
+      "key": "inhaltUebertragen",
+      "type": "radio",
+      "label": "Inhalt im Zielpostfach? · Content in the target mailbox?",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung · Remark",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "it-loeschung-postfach",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Löschung des Quellpostfachs freigeben · Release the deletion of the source mailbox**\n\nQuellpostfach · Source mailbox: **{{pfQuelle.DisplayName}}** <{{pfQuelle.PrimarySmtpAddress}}>, Datenbank · database {{pfQuelle.Database}}, ExchangeGuid {{pfQuelle.ExchangeGuid}}\n\nZielpostfach · Target mailbox: **{{pfZiel.DisplayName}}** <{{pfZiel.PrimarySmtpAddress}}>\n\nMit der Freigabe trennt Atlas das Quellpostfach ab (Disable-Mailbox): Alle Exchange-Attribute der Quelle werden entfernt, der Inhalt wird in das Zielpostfach wiederhergestellt (New-MailboxRestoreRequest). Das abgetrennte Postfach bleibt nur bis zum Ablauf der Aufbewahrungsfrist der Datenbank wiederherstellbar. · On release Atlas disconnects the source mailbox, removing all its Exchange attributes, and restores its content into the target mailbox."
+    },
+    {
+      "key": "freigabe",
+      "type": "radio",
+      "label": "Löschung · Deletion",
+      "values": [
+        {
+          "label": "Freigegeben · Released",
+          "value": "freigegeben"
+        },
+        {
+          "label": "Abgelehnt · Refused",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bestaetigt",
+      "type": "checkbox",
+      "label": "Ich habe Quelle und Ziel geprüft · I have checked source and target",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

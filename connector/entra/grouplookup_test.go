@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // aliasQuery is the value lookup that answers "does a group with this alias exist".

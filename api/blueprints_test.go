@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/api/blueprintregistry"
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 type fakeBlueprintSource struct {
@@ -239,5 +241,108 @@ func TestBlueprintAPIPreviewIncludesProductsAndCatalogues(t *testing.T) {
 	if len(result.Catalogues) != 1 || result.Catalogues[0].ID != "cat-requests" ||
 		len(result.Products) != 1 || result.Products[0].HomeCatalog != "cat-requests" {
 		t.Fatalf("preview omitted real shop identities: %+v", result)
+	}
+}
+
+// TestBlueprintRegistryFailureIsLoggedForTheOperator: the caller learns only that
+// the registry could not be read, but the operator's log names the cause, so a
+// firewall, a proxy or a wrong pinned key can be told apart on a server nobody can
+// debug from the browser.
+func TestBlueprintRegistryFailureIsLoggedForTheOperator(t *testing.T) {
+	sink := captureAuditLog(t)
+	f := sampleBlueprintSource(t)
+	f.loadError = errors.New("registry HTTPS dial failed: connect: connection refused")
+	s := &Server{blueprints: f}
+	fail := blueprintRequest(s, "GET", "/api/v1/blueprints", "", "", "")
+	if fail.Code != http.StatusBadGateway || strings.Contains(fail.Body.String(), "connection refused") {
+		t.Fatalf("caller answer: %d %s", fail.Code, fail.Body.String())
+	}
+	log := sink.String()
+	if !strings.Contains(log, `"event":"hub.registry_unavailable"`) || !strings.Contains(log, "connection refused") || !strings.Contains(log, `"level":"WARN"`) {
+		t.Fatalf("operator log does not name the cause: %s", log)
+	}
+}
+
+// tracedFake is a registry source that reports stations, as the pinned client does.
+type tracedFake struct {
+	*fakeBlueprintSource
+	steps []blueprintregistry.Step
+}
+
+func (f *tracedFake) LoadIndexTraced(ctx context.Context, report func(blueprintregistry.Step)) (blueprintregistry.Index, error) {
+	for _, st := range f.steps {
+		report(st)
+	}
+	return f.LoadIndex(ctx)
+}
+
+func (f *tracedFake) Host() string { return "registry.example.org" }
+
+func connectionLines(t *testing.T, s *Server, principal *httpapi.Principal) []map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blueprints/connection", nil)
+	if principal != nil {
+		req = req.WithContext(httpapi.WithPrincipal(req.Context(), principal))
+	}
+	w := httptest.NewRecorder()
+	s.handleBlueprintConnection(w, req)
+	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/x-ndjson") {
+		t.Fatalf("connection: %d %s", w.Code, w.Header().Get("Content-Type"))
+	}
+	var out []map[string]any
+	for _, l := range strings.Split(strings.TrimSpace(w.Body.String()), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("line %q: %v", l, err)
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// TestBlueprintConnectionStreamsTheWayAndTheIndex: a start line naming the
+// stations, one line per station as the load reports it, and a done line with the
+// verified index and how many of its releases this atlas may install.
+func TestBlueprintConnectionStreamsTheWayAndTheIndex(t *testing.T) {
+	f := &tracedFake{fakeBlueprintSource: sampleBlueprintSource(t), steps: []blueprintregistry.Step{
+		{Stage: blueprintregistry.StageResolve, OK: true, Host: "registry.example.org", Addresses: []string{"203.0.113.7"}},
+		{Stage: blueprintregistry.StageConnect, OK: true, Address: "203.0.113.7:443"},
+	}}
+	lines := connectionLines(t, &Server{blueprints: f}, nil)
+	if len(lines) != 4 || lines[0]["type"] != "start" || lines[0]["host"] != "registry.example.org" ||
+		lines[1]["stage"] != "resolve" || lines[2]["stage"] != "connect" || lines[3]["type"] != "done" {
+		t.Fatalf("lines: %v", lines)
+	}
+	done := lines[3]
+	if done["ok"] != true || done["releases"].(float64) != 1 || done["index"] == nil {
+		t.Fatalf("done: %v", done)
+	}
+}
+
+// TestBlueprintConnectionNamesTheCauseToEveryoneAndTheErrorToAdmins: the error
+// text can name this network's resolver and addresses, so only an administrator
+// reads it; a modeler reads the station and its cause. Either way the operator's
+// log has it.
+func TestBlueprintConnectionNamesTheCauseToEveryoneAndTheErrorToAdmins(t *testing.T) {
+	sink := captureAuditLog(t)
+	stop := blueprintregistry.Step{Stage: blueprintregistry.StageResolve, Cause: blueprintregistry.CauseDNSFailed,
+		Err: errors.New("lookup registry.example.org on 10.0.0.53:53: server misbehaving")}
+	f := &tracedFake{fakeBlueprintSource: sampleBlueprintSource(t), steps: []blueprintregistry.Step{stop}}
+	f.loadError = errors.New("load registry index: " + stop.Err.Error())
+	s := &Server{blueprints: f, authEnabled: true}
+
+	modeler := connectionLines(t, s, &httpapi.Principal{UserID: "m", Roles: []string{RoleModeler}})
+	if modeler[1]["cause"] != "dns_failed" || modeler[1]["ok"] != false || modeler[1]["error"] != nil {
+		t.Fatalf("modeler step: %v", modeler[1])
+	}
+	if last := modeler[len(modeler)-1]; last["type"] != "done" || last["ok"] != false || last["index"] != nil {
+		t.Fatalf("modeler done: %v", last)
+	}
+	admin := connectionLines(t, s, &httpapi.Principal{UserID: "a", Roles: []string{RoleAdmin}})
+	if !strings.Contains(fmt.Sprint(admin[1]["error"]), "10.0.0.53") {
+		t.Fatalf("admin step: %v", admin[1])
+	}
+	if !strings.Contains(sink.String(), `"event":"hub.registry_unavailable"`) {
+		t.Fatalf("not logged: %s", sink.String())
 	}
 }

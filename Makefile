@@ -9,9 +9,11 @@ all: check
 build:
 	go build ./...
 
-# Build the single-binary server into bin/atlas.
+# Build the server into bin/atlas, and beside it bin/atlas-workers, the worker-only
+# executable its supervised workers run when it is there (ADR-0535).
 server:
 	go build -o bin/atlas ./cmd/atlas
+	go build -o bin/atlas-workers ./cmd/atlas-workers
 
 # Run the single-binary server (override flags via ARGS, e.g. ARGS="--addr :9090").
 run:

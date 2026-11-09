@@ -103,7 +103,9 @@ func (d *MockDirectory) Snapshot(maxEntries int) MockSnapshot {
 		}
 		view.Entries = make([]MockEntry, 0, len(live))
 		for _, e := range live {
-			view.Entries = append(view.Entries, MockEntry{DN: e.DN, Attributes: e.Attributes})
+			// As a search answers them: a GUID's raw bytes would reach the Console as
+			// replacement characters, since a JSON string carries no arbitrary bytes.
+			view.Entries = append(view.Entries, MockEntry{DN: e.DN, Attributes: answeredAttrs(e.Attributes)})
 		}
 		left -= len(view.Entries)
 		snap.Forests = append(snap.Forests, view)

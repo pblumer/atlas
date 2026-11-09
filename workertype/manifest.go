@@ -56,8 +56,15 @@ type Spec struct {
 	JobTypes            []string    `json:"jobTypes"`
 	Operations          []Operation `json:"operations"`
 	ConfigurationSchema string      `json:"configurationSchema"`
-	ModelerTemplate     string      `json:"modelerTemplate"`
-	Artifact            *Artifact   `json:"artifact,omitempty"`
+	// Configuration is the configuration contract inline, as a JSON Schema object
+	// whose writeOnly top-level properties are secrets (ADR-0535 §4). An installed
+	// artifact carries no other file, so this is where its schema travels.
+	Configuration   json.RawMessage `json:"configuration,omitempty"`
+	ModelerTemplate string          `json:"modelerTemplate"`
+	Artifact        *Artifact       `json:"artifact,omitempty"`
+	// Artifacts are the runtime's executables, one per platform (ADR-0535 §1). A
+	// manifest names either Artifact (one platform) or Artifacts, not both.
+	Artifacts []Artifact `json:"artifacts,omitempty"`
 }
 
 // Runtime declares how the Worker runtime is supplied.
@@ -70,6 +77,45 @@ type Operation struct {
 	ID           string            `json:"id"`
 	JobType      string            `json:"jobType"`
 	Capabilities []CapabilityClaim `json:"capabilities,omitempty"`
+	// Idempotency and Effect say what a second delivery of one of its jobs does
+	// (ADR-0538): both are required, so the
+	// property is never assumed silently.
+	Idempotency string `json:"idempotency"`
+	Effect      string `json:"effect"`
+}
+
+// How an operation behaves when one of its jobs is delivered a second time.
+const (
+	// IdempotencyNatural: a second delivery is harmless by nature.
+	IdempotencyNatural = "natural"
+	// IdempotencyKey: the target filters duplicates by the job's idempotencyKey.
+	IdempotencyKey = "key"
+	// IdempotencyCheck: the worker checks before acting whether it already happened.
+	IdempotencyCheck = "check"
+	// IdempotencyNone: a second delivery can repeat the effect.
+	IdempotencyNone = "none"
+)
+
+// What a repeated effect means.
+const (
+	// EffectReversible: a repeated effect can be undone or is tolerable.
+	EffectReversible = "reversible"
+	// EffectIrreversible: a repeated effect cannot be undone.
+	EffectIrreversible = "irreversible"
+)
+
+// DuplicateRisk grades what a second delivery of op can do: "" for none, "notice" for
+// a tolerable repeat, "warning" for an irreversible one, as
+// ADR-0538 §3 grades it.
+func (op Operation) DuplicateRisk() string {
+	switch {
+	case op.Idempotency != IdempotencyNone:
+		return ""
+	case op.Effect == EffectReversible:
+		return "notice"
+	default:
+		return "warning"
+	}
 }
 
 // Artifact identifies an executable runtime artifact by content digest.
@@ -170,25 +216,84 @@ func (m Manifest) Validate() error {
 		if _, exists := jobTypes[op.JobType]; !exists {
 			return fmt.Errorf("spec.operations operation %q references undeclared job type %q", op.ID, op.JobType)
 		}
+		switch op.Idempotency {
+		case IdempotencyNatural, IdempotencyKey, IdempotencyCheck, IdempotencyNone:
+		case "":
+			return fmt.Errorf("spec.operations operation %q must declare idempotency (natural, key, check or none): what a second delivery of one of its jobs does", op.ID)
+		default:
+			return fmt.Errorf("spec.operations operation %q idempotency %q must be natural, key, check or none", op.ID, op.Idempotency)
+		}
+		switch op.Effect {
+		case EffectReversible, EffectIrreversible:
+		case "":
+			return fmt.Errorf("spec.operations operation %q must declare effect (reversible or irreversible): whether a repeated effect can be undone", op.ID)
+		default:
+			return fmt.Errorf("spec.operations operation %q effect %q must be reversible or irreversible", op.ID, op.Effect)
+		}
 		if err := validateCapabilityClaims(op.ID, op.Capabilities); err != nil {
 			return err
 		}
 	}
-	if m.Spec.Runtime.Mode == RuntimeExternal && m.Spec.Artifact == nil {
-		return errors.New("spec.artifact is required for an external runtime")
+	if len(bytes.TrimSpace(m.Spec.Configuration)) > 0 {
+		if _, err := CompileConfiguration(m.Spec.Configuration); err != nil {
+			return err
+		}
+	}
+	if m.Spec.Artifact != nil && len(m.Spec.Artifacts) > 0 {
+		return errors.New("spec.artifact and spec.artifacts are exclusive: name one platform or list them all")
+	}
+	if m.Spec.Runtime.Mode == RuntimeExternal && m.Spec.Artifact == nil && len(m.Spec.Artifacts) == 0 {
+		return errors.New("spec.artifact or spec.artifacts is required for an external runtime")
 	}
 	if m.Spec.Artifact != nil {
-		if strings.TrimSpace(m.Spec.Artifact.Platform) == "" {
-			return errors.New("spec.artifact.platform is required")
-		}
-		if strings.TrimSpace(m.Spec.Artifact.MediaType) == "" {
-			return errors.New("spec.artifact.mediaType is required")
-		}
-		if !digestPattern.MatchString(m.Spec.Artifact.Digest) {
-			return errors.New("spec.artifact.digest must be a lower-case sha256 digest")
+		if err := validateArtifact("spec.artifact", *m.Spec.Artifact); err != nil {
+			return err
 		}
 	}
+	platforms := make(map[string]struct{}, len(m.Spec.Artifacts))
+	for i, a := range m.Spec.Artifacts {
+		if err := validateArtifact(fmt.Sprintf("spec.artifacts[%d]", i), a); err != nil {
+			return err
+		}
+		if _, dup := platforms[a.Platform]; dup {
+			return fmt.Errorf("spec.artifacts names platform %q twice", a.Platform)
+		}
+		platforms[a.Platform] = struct{}{}
+	}
 	return nil
+}
+
+// MediaTypeExecutable is the media type of a native executable artifact: one binary
+// for one platform, launched as a process (ADR-0535 §1).
+const MediaTypeExecutable = "application/vnd.atlas.worker.executable"
+
+var platformPattern = regexp.MustCompile(`^[a-z0-9]+/[a-z0-9]+$`)
+
+func validateArtifact(field string, a Artifact) error {
+	switch {
+	case strings.TrimSpace(a.Platform) == "":
+		return fmt.Errorf("%s.platform is required", field)
+	case !platformPattern.MatchString(a.Platform):
+		return fmt.Errorf("%s.platform %q must be os/arch, such as linux/amd64", field, a.Platform)
+	case strings.TrimSpace(a.MediaType) == "":
+		return fmt.Errorf("%s.mediaType is required", field)
+	case !digestPattern.MatchString(a.Digest):
+		return fmt.Errorf("%s.digest must be a lower-case sha256 digest", field)
+	}
+	return nil
+}
+
+// ArtifactFor returns the artifact the manifest declares for platform ("os/arch").
+func (m Manifest) ArtifactFor(platform string) (Artifact, bool) {
+	if a := m.Spec.Artifact; a != nil && a.Platform == platform {
+		return *a, true
+	}
+	for _, a := range m.Spec.Artifacts {
+		if a.Platform == platform {
+			return a, true
+		}
+	}
+	return Artifact{}, false
 }
 
 // CompatibleWith reports whether an Atlas semantic version satisfies the

@@ -1,0 +1,84 @@
+{
+  "type": "default",
+  "id": "m365-kalender-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zusätzlicher Kalender · Additional calendar**\n\nEin eigener Kalender für ein Team oder ein Vorhaben, z.B. ein Ferienplan. Der Name folgt der Namensregel: KAL-<Name>. In Outlook fügt man ihn über «Kalender hinzufügen» › «Aus Verzeichnis» hinzu. · A calendar of its own for a team or a project, e.g. a holiday plan. Its name follows the naming rule KAL-<name>. Add it in Outlook with «Add calendar» › «From directory»."
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Name des Kalenders · Name of the calendar",
+      "description": "Zum Beispiel «Ferienplan Projekte»; das Präfix KAL- setzt die Namensregel davor. · For example «Holiday plan projects»; the naming rule adds the prefix KAL-.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zweck",
+      "type": "textarea",
+      "label": "Zweck · Purpose",
+      "description": "Wofür der Kalender da ist; die genehmigende Person liest es. · What the calendar is for; the approver reads it.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "besitzer",
+      "type": "select",
+      "label": "Verantwortliche Person · Responsible person",
+      "description": "Kann den Kalender bearbeiten und steht in der Herkunftskennzeichnung. · Can edit the calendar and is recorded as its owner.",
+      "validate": {
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "surname",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
+      }
+    },
+    {
+      "key": "leser",
+      "type": "textarea",
+      "label": "Personen mit Leserecht (UPN, je Zeile eine) · People who may read (UPN, one per line)",
+      "description": "Sehen alle Termine mit Details. Leer lassen, wenn niemand sonst lesen soll. · See every appointment with its details. Leave empty if nobody else reads.",
+      "validate": {
+        "pattern": "^\\s*([^@\\s,;]+@[^@\\s,;]+\\.[^@\\s,;]+[\\s,;]*)*$"
+      }
+    },
+    {
+      "key": "bearbeiter",
+      "type": "textarea",
+      "label": "Personen mit Bearbeitungsrecht (UPN, je Zeile eine) · People who may edit (UPN, one per line)",
+      "description": "Erstellen, ändern und löschen Termine. · Create, change and delete appointments.",
+      "validate": {
+        "pattern": "^\\s*([^@\\s,;]+@[^@\\s,;]+\\.[^@\\s,;]+[\\s,;]*)*$"
+      }
+    }
+  ]
+}

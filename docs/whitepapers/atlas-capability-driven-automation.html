@@ -1,0 +1,478 @@
+<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Technisches Whitepaper zu Capability-driven Automation, Claims, Evidence, Worker Binding und den CDA0–CDA8-Meilensteinen in atlas"><title>atlas · Capability-driven Automation · Technisches Whitepaper</title><style>
+:root{color-scheme:dark;--ink:#090f1c;--panel:#101c2e;--panel2:#17263b;--line:#2d4058;--muted:#9bb0cc;--white:#f4f7ff;--blue:#b8d7ff;--mint:#b8e5cd;--shadow:0 25px 60px #0006;font:15.5px/1.63 DejaVu Sans,Arial,sans-serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--white);background:radial-gradient(circle at top,#1d3357 0%,#14233d 42%,#111d33 100%)}
+a{color:var(--blue);text-decoration:none;border-bottom:1px solid #b8d7ff55}a:hover{color:var(--white);border-bottom-color:currentColor}
+.document{width:min(950px,calc(100% - 48px));margin:auto;padding:0 0 80px}
+.cover{min-height:92vh;padding:5vh 0 7vh;display:flex;flex-direction:column;position:relative;page-break-after:always;overflow:hidden}
+.cover-star{position:absolute;inset:0;background-image:radial-gradient(circle at 15% 22%,#fff6 0 1px,transparent 1px),radial-gradient(circle at 82% 18%,#fff5 0 1px,transparent 1px),radial-gradient(circle at 33% 66%,#c8dbff50 0 1px,transparent 1px),radial-gradient(circle at 72% 74%,#eef5ff4b 0 1px,transparent 1px);pointer-events:none}
+.cover-top{display:flex;align-items:center;gap:14px;font-size:32px;font-weight:850;letter-spacing:-.06em}.atlas-brand-glyph{color:#f4f7fb;flex:0 0 64px}.cover-kicker{font-size:12px;letter-spacing:.2em;color:var(--mint);margin-top:auto;text-transform:uppercase;font-weight:650}
+.cover h1{font-size:clamp(54px,10vw,100px);letter-spacing:-.075em;line-height:1.04;font-weight:800;margin:24px 0 26px}.cover h1 em{font-style:normal;color:var(--blue)}.cover-lead{font-size:clamp(20px,3.2vw,28px);max-width:690px;color:#cadcf0;line-height:1.4}.cover-rule{width:190px;height:3px;background:linear-gradient(90deg,var(--blue),var(--mint));margin-top:35px}
+.cover-bottom{margin-top:auto;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding-top:20px}.cover-bottom span{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block}.cover-bottom strong{font-size:13px;display:block;padding-top:5px;font-weight:650}.cover-disclaimer{color:var(--muted);font-size:11px;margin-top:25px}
+article{padding-top:30px}h2{font-size:30px;line-height:1.18;letter-spacing:-.045em;page-break-after:avoid;break-after:avoid;margin:55px 0 17px;color:var(--white)}h3{font-size:20px;line-height:1.3;color:var(--blue);margin:32px 0 12px;page-break-after:avoid;break-after:avoid}p{margin:0 0 15px;text-wrap:pretty}strong{color:var(--white)}blockquote{margin:24px 0;padding:18px 23px 2px;background:var(--panel);border-left:3px solid var(--mint);border-radius:0 8px 8px 0;color:var(--muted)}blockquote strong{color:var(--white)}
+.toc{page-break-after:always;border-top:1px solid var(--line);margin:30px 0;padding:0 0 36px}.toc h2{font-size:32px}.toc-grid{columns:2;column-gap:30px}.toc a{display:block;break-inside:avoid;padding:7px 0;font-size:13.2px;color:var(--blue);border-bottom:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:12.1px;margin:18px 0 27px;line-height:1.42;break-inside:auto;table-layout:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th{background:var(--panel2);border-bottom:2px solid var(--mint);color:var(--white);text-align:left;padding:10px 11px;vertical-align:top}td{padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tr:nth-child(2n) td{background:#17263b55}
+code{background:#1a2d45;color:#c6e2ff;border-radius:3px;padding:.09em .25em;font-size:.89em;overflow-wrap:anywhere}pre{background:var(--panel);padding:16px;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:8px}pre code{background:transparent;padding:0}
+ul,ol{padding-left:27px;margin:15px 0 23px}li{padding-bottom:8px;break-inside:avoid}.diagram{margin:27px 0 34px;break-inside:avoid;page-break-inside:avoid}.diagram svg{width:100%;height:auto;max-width:100%;display:block}figcaption{font-size:11.5px;text-align:center;color:var(--muted);padding-top:8px}.atlas-diagram{font-family:DejaVu Sans,Arial,sans-serif}
+.footer-note{color:var(--muted)}
+@media screen and (max-width:650px){.document{width:calc(100% - 26px)}.cover{min-height:90vh}.cover-bottom{grid-template-columns:1fr;gap:14px}.toc-grid{columns:1}h2{font-size:25px}.diagram{overflow-x:auto}.diagram svg{min-width:600px}table{display:block;overflow-x:auto;font-size:11px;max-width:100%}th,td{min-width:135px}.cover h1{font-size:48px}}
+@page{size:A4;margin:17mm 16mm 19mm;@bottom-center{content:"atlas · Capability-driven Automation   |   " counter(page);font-family:DejaVu Sans;font-size:8pt;color:#9bb0cc}}
+@media print{html{color-adjust:exact}body{background:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}.document{width:100%;padding:0}.cover{min-height:242mm;padding:12mm 0 6mm}.cover h1{font-size:57pt}.cover-lead{font-size:19pt}.toc{margin-top:0}.toc-grid{columns:2}h2{font-size:22pt;margin-top:24pt}h3{font-size:14pt}p{font-size:10.3pt;line-height:1.53}table{font-size:8.15pt}td,th{padding:6px 7px}blockquote p{font-size:9.7pt}li{font-size:10pt;line-height:1.48}a{color:var(--blue)}}
+</style></head><body><main class="document"><section class="cover"><div class="cover-star"></div><div class="cover-top"><svg class="atlas-brand-glyph" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="65" height="65" role="img" aria-label="atlas"><path fill="currentColor" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path fill="currentColor" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path fill="currentColor" d="M133 93H162V211H133Z"/><path fill="currentColor" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg><span class="wordmark">atlas</span></div><div class="cover-kicker">TECHNISCHES WHITEPAPER · NOVEMBER 2026</div><h1>Capability-driven<br><em>Automation</em></h1><p class="cover-lead">Von fachlichen Fähigkeiten zu nachweisbaren, autorisierten Worker-Operationen</p><div class="cover-rule"></div><div class="cover-bottom"><div><span>Faktenstand</span><strong>7. November 2026</strong></div><div><span>Repository-Basis</span><strong>main · 8c6d819b2591</strong></div><div><span>Ausgabe</span><strong>Neufassung 1.0 · DE-CH</strong></div></div><p class="cover-disclaimer">Architektur- und Statusbericht · Developer Preview · Keine Zertifizierung</p></section><nav class="toc"><h2>Inhalt</h2><div class="toc-grid"><a href="#management-summary">Management Summary</a><a href="#ausgangslage-und-problemstellung">1. Ausgangslage und Problemstellung</a><a href="#begriffe-ebenen-und-beweislast">2. Begriffe, Ebenen und Beweislast</a><a href="#architekturüberblick-und-ist-zustand">3. Architekturüberblick und Ist-Zustand</a><a href="#von-der-facharchitektur-zum-technischen-vertrag">4. Von der Facharchitektur zum technischen Vertrag</a><a href="#cda0-deklarative-claims-umgesetzt">5. CDA0: deklarative Claims – umgesetzt</a><a href="#cda1-semantischer-contract-envelope-umgesetzt">6. CDA1: semantischer Contract-Envelope – umgesetzt</a><a href="#cda2-governance-conformance-und-evidenz-teilweise-umgesetzt">7. CDA2: Governance, Conformance und Evidenz – teilweise umgesetzt</a><a href="#cda3-verifizierte-aus-der-quelle-abgeleitete-worker-claims-geplant">8. CDA3: verifizierte, aus der Quelle abgeleitete Worker-Claims – geplant</a><a href="#cda4-und-cda5-architekturgraph-discovery-und-impact-geplant">9. CDA4 und CDA5: Architekturgraph, Discovery und Impact – geplant</a><a href="#cda6-bpmn-binding-und-deployment-validierung-geplant">10. CDA6: BPMN-Binding und Deployment-Validierung – geplant</a><a href="#cda7-governed-execution-geplant">11. CDA7: Governed Execution – geplant</a><a href="#cda8-kontrolliertes-rebinding-geplant-entscheidung-zurückgestellt">12. CDA8: kontrolliertes Rebinding – geplant, Entscheidung zurückgestellt</a><a href="#sicherheit-governance-und-datenschutz">13. Sicherheit, Governance und Datenschutz</a><a href="#durchgehendes-beispiel-employee-onboarding">14. Durchgehendes Beispiel: Employee Onboarding</a><a href="#programmstatus-cda0cda8-und-abhängigkeiten">15. Programmstatus CDA0–CDA8 und Abhängigkeiten</a><a href="#alternativen-grenzen-und-trade-offs">16. Alternativen, Grenzen und Trade-offs</a><a href="#offene-entscheidungen-und-konkrete-nächste-schritte">17. Offene Entscheidungen und konkrete nächste Schritte</a><a href="#fazit">18. Fazit</a><a href="#quellen--und-adr-verzeichnis">Quellen- und ADR-Verzeichnis</a></div></nav><article>
+
+
+
+<blockquote>
+<p><strong>Leseschlüssel.</strong> <strong>Umgesetzt</strong> bedeutet anhand aktueller Repository-Artefakte belegte Funktion. <strong>Teilweise umgesetzt</strong> bedeutet vorhandenen Code mit offenen wesentlichen Abnahmekriterien. <strong>Geplant/offen</strong> bedeutet dokumentiertes Zielbild ohne nachgewiesene Implementierung. <strong>Einschätzung</strong> bezeichnet die eigene fachliche Bewertung. Diese Unterscheidung gilt für jede einzelne Funktion und nicht pauschal für ein gesamtes Programm.</p>
+</blockquote>
+<h2 id="management-summary">Management Summary</h2>
+<p>Capability-driven Automation (CDA) verbindet in atlas drei bisher getrennte Perspektiven: <em>Was</em> eine Organisation leisten muss (Business Capability), <em>wodurch</em> sie diese Leistung erbringt (BPMN-Prozess und Service Tasks) und <em>welche überprüfbare Operation</em> eine konfigurierte technische Integration tatsächlich ausführt. Ziel ist eine belegbare Verbindung von Geschäftsarchitektur, technischen Verträgen, Worker-Auswahl und Identitäts- sowie Berechtigungsprüfung. Die Architektur unterscheidet bewusst zwischen fachlicher Realisierung, deklarierter Fähigkeit, überprüfter Konformität und freigegebener Aktion.</p>
+<p><strong>Stand am 7. November 2026:</strong> Die Grundlagen sind konkreter als in der älteren Konzeptdarstellung. Das Business-Capability-Register mit Value Streams, Realisierungsbeziehungen und Panorama-Verknüpfung existiert. Worker Types können auf Operationsebene versionierte technische Capability-Claims deklarieren (CDA0). Die Engine enthält einen strikten semantischen Contract-Parser (CDA1), einen Offline-Prüfer für vollständige JSON-Schema-Dokumente, Content-Digests und Implementation-Digests. Seit dem Merge von PR #1401 gibt es zusätzlich einen Evidence-Record-Typ, einen reproduzierbaren Verifier und ein CI-Gate für die Konsistenz vorhandener Records. Dies ist die technische Grundlage von CDA2, aber <strong>noch kein publizierter, unabhängig verifizierter Provider-Vertrag</strong>. Die Verzeichnisse für publizierte Contracts und Evidence Records sind auf dem geprüften <code>main</code> nicht vorhanden. Im Programm und der Roadmap wird PR #1401 fälschlich noch als «in Review» geführt; der PR ist seit dem 27. Oktober 2026 gemerged. <a href="../planning/capability-driven-automation-program.md">Programm</a> · <a href="../adr/0483-technical-capability-conformance-governance.md">ADR-0483</a> · <a href="../../workertype/evidence/verify.go">Evidence-Verifier</a>.</p>
+<p>Nicht geliefert sind der providerübergreifend verifizierte Operationenkatalog (CDA3), der technische Architekturgraph (CDA4), die darauf aufbauende Discovery (CDA5), eine capabilitybasierte BPMN-Deployment-Bindung (CDA6), der so gebundene, vollständig autorisierte Ausführungspfad (CDA7) und kontrolliertes Worker-Rebinding ohne erneutes BPMN-Deployment (CDA8). Vorhandene Worker-Jobs und ein teilweise realisierter delegierter SharePoint-Pfad sind <strong>keine</strong> Beweise für diese CDA-Funktionen. <a href="../../ROADMAP.md">Roadmap</a> · <a href="../adr/0482-capability-aware-binding-and-routing.md">ADR-0482</a> · <a href="../adr/0475-identity-aware-worker-execution.md">ADR-0475</a>.</p>
+<p>Die vorrangige nächste fachlich demonstrierbare Erweiterung ist eine veröffentlichte, präzise definierte Contract-Version mit unabhängig geprüfter Evidenz für <strong>eine</strong> konkrete Worker-Type-Operation. Erst danach sollten graphische Nachverfolgbarkeit, BPMN-Binding und Runtime-Routing als Funktionen beworben werden. <strong>Einschätzung:</strong> Das schützt vor dem zentralen Fehlversprechen, dass zwei ähnlich benannte API-Methoden schon austauschbar seien.</p>
+<h2 id="ausgangslage-und-problemstellung">1. Ausgangslage und Problemstellung</h2>
+<p>Prozesse sind aus Sicht des Fachbereichs Mittel zur Erbringung einer Leistung. Eine Business Capability wie «Identität verwalten» formuliert eine Fähigkeit der Organisation unabhängig von einer konkreten SaaS-Plattform. Die technische Ausführung arbeitet hingegen mit spezifischen Ressourcen, Methoden, Berechtigungen und Seiteneffekten: ein Microsoft-Entra-Konto ist kein LDAP-Eintrag und kein Google-Kontakt. Ein unkontrollierter Übergang von solchen Bezeichnungen zu automatischem Service-Task-Routing erzeugt fachlich falsche Ergebnisse oder Sicherheitsrisiken.</p>
+<p>Die schon implementierte atlas-Architektur trennt Business-Capability-Register, BPMN-Engine und Worker-Katalog. Die fehlende Verbindung ist nicht einfach ein weiteres Datenbank-JOIN. Es sind mehrere verschiedenartige Aussagen mit unterschiedlichen Beweisanforderungen: Eine Architektin <em>modelliert</em> die Realisierung einer Business Capability. Ein Worker-Type-Manifest <em>behauptet</em> einen technischen Vertrag. Eine unabhängige Prüfinstanz kann die Übereinstimmung <em>nachweisen</em>. Eine Policy erlaubt oder verweigert eine <em>konkrete externe Aktion</em>. Nicht jede dieser Aussagen entsteht zur gleichen Zeit, hat dieselbe Verantwortlichkeit oder darf dieselbe technische Wirkung haben.</p>
+<p>Eine nachvollziehbare Automation muss ausserdem Aussagen zur Version, zum ausführenden Worker, zur Zielidentität, zur Autorisierung und zur Recovery machen. Andernfalls ist eine übersichtlich gezeichnete Capability-Landkarte noch kein belastbares Ausführungsmodell. CDA ist deshalb als eigenständiges Programm mit expliziten Gates und vertikalen Slices CDA0–CDA8 geführt. <a href="../planning/capability-driven-automation-program.md">Programm</a>.</p>
+<h2 id="begriffe-ebenen-und-beweislast">2. Begriffe, Ebenen und Beweislast</h2>
+<table>
+<colgroup>
+<col style="width: 50%"/>
+<col style="width: 50%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Begriff</th>
+<th>Bedeutung und notwendige Abgrenzung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Business Capability</strong></td>
+<td>Fachliche Fähigkeit einer Organisation; unabhängig von Provider, Schnittstelle oder Prozessmodell.</td>
+</tr>
+<tr class="even">
+<td><strong>Value Stream / Stage</strong></td>
+<td>Wertschöpfungsfluss beziehungsweise Schritt mit Bezug auf benötigte Business Capabilities.</td>
+</tr>
+<tr class="odd">
+<td><strong>Realisierung</strong></td>
+<td>Von der Architektur fachlich erfasste Beziehung zwischen Capability und BPMN-Prozess; kein aus API-Aufrufen errechneter Beweis.</td>
+</tr>
+<tr class="even">
+<td><strong>Technical Capability Contract</strong></td>
+<td>Versionierte, providerunabhängige semantische Beschreibung einer genau definierten Operation, einschliesslich Ressourcenart, Identitätsscope, Daten, Fehlern und Wirkungen.</td>
+</tr>
+<tr class="odd">
+<td><strong>Claim</strong></td>
+<td>Deklaration einer Worker-Type-Operation, einen bestimmten Contract zu unterstützen; bleibt ohne Nachweis eine Behauptung.</td>
+</tr>
+<tr class="even">
+<td><strong>Evidence / Conformance</strong></td>
+<td>Nachvollziehbar prüfbare Evidenz einer konkreten Implementierung gegen einen bestimmten Contract und ein bestimmtes Testprofil.</td>
+</tr>
+<tr class="odd">
+<td><strong>Worker Type</strong></td>
+<td>Installierbare Implementierung beziehungsweise Integrationstyp mit Operationen und Job Types.</td>
+</tr>
+<tr class="even">
+<td><strong>Worker</strong></td>
+<td>Konfigurierte Instanz eines Worker Types: Ziel, Einstellungen und referenzierte Zugangsdaten.</td>
+</tr>
+<tr class="odd">
+<td><strong>Worker Instance</strong></td>
+<td>Laufender, Jobs leasender Worker-Prozess. Ein Worker kann mehrere laufende Instanzen haben.</td>
+</tr>
+<tr class="even">
+<td><strong>Binding</strong></td>
+<td>Eindeutige Zuordnung eines BPMN-Service-Tasks zu einer definierten Operation und einem konkret konfigurierten Worker.</td>
+</tr>
+<tr class="odd">
+<td><strong>Autorisierung</strong></td>
+<td>Entscheidung für die konkrete externe Aktion im gegebenen Identitäts-, Policy- und Ressourcenkontext; nicht aus dem Contract ableitbar.</td>
+</tr>
+</tbody>
+</table>
+<p>Die Begriffe folgen <a href="../adr/0203-worker-execution-model.md">ADR-0203</a>, <a href="../adr/0480-technical-capability-contract.md">ADR-0480</a> und <a href="../adr/0485-technical-capability-semantics.md">ADR-0485</a>. Die technische Contract-Identität besteht aus <code>id</code>, exakter SemVer-<code>version</code> und optionalem <code>profile</code>. Das Profil ist <strong>keine</strong> stillschweigende Erweiterung auf alle Provider. Insbesondere gilt aktuell die Manifest-Regel: Pro Operation darf nur ein Claim zu derselben <code>id@version</code> existieren, auch bei verschiedenen Profilen. <a href="../adr/0483-technical-capability-conformance-governance.md">ADR-0483</a>.</p>
+<h2 id="architekturüberblick-und-ist-zustand">3. Architekturüberblick und Ist-Zustand</h2>
+<p>Der fachliche Teil basiert auf Design-Time-Records in <code>api/capability</code>: Business Capabilities, Value Streams und ihre Stufen, Realisierungen, Coverage und Gap-/Messperspektiven. Panorama kann das Capability-Register über seine Architekturansichten referenzieren. Dies ist kein neuer Laufzeitspeicher und kein technischer Capability-Graph. <a href="../adr/0305-business-capabilities-and-value-streams.md">ADR-0305</a> ist <strong>Accepted / Partial</strong>; <a href="../adr/0308-panorama-binds-the-capability-register.md">ADR-0308</a> ist <strong>Accepted / Landed</strong>. Die Quellmodule und zugehörigen Tests liegen unter <a href="../../api/capability/"><code>api/capability</code></a> und <a href="../../api/panorama/"><code>api/panorama</code></a>.</p>
+<p>Der Runtime-Kern bleibt die eventbasierte BPMN-Engine: Deployment kompiliert ein Modell zu einem unveränderlichen, integer-indexierten Graphen. Ein Single-Writer-Processor je Partition verarbeitet Commands, erzeugt Events und macht diese vor externen Effekten im WAL dauerhaft. State ist eine Materialisierung der Events; Live-Verarbeitung und Recovery verwenden denselben deterministischen <code>applyToState</code>-Pfad. Ein Service Task kann einen dauerhaften Job erzeugen, den eine Worker Instance nach dem Commit leased. Diese vorhandene Engine-Semantik wird durch CDA0–CDA2 nicht verändert. <a href="../ARCHITECTURE.md">Architektur</a> · <a href="../architecture/invariants.md">Invarianten</a>.</p>
+<p>Die Worker-Type-Metadaten sind die heutige Erweiterungsstelle. Das vorhandene Manifest führt Operationen und optionale Capability-Claims; ein eigenständiger Contract-Parser prüft semantische Dokumente ausserhalb des Processor-Hot-Paths. Ein existierender Worker-Katalog ist deshalb nicht mit einem öffentlich nutzbaren, verifizierten Capability-Katalog gleichzusetzen. Ebenso wenig ist das spätere ADR-0420-Graphmodell aus den heutigen Panorama-Ansichten ableitbar: <a href="../adr/0420-one-graph-model-several-projections.md">ADR-0420</a> steht auf <strong>Proposed / Not started</strong>.</p>
+<figure class="diagram">
+<svg aria-label="Ist-Zustand: Architektur- und Runtime-Grenzen" class="atlas-diagram" height="330" role="img" viewbox="0 0 760 330" width="760" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arr" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0 L10 5 L0 10 z" fill="#b8d7ff"></path></marker></defs> <rect fill="#101c2e" height="328" rx="18" stroke="#2d4058" width="758" x="1" y="1"></rect> <text fill="#f4f7ff" font-size="19" font-weight="750" x="24" y="32">Ist-Zustand: Architektur- und Runtime-Grenzen</text> <text fill="#9bb0cc" font-size="12" x="24" y="54">Drei Ebenen mit unterschiedlicher Datenhoheit</text> <rect fill="#17263b" height="94" rx="10" stroke="#43617d" stroke-width="1.3" width="208" x="26" y="82"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="40" y="99">DESIGN TIME</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="130.0" y="120">Business Capabilities</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="130.0" y="139">Value Streams · Realisierung</text> <rect fill="#17263b" height="94" rx="10" stroke="#43617d" stroke-width="1.3" width="208" x="276" y="82"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="290" y="99">DEPLOY TIME</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="380.0" y="120">BPMN Compiler</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="380.0" y="139">kompilierter Graph</text> <rect fill="#17263b" height="94" rx="10" stroke="#43617d" stroke-width="1.3" width="208" x="526" y="82"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="540" y="99">RUNTIME</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="630.0" y="120">Single Writer · WAL</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="630.0" y="139">State · Jobs</text> <path d="M234 128 L270 128" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <path d="M484 128 L519 128" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#17263b" height="78" rx="10" stroke="#5a9b90" stroke-width="1.3" width="208" x="276" y="222"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="290" y="239">CDA0-2</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="380.0" y="260">Contract · Claims</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="380.0" y="279">Evidence-Verifier</text> <rect fill="#17263b" height="78" rx="10" stroke="#43617d" stroke-width="1.3" width="208" x="526" y="222"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="540" y="239">EXECUTION</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="630.0" y="260">Worker Instance</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="630.0" y="279">externer Provider</text> <path d="M484 261 L519 261" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#9bb0cc" font-size="12" x="26" y="206">CDA0–2 ändern den Engine-Hot-Path nicht.</text>
+</svg>
+<figcaption>
+Abbildung: Architekturgrenzen und Einordnung des implementierten Bestands.
+</figcaption>
+</figure>
+<h2 id="von-der-facharchitektur-zum-technischen-vertrag">4. Von der Facharchitektur zum technischen Vertrag</h2>
+<p>Das Zielbild beginnt mit einem Value Stream, dessen Stage eine Business Capability benötigt. Ein Architekt ordnet einen BPMN-Prozess dieser Fähigkeit als <em>Realisierung</em> zu. Ein Service Task kann im späteren CDA6-Modell eine explizite technische Operation referenzieren. Die Operation erhält ihren präzisen Vertrag nicht aus ihrem Anzeigenamen, sondern aus einer getrennt versionierten, konkreten Contract-ID. Über den Claim wird zunächst nur ausgedrückt, dass eine Worker-Type-Operation diese Semantik anbietet.</p>
+<p><strong>Die Verbindung ist nicht automatisch transitiv.</strong> Aus «Prozess führt Entra-Operation aus» folgt nicht «Prozess realisiert fachlich Identitätsmanagement». Die fachliche Realisierung bleibt ein bewusst erfasstes Architektur-Faktum. Aus «Worker Type behauptet Contract» folgt nicht «Provider verhält sich identisch». Erst überprüfte Evidenz kann einen solchen Schluss in einer definierten, begrenzten Form tragen. Und selbst dann erlaubt ein technischer Contract nicht automatisch die konkrete Aktion. Der konzeptionelle Datenfluss lautet somit: <em>authored → claimed → verified → bound → authorized → observed</em>. Die Ausdrücke bezeichnen verschiedene Vertrauens- und Verantwortungsgrenzen. <a href="../adr/0480-technical-capability-contract.md">ADR-0480</a>.</p>
+<p>Das versprochene Nutzenbild umfasst Impact-Abfragen («Welche Value Streams hängen von diesem Worker ab?»), Gap-Abfragen («Wo fehlt ein verifizierter Implementierungspfad?») und später kontrolliertes, autorisiertes Routing. Diese Abfragen benötigen jedoch eindeutige, nachvollziehbare Kanten und explizite Sichtbarkeitsregeln. Die derzeitige Read-Only-Architektur für CDA4/CDA5 ist geplant; sie darf in einer Präsentation nicht als vorhandenes Feature dargestellt werden.</p>
+<figure class="diagram">
+<svg aria-label="Beweiskette: keine implizite Gleichwertigkeit" class="atlas-diagram" height="500" role="img" viewbox="0 0 760 500" width="760" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arr" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0 L10 5 L0 10 z" fill="#b8d7ff"></path></marker></defs> <rect fill="#101c2e" height="498" rx="18" stroke="#2d4058" width="758" x="1" y="1"></rect> <text fill="#f4f7ff" font-size="19" font-weight="750" x="24" y="32">Beweiskette: keine implizite Gleichwertigkeit</text> <text fill="#9bb0cc" font-size="12" x="24" y="54">Jede Kante hat eine eigene Quelle und Vertrauensgrenze</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="245" x="40" y="68"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="162.5" y="96.0">Value Stream / Stage</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="306" x="410" y="68"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="563.0" y="96.0">Business Capability</text> <path d="M285 93 L401 93" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="9.7" text-anchor="middle" x="345" y="82">requires · fachlich</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="245" x="40" y="137"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="162.5" y="165.0">Business Capability</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="306" x="410" y="137"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="563.0" y="165.0">BPMN-Prozess</text> <path d="M285 162 L401 162" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="9.7" text-anchor="middle" x="345" y="151">authored realization</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="245" x="40" y="206"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="162.5" y="234.0">Service Task</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="306" x="410" y="206"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="563.0" y="234.0">Worker-Type-Operation</text> <path d="M285 231 L401 231" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="9.7" text-anchor="middle" x="345" y="220">explizites Binding · geplant</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="245" x="40" y="275"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="162.5" y="303.0">Operation</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="306" x="410" y="275"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="563.0" y="303.0">Technical Contract</text> <path d="M285 300 L401 300" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="9.7" text-anchor="middle" x="345" y="289">Claim · umgesetzt</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="245" x="40" y="344"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="162.5" y="372.0">Contract + Evidence</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="306" x="410" y="344"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="563.0" y="372.0">verifizierte Operation</text> <path d="M285 369 L401 369" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="9.7" text-anchor="middle" x="345" y="358">Conformance · geplant</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="245" x="40" y="413"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="162.5" y="441.0">Worker + Identity</text> <rect fill="#17263b" height="49" rx="10" stroke="#43617d" stroke-width="1.3" width="306" x="410" y="413"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="563.0" y="441.0">externe Aktion</text> <path d="M285 438 L401 438" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="9.7" text-anchor="middle" x="345" y="427">Policy · IAE teilweise</text>
+</svg>
+<figcaption>
+Abbildung: Unterschiedliche fachliche, deklarative und geprüfte Beziehungen.
+</figcaption>
+</figure>
+<h2 id="cda0-deklarative-claims-umgesetzt">5. CDA0: deklarative Claims – umgesetzt</h2>
+<p>CDA0 ist im definierten Umfang abgeschlossen. Die Manifest-Struktur in <a href="../../workertype/capability.go"><code>workertype/capability.go</code></a> enthält <code>CapabilityClaim</code> mit <code>id</code>, <code>version</code> und optionalem <code>profile</code>. Der strikte Manifest-Parser validiert neue und alte Beschreibungen; der bisherige Einsatz ohne Claims bleibt kompatibel. Die Änderungen wurden mit <a href="https://github.com/pblumer/atlas/pull/1343">PR #1343</a> gemerged; <a href="../adr/0480-technical-capability-contract.md">ADR-0480</a> ist akzeptiert, gesamthaft jedoch nur teilweise implementiert.</p>
+<p>Ein Claim beschreibt <em>eine Operation</em> und nicht eine unspezifische Leistungsfähigkeit des gesamten Worker Types. Ausserdem ist ein Claim kein Protokoll zur Selbstfreigabe. Er erteilt keine Runtime-Rechte, wählt keinen Worker und garantiert weder gleiches Fehlerverhalten noch gleiche Ressourcenidentität. Genau diese Zurückhaltung ist ein Architekturmerkmal: Ein Manifest kann bereits maschinenlesbare semantische Aussagen enthalten, ohne dass die Engine sie ungeprüft in automatische Aktionen übersetzt.</p>
+<p>Die Manifest-Ebene muss zudem von der Worker Type-Verteilung unterschieden werden. <a href="../adr/0208-worker-type-packages.md">ADR-0208</a> ist <strong>Accepted / Partial</strong>: das Paket- und Vertrauensmodell ist nicht in allen vorgesehenen Aspekten fertig. Die Existenz von Capability-Claims ersetzt keine Prüfung von Signaturen, Herkunft oder unveränderlicher Paketidentität. <strong>Einschätzung:</strong> Für eine sicherheitskritische Umgebung ist dies ein wichtiger Punkt, weil ein technisch passender, aber unzureichend vertrauenswürdiger Worker keinesfalls allein aufgrund eines Claims zulässig werden darf.</p>
+<h2 id="cda1-semantischer-contract-envelope-umgesetzt">6. CDA1: semantischer Contract-Envelope – umgesetzt</h2>
+<p>Der mit <a href="https://github.com/pblumer/atlas/pull/1346">PR #1346</a> gelieferte Contract-Envelope ist eine eigenständige, streng geparste Beschreibung. Der öffentliche Go-Typ unter <a href="../../workertype/contract.go"><code>workertype/contract.go</code></a> verwendet die API-Version <code>atlas.io/technical-capability/v1alpha1</code> und den Kind-Wert <code>TechnicalCapabilityContract</code>. Der Vertrag umfasst unter anderem die semantische Contract-Identität, Ressourcenart, Identitätsscope und Input-/Output-Schema-Wurzeln. Die Prüfung erfolgt offline beziehungsweise zur Design-Time, nicht pro Job.</p>
+<p>Die Modellierung verlangt explizite Aussagen über Abwesenheit und <code>null</code>, Fehlerkategorien, Idempotenz, partiellen Erfolg, Konsistenz und Seiteneffekte. Der Contract ist semantisch immutable: Ändert sich seine Bedeutung, wird eine neue Contract-Version benötigt. Die Annahme eines exakt versionierten Dokuments verhindert nicht alle semantischen Missverständnisse; sie macht aber ein überprüfbares Ziel für Conformance-Tests möglich. Die <strong>v1alpha1-Felder</strong> dürfen gemäss <a href="../adr/0485-technical-capability-semantics.md">ADR-0485</a> bis zur ersten Veröffentlichung noch angepasst werden, während Contract-Identität und Immutabilität verbindlich bleiben.</p>
+<p>Das ist mehr als ein Namensregister, aber weniger als eine nachgewiesene Fähigkeit. Ein formal valides Schema kann ein unzutreffendes Verhalten einer Entra-Operation nicht erkennen, solange keine realistische, geprüfte Erwartung und keine Ausführungs-Evidenz gegenüberstehen. Daraus folgt der eigene Ausbauschritt CDA2.</p>
+<h2 id="cda2-governance-conformance-und-evidenz-teilweise-umgesetzt">7. CDA2: Governance, Conformance und Evidenz – teilweise umgesetzt</h2>
+<p>Der Stand von CDA2 muss präzise nach Bausteinen ausgewiesen werden:</p>
+<table>
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Baustein</th>
+<th>Geprüfter Stand auf <code>main</code></th>
+<th>Einschränkung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Vollständige Draft-2020-12-Schema-Prüfung</td>
+<td><strong>Umgesetzt</strong>: <a href="../../workertype/conformance.go"><code>workertype/conformance.go</code></a>, PR #1357</td>
+<td>Offline-Prüfung von Beispielen; kein Nachweis einer echten Provider-Implementierung.</td>
+</tr>
+<tr class="even">
+<td>Contract-Content-Digest</td>
+<td><strong>Umgesetzt</strong>: <a href="../../workertype/contract_digest.go"><code>workertype/contract_digest.go</code></a>, PR #1360</td>
+<td>SHA-256 über exakte LF-Dateibytes; veränderte Bytes ergeben einen anderen Digest.</td>
+</tr>
+<tr class="odd">
+<td>Implementation-Digest</td>
+<td><strong>Umgesetzt</strong>: <code>internal/impldigest</code>, PR #1388</td>
+<td>Bindet eingebaute Worker-Implementierungspfade; kein allgemeines Drittanbieter-Vertrauenssiegel.</td>
+</tr>
+<tr class="even">
+<td>Evidence-Record-Typ und Verifier</td>
+<td><strong>Umgesetzt als Infrastruktur</strong>: <a href="../../workertype/evidence/"><code>workertype/evidence</code></a>, PR #1401</td>
+<td>Strikt gebundene, reproduzierbar prüfbare Records; kein publizierter Record vorhanden.</td>
+</tr>
+<tr class="odd">
+<td>Automatisches Gate</td>
+<td><strong>Umgesetzt als Mechanismus</strong>: <code>go test ./workertype/evidence/gate</code></td>
+<td>Verifiziert vorhandene Records; bei leerer Sammlung ergibt sich daraus keine Provider-Konformität.</td>
+</tr>
+<tr class="even">
+<td>Publizierte Contract-/Evidence-Artefakte</td>
+<td><strong>Geplant/offen</strong></td>
+<td><code>workertype/contracts/</code> und <code>workertype/evidence/records/</code> fehlen im geprüften <code>main</code>.</td>
+</tr>
+<tr class="odd">
+<td>Withdrawal und öffentlich abfragbarer Claim-Status</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Keine implementierte Withdrawal-/Claim-Statusprojektion nachgewiesen.</td>
+</tr>
+</tbody>
+</table>
+<p>Die gesonderten Evidence Records bilden eine konkrete Bindung aus Contract, Worker Type, Operation und Suite. Der Verifier leitet dazu Identität und Digests aus dem Modul sowie aus den Implementierungspfaden ab. Ein Record muss beim erneuten Ableiten bytegleich entstehen oder als veraltet beziehungsweise unzulässig erkannt werden. Eine Suite führt festgelegte Fälle gegen <em>Fakes</em> aus; sie kennzeichnet Ergebnisse als <code>passed</code>, <code>failed</code> oder <code>not-exercised</code>. Nicht ausübbares reales Provider-Verhalten darf nicht als bestanden ausgegeben werden. Der Approval-Nachweis stammt aus dem Repository-Review und nicht aus einem frei gesetzten JSON-String. <a href="../adr/0483-technical-capability-conformance-governance.md">ADR-0483</a> · <a href="../../workertype/evidence/evidence.go"><code>evidence.go</code></a> · <a href="../../workertype/evidence/suite.go"><code>suite.go</code></a>.</p>
+<p><strong>Statuskorrektur gegenüber der Roadmap:</strong> PR <a href="https://github.com/pblumer/atlas/pull/1401">#1401</a> wurde am <strong>27. Oktober 2026</strong> gemerged, obwohl <code>ROADMAP.md</code> und das CDA-Programm ihn noch als «in Review» bezeichnen. Die implementierten Record-/Gate-Bausteine sind deshalb in diesem Whitepaper auf «Umgesetzt als Infrastruktur» angehoben. CDA2 bleibt dennoch «Teilweise umgesetzt», weil die erste veröffentlichte Contract/Evidence-Kombination, eine geprüfte Provider-Operation und Withdrawal fehlen. Ein leerer Bestand wird nicht zu einem bestandenen Konformitätsnachweis umgedeutet.</p>
+<p>Sichere Implementierung bedeutet ausserdem, dass der gesamte überprüfte Runtime-Code einem Implementation-Digest zugeordnet ist. Die in <a href="../adr/0483-technical-capability-conformance-governance.md">ADR-0483</a> dokumentierte erste Governance setzt auf maintainergeprüfte Artefakte und eine einzelne Approval-Autorität; externe Signaturen, Drittanbieter-Attestierungen und umfassende Live-Tenant-Tests sind bewusst noch keine generellen Zusagen. Der Conformance-Runner erzeugt keine Runtime-Berechtigung.</p>
+<h2 id="cda3-verifizierte-aus-der-quelle-abgeleitete-worker-claims-geplant">8. CDA3: verifizierte, aus der Quelle abgeleitete Worker-Claims – geplant</h2>
+<p>CDA3 soll die konkrete Worker-Type-Operation mit einem präzisen Contract verbinden, ohne eine parallele Operationstabelle aufzubauen. Die Quelle einer Operation ist die vom Worker Type tatsächlich angebotene Operation samt Job Type. Ein Read-only-Katalog darf daraus Metadaten ableiten; er darf aber eine bequeme Mapping-Tabelle nicht als zweite Wahrheit etablieren. Für jede Zuordnung sind Contract-Identität, Profil, Version, Evidenzquelle und gegebenenfalls eine explizite Ablehnung der Gleichwertigkeit erforderlich. <a href="../planning/capability-driven-automation-program.md">Programm</a> · <a href="../adr/0480-technical-capability-contract.md">ADR-0480</a>.</p>
+<p>Die Negative Cases sind mindestens so wichtig wie der Erfolgspfad: Eine Google-Contacts-Operation, die einen Kontakt erzeugt, darf niemals allein wegen des Verbs «create» als Entra-Account-Erstellung gelten. Eine LDAP-Operation kann einen Verzeichniseintrag erzeugen, ohne dass er die Identitätsscope- und Lifecycle-Semantik eines Benutzerkontos erfüllt. Selbst innerhalb eines Providers können Fehlercodes, Retry-Fähigkeit, Pagination oder Zeitkonsistenz abweichen. Erst ein konkreter Contract plus ein passender Evidenzumfang erlaubt die Aussage «verified»; andernfalls sind «candidate», «unknown» oder «unsupported» die einzig ehrlichen Zustände.</p>
+<p>CDA3 ist nach Programm und Codeprüfung noch nicht geliefert. Der vorhandene Mechanismus der Evidence Records ist eine Voraussetzung, aber sein Vorhandensein erzeugt keine Claims für Entra, LDAP oder Google Contacts. <strong>Einschätzung:</strong> Beginnen sollte man mit einer eng umrissenen Account- oder Contact-Operation und einer Matrix dokumentierter Nicht-Äquivalenzen. Das schafft ein ausführbares Qualitäts-Gate, bevor ein grösserer Katalog vermeintlich gleichwertiger Fähigkeiten entsteht.</p>
+<h2 id="cda4-und-cda5-architekturgraph-discovery-und-impact-geplant">9. CDA4 und CDA5: Architekturgraph, Discovery und Impact – geplant</h2>
+<h3 id="ein-modell-mehrere-projektionen">Ein Modell, mehrere Projektionen</h3>
+<p>Der geplante technische Erweiterungsgraph verbindet die bereits vorhandenen Business-Architecture-Datensätze mit Prozessdefinitionen, explizit gebundenen Service Tasks, Operationen, Contracts und konkreten Workern. Er ist keine zusätzliche, transaktional gepflegte Wahrheit über dieselben Objekte. Beziehungen müssen nach Quelle und Bedeutung unterscheidbar bleiben: <em>authored</em> für fachlich erfasste Realisierungen, <em>derived</em> für deterministisch auflösbare Verweise, <em>claimed</em> für Manifest-Aussagen, <em>verified</em> für unabhängige Evidenz und <em>observed</em> für tatsächlich ausgeführte Jobs und Aktionen. <a href="../adr/0420-one-graph-model-several-projections.md">ADR-0420</a> ist <strong>Proposed / Not started</strong> und liefert somit kein heute benutzbares Graph-API.</p>
+<p>Eine robuste Impact-Antwort muss ferner nachweisen, welche Kante auf welches Artefakt und auf welche Version zurückgeht. Wird ein Worker ausgetauscht, darf eine alte Evidenz nicht stillschweigend auf den neuen Code vererbt werden. Werden BPMN-Definitionen neu deployed, muss die Abfrage die verwendete Definition und Version kennen. Für vertrauliche Bereiche gilt «stop at restricted»: nicht nur Knotennamen, sondern auch vermeintlich harmlose Anzahlen oder indirekte Pfade können Informationen offenlegen. Die tatsächliche Berechtigung ist für jede Projektion zu prüfen.</p>
+<h3 id="was-discovery-liefern-soll">Was Discovery liefern soll</h3>
+<p>Geplante CDA5-Abfragen umfassen: Welcher Value Stream hängt von einer bestimmten Operation ab? Welche Prozesse adressieren einen Contract, für den keine verifizierte Implementierung vorhanden ist? Welche konfigurierte Worker-Instanz wäre von einem sicherheitsbedingten Withdraw betroffen? Wo besteht eine Lücke zwischen Business Capability und technisch belegter Umsetzung? Solche Antworten müssen unvollständige Daten als unvollständig markieren, statt fehlende Kanten stillschweigend zu ergänzen.</p>
+<p>Heute existieren Capability-Register, Panorama-Bindings, einige Coverage-/Gap-Funktionen und Worker-Übersichten. Das ist fachlich wertvoll, aber <strong>noch keine CDA5-End-to-End-Discovery</strong>. Der Weg von Business Capability zu einem unabhängig verifizierten Technical Contract ist noch nicht implementiert; erst recht kann daraus keine dynamische Routenberechtigung folgen. CDA5 ist keine technische Voraussetzung für jeden frühen CDA6-Prototyp, wohl aber für eine nachvollziehbare Benutzererfahrung über mehrere Architektur-Ebenen. <a href="../planning/capability-driven-automation-program.md">Programm</a>.</p>
+<figure class="diagram">
+<svg aria-label="Graph und Sichtbarkeit: heute versus Zielbild" class="atlas-diagram" height="330" role="img" viewbox="0 0 760 330" width="760" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arr" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0 L10 5 L0 10 z" fill="#b8d7ff"></path></marker></defs> <rect fill="#101c2e" height="328" rx="18" stroke="#2d4058" width="758" x="1" y="1"></rect> <text fill="#f4f7ff" font-size="19" font-weight="750" x="24" y="32">Graph und Sichtbarkeit: heute versus Zielbild</text> <text fill="#b8e5cd" font-size="12" font-weight="700" x="26" y="83">HEUTE · belegt</text> <rect fill="#17263b" height="90" rx="10" stroke="#43617d" stroke-width="1.3" width="335" x="26" y="100"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="40" y="117">GETRENNTE SICHTEN</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="193.5" y="138">Capability Register + Panorama</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="193.5" y="157">BPMN · Worker-Katalog</text> <text fill="#b8e5cd" font-size="12" font-weight="700" x="26" y="229">GEPLANT · CDA4/5</text> <rect fill="#17263b" height="59" rx="10" stroke="#43617d" stroke-width="1.3" width="335" x="26" y="244"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="193.5" y="267.5">Contract · Evidence · Worker</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="193.5" y="286.5">mit Provenienz + ACL</text> <rect fill="#17263b" height="90" rx="10" stroke="#43617d" stroke-width="1.3" width="300" x="435" y="100"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="449" y="117">GRENZE</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="585.0" y="138">Kein technischer</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="585.0" y="157">Cross-Layer-Graph</text> <rect fill="#17263b" height="59" rx="10" stroke="#43617d" stroke-width="1.3" width="300" x="435" y="244"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="585.0" y="267.5">Read-only Impact · Gaps</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="585.0" y="286.5">no hidden node counts</text> <path d="M361 144 L426 144" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <path d="M361 274 L426 274" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path>
+</svg>
+<figcaption>
+Abbildung: Bestehende Daten und geplante autorisierte Cross-Layer-Abfragen.
+</figcaption>
+</figure>
+<h2 id="cda6-bpmn-binding-und-deployment-validierung-geplant">10. CDA6: BPMN-Binding und Deployment-Validierung – geplant</h2>
+<p>Im ersten geplanten Modell erklärt ein Service Task <strong>opt-in</strong> den exakten technischen Contract und wählt einen passenden, überprüften konfigurierten Worker. Beim Deployment werden Contract-Identität, Profil, Digest, Worker-Type-Version und konkrete Worker-Zuordnung validiert; eine fehlende, unklare oder nicht mehr gültige Bindung führt zu einer verständlichen Fehlermeldung. Die bestehende BPMN-Ausführung ohne dieses neue Feld bleibt gültig. Weder BPMN <code>Task</code> noch <code>Call Activity</code> wird semantisch uminterpretiert. <a href="../adr/0482-capability-aware-binding-and-routing.md">ADR-0482</a>.</p>
+<p>Die Kompilierungsinvariante ist entscheidend: XML, semantische Vertragssuche, String-Auflösung und statische Prüfung gehören in den Deployment-Pfad. Zur Laufzeit wird ein bereits festgelegter Plan verwendet. Ein unveränderlicher BPMN-Deployment-Vertrag darf nicht unbemerkt durch veränderte Worker-Kataloge umgeschrieben werden. Das geplante Deployment-Ergebnis muss deshalb eindeutig sein und unabhängig von späteren Katalogänderungen bleiben.</p>
+<p>CDA6 soll allerdings schon bei der Gestaltung die mögliche spätere Umschaltung berücksichtigen: Ein stabiler <strong>logischer Binding-Slot</strong> dient als Identität der Bindungsstelle, auch wenn zunächst eine konkrete Worker-Revision fest gepinnt bleibt. Damit kann CDA8 künftig eine neue freigegebene Zielrevision einführen, ohne die BPMN-Definition selbst zu verändern. Dieser Entwurfszwang ist <strong>keine</strong> vorweggenommene Runtime-Rebinding-Funktion. Die XML-Syntax, die Diagnostik und das Authz-Modell benötigen noch die im ADR beschriebenen Architekturentscheidungen.</p>
+<h2 id="cda7-governed-execution-geplant">11. CDA7: Governed Execution – geplant</h2>
+<p>Im ersten ausführbaren CDA-Slice soll die Engine die beim Deployment eindeutig gewählte Bindung nutzen und einen Job für genau diesen, bereits überprüften Worker bereitstellen. Vor der externen Aktion muss die unterstützte Identity-Aware-Execution-Schnittstelle eine konkrete, autorisierte Entscheidung für Ziel, Identität, Operation und Ressource liefern. Verweigerung bedeutet Verweigerung: kein versteckter Fallback auf einen anderen Worker. Eine positive Contract-Konformität ist dafür weder Berechtigung noch eine Security Policy.</p>
+<p>Das Programm <a href="../planning/identity-aware-execution-program.md">IAE</a> ist hier eine eigenständige Abhängigkeit. Seine <a href="../adr/0475-identity-aware-worker-execution.md">ADR-0475</a> ist <strong>Proposed / Partial</strong>; dokumentiert sind ein begrenzter, beaufsichtigter Microsoft-SharePoint-Pfad und offene Provider- und Governance-Fragen. Daraus folgt keine bereits vollständige Freigabe für Entra, LDAP, Google Contacts oder einen beliebigen Drittanbieter-Worker. CDA7 kann erst für einen konkreten Provider gelten, wenn dessen Policy Enforcement tatsächlich im Code, in Tests und auf der richtigen Betriebsgrenze nachgewiesen ist.</p>
+<h3 id="recovery-ist-bestandteil-der-fachlichen-garantie">Recovery ist Bestandteil der fachlichen Garantie</h3>
+<p>Ein Service-Task-Job ist keine einmalige HTTP-Anfrage, die im Erfolgsfall vergessen wird. Die Engine persistiert Zustandsänderungen als Events, versieht Jobs mit Lease-/Fencing-Semantik und kann sie nach einem Neustart wiederherstellen. Eine spätere Capability-Bindung darf diese Eigenschaften nicht abschwächen. Insbesondere muss die zum Zeitpunkt der Ausführung gewählte, autorisierte Zuordnung als dauerhafte Tatsache festgehalten sein, bevor sie extern sichtbar wird. Beim Replay darf weder ein neuer Worker gewählt noch eine aktuelle externe Policy oder ein Live-Provider befragt werden. Die neue Autorisierung gehört in die dafür akzeptierte Ereignis-/Ausführungsarchitektur, nicht in <code>applyToState</code>.</p>
+<p>Die unverhandelbare Reihenfolge ist: Command bearbeiten; Events erzeugen; WAL schreiben; gemeinsam <code>fsync</code> ausführen; State committen; Followups bereitstellen; erst dann Responses, Notifications oder externe Side Effects ausführen. Der Single Writer pro Partition bleibt alleiniger Besitzer seines State. Eine neue Binding-Funktion darf weder Locks im regulären Prozesszustand noch Heap-Allokationen pro Command im Hot Path oder direkte Cross-Partition-Zugriffe einführen. <a href="../architecture/invariants.md">Invarianten</a>.</p>
+<p><strong>Wichtig zur Zustellsemantik:</strong> «durable before visible» schützt den eigenen Engine-Zustand vor voreiliger Sichtbarkeit. Es liefert nicht automatisch eine exakt-einmalige externe API-Aktion. Worker verarbeiten geleaste Jobs unter Retry- und Failure-Semantik; externe Aktionen benötigen geeignete Idempotenz, Schlüssel und Reconciliation. Eine Recovery, die die interne Eventhistorie korrekt rekonstruiert, kann die bereits ausgeführte Fremdaktion nicht einfach zurückrollen. Diese Grenze ist in jedem späteren Runtime-Whitepaper und jedem Betriebsvertrag transparent zu machen. <a href="../adr/0203-worker-execution-model.md">ADR-0203</a> · <a href="../ARCHITECTURE.md">Architektur</a>.</p>
+<figure class="diagram">
+<svg aria-label="CDA7-Zielbild: Durability vor Side Effects" class="atlas-diagram" height="480" role="img" viewbox="0 0 760 480" width="760" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arr" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0 L10 5 L0 10 z" fill="#b8d7ff"></path></marker></defs> <rect fill="#101c2e" height="478" rx="18" stroke="#2d4058" width="758" x="1" y="1"></rect> <text fill="#f4f7ff" font-size="19" font-weight="750" x="24" y="32">CDA7-Zielbild: Durability vor Side Effects</text> <text fill="#9bb0cc" font-size="12" x="24" y="54">Konzeptionelle, noch nicht implementierte Sequenz</text> <rect fill="#21435b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="95" x="30" y="66"></rect> <text fill="#f4f7ff" font-size="15" font-weight="650" text-anchor="middle" x="77.5" y="93.0">01</text> <rect fill="#17263b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="585" x="144" y="66"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="436.5" y="83.5">Deploy</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="436.5" y="102.5">Contract + Worker validieren</text> <path d="M79 113 L79 126" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#21435b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="95" x="30" y="129"></rect> <text fill="#f4f7ff" font-size="15" font-weight="650" text-anchor="middle" x="77.5" y="156.0">02</text> <rect fill="#17263b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="585" x="144" y="129"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="436.5" y="146.5">Job erzeugen</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="436.5" y="165.5">Events in WAL; gemeinsam fsync</text> <path d="M79 176 L79 189" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#21435b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="95" x="30" y="192"></rect> <text fill="#f4f7ff" font-size="15" font-weight="650" text-anchor="middle" x="77.5" y="219.0">03</text> <rect fill="#17263b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="585" x="144" y="192"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="436.5" y="209.5">Job leasbar</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="436.5" y="228.5">State commit; Fencing beachten</text> <path d="M79 239 L79 252" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#21435b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="95" x="30" y="255"></rect> <text fill="#f4f7ff" font-size="15" font-weight="650" text-anchor="middle" x="77.5" y="282.0">04</text> <rect fill="#17263b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="585" x="144" y="255"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="436.5" y="272.5">Aktion freigeben</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="436.5" y="291.5">Provider-spezifisches Policy-Gate</text> <path d="M79 302 L79 315" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#21435b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="95" x="30" y="318"></rect> <text fill="#f4f7ff" font-size="15" font-weight="650" text-anchor="middle" x="77.5" y="345.0">05</text> <rect fill="#17263b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="585" x="144" y="318"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="436.5" y="335.5">Externer Effekt</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="436.5" y="354.5">erst nach durablem Gate</text> <path d="M79 365 L79 378" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#21435b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="95" x="30" y="381"></rect> <text fill="#f4f7ff" font-size="15" font-weight="650" text-anchor="middle" x="77.5" y="408.0">06</text> <rect fill="#17263b" height="47" rx="10" stroke="#43617d" stroke-width="1.3" width="585" x="144" y="381"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="436.5" y="398.5">Resultat speichern</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="436.5" y="417.5">Events; fsync; Recovery möglich</text>
+</svg>
+<figcaption>
+Abbildung: Konzeptionelle Abfolge für einen späteren CDA7-Ausführungspfad.
+</figcaption>
+</figure>
+<h2 id="cda8-kontrolliertes-rebinding-geplant-entscheidung-zurückgestellt">12. CDA8: kontrolliertes Rebinding – geplant, Entscheidung zurückgestellt</h2>
+<p>Das weitere Ziel ist der explizit genehmigte Austausch von <strong>konfiguriertem Worker A</strong> zu <strong>Worker B</strong> für zukünftige Jobs <strong>einer bestehenden, opt-in bereitgestellten BPMN-Prozessversion</strong>, ohne die Prozessdefinition erneut zu deployen. Der Contract bleibt semantisch identisch; die Bindung erhält eine neue Revision. Ein Operator muss eine Vorschau über Übereinstimmung, Berechtigung, betroffene Instanzen und offene Jobs erhalten. Eine leise Automatik ist ausdrücklich nicht vorgesehen. <a href="../adr/0492-controlled-worker-rebinding.md">ADR-0492</a>.</p>
+<p>Die notwendige zeitliche Trennung lautet: Jobs, die vor dem dauerhaft bestätigten Cutover entstanden sind, behalten ihre ursprüngliche Zielrevision. Ein laufender oder geparkter Job darf nicht von selbst zu Worker B wandern. Für neue Jobs wird die neue Revision erst nach einem für die zuständige Partition dauerhaft gespeicherten Entscheid sichtbar. Bei mehreren Partitionen kann ein Rollout deshalb vorübergehend teilweise abgeschlossen sein; diese Differenz muss sichtbar und betreibbar sein. Ein Rollback ist eine neue, autorisierte Revision und keine nachträgliche Umschreibung der alten Facts.</p>
+<p>CDA8 ist <strong>nicht implementiert</strong> und seine Architektur ist <strong>nicht angenommen</strong>. Die Review-Fragen von ADR-0492 wurden laut ADR bis nach CDA7 zurückgestellt; lediglich die Frage nach dem Binding-Slot kann bei CDA6 vorgezogen werden. Eine automatische Worker-Auswahl pro Job wäre ein anderer Funktionsumfang mit eigenem ADR, eigener Event-Semantik, Sicherheitsprüfung und Recovery. Daraus folgt: Selbst ein später erfolgreiches CDA7 darf nicht als «selbstheilendes providerneutrales Routing» beschrieben werden.</p>
+<figure class="diagram">
+<svg aria-label="CDA8-Zielbild: nur zukünftige Jobs wechseln" class="atlas-diagram" height="355" role="img" viewbox="0 0 760 355" width="760" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arr" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0 L10 5 L0 10 z" fill="#b8d7ff"></path></marker></defs> <rect fill="#101c2e" height="353" rx="18" stroke="#2d4058" width="758" x="1" y="1"></rect> <text fill="#f4f7ff" font-size="19" font-weight="750" x="24" y="32">CDA8-Zielbild: nur zukünftige Jobs wechseln</text> <text fill="#9bb0cc" font-size="12" x="24" y="54">Explizite Freigabe, revisionssichere Zuordnung je Partition</text> <rect fill="#17263b" height="71" rx="10" stroke="#43617d" stroke-width="1.3" width="300" x="26" y="72"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="40" y="89">VOR CUTOVER</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="176.0" y="110">Revision A</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="176.0" y="129">Worker A</text> <rect fill="#17263b" height="71" rx="10" stroke="#43617d" stroke-width="1.3" width="300" x="435" y="72"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="449" y="89">NACH FREIGABE</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="585.0" y="110">Revision B</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="585.0" y="129">Worker B</text> <path d="M326 108 L427 108" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#b8e5cd" font-size="10" text-anchor="middle" x="379" y="92">fsync-Cutover</text> <rect fill="#17263b" height="82" rx="10" stroke="#43617d" stroke-width="1.3" width="300" x="26" y="195"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="40" y="212">UNVERÄNDERT</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="176.0" y="233">Bereits erzeugte Jobs</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="176.0" y="252">bleiben an Worker A gepinnt</text> <rect fill="#17263b" height="82" rx="10" stroke="#43617d" stroke-width="1.3" width="300" x="435" y="195"></rect> <text fill="#b8e5cd" font-size="10" font-weight="700" x="449" y="212">KÜNFTIG</text> <text fill="#f4f7ff" font-size="14" font-weight="650" text-anchor="middle" x="585.0" y="233">Neue Jobs nach Cutover</text> <text fill="#f4f7ff" font-size="14" font-weight="450" text-anchor="middle" x="585.0" y="252">erhalten Revision B</text> <path d="M177 143 L177 188" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <path d="M585 143 L585 188" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <text fill="#9bb0cc" font-size="12" x="27" y="317">Kein autonomes Failover · Rollback = neue, autorisierte Revision</text>
+</svg>
+<figcaption>
+Abbildung: Trennung von bestehenden und neuen Job-Bindungen.
+</figcaption>
+</figure>
+<h2 id="sicherheit-governance-und-datenschutz">13. Sicherheit, Governance und Datenschutz</h2>
+<p>Die wichtigsten Schutzgüter sind: Integrität der fachlichen Zuordnungen, Semantik und Version der Verträge, Herkunft und Implementierung der Worker, Sichtbarkeit von Architekturbeziehungen, Identitäts- und Credential-Grenzen, korrekte Autorisierungsentscheidungen sowie dauerhaft nachvollziehbare externe Effekte. Jede Ebene hat andere Verantwortliche. Die Facharchitektur bestätigt die Realisierung; ein Contract-Maintainer verantwortet die Semantik; ein unabhängiger Reviewer bestätigt definierte Prüfergebnisse; der Betreiber entscheidet über Worker-Konfigurationen und Trust Roots; die Policy Engine entscheidet zur konkreten Aktion.</p>
+<table>
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Bedrohung oder Fehler</th>
+<th>Gegenmassnahme im Konzept</th>
+<th>Status / Restrisiko</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Falsche Gleichsetzung ähnlich benannter Provider-Operationen</td>
+<td>Exakte Contract-Version, Profil und Negativ-Evidenz</td>
+<td>Contract-Envelope umgesetzt; echte Provider-Verifikation offen.</td>
+</tr>
+<tr class="even">
+<td>Selbstzertifizierung eines Worker Types</td>
+<td>Unabhängiges, digestgebundenes Evidence Review</td>
+<td>Evidence-Infrastruktur vorhanden; keine publizierten Records.</td>
+</tr>
+<tr class="odd">
+<td>Nachträgliche Änderung geprüfter Implementierung</td>
+<td>Content-, Implementation- und Suite-Digests; CI-Gate</td>
+<td>Teile umgesetzt; Revocation und publizierte Provenienz offen.</td>
+</tr>
+<tr class="even">
+<td>Fehlendes Ziel- oder Ressourcenrecht</td>
+<td>Provider-spezifischer Policy Enforcement Point mit Identitätskontext</td>
+<td>IAE teilweise; kein universelles Worker-Enforcement.</td>
+</tr>
+<tr class="odd">
+<td>Informationsleck über Architekturgraph</td>
+<td>Autorisierte, begrenzte Traversierung, keine versteckten Knotenzahlen</td>
+<td>CDA4/CDA5 geplant.</td>
+</tr>
+<tr class="even">
+<td>Inkonsistenter Job-Routing-Entscheid beim Recovery</td>
+<td>Durable Event vor Side Effect; keine Neuauswertung beim Replay</td>
+<td>Engine-Invarianten vorhanden; CDA-Routing noch nicht implementiert.</td>
+</tr>
+<tr class="odd">
+<td>Secrets oder persönliche Daten in Contract/Graph/WAL</td>
+<td>Referenzen statt Tokenwerten, datensparsame Evidence und Zugriffskontrolle</td>
+<td>Architekturvorgabe; bei neuen CDA-Funktionen noch nachzuweisen.</td>
+</tr>
+</tbody>
+</table>
+<p>Die Governance in <a href="../adr/0483-technical-capability-conformance-governance.md">ADR-0483</a> verwendet anfangs eine einzelne Maintainer-Autorität mit Repository-Provenienz, nicht bereits ein föderiertes Zertifizierungs-Ökosystem. Die Trennung von Contract- und Implementation-Digest verhindert, dass eine Änderung der Implementierung automatisch einen unveränderten Conformance-Nachweis behält. Sie verhindert aber nicht sämtliche Risiken kompromittierter Prüfumgebungen, unvollständiger Testfälle, unechter Fakes oder falsch akzeptierter Semantik. Solche Fälle benötigen Review-Regeln, Negativtests und gegebenenfalls Live-Tenant-Gates.</p>
+<p>Für sensible Bereiche gelten mehrere explizite Verbote: keine Credentials in BPMN, Capability-Metadaten oder Conformance-Records; keine geheimen Policy-Attribute in frei abfragbaren Graphantworten; keine unautorisierten Traversals über geschützte Architekturgrenzen. Die spätere Identity-Aware Execution benötigt nachvollziehbare Entscheidungen und Schutz gegen Tokenmissbrauch und Revocation-Races. Wo diese Pfade nicht nachgewiesen sind, ist dies als <strong>offen</strong> auszuweisen und nicht mit der allgemeinen Sicherheit der Event-Sourcing-Engine gleichzusetzen. <a href="../planning/identity-aware-execution-program.md">IAE-Programm</a>.</p>
+<h2 id="durchgehendes-beispiel-employee-onboarding">14. Durchgehendes Beispiel: Employee Onboarding</h2>
+<p>Ein Onboarding-Value-Stream umfasst beispielsweise die Stage «IT-Zugang bereitstellen». Der Fachbereich modelliert die benötigte Business Capability «Identity Management». Ein BPMN-Prozess wird als fachliche Realisierung zugeordnet und enthält einen Service Task «Konto im Zielsystem anlegen». Ein konkreter Entra Worker Type kann eine Operation zur Kontoanlage anbieten; deren technische Semantik muss einen Vertrag mit Ressourcenart <em>Account</em> und geeignetem Identitätsscope benennen. Der Worker ist mit Tenant, Zielumgebung und Vault-Referenzen konfiguriert. Eine spätere Policy entscheidet, ob diese Identität für diese Ressource diese Aktion ausführen darf.</p>
+<p><strong>Was bereits als Baustein gezeigt werden kann:</strong> Business-Capability-/Value-Stream-Modellierung, BPMN-Modell und -Ausführung, Worker-Type-Operationen, optionale Capability-Claims, der unabhängige Contract-Envelope, Schema- und Digest-Prüfungen sowie das Evidence-Gate als Infrastruktur. Für das gesamte Beispiel gibt es nach dem geprüften Stand jedoch keine veröffentlichte, verifizierte Entra-Account-Contract-Bindung. Es ist daher ausdrücklich <strong>kein heute funktionsfähiger CDA7-End-to-End-Demoprozess</strong>. <a href="../adr/0305-business-capabilities-and-value-streams.md">ADR-0305</a> · <a href="../adr/0483-technical-capability-conformance-governance.md">ADR-0483</a>.</p>
+<p><strong>Zielbild nach CDA3–CDA7:</strong> Ein unabhängig geprüftes Account-Contract-Artefakt und der dazugehörige Evidence Record erlauben die Kennzeichnung der exakt passenden Operation. CDA4/CDA5 zeigen die verantwortete Kette für Architektur- und Betriebssicht. CDA6 validiert eine eindeutige initiale Bindung beim Deployment. CDA7 führt den Job ausschliesslich über den autorisierten Pfad aus und bewahrt Entscheidung und Ergebnis replaybar. Jede dieser Etappen hat ein eigenes Gate; ihr Erfolg darf nicht aus dem Vorhandensein des vorherigen Bausteins extrapoliert werden.</p>
+<h3 id="negativ--und-ausfallfälle">Negativ- und Ausfallfälle</h3>
+<ol type="1">
+<li><strong>Google-Kontakt statt Entra-Konto:</strong> gleiche Aktion «erstellen», aber andere Ressource und Identitätssemantik. Kein Contract-Match ohne belegtes Profil.</li>
+<li><strong>Veralteter Evidence-Digest:</strong> Quellcode oder Suite hat sich geändert. Die Prüfung muss den Record als stale erkennen; ein bisheriger Claim darf daraus nicht stillschweigend «verified» bleiben.</li>
+<li><strong>Kein Zugriff auf den Tenant:</strong> Ein korrektes Binding kann die Autorisierung nicht ersetzen; die externe Aktion wird verweigert. Kein transparenter Wechsel auf einen anderen Worker.</li>
+<li><strong>Geschützte Abteilung:</strong> Eine Nutzerin ohne Berechtigung darf nicht einmal aus einer Impact-Antwort auf die Anzahl versteckter Worker schliessen.</li>
+<li><strong>Neustart nach dauerhafter Bindungsentscheidung:</strong> Replay übernimmt gespeicherte Fakten; es darf weder einen neuen Worker ermitteln noch erneut eine externe Kontoerstellung auslösen. Externe Retry-/Idempotenz-Semantik muss separat beachtet werden.</li>
+<li><strong>Worker A fällt nach einem künftigen Rebinding aus:</strong> Alte, bereits A zugeordnete Jobs bleiben nicht automatisch auf B lauffähig. Der Operator braucht eine sichtbare Drain-/Incident-/Reconciliation-Regel.</li>
+</ol>
+<p>Die ersten beiden Fälle prüfen Semantik und Evidenz, der dritte Sicherheitsgrenzen, der vierte Datenschutz, der fünfte die Engine-Invarianten und der sechste die zeitliche Bindungssemantik. Diese Trennung verhindert, dass ein einzelner «Happy Path» eine nicht gegebene Gesamtgarantie suggeriert.</p>
+<h2 id="programmstatus-cda0cda8-und-abhängigkeiten">15. Programmstatus CDA0–CDA8 und Abhängigkeiten</h2>
+<table>
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Slice</th>
+<th>Am geprüften Commit</th>
+<th>Nächster belastbarer Nachweis</th>
+<th>Architektur-Gate</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>CDA0</strong> Claims</td>
+<td><strong>Umgesetzt</strong> für deklarative Operation-Claims</td>
+<td>Legacy-/Negativtests und dokumentierte Semantik behalten</td>
+<td>ADR-0480 Accepted / Partial</td>
+</tr>
+<tr class="even">
+<td><strong>CDA1</strong> Contract-Envelope</td>
+<td><strong>Umgesetzt</strong> als Format/Parser</td>
+<td>Ersten unveränderlichen Contract veröffentlichen</td>
+<td>ADR-0485 Accepted / Partial</td>
+</tr>
+<tr class="odd">
+<td><strong>CDA2</strong> Conformance</td>
+<td><strong>Teilweise umgesetzt</strong>; Validator, Digests, Evidence-Record/CI-Gate gebaut</td>
+<td>Veröffentlichtes Contract-Artefakt, nachvollziehbar geprüftes Provider-Evidence, Withdrawal</td>
+<td>ADR-0483 Accepted / Partial</td>
+</tr>
+<tr class="even">
+<td><strong>CDA3</strong> Worker-Mappings</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Eine nachweislich richtige, aus Quelle abgeleitete Provider-Operation und Negativ-Mappings</td>
+<td>CDA2 und ADR-0208-Trust-Gates</td>
+</tr>
+<tr class="odd">
+<td><strong>CDA4</strong> Architekturgraph</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Provenienz- und ACL-sichere technische Kanten, stabile IDs, Query-Grenzen</td>
+<td>ADR-0420 aktuell Proposed</td>
+</tr>
+<tr class="even">
+<td><strong>CDA5</strong> Discovery</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Read-only Impact-/Gap-Abfrage ohne verdeckte Knoten-Leaks</td>
+<td>CDA4; UI verspricht keine Runtime</td>
+</tr>
+<tr class="odd">
+<td><strong>CDA6</strong> BPMN-Binding</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Verifizierter, eindeutiger Deployment-Plan; stable binding slot</td>
+<td>ADR-0482 aktuell Proposed; CDA2/CDA3</td>
+</tr>
+<tr class="even">
+<td><strong>CDA7</strong> Governed Execution</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Ein korrekt autorisierter und recoverygetesteter Provider-Pfad</td>
+<td>CDA6 und konkretes IAE-Enforcement</td>
+</tr>
+<tr class="odd">
+<td><strong>CDA8</strong> Controlled Rebinding</td>
+<td><strong>Geplant/offen</strong></td>
+<td>Expliziter Cutover mit alten Jobs, Rollback, Partition-Recovery</td>
+<td>ADR-0492 Proposed; Review zurückgestellt</td>
+</tr>
+</tbody>
+</table>
+<p>Die ursprüngliche T0–T5-Planung wurde in CDA0–CDA8 fachlich feiner aufgeteilt: T0 → CDA0; T1a → CDA1; T1b → CDA2; T2 → CDA3; T3 → CDA4; T4 → CDA5; T5 → CDA6 plus CDA7; T5c → CDA8. Dabei ist eine read-only Discovery kein zwingendes Engine-Dependency-Gate für jeden Validierungsprototyp. Vor einer fertigen produktiven Nutzersicht muss die Herkunft der Daten jedoch nachvollziehbar sein. <a href="../planning/technical-capability-contract.md">Technischer Plan</a> · <a href="../planning/capability-driven-automation-program.md">CDA-Programm</a>.</p>
+<figure class="diagram">
+<svg aria-label="CDA-Lieferpfad: Grundlagen und Gates" class="atlas-diagram" height="385" role="img" viewbox="0 0 760 385" width="760" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arr" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0 L10 5 L0 10 z" fill="#b8d7ff"></path></marker></defs> <rect fill="#101c2e" height="383" rx="18" stroke="#2d4058" width="758" x="1" y="1"></rect> <text fill="#f4f7ff" font-size="19" font-weight="750" x="24" y="32">CDA-Lieferpfad: Grundlagen und Gates</text> <text fill="#9bb0cc" font-size="12" x="24" y="54">CDA5 ist kein Engine-Prerequisite-Gate für jeden CDA6-Prototyp</text> <rect fill="#17263b" height="68" rx="10" stroke="#43617d" stroke-width="1.3" width="155" x="34" y="65"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="111.5" y="93.0">CDA0 · Claims</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="111.5" y="112.0">umgesetzt</text> <path d="M189 99 L213 99" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#17263b" height="68" rx="10" stroke="#43617d" stroke-width="1.3" width="155" x="219" y="65"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="296.5" y="93.0">CDA1 · Contracts</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="296.5" y="112.0">umgesetzt</text> <path d="M374 99 L398 99" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#17263b" height="68" rx="10" stroke="#43617d" stroke-width="1.3" width="155" x="404" y="65"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="481.5" y="93.0">CDA2 · Evidence</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="481.5" y="112.0">teilweise</text> <rect fill="#17263b" height="68" rx="10" stroke="#43617d" stroke-width="1.3" width="325" x="34" y="186"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="196.5" y="214.0">CDA3 · Provider-Nachweis</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="196.5" y="233.0">noch offen</text> <rect fill="#17263b" height="68" rx="10" stroke="#43617d" stroke-width="1.3" width="322" x="404" y="186"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="565.0" y="214.0">CDA4/5 · Graph + Discovery</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="565.0" y="233.0">noch offen</text> <path d="M481 133 L481 179" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <path d="M359 220 L395 220" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <rect fill="#17263b" height="65" rx="10" stroke="#43617d" stroke-width="1.3" width="220" x="34" y="286"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="144.0" y="312.5">CDA6 · Binding</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="144.0" y="331.5">geplant</text> <rect fill="#17263b" height="65" rx="10" stroke="#43617d" stroke-width="1.3" width="220" x="283" y="286"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="393.0" y="312.5">CDA7 · Execution</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="393.0" y="331.5">geplant</text> <rect fill="#17263b" height="65" rx="10" stroke="#43617d" stroke-width="1.3" width="194" x="532" y="286"></rect> <text fill="#f4f7ff" font-size="12" font-weight="650" text-anchor="middle" x="629.0" y="312.5">CDA8 · Rebinding</text> <text fill="#f4f7ff" font-size="12" font-weight="450" text-anchor="middle" x="629.0" y="331.5">geplant</text> <path d="M191 254 L191 279" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <path d="M254 317 L276 317" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path> <path d="M503 317 L525 317" fill="none" marker-end="url(#arr)" stroke="#b8d7ff" stroke-width="2"></path>
+</svg>
+<figcaption>
+Abbildung: CDA-Slices und ihre wesentlichen Abhängigkeiten.
+</figcaption>
+</figure>
+<h2 id="alternativen-grenzen-und-trade-offs">16. Alternativen, Grenzen und Trade-offs</h2>
+<p><strong>Direkte Provider-Kopplung ohne CDA.</strong> Sie hat die geringste konzeptionelle Komplexität und ist für wenige kontrollierte Zielsysteme leicht verständlich. Die fachliche Abhängigkeit vom Provider wird jedoch oft in BPMN, Skripten oder Workerkonfiguration versteckt; Auswirkungen auf Value Streams, Versionswechsel und Beweisqualität bleiben manuell. Nicht jede Integration braucht deshalb sofort CDA: Für ein kleines, festes Prozessportfolio kann ein expliziter Worker Type ausreichen.</p>
+<p><strong>Manuell gepflegter Architektur- und Contract-Katalog.</strong> Er kann schnell Übersicht liefern, birgt aber Drift zu tatsächlich implementierten Operationen. Ohne verbindliche Versionen, Prüfergebnisse und Quellbezüge wird eine «verified»-Markierung zum unklaren Verwaltungsstatus. Die CDA-Architektur bevorzugt deshalb Ableitung aus vorhandenen Operationstabellen plus prüfbare, unabhängig begutachtete Evidence Records.</p>
+<p><strong>Automatische Laufzeitwahl unter allen passenden Workern.</strong> Sie kann theoretisch Flexibilität und Ausfallsicherheit erhöhen, erzeugt aber hohe Anforderungen an Policy, deterministische Wahl, Fehlersemantik, Zielidentität, Audit, Replay und Migration. Der aktuelle Entscheidungsweg wählt zuerst das enger definierte Deployment-Pinning und später allenfalls operatorgesteuerte Revisionen. Ein universeller dynamischer Scheduler ist nicht mit CDA0–CDA8 freigegeben.</p>
+<p><strong>Einschätzung:</strong> Die zunächst strengere Architektur ist nicht so bequem wie semantische Suche plus Sofort-Routing. Sie ist aber besser überprüfbar: Jeder Übergang von fachlichem Bedarf zu technischer Aktion hat eine benannte Quelle und einen expliziten Gate. Die Kosten liegen in Pflege von Contracts, Negativtests, Review und Governance. Dieser Aufwand ist nur dann wirtschaftlich, wenn mehrere Prozesse oder Zielsysteme tatsächlich von nachweisbaren Fähigkeiten und kontrolliertem Austausch profitieren.</p>
+<h2 id="offene-entscheidungen-und-konkrete-nächste-schritte">17. Offene Entscheidungen und konkrete nächste Schritte</h2>
+<p>Der vorhandene Repository-Stand legt eine fachlich sinnvolle Reihenfolge nahe, ohne neue Architekturentscheidungen vorwegzunehmen:</p>
+<ol type="1">
+<li><strong>CDA2 fertigstellen.</strong> Mindestens einen semantisch präzisen, geprüften Contract unter <code>workertype/contracts/</code> veröffentlichen; mit einer realen Worker-Type-Operation verknüpfen; positive und negative Fälle im Evidence Record mit Review sichern. Withdrawal und State-Projektion als getrennte Gate-Aufgaben entscheiden.</li>
+<li><strong>Programm und Roadmap korrigieren.</strong> PR #1401 ist gemerged, obwohl beide Planungsdokumente noch «in Review» nennen. Die Statuskorrektur darf ausdrücklich nicht als CDA2-Completion formuliert werden.</li>
+<li><strong>CDA3 klein beginnen.</strong> Erstes Account- oder Contact-Profil auswählen, semantische Grenzfälle beweisen und aus dem bestehenden Provider-Code ableiten; keine zweite Operationenquelle aufbauen.</li>
+<li><strong>Graphdesign entscheiden.</strong> ADR-0420 nur nach Provenienz-/Sichtbarkeitsprüfung akzeptieren; Graph-Abfragen standardmässig an eingeschränkten Knoten stoppen lassen.</li>
+<li><strong>Binding und Runtime getrennt freigeben.</strong> CDA6 beginnt mit reinem Deployment-Plan und Validierung; CDA7 erst nach einem tatsächlich unterstützten IAE-Enforcement-Pfad und Recovery-Nachweisen.</li>
+<li><strong>CDA8 bis zum richtigen Zeitpunkt offenhalten.</strong> Logische Slot-Identität in CDA6 berücksichtigen, aber Cutover-/Rollback-/Cross-Partition-Design erst nach einer angenommenen Entscheidung implementieren.</li>
+</ol>
+<p>Für jede Runtime-Änderung gelten Regressionstests, Recovery-Vergleich von Live- und Replay-State, Fencing- und Idempotenztests, Prüfen der No-Allocation-Invariante und das repoübliche Build-/Test-/Race-/Vet-/Format-Gate. Die komplette Go-Suite wurde <strong>für die Erstellung dieses dokumentarischen Whitepapers nicht ausgeführt</strong>; es werden daher keine neuen Testergebnisse oder Produktionsfreigaben behauptet.</p>
+<h2 id="fazit">18. Fazit</h2>
+<p>CDA ist nicht bloss eine alternative Bezeichnung für bereits vorhandene Jobs oder eine schönere Darstellung von Integrationen. Die heute implementierten Bausteine liefern einen klaren Fortschritt: eine fachlich getrennte Business-Capability-Ebene, deklarative technische Claims, eine unabhängige Contract-Identität sowie überprüfbare Schema-, Digest- und Evidence-Infrastruktur. <strong>Das eigentliche Capability-driven Routing ist noch Zielbild.</strong> Gerade diese saubere Statusaussage ist der Ausgangspunkt für eine verlässliche Weiterentwicklung.</p>
+<p>Eine belastbare nächste Version des Produkts wird nicht mit einem universellen «Kann alles»-Worker beginnen, sondern mit einer überprüften einzelnen Operation: exakte Semantik, unabhängige Evidenz, fehlerhafte Gegenbeispiele und danach ein autorisierter, replaybarer Ausführungspfad. Erst wenn dieser Nachweis erbracht ist, sollten die Graph- und Runtime-Projektionen ihn als verfügbar darstellen.</p>
+<h2 id="quellen--und-adr-verzeichnis">Quellen- und ADR-Verzeichnis</h2>
+<p><strong>Primärquellen:</strong> <a href="../../README.md"><code>README.md</code></a>, <a href="../../ROADMAP.md"><code>ROADMAP.md</code></a>, <a href="../../AGENTS.md"><code>AGENTS.md</code></a>, <a href="../ARCHITECTURE.md"><code>docs/ARCHITECTURE.md</code></a>, <a href="../architecture/invariants.md"><code>docs/architecture/invariants.md</code></a>, <a href="../planning/capability-driven-automation-program.md"><code>CDA-Programm</code></a>, <a href="../planning/identity-aware-execution-program.md"><code>IAE-Programm</code></a>, <a href="../planning/technical-capability-contract.md"><code>Technischer CDA-Plan</code></a>, <a href="../adr/README.md"><code>ADR-Index</code></a>, <a href="../../workertype/"><code>workertype</code></a>, <a href="../../api/capability/"><code>api/capability</code></a>, <a href="../../engine/"><code>engine</code></a> und <a href="https://github.com/pblumer/atlas/pull/1401">PR #1401</a>. Prüfzeitpunkt: 7. November 2026, Commit <code>8c6d819b2591af02a2b49b3d8ad362dc234df476</code>.</p>
+<table>
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>ADR</th>
+<th>Gegenstand</th>
+<th>Status am geprüften Stand</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="../adr/0305-business-capabilities-and-value-streams.md">0305</a></td>
+<td>Business Capabilities und Value Streams</td>
+<td>Accepted / Partial</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0308-panorama-binds-the-capability-register.md">0308</a></td>
+<td>Panorama-Bindung</td>
+<td>Accepted / Landed</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0203-worker-execution-model.md">0203</a></td>
+<td>Worker-Ausführungsmodell</td>
+<td>Accepted / Landed</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0208-worker-type-packages.md">0208</a></td>
+<td>Worker-Type-Pakete und Trust</td>
+<td>Accepted / Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0480-technical-capability-contract.md">0480</a></td>
+<td>Claims auf Operationen</td>
+<td>Accepted / Partial</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0485-technical-capability-semantics.md">0485</a></td>
+<td>Contract-Envelope</td>
+<td>Accepted / Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0483-technical-capability-conformance-governance.md">0483</a></td>
+<td>Evidence und Conformance Governance</td>
+<td>Accepted / Partial</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0420-one-graph-model-several-projections.md">0420</a></td>
+<td>Ein Graph, mehrere Projektionen</td>
+<td>Proposed / Not started</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0482-capability-aware-binding-and-routing.md">0482</a></td>
+<td>Capability-aware Binding und Routing</td>
+<td>Proposed / Not started</td>
+</tr>
+<tr class="even">
+<td><a href="../adr/0475-identity-aware-worker-execution.md">0475</a></td>
+<td>Identity-aware Execution</td>
+<td>Proposed / Partial</td>
+</tr>
+<tr class="odd">
+<td><a href="../adr/0492-controlled-worker-rebinding.md">0492</a></td>
+<td>Controlled Worker-Rebinding</td>
+<td>Proposed / Not started</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Editionshinweis:</strong> Das bisherige <a href="Atlas_Whitepaper_Capability_Driven_Automation.pdf"><code>Atlas_Whitepaper_Capability_Driven_Automation.pdf</code></a> bleibt als historisches PDF bestehen. Diese Neuauflage wurde aus den aktuellen Repository-Quellen neu verfasst. Der binäre Inhalt der historischen PDF konnte über die verfügbare Repository-Schnittstelle nicht extrahiert werden; deshalb behauptet die Änderungsübersicht keinen zeilenweisen Vergleich mit der Altversion.</p>
+</article></main></body></html>
