@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Owner review of ADR-draft-refuse-forbidden-sequence-flow-shapes (first CON6 slice): accept, amend or reject; on acceptance deliver PR 1 (three stage-5 rules) and PR 2 (element locations) as separate vertical PRs. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
+  "next_action": "Owner review of ADR-0547 (first CON6 slice): accept, amend or reject; on acceptance deliver PR 1 (three stage-5 rules) and PR 2 (element locations) as separate vertical PRs. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
   "slices": [
     {
       "id": "CON0",
@@ -138,9 +138,9 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First proposed slice: ADR-draft-refuse-forbidden-sequence-flow-shapes (Proposed, not accepted) — stage-5 deploy refusal of start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow (including the silent cross-gateway mis-route found in CON2), reload stays tolerant per ADR-0177/ADR-0393; plus element locations on element-local compile diagnostics. Implementation waits for owner acceptance of the ADR.",
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First proposed slice: ADR-0547 (Proposed, not accepted) — stage-5 deploy refusal of start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow (including the silent cross-gateway mis-route found in CON2), reload stays tolerant per ADR-0177/ADR-0393; plus element locations on element-local compile diagnostics. Implementation waits for owner acceptance of the ADR.",
       "evidence": [
-        "../../adr/draft-refuse-forbidden-sequence-flow-shapes.md",
+        "../../adr/0547-refuse-forbidden-sequence-flow-shapes.md",
         "../../../conformance/normative_diagnostics_test.go"
       ]
     }

@@ -1,4 +1,4 @@
-# ADR-DRAFT: Refuse the sequence-flow shapes BPMN forbids, and locate element-local compile errors
+# ADR-0547: Refuse the sequence-flow shapes BPMN forbids, and locate element-local compile errors
 
 - **Status:** Proposed
 - **Implementation:** Not started
