@@ -20,6 +20,9 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/internal/trustedproxy"
 )
@@ -115,6 +118,40 @@ type Principal struct {
 	// consenting to a Worker acting as them — and are refused to anything that is not
 	// their session (ADR-0475 §10).
 	Session bool
+	// Instance binds a principal to one Worker Instance and the job types it serves.
+	// Only the credential an installed Worker Type's instance is launched with sets it
+	// (ADR-draft-installed-worker-instances-hold-their-own-credential): the scope
+	// says which routes, and this says which work on them, which no route pattern can
+	// — a job key does not say its type. Nil narrows nothing.
+	Instance *InstanceBinding
+}
+
+// InstanceBinding is the Worker Instance a credential belongs to and the job types
+// its manifest declares.
+type InstanceBinding struct {
+	Worker   string
+	JobTypes []string
+}
+
+// InstanceRefusal says why p may not do the work of worker on a job of jobType, or
+// "" when it may. A principal without a binding may do any — the binding only ever
+// takes away. worker is the id the request reports as, and jobType the type it asks
+// for or the type of the job its key names; "" for jobType checks the worker alone.
+func InstanceRefusal(p *Principal, worker, jobType string) string {
+	if p == nil || p.Instance == nil {
+		return ""
+	}
+	b := p.Instance
+	if worker != b.Worker {
+		return "this credential belongs to Worker Instance " + strconv.Quote(b.Worker) +
+			"; it reports only as that instance, on a lease it holds"
+	}
+	if jobType != "" && !slices.Contains(b.JobTypes, jobType) {
+		return "this credential belongs to Worker Instance " + strconv.Quote(b.Worker) +
+			" and serves only the job types its manifest declares (" + strings.Join(b.JobTypes, ", ") +
+			"); it may not serve " + strconv.Quote(jobType)
+	}
+	return ""
 }
 
 // ErrNoSuchPrincipal says a name did not resolve to anybody.

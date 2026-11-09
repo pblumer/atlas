@@ -45,6 +45,14 @@ const (
 	// zone, and its whole job is this small, enumerated protocol.
 	apiScopeWorker = "worker"
 
+	// apiScopeInstalledWorker is what the secret of an installed Worker Type's
+	// instance carries: the job and query protocol, and none of the routes the
+	// built-in Worker Types report to (ADR-draft-installed-worker-instances-hold-their-own-credential).
+	// The principal also carries a binding to its instance id and job types, which the
+	// six handlers check, because a route pattern cannot say which job a key names.
+	// Not mintable: the supervisor mints it, and nothing asks for it.
+	apiScopeInstalledWorker = "workertype"
+
 	// apiScopeMCP reaches the Model Context Protocol transport and nothing else. It
 	// is what a person's OAuth grant carries when they approved a client for the
 	// transport rather than for the whole server (ADR-0200) — an audience made real:
@@ -227,6 +235,17 @@ var apiScopeAllowed = map[string][]string{
 		// A worker in SharePoint mockup mode performs its operations here: the site is
 		// the server's, so it outlives the worker (ADR-0484).
 		"POST /api/v1/sharepoint/mock-sites/{worker}",
+	},
+	// The worker set's protocol half and nothing else: not the authorization route
+	// (no installed type is governed, and none may be brokered a credential), not the
+	// outbox or the mock-system reports, which belong to built-in Worker Types.
+	apiScopeInstalledWorker: {
+		"POST /api/v1/jobs/activate",
+		"POST /api/v1/jobs/{key}/complete",
+		"POST /api/v1/jobs/{key}/fail",
+		"POST /api/v1/jobs/{key}/error",
+		"POST /api/v1/worker-queries/activate",
+		"POST /api/v1/worker-queries/{id}/answer",
 	},
 	// One route, and not one of /api/v1's: the exposition is mounted beside the
 	// probes. A scope is a set of mounted patterns, not of API operations, which is

@@ -5296,9 +5296,11 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
+	principal := httpapi.PrincipalFrom(r.Context())
 	var (
 		found     bool
 		notHolder bool
+		refused   string
 		runErr    error
 	)
 	s.do(func() {
@@ -5308,6 +5310,9 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		worker := strings.TrimSpace(req.Worker)
+		if refused = s.instanceRefusesJob(principal, worker, jv); refused != "" {
+			return
+		}
 		if worker != "" && !holdsLease(jv, worker, req.LeaseToken) {
 			notHolder = true
 			return
@@ -5340,6 +5345,8 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case refused != "":
+		refuseInstance(w, r, refused)
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(strings.TrimSpace(req.Worker))+" does not hold this job's current lease; it may have elapsed and been taken by another worker")
@@ -5402,13 +5409,15 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	message := strings.TrimSpace(req.ErrorMessage)
+	principal := httpapi.PrincipalFrom(r.Context())
 	actor := ""
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		actor = p.Username
+	if principal != nil {
+		actor = principal.Username
 	}
 	var (
 		found     bool
 		notHolder bool
+		refused   string
 		runErr    error
 	)
 	s.do(func() {
@@ -5417,6 +5426,9 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		if refused = s.instanceRefusesJob(principal, worker, jv); refused != "" {
+			return
+		}
 		if worker == "" {
 			s.proc.ThrowJobErrorManually(key, code, message, actor, reason)
 			return
@@ -5445,6 +5457,8 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "throw job error: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case refused != "":
+		refuseInstance(w, r, refused)
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or throw as an operator with a reason")
@@ -5693,14 +5707,16 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// principal's username, or "" when auth is off (single-user) or the caller is
 	// unidentified. Read off the request before the run loop, like every other
 	// principal read.
+	principal := httpapi.PrincipalFrom(r.Context())
 	actor := ""
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		actor = p.Username
+	if principal != nil {
+		actor = principal.Username
 	}
 	var (
 		found        bool
 		notHolder    bool
 		unauthorized bool
+		refused      string
 		badReport    error
 		runErr       error
 	)
@@ -5710,6 +5726,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		if refused = s.instanceRefusesJob(principal, worker, jv); refused != "" {
+			return
+		}
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
@@ -5777,6 +5796,8 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case refused != "":
+		refuseInstance(w, r, refused)
 	case badReport != nil:
 		httpapi.Error(w, http.StatusBadRequest, badReport.Error())
 	case notHolder:
@@ -6738,6 +6759,12 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	body.Type = strings.TrimSpace(body.Type)
 	if body.Type == "" {
 		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
+		return
+	}
+	// An installed Worker Type's instance leases only the types its manifest declares,
+	// as itself (ADR-draft-installed-worker-instances-hold-their-own-credential).
+	if why := httpapi.InstanceRefusal(httpapi.PrincipalFrom(r.Context()), body.Worker, body.Type); why != "" {
+		refuseInstance(w, r, why)
 		return
 	}
 	lease := defaultJobLease

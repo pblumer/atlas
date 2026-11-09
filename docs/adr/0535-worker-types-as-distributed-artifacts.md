@@ -487,6 +487,19 @@ worker queries; binding a BPMN task to one configured Worker of a model-authored
 broker for installed types; and migrating the built-in Worker Types onto this path, which
 starts with the types whose server half is smallest.
 
+**2026-11-09 — step 3, follow-up: a credential per installed release.** Until now the
+supervisor handed an installed artifact the same credential as every built-in worker —
+the internal token, whose `worker` scope reaches every job type. An installed release now
+gets a secret of its own, minted in memory when it is registered and revoked when it is
+removed, which reaches only the job and query protocol, only the job types its manifest
+declares and only as its own Worker Instance id; anything else is refused with `403` and
+the reason. Built-in supervised workers and external workers with API tokens are
+unchanged. Decided in
+[ADR-draft-installed-worker-instances-hold-their-own-credential](draft-installed-worker-instances-hold-their-own-credential.md).
+Still open in step 3: process confinement for installed artifacts, the Console view of
+installed releases, and comparing the digest an instance reports with the one it was
+launched with.
+
 ## Links
 
 - refines [ADR-0203](0203-worker-execution-model.md): ends compiled-in embedded Worker
