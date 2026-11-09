@@ -27,8 +27,13 @@ _Changed_ / _Removed_ for each version.
   removed every instance it entered. Documents live in the data directory by default, or in an S3
   bucket with `--documents-backend=s3 --documents-s3-worker --documents-s3-bucket`. A full
   snapshot carries them only with `?documents=true`. The CSV import reads a referenced file from
-  the store; a Worker Instance cannot yet and says so. Operations and the replay show a reference
-  as a download link (ADR-draft-a-file-is-a-document-not-a-variable).
+  the store, in process and on a Worker Instance, which reads it under its job's lease through
+  `POST /api/v1/jobs/{key}/documents/{id}` (`workersdk.ReadDocument`, `UploadDocument`). S3 tasks
+  gain `put-document` and `get-document`, mail tasks `store-attachment`. The MCP tools
+  `atlas_document_meta`, `atlas_read_document` and `atlas_upload_document` reach the store. A
+  document a personal variable names is enciphered under the data subject's key and becomes
+  unreadable with an erasure. Operations and the replay show a reference as a download link
+  (ADR-draft-a-file-is-a-document-not-a-variable).
 - **Teams and SharePoint team sites of the m365-dienste example can change their visibility.** The
   products `m365-team` and `m365-sharepoint-site` gain the action «Sichtbarkeit ändern»
   (`sichtbarkeit`, messages `m365.team.sichtbarkeit` and `m365.site.sichtbarkeit`, form

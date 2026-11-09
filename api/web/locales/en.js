@@ -5237,7 +5237,7 @@ export default {
   "workerDoc.mail.trap": "Send the first real batch to yourself, and check that the sender address is allowed to send (SPF/DKIM). An automation sending two hundred wrong mails is faster than any correction. And a watch publishes mail from <b>anyone</b> who can write to the address: a sender address is a claim anybody can make, so restrict the watch to allowed senders <i>and</i> require a DMARC pass.",
   "workerDoc.csv.title": "Text file",
   "workerDoc.csv.needs": "Nothing to configure: no Worker record, no credential, no endpoint. The layout is in the task, the file's text is a process variable.",
-  "workerDoc.csv.step1": "Reading: put the file's text into a variable first (a form upload, a REST call), name it as the source, and the rows land in the result variable as a JSON array of objects.",
+  "workerDoc.csv.step1": "Reading: name as the source the variable that holds the file – a document reference from a form upload, or the file's text (from a REST call, say) – and the rows land in the result variable as a JSON array of objects.",
   "workerDoc.csv.step2": "Say what the layout is: delimiter and header row for a delimited file, <code>name:width</code> pairs for a fixed-width one, field names for attribute-value pairs. A delimited file with a header row can derive its columns itself.",
   "workerDoc.csv.step3": "Writing: the source variable holds the rows as an array of objects and the rendered file lands in the result variable as text — pass it to a mail attachment, a REST call or a Directory file task.",
   "workerDoc.csv.trap": "A fixed-width value wider than its column is cut on write, because the format has no way to hold it. Size the columns for the widest value you actually expect.",

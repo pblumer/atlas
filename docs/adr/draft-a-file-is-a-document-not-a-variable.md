@@ -1,15 +1,9 @@
 # ADR-DRAFT: A file is a document, and a variable holds a reference to it
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-11-04
 - **Deciders:** Atlas maintainers
-- **Open question:** how a remote Worker Instance reads a document's bytes — over the
-  HTTP API with its worker token, or over the job stream it already holds — has not been
-  settled. Each changes a different surface (an HTTP route a worker token reaches, or the
-  job protocol), and neither has been measured against a 35 MiB document on a slow link.
-  Slices 1 to 4 of the plan do not need the answer; slice 5 does.
-- **Question checked:** 2026-11
 - **Decided (2026-11-05, product owner):** the store is internal by default with S3 as a
   selectable backend; `limits.Document` is the size limit; unbound uploads expire after
   24 hours, configurable; documents enter the whole-instance snapshot only when a
@@ -295,13 +289,54 @@ cursor over the document, one multi-instance batch per page), which is a separat
   Operations, the single-instance view and the replay show a reference as a download link;
   the Settings page offers the snapshot with documents.
 - **CSV import:** the source variable may hold text or a reference; the in-process worker
-  reads the document off the run loop. The lease payload for a Worker Instance is resolved
-  on the run loop, where reading a document is not allowed, so a Worker Instance's CSV job
-  fails naming the document until slice 5.
-- **Not built yet:** slice 5 (Worker Instances reading documents, S3 and mail Workers
-  moving documents), slice 6 (MCP tools — the three routes are listed as omitted for now,
-  personal-data encipherment of documents, the handbook). A public start form or answer
-  link cannot carry a file yet: its visitor is nobody the store knows.
+  reads the document off the run loop.
+
+## As built (slices 5–6, 2026-11-09)
+
+- **How a Worker Instance reads a document** — the question this record left open — is
+  settled over the HTTP API workers already speak, not over a second channel:
+  `POST /api/v1/jobs/{key}/documents/{id}` with `{worker, leaseToken}` streams a document
+  to the worker holding the job's current lease, and only one bound to the root of the
+  job's instance. `workersdk` gains `ReadDocument`, `UploadDocument` and `DocumentID` on
+  the job's context. It has not been measured against a 35 MiB document on a slow link.
+- **CSV on a Worker Instance:** the lease payload is resolved on the run loop, where no
+  document is read, so it carries `sourceDocument`; the worker reads it under its lease
+  and parses it.
+- **In-process reads are the job's, too.** Every in-process document read
+  (`readJobDocument`) is for the job's own process instance and answers only for a
+  document bound to its root, so a model that writes a foreign id into FEEL reads
+  nothing.
+- **When binding happens.** Binding moved into `drive`, right after the command that
+  carried the reference is durable and before any in-process worker is handed a job it
+  unblocked (`driveThen`). Bound after `drive` returned, an in-process worker ran first and
+  was refused its own instance's document. One window remains: a Worker Instance's
+  activation can lease the job between the durable command and the binding; its read is
+  then refused, the job fails, and its retry succeeds.
+- **S3:** `put-document` puts the document a reference names into a bucket under its
+  detected type; `get-document` takes an object into the store and answers a reference.
+  Both are bounded by `limits.Document`, in process and on a Worker Instance (which
+  uploads through `POST /api/v1/documents` and is bound when its completion lands).
+  Documents an in-process worker's outputs name are bound once the completion is
+  durable.
+- **Mail:** `store-attachment` inspects an attachment like the other document operations
+  and puts it into the store, answering a reference with the inspection.
+- **MCP:** `atlas_document_meta`, `atlas_read_document` (text only, at most 1 MiB, saying
+  when it is cut) and `atlas_upload_document` (text an agent composes). The worker-lease
+  route is not a tool: an agent holds no lease.
+- **Personal documents (ADR-0314):** where personal values are sealed, a personal
+  variable's document references make the documents personal too: their bytes are
+  enciphered under the data subject's key (`vault.SealBytes`/`OpenBytes`, bound to the
+  document's id), stored as a separate blob, and the plain bytes leave the store with the
+  next sweep unless another document holds the same content. An erasure answers 410 on
+  download and the sweep removes the document. The reference's `sha256` stays the
+  content's hash. Because the variable itself becomes an envelope, a person holding a
+  task cannot be matched to a personal document through the form's fields; operators
+  and project members still read it.
+- **Handbook:** a *Files and documents* card, and the CSV and mail sections, in both
+  languages.
+- **Not built:** a public start form or answer link cannot carry a file — its visitor is
+  nobody the store knows. Large parsed results (`rows` under the 1 MiB budget) remain the
+  open question named under *What this does not solve*.
 
 ## Links
 

@@ -1643,14 +1643,16 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   tooling via `keyId`, a KMS/envelope (A4) backend, extending the vault to the DMN
   resolver and other `ATLAS_*_TOKEN` references, and a Console Organization →
   Secrets panel over the CRUD endpoints.
-- 🚧 **A file a process receives is a document, not a variable**
+- ✅ **A file a process receives is a document, not a variable**
   ([ADR-draft-a-file-is-a-document-not-a-variable](docs/adr/draft-a-file-is-a-document-not-a-variable.md),
   [plan](docs/planning/documents-instead-of-variables.md)). ✅ A document store (local by
   default, S3 selectable), upload/download routes with per-document access, binding to the
   instance a reference enters, a sweep for unused uploads and released documents, the Tasks
   app uploading files as documents, Operations and the replay showing a reference as a link,
-  and the CSV import reading a referenced file. 🔲 Worker Instances reading documents, S3 and
-  mail Workers moving documents, MCP tools, personal-data encipherment of documents.
+  and the CSV import reading a referenced file; Worker Instances reading documents under
+  their job's lease, S3 and mail Workers moving documents, MCP tools, and personal documents
+  enciphered under the data subject's key. 🔲 Quality checks over files of many thousands of
+  rows, whose parsed result does not fit one variable.
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone P — Panorama architecture & live landscape ✅
