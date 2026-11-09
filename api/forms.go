@@ -184,6 +184,33 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	if !existed && !fromExisted {
 		rec.OwnerID = s.artifactOwnerOnCreate(r)
 	}
+	// A save that names no application keeps the one the form is filed under, and a
+	// new form names one (ADR-draft-artifacts-belong-to-an-application). Until now an
+	// empty projectId took the form out of its application, which is no longer a
+	// destination. A form written before the rule may still be saved unfiled, so its
+	// author can finish it and adopt it.
+	baseProject, continuing := existing.ProjectID, existed
+	if fromExisted {
+		baseProject, continuing = from.ProjectID, true
+	}
+	if s.applicationRequired && rec.ProjectID == "" && continuing {
+		rec.ProjectID = baseProject
+	}
+	if !continuing {
+		if code, msg := s.unfiledRefusal(rec.ProjectID, "a form"); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	// Filing into an application it was not in needs that application to exist, not
+	// only editor on it if it does: an unknown id would be Not assigned under another
+	// name.
+	if s.applicationRequired && rec.ProjectID != "" && rec.ProjectID != baseProject {
+		if code, msg := s.authorizeTargetProject(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	if rec.ProjectID != "" {
 		if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)

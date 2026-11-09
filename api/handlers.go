@@ -1122,6 +1122,20 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 			}
 		}
 	}
+	// Without a draft to inherit from, a new version files where the process's
+	// earlier versions are: redeploying a definition through the API must not need
+	// to be told an application its history already names
+	// (ADR-draft-artifacts-belong-to-an-application).
+	if !hasProjectParam && projectID == "" {
+		var readErr error
+		s.do(func() { projectID, readErr = s.deployedApplicationOf(pid) })
+		if readErr != nil {
+			return deployResp{}, refusedWith(http.StatusInternalServerError, "read project: "+readErr.Error())
+		}
+	}
+	if code, msg := s.unfiledRefusal(projectID, "a deployed process"); code != 0 {
+		return deployResp{}, refusedWith(code, msg)
+	}
 	// Filing a definition into a project is a write on that project, so it needs
 	// editor there — the check the project deploy path has always made, and the
 	// axis a role-per-route table cannot express (ADR-0071,
@@ -6403,6 +6417,20 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if hasProjectParam {
 		destProjectID = projectID
 	}
+	// A new draft is filed under an application, and a filed one stays in one
+	// (ADR-draft-artifacts-belong-to-an-application). A draft written before the rule
+	// may still be saved where it is, so its author can finish it and adopt it.
+	if !continuing {
+		if code, msg := s.unfiledRefusal(destProjectID, "a draft"); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	} else if base.ProjectID != "" {
+		if code, msg := s.unfileRefusal(destProjectID); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	if destProjectID != "" && (hasProjectParam || !continuing) {
 		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
@@ -6574,6 +6602,10 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	// Moving a draft needs editor on both ends (ADR-0071): the project it leaves
 	// and, when non-empty, the project it joins (which must exist).
 	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if code, msg := s.unfileRefusal(payload.ProjectID); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}

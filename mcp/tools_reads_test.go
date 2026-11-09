@@ -37,7 +37,7 @@ const collabRuntimeBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/2010
 // state by one pool's definition key.
 func TestCollaborationRuntimeViaTool(t *testing.T) {
 	atlas := newAtlas(t)
-	depJSON := callOne(t, atlas, "atlas_deploy", map[string]any{"xml": collabRuntimeBPMN})
+	depJSON := callOne(t, atlas, "atlas_deploy", map[string]any{"projectId": testApp(t, atlas), "xml": collabRuntimeBPMN})
 	var dep struct {
 		Deployments []struct {
 			Key uint64 `json:"key"`
@@ -70,7 +70,7 @@ func TestListAndGetFormViaTool(t *testing.T) {
 		t.Fatalf("create_project = %q (err=%v), want an id", projJSON, err)
 	}
 	callOne(t, atlas, "atlas_save_form", map[string]any{"id": "f1", "projectId": proj.ID, "schema": mustReadObject(t, exampleFile("csv-upload-form.json"))})
-	callOne(t, atlas, "atlas_save_form", map[string]any{"id": "f2", "schema": mustReadObject(t, exampleFile("row-correction-form.json"))})
+	callOne(t, atlas, "atlas_save_form", map[string]any{"projectId": testApp(t, atlas), "id": "f2", "schema": mustReadObject(t, exampleFile("row-correction-form.json"))})
 
 	if all := callOne(t, atlas, "atlas_list_forms", map[string]any{}); !strings.Contains(all, "f1") || !strings.Contains(all, "f2") {
 		t.Fatalf("list_forms = %q, want both f1 and f2", all)
@@ -102,7 +102,7 @@ func TestListAndGetFormViaTool(t *testing.T) {
 // errors on an unknown process id.
 func TestListAndGetDraftViaTool(t *testing.T) {
 	atlas := newAtlas(t)
-	callOne(t, atlas, "atlas_save_draft", map[string]any{"xml": sampleBPMN})
+	callOne(t, atlas, "atlas_save_draft", map[string]any{"projectId": testApp(t, atlas), "xml": sampleBPMN})
 
 	if list := callOne(t, atlas, "atlas_list_drafts", map[string]any{}); !strings.Contains(list, "order") {
 		t.Fatalf("list_drafts = %q, want the order draft", list)
@@ -121,7 +121,7 @@ func TestListAndGetDraftViaTool(t *testing.T) {
 func TestListDecisionRefsAndDecisionsViaTool(t *testing.T) {
 	atlas := newAtlas(t)
 	callOne(t, atlas, "atlas_upload_decision_model", map[string]any{"handle": "rowvalid", "xml": mustRead(t, exampleFile("pruefe-datensaetze.dmn"))})
-	callOne(t, atlas, "atlas_register_decision", map[string]any{"name": "RowValid", "modelRef": "rowvalid"})
+	callOne(t, atlas, "atlas_register_decision", map[string]any{"projectId": testApp(t, atlas), "name": "RowValid", "modelRef": "rowvalid"})
 
 	if refs := callOne(t, atlas, "atlas_list_decision_refs", map[string]any{}); !strings.Contains(refs, "RowValid") || !strings.Contains(refs, "rowvalid") {
 		t.Fatalf("list_decision_refs = %q, want the RowValid reference", refs)

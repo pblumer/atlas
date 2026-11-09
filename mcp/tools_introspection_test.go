@@ -14,7 +14,7 @@ import (
 // on its service task, so the instance stays active and its state is queryable.
 func deployAndStartInstance(t *testing.T, atlas *httptest.Server, createArgs map[string]any) uint64 {
 	t.Helper()
-	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, atlas)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_create_instance", createArgs))[0])); isErr {

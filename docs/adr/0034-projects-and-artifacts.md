@@ -5,6 +5,8 @@
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 
+> **Amended (2026-11-09).** The `projectId` tag is no longer optional for anything new, and deleting a project no longer leaves its artifacts behind under Ungrouped: [ADR-draft-artifacts-belong-to-an-application](draft-artifacts-belong-to-an-application.md).
+
 ## Context and problem statement
 
 The Modeler today presents a **flat** workspace. There are two independent,

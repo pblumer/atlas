@@ -54,7 +54,7 @@ func TestNoArgToolHandlers(t *testing.T) {
 func TestGetProcessXMLStringKey(t *testing.T) {
 	ts := newAtlas(t)
 	resps := run(t, ts,
-		callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}),
+		callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}),
 		callTool(2, "atlas_get_process_xml", map[string]any{"key": "1"}),
 	)
 	if _, isErr := toolText(t, result(t, resps[0])); isErr {
@@ -74,7 +74,7 @@ func TestCancelAndDeleteViaTools(t *testing.T) {
 	ts := newAtlas(t)
 
 	// Deploy → definition key 1 on a fresh engine.
-	resps := run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))
+	resps := run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}))
 	if _, isErr := toolText(t, result(t, resps[0])); isErr {
 		t.Fatal("deploy failed")
 	}
@@ -119,7 +119,7 @@ func TestCancelAndDeleteViaTools(t *testing.T) {
 func TestCreateInstanceForwardsStartVariables(t *testing.T) {
 	ts := newAtlas(t)
 
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 
@@ -158,7 +158,7 @@ func TestCreateInstanceForwardsStartVariables(t *testing.T) {
 // common no-argument start is unaffected.
 func TestCreateInstanceNoVariablesStartsEmpty(t *testing.T) {
 	ts := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0]))
@@ -172,7 +172,7 @@ func TestCreateInstanceNoVariablesStartsEmpty(t *testing.T) {
 // silently ignored value.
 func TestCreateInstanceRejectsNonObjectVariables(t *testing.T) {
 	ts := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1, "variables": "nope"}))[0]))
@@ -198,7 +198,7 @@ func TestCancelMissingInstanceIsToolError(t *testing.T) {
 // definition deletes cleanly. A bulk cancel of an unknown definition is a tool error.
 func TestCancelInstancesBulkViaTool(t *testing.T) {
 	ts := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	for i := 0; i < 3; i++ {
