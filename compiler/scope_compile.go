@@ -1069,7 +1069,14 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		if !ok {
 			return fmt.Errorf("compiler: %s gateway %q default references unknown flow %q", kind, gid, def)
 		}
+		// Mark the named flow a default exactly as before, whatever its source — a
+		// stored definition must reload and route as it always has — and record who
+		// declared it, so stage 5 refuses a default that is not this gateway's own
+		// outgoing flow at deploy (ADR-0547).
 		b.SetFlowDefault(fid)
+		if gw, ok := ids[gid]; ok {
+			b.markDefaultDeclaration(gw, fid)
+		}
 		return nil
 	}
 	for _, g := range c.ExclusiveGateways {

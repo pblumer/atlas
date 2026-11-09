@@ -3,12 +3,12 @@ package conformance
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
-	"github.com/pblumer/atlas/state"
 )
 
 // CON2 negative diagnostics for registry row FLOW-14 (model validation). The
@@ -23,9 +23,9 @@ import (
 //   - coarse diagnostics: element-local (stages 1-4) faults that are refused but
 //     reported under the generic "compile" rule with no element field, the id
 //     appearing only in the message text — a known gap in location reporting;
-//   - accepted violations: models the specification forbids that atlas deploys
-//     without an error today. They are characterised here so the gap stays
-//     visible; closing one is a deploy-behaviour change for an ADR-gated slice.
+//   - forbidden flow shapes (ADR-0547): refused at deploy like the located group,
+//     and brought back unchanged, with the problem reported, when a stored
+//     definition is reloaded.
 
 // con2Problems returns the modeler-validation problems for a model, failing the
 // test if validation itself errors.
@@ -70,6 +70,11 @@ func TestCON2InvalidModelsHaveLocatedDiagnostics(t *testing.T) {
 		{"timer-start-schedule-unresolvable", compiler.RuleTimerStartSchedule, "s", con2Defs("",
 			`<startEvent id="s"><timerEventDefinition><timeDuration>= "nonsense"</timeDuration></timerEventDefinition>`+
 				`</startEvent><endEvent id="e"/>`+F("f1", "s", "e"))},
+		// ADR-0547: the four shapes BPMN forbids that atlas used to deploy.
+		{"start-event-with-incoming-flow", compiler.RuleStartIncomingFlow, "s", con2StartWithIncoming()},
+		{"end-event-with-outgoing-flow", compiler.RuleEndOutgoingFlow, "e", con2EndWithOutgoing()},
+		{"default-flow-not-outgoing", compiler.RuleGatewayDefaultNotOutgoing, "gw", con2DefaultNotOutgoing()},
+		{"default-naming-another-gateways-flow", compiler.RuleGatewayDefaultNotOutgoing, "gw1", con2ForeignDefault()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,117 +201,104 @@ func TestCON2ModelingSmellsAreWarningsNotRefusals(t *testing.T) {
 	}
 }
 
-// TestCON2KnownAcceptedSpecViolations characterises models that OMG BPMN 2.0.2
-// forbids but atlas deploys without an error today. Clause wording is provisional
-// pending the CON0 per-clause review:
-//   - a start event must not be the target of a sequence flow;
-//   - an end event must not be the source of a sequence flow;
-//   - a gateway's default must be one of its own outgoing sequence flows; when it
-//     names another gateway's flow, that other gateway is silently misrouted.
-//
-// The runtime consequences are asserted too, because they are what makes each gap
-// matter: the outgoing flow of an end event is silently never taken, and a default
-// that names a non-outgoing flow is ignored, so the gateway parks with an incident
-// while the modeler reported only the generic missing-default warning. A start
-// event with an incoming flow is only compile-checked here; executed, the loop it
-// builds runs until the engine's per-token step budget raises an incident.
-//
-// When the compiler starts refusing one of these, this test fails by design: move
-// the case to TestCON2InvalidModelsHaveLocatedDiagnostics and update FLOW-14.
-func TestCON2KnownAcceptedSpecViolations(t *testing.T) {
-	S, F := con2Script, con2Flow
-	startWithIncoming := con2Defs("", `<startEvent id="s"/>`+S("a")+`<endEvent id="e"/>`+
-		F("f1", "s", "a")+F("f2", "a", "e")+F("f3", "a", "s"))
-	endWithOutgoing := con2Defs("", `<startEvent id="s"/><endEvent id="e"/>`+S("a")+`<endEvent id="e2"/>`+
-		F("f1", "s", "e")+F("f2", "e", "a")+F("f3", "a", "e2"))
-	defaultNotOutgoing := con2Defs("", `<startEvent id="s"/><exclusiveGateway id="gw" default="f1"/><endEvent id="e"/>`+
-		F("f1", "s", "gw")+`<sequenceFlow id="f2" sourceRef="gw" targetRef="e"><conditionExpression>= false</conditionExpression></sequenceFlow>`)
+// The four sequence-flow shapes OMG BPMN 2.0.2 forbids and atlas deployed without an
+// error until ADR-0547. Clause wording is provisional pending the CON0 per-clause review.
+func con2StartWithIncoming() []byte {
+	return con2Defs("", `<startEvent id="s"/>`+con2Script("a")+`<endEvent id="e"/>`+
+		con2Flow("f1", "s", "a")+con2Flow("f2", "a", "e")+con2Flow("f3", "a", "s"))
+}
 
-	for _, tc := range []struct {
-		name string
-		xml  []byte
+func con2EndWithOutgoing() []byte {
+	return con2Defs("", `<startEvent id="s"/><endEvent id="e"/>`+con2Script("a")+`<endEvent id="e2"/>`+
+		con2Flow("f1", "s", "e")+con2Flow("f2", "e", "a")+con2Flow("f3", "a", "e2"))
+}
+
+func con2DefaultNotOutgoing() []byte {
+	return con2Defs("", `<startEvent id="s"/><exclusiveGateway id="gw" default="f1"/><endEvent id="e"/>`+
+		con2Flow("f1", "s", "gw")+`<sequenceFlow id="f2" sourceRef="gw" targetRef="e"><conditionExpression>= false</conditionExpression></sequenceFlow>`)
+}
+
+// con2ForeignDefault: gw1's default names gw2's flow b_no. With x = 1 both of gw2's
+// conditions are false, so gw2 must not route; the leaked default sent it to "no".
+func con2ForeignDefault() []byte {
+	cond := func(id, from, to, c string) string {
+		return `<sequenceFlow id="` + id + `" sourceRef="` + from + `" targetRef="` + to +
+			`"><conditionExpression>` + c + `</conditionExpression></sequenceFlow>`
+	}
+	return con2Defs("", `<startEvent id="s"/>`+con2Script("x")+`<exclusiveGateway id="gw1" default="b_no"/>`+
+		`<exclusiveGateway id="gw2"/><endEvent id="yes"/><endEvent id="no"/><endEvent id="other"/>`+
+		con2Flow("f1", "s", "x")+con2Flow("f2", "x", "gw1")+cond("a1", "gw1", "gw2", "= x = 1")+cond("a2", "gw1", "other", "= x = 5")+
+		cond("b_no", "gw2", "no", "= x = 2")+cond("b_yes", "gw2", "yes", "= x = 3"))
+}
+
+// con2RunReloaded compiles the model the way a stored deployment is brought back
+// (compiler.ReloadNamed, without the deploy gate), runs it live and through WAL
+// replay, and returns the result with the problems the reload reported.
+func con2RunReloaded(t *testing.T, xml []byte) (RunResult, []compiler.Problem) {
+	t.Helper()
+	cp, problems, err := compiler.ReloadNamed(defKey, 1, bytes.NewReader(xml), "p")
+	if err != nil {
+		t.Fatalf("ReloadNamed must bring a stored definition back: %v", err)
+	}
+	defs := []compiler.Deployable{{Process: cp}}
+	dir := t.TempDir()
+	live, err := executeLive(filepath.Join(dir, "live"), defs, cp, Start{}, nil)
+	if err != nil {
+		t.Fatalf("run reloaded definition: %v", err)
+	}
+	replayed, err := replayLog(filepath.Join(dir, "live"), filepath.Join(dir, "replay"), defs, cp)
+	if err != nil {
+		t.Fatalf("replay reloaded definition: %v", err)
+	}
+	if !equalResult(live, replayed) {
+		t.Fatalf("replay diverged from live (I4):\n live   = %s\n replay = %s", live.Golden(), replayed.Golden())
+	}
+	return live, problems
+}
+
+// TestCON2ForbiddenFlowShapesReloadUnchanged pins the other half of ADR-0547: a stored
+// definition with one of the four shapes, deployed before the rules existed, still
+// reloads (ADR-0177, ADR-0393), reports the rule beside the process, and runs exactly as
+// it did — including the behaviour that made the shape worth refusing. Repairing a
+// stored definition on restart would change what its running instances do.
+func TestCON2ForbiddenFlowShapesReloadUnchanged(t *testing.T) {
+	cases := []struct {
+		name, rule, element string
+		xml                 []byte
+		state               model.ProcessInstanceState
+		visits              map[string]int
 	}{
-		{"start-event-with-incoming-flow", startWithIncoming},
-		{"end-event-with-outgoing-flow", endWithOutgoing},
-		{"default-flow-not-outgoing", defaultNotOutgoing},
-	} {
-		xml := tc.xml
-		t.Run(tc.name+"/deploys", func(t *testing.T) {
-			if _, err := compiler.Parse(defKey, 1, bytes.NewReader(xml)); err != nil {
-				t.Fatalf("compiler now refuses this violation (%v): move it to the located table and update FLOW-14", err)
+		// The flow after an end event is never taken.
+		{"end-event-with-outgoing-flow", compiler.RuleEndOutgoingFlow, "e", con2EndWithOutgoing(),
+			model.PICompleted, map[string]int{"e": 1, "a": 0, "e2": 0}},
+		// A default naming the gateway's incoming flow is ignored: the gateway parks.
+		{"default-flow-not-outgoing", compiler.RuleGatewayDefaultNotOutgoing, "gw", con2DefaultNotOutgoing(),
+			model.PIActive, map[string]int{"gw": 1, "e": 0}},
+		// A default naming another gateway's flow still mis-routes that gateway.
+		{"default-naming-another-gateways-flow", compiler.RuleGatewayDefaultNotOutgoing, "gw1", con2ForeignDefault(),
+			model.PICompleted, map[string]int{"gw2": 1, "no": 1, "yes": 0, "other": 0}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, problems := con2RunReloaded(t, tc.xml)
+			if !con2HasProblem(problems, tc.rule, tc.element, compiler.SeverityError) {
+				t.Fatalf("reload problems %+v lack %s on %q", problems, tc.rule, tc.element)
 			}
-			for _, p := range con2Problems(t, xml) {
-				if p.Severity == compiler.SeverityError {
-					t.Fatalf("modeler now reports error %+v: move the case and update FLOW-14", p)
-				}
+			if got.State != tc.state {
+				t.Fatalf("state %v, want %v; path=%v", got.State, tc.state, got.Path)
 			}
+			con2Expect(t, "ADR-0547 reload", got, tc.visits)
 		})
 	}
-
-	t.Run("end-event-with-outgoing-flow/flow-never-taken", func(t *testing.T) {
-		got := con2Run(t, endWithOutgoing)
-		if got.State != model.PICompleted {
-			t.Fatalf("state %v, want completed", got.State)
+	// The start-event loop is only reload-checked: run, it cycles until the per-token
+	// step budget raises an incident, which is not what this test is about.
+	t.Run("start-event-with-incoming-flow", func(t *testing.T) {
+		cp, problems, err := compiler.ReloadNamed(defKey, 1, bytes.NewReader(con2StartWithIncoming()), "p")
+		if err != nil || cp == nil {
+			t.Fatalf("ReloadNamed must bring a stored definition back: %v", err)
 		}
-		con2Expect(t, "FLOW-14", got, map[string]int{"e": 1, "a": 0, "e2": 0})
-	})
-
-	t.Run("default-flow-not-outgoing/gateway-parks", func(t *testing.T) {
-		// The only diagnostic is the generic warning, which does not say that the
-		// declared default is not one of the gateway's outgoing flows.
-		if problems := con2Problems(t, defaultNotOutgoing); !con2HasProblem(problems,
-			compiler.RuleGatewayMissingDefault, "gw", compiler.SeverityWarning) {
-			t.Fatalf("modeler diagnostics %+v lack the missing-default warning on gw", problems)
+		if !con2HasProblem(problems, compiler.RuleStartIncomingFlow, "s", compiler.SeverityError) {
+			t.Fatalf("reload problems %+v lack %s on s", problems, compiler.RuleStartIncomingFlow)
 		}
-		got := con2Run(t, defaultNotOutgoing)
-		if got.State != model.PIActive {
-			t.Fatalf("state %v, want active", got.State)
-		}
-		con2Inspect(t, defaultNotOutgoing, nil, func(store *state.Store, cp *compiler.CompiledProcess) {
-			var on []string
-			if err := store.Incidents(func(_ uint64, incident *model.IncidentValue) error {
-				on = append(on, cp.ElementBpmnId(incident.ElementId))
-				return nil
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if len(on) != 1 || on[0] != "gw" {
-				t.Fatalf("incidents on %v, want exactly one on gw", on)
-			}
-		})
-	})
-
-	// A default that names *another* gateway's flow is worse than ignored: the
-	// compiler marks that flow as the other gateway's default, so the other
-	// gateway routes there although the flow's own condition is false, and the
-	// modeler drops its missing-default warning for that gateway. Here x = 1:
-	// gw2's flows test x = 2 and x = 3, so gw2 must not route at all (it would
-	// park with an incident), yet it reaches "no".
-	t.Run("default-naming-another-gateways-flow/misroutes", func(t *testing.T) {
-		cond := func(id, from, to, c string) string {
-			return `<sequenceFlow id="` + id + `" sourceRef="` + from + `" targetRef="` + to +
-				`"><conditionExpression>` + c + `</conditionExpression></sequenceFlow>`
-		}
-		xml := con2Defs("", `<startEvent id="s"/>`+S("x")+`<exclusiveGateway id="gw1" default="b_no"/>`+
-			`<exclusiveGateway id="gw2"/><endEvent id="yes"/><endEvent id="no"/><endEvent id="other"/>`+
-			F("f1", "s", "x")+F("f2", "x", "gw1")+cond("a1", "gw1", "gw2", "= x = 1")+cond("a2", "gw1", "other", "= x = 5")+
-			cond("b_no", "gw2", "no", "= x = 2")+cond("b_yes", "gw2", "yes", "= x = 3"))
-		if _, err := compiler.Parse(defKey, 1, bytes.NewReader(xml)); err != nil {
-			t.Fatalf("compiler now refuses this violation (%v): move it to the located table and update FLOW-14", err)
-		}
-		problems := con2Problems(t, xml)
-		for _, p := range problems {
-			if p.Severity == compiler.SeverityError {
-				t.Fatalf("modeler now reports error %+v: move the case and update FLOW-14", p)
-			}
-		}
-		if con2HasProblem(problems, compiler.RuleGatewayMissingDefault, "gw2", compiler.SeverityWarning) {
-			t.Fatalf("gw2 is warned as lacking a default again; the foreign default no longer leaks: %+v", problems)
-		}
-		got := con2Run(t, xml)
-		if got.State != model.PICompleted {
-			t.Fatalf("state %v, want completed (misrouted through the leaked default)", got.State)
-		}
-		con2Expect(t, "FLOW-14", got, map[string]int{"gw2": 1, "no": 1, "yes": 0, "other": 0})
 	})
 }

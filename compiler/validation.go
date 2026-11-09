@@ -54,6 +54,19 @@ const (
 	RuleBoundaryIncomingFlow   = "boundary.incoming-flow"
 	RuleBoundaryInvalidHost    = "boundary.invalid-host"
 	RuleFlowCrossScope         = "flow.cross-scope"
+	// RuleStartIncomingFlow marks a start event that is the target of a sequence flow.
+	// BPMN gives a start event no incoming flow; atlas used to deploy one and run the
+	// flow back into it (ADR-0547). An error at deploy; a stored definition still
+	// reloads (ADR-0177, ADR-0393).
+	RuleStartIncomingFlow = "start.incoming-flow"
+	// RuleEndOutgoingFlow marks an end event that is the source of a sequence flow.
+	// BPMN gives an end event no outgoing flow; atlas used to deploy one and never take
+	// the flow, so whatever the author drew after it silently did not run (ADR-0547).
+	RuleEndOutgoingFlow = "end.outgoing-flow"
+	// RuleGatewayDefaultNotOutgoing marks an exclusive or inclusive gateway whose
+	// default attribute names a flow that does not leave that gateway. Naming another
+	// gateway's flow made it *that* gateway's default and mis-routed it (ADR-0547).
+	RuleGatewayDefaultNotOutgoing = "gateway.default-not-outgoing"
 	// RuleAgentTool marks a tool of an agent-driven ad-hoc that gives the model nothing to
 	// go on: an entry activity with no <bpmn:documentation>, so the model is told the tool
 	// exists and not what it is for (ADR-0253). A
@@ -223,6 +236,13 @@ const (
 
 // eventGatewayKind is one event-based gateway marked as a kind atlas does not run,
 // recorded at compile time for stage 5 (RuleEventGatewayKind).
+// defaultDeclaration records that a gateway's default attribute named a flow, so stage 5
+// can check the flow leaves that gateway (RuleGatewayDefaultNotOutgoing, ADR-0547).
+type defaultDeclaration struct {
+	Gateway int32 // the declaring gateway node
+	Flow    int32 // the flow its default attribute named
+}
+
 type eventGatewayKind struct {
 	Node        int32
 	Instantiate bool // instantiate="true": the gateway starts the instance
@@ -294,6 +314,8 @@ func Validate(cp *CompiledProcess) []Problem {
 	var ps []Problem
 	ps = append(ps, checkReachability(cp)...)
 	ps = append(ps, checkGateways(cp)...)
+	ps = append(ps, checkEventFlowEnds(cp)...)
+	ps = append(ps, checkDefaultDeclarations(cp)...)
 	ps = append(ps, checkScopes(cp)...)
 	ps = append(ps, checkErrorHandling(cp)...)
 	ps = append(ps, checkTransactions(cp)...)
@@ -810,6 +832,57 @@ func checkGateways(cp *CompiledProcess) []Problem {
 		}
 	}
 	return ps
+}
+
+// checkEventFlowEnds refuses a start event with an incoming sequence flow
+// (RuleStartIncomingFlow) and an end event with an outgoing one (RuleEndOutgoingFlow),
+// the two flow ends BPMN does not give those events (ADR-0547). Both are read off the
+// compiled graph, so the check sits in stage 5 and a stored definition that has one
+// still reloads, unchanged, with the problem reported (ADR-0177).
+func checkEventFlowEnds(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for i := range cp.nodes {
+		id := int32(i)
+		n := &cp.nodes[i]
+		switch {
+		case isStartEvent(n.Type) && n.IncomingCount > 0:
+			ps = append(ps, problem(cp, id, SeverityError, RuleStartIncomingFlow,
+				fmt.Sprintf("%s is the target of a sequence flow; a start event has no incoming flow — route the flow to the element after the start event instead", describeNode(cp, id))))
+		case isEndEventType(n.Type) && n.OutgoingCount > 0:
+			ps = append(ps, problem(cp, id, SeverityError, RuleEndOutgoingFlow,
+				fmt.Sprintf("%s is the source of a sequence flow, which would never be taken; an end event has no outgoing flow — end the path later or remove the flow", describeNode(cp, id))))
+		}
+	}
+	return ps
+}
+
+// checkDefaultDeclarations refuses an exclusive or inclusive gateway whose default
+// attribute names a flow that does not leave it (RuleGatewayDefaultNotOutgoing,
+// ADR-0547). The compile still marks the named flow as a default exactly as it always
+// has — a stored definition reloads and routes as it did — and records which gateway
+// declared it, so this check can say so at deploy.
+func checkDefaultDeclarations(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, d := range cp.defaultDeclarations {
+		source := cp.Flow(d.Flow).Source
+		if source == d.Gateway {
+			continue
+		}
+		ps = append(ps, problem(cp, d.Gateway, SeverityError, RuleGatewayDefaultNotOutgoing,
+			fmt.Sprintf("%s names sequence flow %q as its default, but that flow leaves %s, not this gateway; a default must be one of the gateway's own outgoing flows",
+				describeNode(cp, d.Gateway), cp.FlowBpmnId(d.Flow), describeNode(cp, source))))
+	}
+	return ps
+}
+
+// isEndEventType reports whether a node type is an end event of any result type.
+func isEndEventType(t BpmnType) bool {
+	switch t {
+	case TypeEndEvent, TypeMessageEndEvent, TypeSignalEndEvent, TypeErrorEndEvent,
+		TypeCompensationEndEvent, TypeCancelEndEvent, TypeTerminateEndEvent, TypeEscalationEndEvent:
+		return true
+	}
+	return false
 }
 
 // checkEventGatewayTargets validates that every outgoing flow of an event-based gateway

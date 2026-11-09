@@ -1664,44 +1664,45 @@ type CompiledProcess struct {
 	// caughtErrorCodes is every error code an error boundary or error event subprocess
 	// in this process catches, sorted and without duplicates — computed once in Build
 	// so a script job's lease reads it rather than walking the details (I5).
-	caughtErrorCodes   []string
-	eventSubs          []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
-	rootEventSubs      []int32 // event-subprocess handler node ids whose parent scope is the process root
-	messageCatches     []MessageDetail
-	receiveTasks       []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
-	messageThrows      []MessageDetail
-	messageStarts      []MessageDetail
-	signalCatches      []SignalDetail
-	signalThrows       []SignalDetail // shared by signal throw and signal end events
-	signalStarts       []SignalDetail
-	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
-	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
-	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
-	adHocs             []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
-	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
-	timerStarts        []TimerStartDetail
-	dataObjects        []CompiledDataObject
-	dataStores         []CompiledDataStore
-	dataOutAssocs      []DataOutputAssociation // shared: output associations grouped by activity node
-	dataInAssocs       []DataInputAssociation  // shared: input associations grouped by activity node
-	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
-	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
-	startEvents        []int32
-	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
-	startVars          []StartVariable     // declared start variables (atlas:startForm), nil if none
-	constants          []Constant          // process constants (atlas:constants), nil if none
-	constantSet        map[string]struct{} // the same names as a set, for the per-write question
-	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
-	eventGatewayKinds  []eventGatewayKind  // event-based gateways of a kind atlas does not run; read by stage 5 only
-	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
-	invalidAnsweredBy  []int32             // user task nodes whose atlas:answeredBy named no way; read by stage 5 only
-	answerTasks        map[int32]int32     // mail task node → interned BPMN id of the task answered by its link
-	passwordFor        map[int32]RestExpr  // mail task node → the account whose password link it carries
-	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
-	searchableVars     []string            // declared searchable variable names, in the order authored
-	searchableSet      map[string]struct{} // the same names as a set, for the per-write question
+	caughtErrorCodes    []string
+	eventSubs           []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
+	rootEventSubs       []int32 // event-subprocess handler node ids whose parent scope is the process root
+	messageCatches      []MessageDetail
+	receiveTasks        []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
+	messageThrows       []MessageDetail
+	messageStarts       []MessageDetail
+	signalCatches       []SignalDetail
+	signalThrows        []SignalDetail // shared by signal throw and signal end events
+	signalStarts        []SignalDetail
+	errorEnds           []ErrorEndDetail     // error end events (ADR-0089)
+	escalations         []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
+	conditionals        []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
+	adHocs              []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
+	compensationThrows  []CompensationDetail // shared by compensation throw and end events (ADR-0103)
+	timerStarts         []TimerStartDetail
+	dataObjects         []CompiledDataObject
+	dataStores          []CompiledDataStore
+	dataOutAssocs       []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs        []DataInputAssociation  // shared: input associations grouped by activity node
+	ioInputs            []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
+	ioOutputs           []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
+	startEvents         []int32
+	startFormId         int32                // interned start-form id (ADR-0028), -1 if none
+	startVars           []StartVariable      // declared start variables (atlas:startForm), nil if none
+	constants           []Constant           // process constants (atlas:constants), nil if none
+	constantSet         map[string]struct{}  // the same names as a set, for the per-write question
+	conditionalStarts   []int32              // process-level start nodes that carried a conditional event definition; read by stage 5 only
+	defaultDeclarations []defaultDeclaration // which gateway declared which flow its default; read by stage 5 only (ADR-0547)
+	eventGatewayKinds   []eventGatewayKind   // event-based gateways of a kind atlas does not run; read by stage 5 only
+	invalidWizards      []int32              // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
+	invalidAnsweredBy   []int32              // user task nodes whose atlas:answeredBy named no way; read by stage 5 only
+	answerTasks         map[int32]int32      // mail task node → interned BPMN id of the task answered by its link
+	passwordFor         map[int32]RestExpr   // mail task node → the account whose password link it carries
+	versionTag          int32                // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos    int64                // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos     int64                // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	searchableVars      []string             // declared searchable variable names, in the order authored
+	searchableSet       map[string]struct{}  // the same names as a set, for the per-write question
 	// personalVars and personalSet are the variables declared to hold personal data
 	// (ADR-0314), in the order authored and as a set. A declared variable is enciphered
 	// under its subject's data key before it becomes a command, which is why it may not
