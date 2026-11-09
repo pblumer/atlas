@@ -396,7 +396,7 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_create_project",
 			Description: "Deprecated — use atlas_create_application (ADR-0128). Create a project (a " +
-				"folder that groups a scenario's diagrams, forms, and decision references). Returns the " +
+				"folder that groups a scenario's diagrams, forms, and rules — DMN decision references). Returns the " +
 				"project's id — pass it to the other authoring tools to file artifacts under this project.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -424,7 +424,7 @@ func authoringTools() []Tool {
 			Name: "atlas_delete_project",
 			Description: "Deprecated — use atlas_delete_application (ADR-0128). Delete a design-time " +
 				"project by id. The operation is idempotent. It removes only the project folder; tagged " +
-				"drafts and decision references remain and become ungrouped. When authentication is " +
+				"drafts and rules (decision references) remain and become ungrouped. When authentication is " +
 				"enabled, the caller must have the project owner role.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -449,7 +449,7 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_create_application",
 			Description: "Create a process application (a container that groups a scenario's diagrams, " +
-				"forms, and decision references and publishes them together, ADR-0128). Returns the " +
+				"forms, and rules (DMN decision references) and publishes them together, ADR-0128). Returns the " +
 				"application's id — pass it to the other authoring tools to file artifacts under it.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -514,7 +514,7 @@ func authoringTools() []Tool {
 			Name: "atlas_application_deletion_preview",
 			Description: "Read what deleting a process application with purge=true would remove — every " +
 				"deployed version with its running instances, decision deployments, drafts, forms, " +
-				"decision references, Panorama and information models — and what outside the application " +
+				"rules (decision references), Panorama and information models — and what outside the application " +
 				"would stop working: catalogue products binding its processes, order lines that could still " +
 				"start them, other applications' processes evaluating its decisions. Also says whether the " +
 				"purge would be refused, and whether the caller lacks the operator role the cancellations " +
@@ -686,13 +686,13 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_register_decision",
-			Description: "Register a decision reference (name + modelRef) so a business rule task's " +
+			Description: "Register a rule — the Console's name for a decision reference (name + modelRef) — so a business rule task's " +
 				"calledDecision resolves to an uploaded model at deploy time, optionally under a project. " +
 				"modelRef is the handle used with atlas_upload_decision_model.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"name":      stringProp("The decision reference name (typically the decisionId a rule task calls)."),
+					"name":      stringProp("The rule (decision reference) name (typically the decisionId a rule task calls)."),
 					"modelRef":  stringProp("The model handle (from atlas_upload_decision_model) that provides the decision."),
 					"projectId": stringProp("Optional project id to file the reference under."),
 				},
@@ -795,12 +795,12 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_dmnref_graph",
-			Description: "Read a decision reference's decision requirements graph (DRD) — its decision nodes and " +
+			Description: "Read a rule's (decision reference's) decision requirements graph (DRD) — its decision nodes and " +
 				"the requirement edges between them — by the reference id from atlas_register_decision. Refused " +
 				"with a not-found error if no reference has that id.",
 			InputSchema: map[string]any{
 				"type":       "object",
-				"properties": map[string]any{"id": stringProp("The decision reference id (from atlas_register_decision or atlas_list_projects artifacts).")},
+				"properties": map[string]any{"id": stringProp("The rule (decision reference) id (from atlas_register_decision or atlas_list_projects artifacts).")},
 				"required":   []any{"id"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -814,7 +814,7 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_get_decision_model",
 			Description: "Get the raw DMN XML stored under a model handle — the handle used with " +
-				"atlas_upload_decision_model, i.e. a decision reference's modelRef. Refused with a not-found error " +
+				"atlas_upload_decision_model, i.e. a rule's (decision reference's) modelRef. Refused with a not-found error " +
 				"if no model matches the handle.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -1134,7 +1134,7 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_list_decision_refs",
-			Description: "List registered DMN decision references (name + modelRef, from atlas_register_decision), " +
+			Description: "List registered rules — DMN decision references (name + modelRef, from atlas_register_decision) — " +
 				"optionally filtered to one project. These are the design-time artifacts; atlas_deployed_decisions " +
 				"is the runtime counterpart.",
 			InputSchema: map[string]any{
@@ -1148,7 +1148,7 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_list_decisions",
 			Description: "List the DMN decisions (with their inputs and outputs) discoverable from the registered " +
-				"decision references, optionally filtered to one project. Use a decision's id as a business rule " +
+				"rules (decision references), optionally filtered to one project. Use a decision's id as a business rule " +
 				"task's calledDecision. Each row carries `deployed`: false means the decision is in the model and " +
 				"callable by name, but the engine cannot run it yet, so a task wired to it is refused at deploy.",
 			InputSchema: map[string]any{

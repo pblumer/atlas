@@ -85,6 +85,16 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
+  the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
+  "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact
+  table, *Create new* ("Regel (DMN)", "Prozess (BPMN)"), validating and publishing an application,
+  adding, moving and deleting one, and deleting an application. The type column of an
+  application's artifacts reads "Prozess" (was "Diagramm") and "Regel", and the notation pill
+  (BPMN, DMN, FORM) moved from the name column into it. The MCP tool descriptions say "rule" and
+  keep "decision reference" in brackets, so an agent finds the term both ways; tool names, the
+  HTTP routes and the API's own error messages are unchanged. "Entscheidung" / "decision" stays
+  the DMN term for a decision inside a model.
 - **The replay names a multi-instance activity once below the diagram.** The token row under
   an instance replay listed one chip per token, so a multi-instance task with 200 iterations
   filled the screen with 200 identical "Token … — Datensatz prüfen" lines and pushed the diagram
@@ -103,6 +113,7 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **The Console's landing page follows the chosen language.** The welcome card — its introduction, the three first steps, the buttons and the System Overview tooltip — and the Deployments and Engine tiles under it were written in English in `app.js` and stayed English whatever language was set. They now come from the message catalogue (`dashboard.*` in `api/web/locales/`), so a Console set to German greets with «Willkommen bei atlas» and English stays as it was.
 - **Why the atlas hub registry could not be read is in the server log.** The server now logs
   the cause as a WARN with event `hub.registry_unavailable` — DNS, a refused connection, TLS,
   an HTTP status or a signature no pinned key made — so an operator can tell a firewall from

@@ -1040,7 +1040,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
 const WORKER_TYPES = [
   {
     id: "temis", name: "temis", kind: "Decision engine",
-    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's DMN references at deploy time.",
+    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's rules (DMN references) at deploy time.",
     refs: "ADR-0014 · ADR-0034", status: "active", statusLabel: "embedded",
   },
   {
@@ -2025,22 +2025,20 @@ async function viewConsoleDashboard() {
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
         }</span>
-        <h1>${signedInName() ? `Welcome, ${esc(signedInName())}` : "Welcome to atlas"}</h1>
+        <h1>${signedInName() ? tr("dashboard.welcome.titleNamed", { name: esc(signedInName()) }) : esc(tr("dashboard.welcome.title"))}</h1>
         <span id="welcome-version" class="welcome-version muted"></span>
       </div>
-      <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
-      from a single self-contained binary. This Console manages deployments and shows engine health;
-      the Modeler lets you design and deploy BPMN models in the browser.</p>
+      <p class="muted">${tr("dashboard.welcome.intro")}</p>
       <ol class="steps">
-        <li><b>Model a process</b> — open the Modeler and draw a BPMN diagram, or import existing XML.</li>
-        <li><b>Deploy</b> — make a model runnable straight from the editor, and optionally start an instance in one step with <b>Deploy &amp; run</b>.</li>
-        <li><b>Watch it execute</b> — tokens move through the engine and land as durable events.</li>
+        <li>${tr("dashboard.welcome.step.model")}</li>
+        <li>${tr("dashboard.welcome.step.deploy")}</li>
+        <li>${tr("dashboard.welcome.step.watch")}</li>
       </ol>
       <div class="row">
-        <a class="btn" href="#/modeler">Open Modeler</a>
-        <a class="btn ghost" href="#/console/engine">View engine</a>
-        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
-        <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
+        <a class="btn" href="#/modeler">${esc(tr("dashboard.welcome.openModeler"))}</a>
+        <a class="btn ghost" href="#/console/engine">${esc(tr("dashboard.welcome.viewEngine"))}</a>
+        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">${esc(tr("dashboard.welcome.handbook"))}</a>
+        <button type="button" class="btn ghost" data-system-overview title="${esc(tr("dashboard.welcome.systemOverviewTitle"))}">${esc(tr("dashboard.welcome.systemOverview"))}</button>
       </div>
       </div>
       <img class="welcome-art" src="welcome.svg" alt="" width="480" height="320" />
@@ -2048,15 +2046,15 @@ async function viewConsoleDashboard() {
     <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
       <div class="card">
-        <div class="between"><h2>Deployments</h2><a href="#/modeler">View all</a></div>
-        <p id="dep-summary" class="muted">Loading…</p>
-        <a class="btn neutral" href="#/modeler/new">New diagram</a>
+        <div class="between"><h2>${esc(tr("dashboard.deployments.title"))}</h2><a href="#/modeler">${esc(tr("dashboard.deployments.viewAll"))}</a></div>
+        <p id="dep-summary" class="muted">${esc(tr("dashboard.deployments.loading"))}</p>
+        <a class="btn neutral" href="#/modeler/new">${esc(tr("dashboard.deployments.newDiagram"))}</a>
       </div>
       <div class="card">
-        <div class="between"><h2>Engine</h2><a href="#/operations">Instances</a></div>
+        <div class="between"><h2>${esc(tr("dashboard.engine.title"))}</h2><a href="#/operations">${esc(tr("dashboard.engine.instances"))}</a></div>
         <div class="stats" style="margin-top:6px">
-          <div class="stat"><b id="s-pi">0</b><span>active process instances</span></div>
-          <div class="stat"><b id="s-ei">0</b><span>active element instances</span></div>
+          <div class="stat"><b id="s-pi">0</b><span>${esc(tr("dashboard.engine.activeProcessInstances"))}</span></div>
+          <div class="stat"><b id="s-ei">0</b><span>${esc(tr("dashboard.engine.activeElementInstances"))}</span></div>
         </div>
       </div>
     </div>
@@ -2117,8 +2115,8 @@ async function viewConsoleDashboard() {
       api("GET", "/api/v1/stats"),
     ]);
     document.getElementById("dep-summary").textContent = procs.length
-      ? `${procs.length} process definition${procs.length === 1 ? "" : "s"} deployed.`
-      : "No processes deployed yet.";
+      ? trPlural("dashboard.deployments.count", procs.length)
+      : tr("dashboard.deployments.none");
     document.getElementById("s-pi").textContent = stats.activeProcessInstances;
     document.getElementById("s-ei").textContent = stats.activeElementInstances;
   } catch (e) { toast(e.message, "err"); }
@@ -4198,11 +4196,17 @@ async function viewProjectDetail(id) {
 
     // star is the favourite mark for a stored diagram (diagram-shortcuts.js), empty for
     // a row that is not one.
-    const nameCell = (chip, title, sub, href, star = "") => {
+    const nameCell = (title, sub, href, star = "") => {
       const link = href ? `<a href="${href}"><b>${esc(title)}</b></a>` : `<b>${esc(title)}</b>`;
-      return `<td><div class="artifact-name"><span class="chip">${chip}</span>${link}${star}</div>` +
-        `<div class="muted" style="font-size:12px; padding-left:26px">${sub}</div></td>`;
+      return `<td><div class="artifact-name">${link}${star}</div>` +
+        `<div class="muted" style="font-size:12px">${sub}</div></td>`;
     };
+    // The type column carries the notation pill (BPMN, DMN, FORM) next to the
+    // plain-language type, so the name column is left to the name alone. The
+    // data-filter/data-sort value keeps a space between the two for the table filter.
+    const typeCell = (chip, label) =>
+      `<td class="muted" data-filter="${esc(chip + " " + label)}" data-sort="${esc(label)}">` +
+      `<div class="artifact-name artifact-type"><span class="chip">${chip}</span>${esc(label)}</div></td>`;
 
     const draftRow = (d) => {
       const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
@@ -4213,8 +4217,8 @@ async function viewProjectDetail(id) {
         { label: tr("common.delete"), icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
       );
       return `<tr>
-        ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
-        <td class="muted">${esc(tr("application.type.diagram"))}</td>
+        ${nameCell(d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
+        ${typeCell("BPMN", tr("application.type.diagram"))}
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -4232,8 +4236,8 @@ async function viewProjectDetail(id) {
       // what a publish would ship is the model, not that work.
       const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `${mark}${esc(tr("application.ref.model", { model: r.modelRef }))} · <span data-refstatus="${esc(r.id)}">${esc(tr("application.ref.notValidated"))}</span>`, href, starButton("decision", r.id))}
-        <td class="muted">${esc(tr("application.type.decisionRef"))}</td>
+        ${nameCell(r.name, `${mark}${esc(tr("application.ref.model", { model: r.modelRef }))} · <span data-refstatus="${esc(r.id)}">${esc(tr("application.ref.notValidated"))}</span>`, href, starButton("decision", r.id))}
+        ${typeCell("DMN", tr("application.type.decisionRef"))}
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -4248,8 +4252,8 @@ async function viewProjectDetail(id) {
         { label: tr("common.delete"), icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
       );
       return `<tr>
-        ${nameCell("DMN", d.name || tr("application.type.decision"), `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ${esc(tr("application.decisionDraft.sub"))}`, href, starButton("decision", d.id))}
-        <td class="muted">${esc(tr("application.type.decision"))}</td>
+        ${nameCell(d.name || tr("application.type.decision"), `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ${esc(tr("application.decisionDraft.sub"))}`, href, starButton("decision", d.id))}
+        ${typeCell("DMN", tr("application.type.decision"))}
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -4266,8 +4270,8 @@ async function viewProjectDetail(id) {
         ? trPlural("application.model.decisions", m.decisions.length, { names: m.decisions.join(", ") })
         : tr("application.model.noCompile"));
       return `<tr>
-        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">${esc(tr("application.chip.noReference"))}</span> ${esc(m.handle)}.dmn · ${what}`, "")}
-        <td class="muted">${esc(tr("application.type.decisionModel"))}</td>
+        ${nameCell(m.modelName || m.handle, `<span class="chip draft-chip">${esc(tr("application.chip.noReference"))}</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        ${typeCell("DMN", tr("application.type.decisionModel"))}
         <td class="muted" data-sort="0">—</td>
         <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
     };
@@ -4279,8 +4283,8 @@ async function viewProjectDetail(id) {
         { label: tr("common.delete"), icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
       );
       return `<tr>
-        ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
-        <td class="muted">${esc(tr("application.type.form"))}</td>
+        ${nameCell(f.name || f.id, esc(f.id), href)}
+        ${typeCell("FORM", tr("application.type.form"))}
         <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -6724,7 +6728,7 @@ async function validateProject(projectId) {
 // show under "Deployed". Uses a raw fetch so the refusal body (which is not an
 // {error} shape) is read instead of thrown away.
 async function deployProject(id, reload) {
-  if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
+  if (!window.confirm("Publish this application? Its rules are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
     const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/deploy`, { method: "POST" });
