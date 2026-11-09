@@ -1,0 +1,18 @@
+{
+  "type": "default",
+  "id": "it-entra-hardmatch",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Hard Match bestätigen · Confirm the hard match**\n\nDas bisherige Cloud-Konto (Objekt-ID {{cloudAlt[1].id}}) ist wiederhergestellt und trägt onPremisesImmutableId = ObjectGUID von {{ziel}}.\n\n1. Entra Connect wieder einschalten (`Set-ADSyncScheduler -SyncCycleEnabled $true`) und einen Delta-Lauf starten (`Start-ADSyncSyncCycle -PolicyType Delta`).\n2. Prüfen, dass das Konto jetzt synchronisiert ist und das neue AD-Konto kein zweites Cloud-Konto erhalten hat.\n3. Abschliessen. Atlas liest danach onPremisesSyncEnabled nach und schreibt das Ergebnis ins Protokoll.\n\nIn der Testumgebung gibt es kein Entra Connect: Das Konto bleibt ein Cloud-Konto mit gesetzter ImmutableId, der Hard Match vollendet sich nicht. · Without Entra Connect the hard match does not complete."
+    },
+    {
+      "key": "hardMatchGeprueft",
+      "type": "checkbox",
+      "label": "Geprüft · Checked",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

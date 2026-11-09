@@ -556,7 +556,7 @@ func (d *MockDirectory) searchLocked(f *mockForest, req SearchRequest) ([]Entry,
 		if !filter.match(e.attrs) {
 			continue
 		}
-		out = append(out, Entry{DN: e.dn, Attributes: selectAttrs(e.attrs, req.Attributes)})
+		out = append(out, Entry{DN: e.dn, Attributes: answeredAttrs(selectAttrs(e.attrs, req.Attributes))})
 	}
 	if max := int(req.MaxEntries); max > 0 && len(out) > max {
 		return nil, fmt.Errorf("ad: mock: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", req.BaseDN, max)
@@ -740,7 +740,7 @@ func (d *MockDirectory) dirSyncLocked(f *mockForest, req DirSyncRequest) (DirSyn
 		More:    more,
 	}
 	for _, e := range changed {
-		out.Entries = append(out.Entries, Entry{DN: e.dn, Attributes: copyAttrs(e.attrs)})
+		out.Entries = append(out.Entries, Entry{DN: e.dn, Attributes: answeredAttrs(e.attrs)})
 	}
 	return out, fmt.Sprintf("%d change(s) since %d, more=%t", len(out.Entries), since, more), nil
 }

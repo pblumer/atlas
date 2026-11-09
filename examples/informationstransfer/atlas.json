@@ -1,0 +1,114 @@
+{
+  "formatVersion": 4,
+  "key": "beispiel-informationstransfer",
+  "name": "Beispiel: Informationstransfer",
+  "processes": [
+    {
+      "id": "proc_it_adresse",
+      "name": "Informationstransfer: Primäradresse",
+      "path": "adresse.bpmn"
+    },
+    {
+      "id": "proc_it_entra",
+      "name": "Informationstransfer: Entra-Transfer",
+      "path": "entra.bpmn"
+    },
+    {
+      "id": "proc_it_inhalt",
+      "name": "Informationstransfer: Postfachinhalt",
+      "path": "inhalt.bpmn"
+    },
+    {
+      "id": "proc_it_kontingent",
+      "name": "Informationstransfer: Kontingent",
+      "path": "kontingent.bpmn"
+    },
+    {
+      "id": "proc_it_kuerzel",
+      "name": "Informationstransfer: Kürzel",
+      "path": "kuerzel.bpmn"
+    },
+    {
+      "id": "proc_it_postfaecher",
+      "name": "Informationstransfer: Postfächer lesen",
+      "path": "postfaecher.bpmn"
+    },
+    {
+      "id": "proc_it_rechte",
+      "name": "Informationstransfer: Berechtigungen",
+      "path": "rechte.bpmn"
+    },
+    {
+      "id": "proc_it_telefon",
+      "name": "Informationstransfer: Telefonnummer",
+      "path": "telefon.bpmn"
+    },
+    {
+      "id": "proc_it_transfer",
+      "name": "Informationstransfer",
+      "path": "informationstransfer.bpmn"
+    }
+  ],
+  "forms": [
+    {
+      "id": "it-bestellung",
+      "name": "it-bestellung",
+      "path": "it-bestellung.form.json"
+    },
+    {
+      "id": "it-entra-freigabe",
+      "name": "it-entra-freigabe",
+      "path": "it-entra-freigabe.form.json"
+    },
+    {
+      "id": "it-entra-hardmatch",
+      "name": "it-entra-hardmatch",
+      "path": "it-entra-hardmatch.form.json"
+    },
+    {
+      "id": "it-entra-sync",
+      "name": "it-entra-sync",
+      "path": "it-entra-sync.form.json"
+    },
+    {
+      "id": "it-genehmigung",
+      "name": "it-genehmigung",
+      "path": "it-genehmigung.form.json"
+    },
+    {
+      "id": "it-loeschung-postfach",
+      "name": "it-loeschung-postfach",
+      "path": "it-loeschung-postfach.form.json"
+    },
+    {
+      "id": "it-postfach-fehler",
+      "name": "it-postfach-fehler",
+      "path": "it-postfach-fehler.form.json"
+    },
+    {
+      "id": "it-postfach-online",
+      "name": "it-postfach-online",
+      "path": "it-postfach-online.form.json"
+    },
+    {
+      "id": "it-telefonie",
+      "name": "it-telefonie",
+      "path": "it-telefonie.form.json"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dmn-it-optionen",
+      "name": "InfotransferOptionen",
+      "modelRef": "it-optionen",
+      "path": "it-optionen.dmn"
+    }
+  ],
+  "informationModels": [
+    {
+      "name": "Informationstransfer",
+      "path": "architektur/informationsmodell.json"
+    }
+  ],
+  "architecture": "architektur/capabilities.json"
+}

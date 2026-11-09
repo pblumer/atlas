@@ -61,9 +61,9 @@ way: `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.23.1/atlas_0.23.1_linux_amd64.tar.gz
-tar -xzf atlas_0.23.1_linux_amd64.tar.gz
-./atlas_0.23.1_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.24.0/atlas_0.24.0_linux_amd64.tar.gz
+tar -xzf atlas_0.24.0_linux_amd64.tar.gz
+./atlas_0.24.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.23.1
+VERSION=0.24.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.23.1_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.24.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -735,7 +735,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.23.1'
+$Version = '0.24.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -751,7 +751,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.23.1_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.24.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -767,7 +767,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.23.1_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.24.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -846,7 +846,7 @@ The archive holds a folder `atlas_<version>_windows_amd64`, so the binary is one
 down:
 
 ```powershell
-$Version = '0.23.1'
+$Version = '0.24.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 $Dir  = "D:\atlas\releases\$Version"
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
@@ -994,6 +994,8 @@ history.
 | Variable | Used for |
 |----------|----------|
 | `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
+| `--allow-unsigned-worker-types` (flag) | Admit Worker Type artifacts installed through `POST /api/v1/worker-types/installed` although their signature is not verified — signatures are not verified yet, so without it nothing can be installed. Each artifact is still checked against its manifest's sha256 at install and before every start, and runs with an allowlisted environment. Development only ([ADR-0535](adr/0535-worker-types-as-distributed-artifacts.md)) |
+| `ATLAS_WORKERS_BINARY` | Which executable the server's supervised workers run. Unset, the server uses `atlas-workers` (`atlas-workers.exe` on Windows) when it sits beside the `atlas` binary — the release archives and the container image ship it there — and otherwise its own `atlas worker` mode. `self` keeps the server's own binary; a path names another worker-only executable. `atlas-workers` takes the same flags and variables as `atlas worker` ([ADR-0535](adr/0535-worker-types-as-distributed-artifacts.md)) |
 | `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another atlas over `https`. For an internally issued certificate; it never replaces the system roots and never skips verification |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |

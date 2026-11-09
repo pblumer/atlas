@@ -43,7 +43,10 @@ func buildCoverage(features []Feature, patterns []Pattern, scenarios []Scenario,
 	}
 
 	var b strings.Builder
-	b.WriteString("# BPMN conformance coverage\n\n")
+	b.WriteString("# Registered BPMN scenario coverage (not OMG conformance)\n\n")
+	b.WriteString(fmt.Sprintf("**Scope:** %d registered features and %d registered workflow patterns only. ", len(features), len(patterns)))
+	b.WriteString("This report is not a BPMN 2.0.2 normative completeness or certification claim. ")
+	b.WriteString("See [normative candidate evidence](NORMATIVE_COVERAGE.md).\n\n")
 	b.WriteString("Generated from the register in `scenario.go` by ")
 	b.WriteString("`go test ./conformance -update`. Do not edit by hand.\n\n")
 

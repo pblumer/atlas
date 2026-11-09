@@ -5,8 +5,10 @@
   </head>
   <body>
     <pre id="result">not started</pre>
+    <div id="route"></div>
     <script type="module">
       import { openBlueprintMarketplace } from "/blueprint-marketplace.js";
+      import { openRoute } from "/hub-connection.js";
       window.__calls = [];
       window.__reloads = 0;
       window.__open = () => openBlueprintMarketplace({
@@ -23,6 +25,11 @@
         reload: async () => { window.__reloads++; },
         notify: (msg, kind) => { document.getElementById("result").textContent = kind + ": " + msg; },
       });
+      // The route alone, fed lines by hand, as the stream would feed it.
+      window.__route = (events) => {
+        const route = openRoute(document.getElementById("route"));
+        events.forEach((e) => route.update(e));
+      };
       window.__ready = true;
     </script>
   </body>

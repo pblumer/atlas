@@ -107,6 +107,16 @@ var wantAdminRoutes = []string{
 
 	// What a worker did, in full: job payloads carry whatever the process carries.
 	"GET /api/v1/workers/{id}/history",
+	// Installing a Worker Type artifact puts code on this server that the supervisor
+	// will run (ADR-0535, migration step 3): an administrator's decision, like the
+	// rest of what runs here.
+	"GET /api/v1/worker-types/installed",
+	"POST /api/v1/worker-types/installed",
+	"DELETE /api/v1/worker-types/installed/{id}/{version}",
+	// Configuring one hands it a credential from the vault.
+	"GET /api/v1/worker-types/installed/{id}/workers",
+	"PUT /api/v1/worker-types/installed/{id}/workers/{name}",
+	"DELETE /api/v1/worker-types/installed/{id}/workers/{name}",
 	"GET /api/v1/workers/{id}/jobs",
 	// And what a mock AD worker holds. Invented entries, but shaped like a staff
 	// list — no more public than the seed file they started from, which is admin-only

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/workerquery"
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 const siteForm = `{"components":[

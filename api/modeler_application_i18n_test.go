@@ -28,7 +28,7 @@ func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 	for _, file := range []string{
 		"web/app.js", "web/deletedialog.js", "web/dmnref-impact.js",
 		"web/sourceneeds.js", "web/pickmodal.js", "web/table.js",
-		"web/importchoices.js", "web/packageimport.js", "web/blueprint-marketplace.js", "web/frozen-decisions.js",
+		"web/importchoices.js", "web/packageimport.js", "web/blueprint-marketplace.js", "web/hub-connection.js", "web/frozen-decisions.js",
 	} {
 		src, err := os.ReadFile(file)
 		if err != nil {

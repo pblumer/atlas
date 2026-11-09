@@ -20,6 +20,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/pblumer/atlas/internal/workercmd"
 	"io"
 	"log/slog"
 	"net"
@@ -77,13 +78,13 @@ func main() {
 			fatal("atlas mcp", err)
 		}
 	case "worker":
-		if err := runWorker(args); err != nil {
+		if err := workercmd.Run(args); err != nil {
 			// A worker with nothing to serve has already said so, at the level that
 			// fits it. It leaves its own status so a supervisor can park it rather
 			// than restart it forever; reporting it again as a failure would put a
 			// red line in the console for an ordinary state.
-			if errors.Is(err, errNothingToServe) {
-				os.Exit(exitNothingToServe)
+			if errors.Is(err, workercmd.ErrNothingToServe) {
+				os.Exit(workercmd.ExitNothingToServe)
 			}
 			fatal("atlas worker", err)
 		}
@@ -350,6 +351,7 @@ func runServe(args []string) error {
 	history := fs.String("worker-history", "", "name of a clio worker to append every settled job run to, so a worker's history outlives this process (ADR-0036). The console reads it back under a worker's recent jobs; retention and querying are then your clio's, not another flag here. Off unless given, in which case the console keeps only its in-memory tail")
 	historyScope := fs.String("worker-history-scope", api.HistoryScopeAll, "what --worker-history writes: \"all\" settled jobs, or \"failed\" only. All is what \"how long does a mail send take\" needs and the larger bill; failed is much less volume and still answers most of what a history is asked")
 	superviseConnectors := fs.String("supervise-connector", "", "comma-separated Worker Types this server runs a worker for itself, beyond the ones it supervises by default (e.g. ad,entra). Each named kind gets its own supervised worker — handed this server's token and environment at spawn, like the default ones — and is taken off the engine, so that worker is what leases its jobs. It is the missing half of --offload-connectors, which parks a kind's jobs for a worker somebody else runs: on a server with --auth there is no credential an outside worker could hold, so without this a kind outside the defaults cannot be served at all. An unknown kind is refused at startup rather than ignored")
+	allowUnsignedWorkerTypes := fs.Bool("allow-unsigned-worker-types", false, "install Worker Type artifacts that carry no verified signature (POST /api/v1/worker-types/installed). Signatures are not verified yet, so without this no artifact can be installed; an installed one is still checked against its manifest's sha256 at install and before every start, and runs with an allowlisted environment. For development only (ADR-0535)")
 	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying atlas still needs no configuration")
 	workerMaxJobs := fs.Int("worker-max-jobs", api.DefaultSupervisedWorkerMaxJobs, "how many jobs of one type each built-in worker this server supervises runs at once, handed to it as --max-jobs. The default is the bound the engine puts on its own in-process handlers, so moving a kind onto a worker does not change how many of its jobs run together; lower it when a target system takes fewer parallel calls than that, and 1 runs every kind one job at a time. A --supervise command keeps one at a time: it is your own program, and nothing here can know it is safe to run twice at once")
 	supervise := superviseFlag{}
@@ -468,7 +470,7 @@ func runServe(args []string) error {
 		ClientID:     *linkClientID,
 		ClientSecret: *linkClientSecret,
 		Scopes:       *linkScopes,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets, *allowUnsignedWorkerTypes)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -619,7 +621,7 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits, allowUnsignedWorkerTypes bool) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -1024,6 +1026,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if len(specs) > 0 {
 		apiOpts = append(apiOpts, api.WithSupervisedWorkers(internal, specs, handles))
 	}
+	// Installed Worker Type artifacts live beside the log and the state store, and the
+	// supervisor launches them (ADR-0535, migration step 3).
+	apiOpts = append(apiOpts, api.WithInstalledWorkerTypes(filepath.Join(dataDir, "workertypes"), internal, allowUnsignedWorkerTypes))
 	// A worker's job history, when an operator named a clio worker for it. Atlas
 	// keeps none of its own: the console's tail is memory, and everything beyond it
 	// belongs in an event store where retention is already a policy (ADR-0036).
@@ -1384,212 +1389,6 @@ func (f superviseFlag) build() ([]api.SuperviseSpec, [][]string) {
 // selfURL is the address a supervised worker is told to work for. It is this
 // server's own listen address, with a bare port meaning loopback — a child talks to
 // its parent, not out across the network.
-// handleFlag collects repeated --handle type=command pairs: what this worker
-// serves, and what to run for each. A repeated flag is the shape that keeps the
-// pairing unambiguous — two parallel lists would let a typo silently line the wrong
-// command up with a type.
-type handleFlag map[string][]string
-
-func (h handleFlag) String() string {
-	types := make([]string, 0, len(h))
-	for t := range h {
-		types = append(types, t)
-	}
-	sort.Strings(types)
-	return strings.Join(types, ",")
-}
-
-func (h handleFlag) Set(v string) error {
-	jobType, command, ok := strings.Cut(v, "=")
-	jobType = strings.TrimSpace(jobType)
-	command = strings.TrimSpace(command)
-	if !ok || jobType == "" || command == "" {
-		return fmt.Errorf("want type=command, got %q", v)
-	}
-	parts := strings.Fields(command)
-	if _, dup := h[jobType]; dup {
-		return fmt.Errorf("job type %q is handled twice", jobType)
-	}
-	h[jobType] = parts
-	return nil
-}
-
-// errNothingToServe ends a worker that holds no handler at all. It leaves
-// [exitNothingToServe] rather than a generic failure so a supervisor can tell "this
-// worker has nothing configured yet" from "this worker crashed", and park it instead
-// of restarting it into an empty configuration on a backoff loop.
-var errNothingToServe = errors.New("worker: nothing to serve")
-
-// exitNothingToServe is the status [errNothingToServe] leaves. It is api's constant
-// of the same name — the supervisor is the reader, and a status the two ends
-// disagreed about would put a parked worker into a restart loop; TestNothingToServe
-// StatusIsTheOneTheSupervisorParksOn holds them together.
-const exitNothingToServe = api.ExitNothingToServe
-
-// runWorker runs the binary as an out-of-process worker for a running Atlas
-// (ADR-0157 step 5): it leases jobs of the types it was given, runs a command for
-// each, and reports the outcome. The job arrives on the command's stdin as JSON and
-// whatever JSON object the command prints becomes the variables the job completes
-// with; a non-zero exit fails the job, carrying stderr as the message.
-//
-// This is what takes a service task's work off the engine's single writer: the
-// latency of the work is paid by this process, not by every other request.
-func runWorker(args []string) error {
-	fs := flag.NewFlagSet("worker", flag.ExitOnError)
-	server := fs.String("server", "http://localhost:8080", "base URL of the atlas server to work for")
-	id := fs.String("id", defaultWorkerID(), "worker id, shown in the Workers view; give each deployment its own")
-	token := fs.String("token", os.Getenv("ATLAS_TOKEN"), "bearer token, when the server requires authentication (or ATLAS_TOKEN)")
-	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Without it the host trust store is the only answer. It is never a way to skip verification: there is none (or ATLAS_TLS_CA)")
-	lease := fs.Duration("lease", worker.DefaultLease, "how long the engine holds a job for this worker; must comfortably exceed how long the work takes")
-	wait := fs.Duration("wait", worker.DefaultWait, "how long a poll waits for work before asking again; the server caps it")
-	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs of one type this worker runs at once; a poll leases only as many as there are free places for, so a leased job starts the moment it arrives. Keep it to what the handler and its target can take in parallel")
-	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
-	handles := handleFlag{}
-	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, carddav, csv, entra, exchange, googlecontacts, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, teamsphone, webscrape, wikiwikibangbang). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CLIENT_SECRET, _CLIENT_CERTIFICATE (the app's certificate with its private key as PEM) or, on Windows, _CLIENT_CERTIFICATE_THUMBPRINT (a certificate in this host's store, whose key signs there), teamsphone takes ATLAS_TEAMSPHONE_CONNECTORS plus ATLAS_TEAMSPHONE_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CERTIFICATE (PEM) or _CERTIFICATE_THUMBPRINT (a certificate in this host's store), runs pwsh — or ATLAS_TEAMSPHONE_PWSH — with the MicrosoftTeams module for each job within ATLAS_TEAMSPHONE_TIMEOUT (default 4m), and with ATLAS_TEAMSPHONE_MOCK=1 serves its tenants from memory instead, exchange takes ATLAS_EXCHANGE_CONNECTORS plus ATLAS_EXCHANGE_<NAME>_CREDENTIALS (the JSON bundle naming an Exchange Online organization or, with \"target\": \"onprem\", an Exchange Server) and optionally _URL (an Exchange Server's Remote PowerShell URI), and ATLAS_EXCHANGE_POWERSHELL for the interpreter an on-premises call starts, googlecontacts takes ATLAS_GOOGLECONTACTS_CONNECTORS plus ATLAS_GOOGLECONTACTS_<NAME>_CREDENTIALS (the JSON bundle of a service account acting as a Workspace user, or of a refresh token) and optionally _URL (a People API base behind a proxy), carddav takes ATLAS_CARDDAV_CONNECTORS plus ATLAS_CARDDAV_<NAME>_URL (the address book's URL, or the server's, from which the address book is found) and ATLAS_CARDDAV_<NAME>_CREDENTIALS (the JSON bundle {username, password, groups}), wikiwikibangbang takes ATLAS_WIKIWIKIBANGBANG_CONNECTORS plus ATLAS_WIKIWIKIBANGBANG_<NAME>_URL (the wiki's base URL) and ATLAS_WIKIWIKIBANGBANG_<NAME>_CREDENTIALS (the JSON bundle {token} of a technical account that holds no system role in the wiki), remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
-	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
-	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for script interpreters: off or strict (Linux Landlock/seccomp; or ATLAS_SCRIPT_SANDBOX)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	kinds := splitList(*connectors)
-	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
-	if err != nil {
-		return err
-	}
-	if slices.Contains(kinds, "script") {
-		if err := script.CheckSandbox(scriptSandbox); err != nil {
-			return err
-		}
-		// An external worker gets the same fail-closed startup the server has: the
-		// languages it will serve are proved to start under the profile now, not
-		// discovered to be unrunnable by the first job that leases.
-		if err := script.CheckSandboxLanguages(scriptSandbox, splitList(*scriptLanguages)); err != nil {
-			return err
-		}
-	}
-	// The workers are built from the environment alone, and one of them has to know
-	// this worker's own id: a mock AD directory is reported to the Console under it
-	// (ADR-0213). --id is therefore read back out of
-	// the environment rather than threaded through as a parameter, so an external
-	// worker that sets ATLAS_WORKER_ID by hand and one started with --id look the same
-	// from in there.
-	env := func(name string) string {
-		if name == worker.WorkerIDEnv {
-			return *id
-		}
-		if name == script.LanguagesEnv && strings.TrimSpace(*scriptLanguages) != "" {
-			return *scriptLanguages
-		}
-		if name == script.SandboxEnv {
-			return string(scriptSandbox)
-		}
-		return os.Getenv(name)
-	}
-	builtin, err := worker.BuiltinConnectors(env, kinds...)
-	if err != nil {
-		return err
-	}
-
-	if err := logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel); err != nil {
-		return err
-	}
-	installOutboundProxy(os.Getenv)
-	if len(handles) == 0 && len(builtin.Handlers) == 0 && len(builtin.Queries) == 0 {
-		// Nothing to serve. For a worker an operator ran by hand this is a typo, and
-		// saying so and stopping is right. For a supervised one it is an ordinary
-		// state — a mail worker on a server with no mail worker yet — and the
-		// supervisor must park it rather than restart it into the same emptiness
-		// forever, so the two are told apart by the exit status rather than by the
-		// message. Configure the kind and the supervisor brings this worker back
-		// holding it.
-		logging.Warn(logging.WorkerStarting, "nothing to serve: give at least one --handle type=command, or configure a Worker Type this worker was given",
-			slog.String("connectors", strings.Join(kinds, ",")))
-		return errNothingToServe
-	}
-
-	execs := map[string]worker.Exec{}
-	for jobType, exec := range builtin.Handlers {
-		execs[jobType] = exec
-	}
-	for jobType, argv := range handles {
-		execs[jobType] = worker.CmdExec{Name: argv[0], Args: argv[1:]}
-	}
-	// A worker on the server's own host reaches it over loopback and needs none of
-	// this; one on another host is the case --tls-ca exists for, and its bearer
-	// token is what would otherwise cross a network in the clear.
-	serverRoots, err := trustPool(*tlsCA)
-	if err != nil {
-		return err
-	}
-	opts := worker.Options{
-		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
-		// Only a server that supervises this worker sets it, and only for the process
-		// serving a Worker whose credential it brokers per job.
-		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
-		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
-		Connectors: builtin.Names,
-		Endpoints:  builtin.Endpoints,
-		// The form lookups the configured kinds answer, for the same Workers
-		// (ADR-0473).
-		Queries: builtin.Queries,
-	}
-	if serverRoots != nil {
-		// Only where a CA was named: otherwise worker.New builds the client, and a
-		// worker that does not need this keeps exactly the one it always had. One
-		// request may block for a whole poll and is followed by the work itself, so
-		// the ceiling is the poll plus the lease, as that default is.
-		opts.HTTP = &http.Client{
-			Timeout:   *wait + *lease + 30*time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: serverRoots, MinVersion: tls.VersionTLS12}},
-		}
-	}
-	w := worker.New(opts)
-
-	logging.Info(logging.WorkerStarting, "working jobs for a running atlas",
-		slog.String("server", *server), slog.String("id", *id),
-		slog.String("types", strings.Join(sortedKeys(execs), ",")),
-		slog.String("connectors", strings.Join(builtin.Names, ",")), slog.Duration("lease", *lease))
-	// A kind this worker was asked to serve and holds nothing for is not an error —
-	// it serves the rest — but it is the answer to "why is that task waiting", so it
-	// is said once, here, where the Workers console shows it.
-	for _, kind := range builtin.Unconfigured {
-		logging.Warn(logging.WorkerStarting, "not serving a Worker Type: nothing is configured for it here",
-			slog.String("kind", kind))
-	}
-
-	if *once {
-		return w.RunOnce(context.Background())
-	}
-	// Interrupt stops the loop between polls, so a job in flight is finished and
-	// reported rather than abandoned to its lease.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	runErr := w.Run(ctx)
-	if ctx.Err() != nil {
-		return nil // interrupted, which is an ordinary exit
-	}
-	return runErr
-}
-
-// sortedKeys is the handled job types in a stable order, for the startup line.
-func sortedKeys(m map[string]worker.Exec) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// defaultWorkerID names the worker after the host it runs on, which is the useful
-// default when several replicas each want their own row in the Workers view.
-func defaultWorkerID() string {
-	if h, err := os.Hostname(); err == nil && h != "" {
-		return h
-	}
-	return "atlas-worker"
-}
 
 // runMockRemedy runs an in-memory mock BMC Remedy AR System REST API (ADR-0106), so a
 // Remedy worker can be exercised end to end without a real Remedy / Helix ITSM
@@ -1672,7 +1471,7 @@ func runMockOpenAPI(args []string) error {
 	addr := fs.String("addr", ":8009", "HTTP listen address for the mock API")
 	basePath := fs.String("base-path", "", `serve the document's paths under this prefix instead of the path in its first server URL ("/" serves them at the root)`)
 	specRoot := fs.String("spec-root", "", "directory the document's $refs to other files may read (default: the document's own directory)")
-	id := fs.String("id", defaultWorkerID(), "name this mock reports itself under")
+	id := fs.String("id", workercmd.DefaultWorkerID(), "name this mock reports itself under")
 	quiet := fs.Bool("quiet", false, "do not print one line per served call")
 	if err := fs.Parse(args); err != nil {
 		return err

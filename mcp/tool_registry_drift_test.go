@@ -250,6 +250,16 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/documents":          "a document is a file a person picks in a task form, uploaded by the browser that holds it; what an agent may do with documents is decided in its own slice (ADR-draft-a-file-is-a-document-not-a-variable, plan S6)",
 	"GET /api/v1/documents/{id}":      "a document's bytes are for the person downloading it, up to 35 MiB, which is not something to put into an agent's context; decided in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable",
 	"GET /api/v1/documents/{id}/meta": "decided together with the other document routes in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable; an agent already sees the reference in the variable",
+	// Installed Worker Type artifacts (ADR-0535, migration step 3). Installing one puts
+	// code on the server that its supervisor runs; that is an administrator's decision
+	// made with the artifact in hand, not something an agent should be able to do or
+	// undo, and the upload is a binary the MCP transport does not carry.
+	"POST /api/v1/worker-types/installed":                       "installs an executable the server will run; an administrator's act with the artifact in hand, and a binary upload",
+	"DELETE /api/v1/worker-types/installed/{id}/{version}":      "stops and removes code the server runs; kept with the administrator who installed it",
+	"GET /api/v1/worker-types/installed/{id}/workers":           "an administrator's view of which vault entries an installed Worker Type is handed",
+	"PUT /api/v1/worker-types/installed/{id}/workers/{name}":    "binds vault secrets to code the server runs; kept with the administrator, like the install",
+	"DELETE /api/v1/worker-types/installed/{id}/workers/{name}": "changes what code the server runs is handed; kept with the administrator",
+	"GET /api/v1/worker-types/installed":                        "the installed releases are an administrator's view of what runs on this server; atlas_workers already shows the instances they run as",
 	// The reports that name people (ADR-0515 §3).
 	// They list who holds which right; an agent acting for somebody does not need a
 	// list of other people's rights to do it, and the product manager's counting
@@ -882,6 +892,7 @@ var mcpOmittedRoutes = map[string]string{
 	// application APIs, returning a raw downloaded package to an MCP agent
 	// would bypass the dedicated import decision UI without adding a distinct
 	// agent capability. MCP uses the existing application/import tools.
+	"GET /api/v1/blueprints/connection":                      "a stream of the registry load's stations (NDJSON) for the Console to draw live; an agent lists with atlas_hub_list_releases, whose failure the operator's log explains (hub.registry_unavailable)",
 	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; an agent installs through atlas_hub_import_release, which the server feeds the verified bytes, so MCP never moves raw package bytes",
 
 	// Repository: package management, an admin/UI concern.

@@ -33,17 +33,22 @@ func TestInboundBridgeLive(t *testing.T) {
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
-	if code, sb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/inbound-subscriptions",
-		`{"watchedSubject":"orders/new","messageName":"orderEvent","startFromTip":false}`); code != http.StatusOK {
-		t.Fatalf("create subscription: %d %s", code, sb)
-	}
+	// Install the fake before enabling the subscription: the bridge runs in the
+	// background, and could otherwise read the placeholder http://x endpoint
+	// before the test swaps the client. Windows DNS resolution can outlast the
+	// test deadline, making this a scheduling-dependent failure.
 	srv.do(func() {
 		srv.clioRegistry.Replace(map[string]clio.Client{"events": &fakeClioReader{events: []clio.InboundEvent{
 			{ID: "1", Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-1"}},
 		}}})
 	})
-	// The ticker fires within a few intervals; wait until the bridge starts the process.
-	deadline := time.Now().Add(3 * time.Second)
+	if code, sb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/inbound-subscriptions",
+		`{"watchedSubject":"orders/new","messageName":"orderEvent","startFromTip":false}`); code != http.StatusOK {
+		t.Fatalf("create subscription: %d %s", code, sb)
+	}
+	// The ticker is asynchronous; allow for a heavily loaded Windows runner,
+	// without making the expected process start optional.
+	deadline := time.Now().Add(15 * time.Second)
 	for activeInstances(t, srv) == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("bridge did not start a process within the deadline")

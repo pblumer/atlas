@@ -6,6 +6,7 @@
 // The actual import is ADR-0467's existing packageimport.js workflow — including
 // dry-run conflict decisions, caller authorization, optional publish and needs.
 import { importPackage, packageSummary } from "./packageimport.js";
+import { connectToHub, openRoute, routeSummary } from "./hub-connection.js";
 import { t } from "./i18n.js";
 
 const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g,
@@ -63,11 +64,44 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   const chips = (tags) => (tags || []).map((tag) =>
     `<span class="chip small" data-tag-chip="${esc(tag)}">${esc(tag)}</span>`).join(" ");
 
-  const list = async () => {
-    body.innerHTML = `<p class="muted">${esc(t("blueprint.loading"))}</p>`;
+  // The way to the hub, as the last connection passed it: its lines, replayed
+  // into the folded route above the listing, and its done line with the index.
+  let connection = null;
+
+  // connect draws the route live while the server loads the signed index, and
+  // leaves it standing, with what the stop usually means, where the way ends.
+  const connect = async () => {
+    body.innerHTML = `<div data-route></div>`;
+    const route = openRoute(body.querySelector("[data-route]"));
+    const events = [];
     try {
-      const index = await trustedJSON("/api/v1/blueprints");
+      const done = await connectToHub((event) => {
+        events.push(event);
+        if (!closed) route.update(event);
+      });
+      if (closed) return false;
+      if (!done.ok) {
+        body.insertAdjacentHTML("beforeend", `<div class="between" style="margin-top:10px"><span></span>
+          <button type="button" class="btn ghost" data-retry>${esc(t("blueprint.route.retry"))}</button></div>`);
+        body.querySelector("[data-retry]").addEventListener("click", () => { void list(true); });
+        return false;
+      }
+      const start = events.find((e) => e.type === "start") || {};
+      connection = { events, done, host: start.host || "", steps: events.filter((e) => e.type === "step") };
+      return true;
+    } catch (err) {
+      route.stop();
+      if (!closed) error(err);
+      return false;
+    }
+  };
+
+  const list = async (reconnect = false) => {
+    if ((!connection || reconnect) && !(await connect())) return;
+    try {
       if (closed) return;
+      const index = connection.done.index || {};
+      const tooOld = new Map((connection.done.incompatible || []).map((r) => [r.blueprintId + "@" + r.version, r.minAtlas]));
       const releases = index.releases || [];
       const allTags = [...new Set(releases.flatMap((r) => r.tags || []))].sort();
       if (activeTag && !allTags.includes(activeTag)) activeTag = "";
@@ -79,7 +113,12 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
           <button type="button" class="btn ghost small toggle" data-tag="" aria-pressed="${activeTag === ""}">${esc(t("blueprint.allTags"))}</button>
           ${allTags.map((tag) => `<button type="button" class="btn ghost small toggle" data-tag="${esc(tag)}" aria-pressed="${activeTag === tag}">${esc(tag)}</button>`).join("")}
         </div>` : "";
-      body.innerHTML = `<p class="muted">${esc(t("blueprint.registry"))}: ${esc(index.registryId)}</p>
+      body.innerHTML = `<details class="fold-sub hub-connected">
+          <summary class="small">${esc(routeSummary(connection.done, connection.steps, connection.host))}</summary>
+          <div data-route></div>
+          <div class="between"><span></span><button type="button" class="btn ghost small" data-retry>${esc(t("blueprint.route.retry"))}</button></div>
+        </details>
+        <p class="muted">${esc(t("blueprint.registry"))}: ${esc(index.registryId)}</p>
         <p>${esc(t("blueprint.intro"))}</p>
         ${filter}
         ${shown.length ? `<div class="package-list">${shown.map(({ r, i }) => `
@@ -87,9 +126,13 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
             <div><b>${esc(r.title)}</b> <span class="muted">v${esc(r.version)}</span>
               <div class="muted small">${esc(r.publisherId)} · ${esc(r.license)}</div>
               <div class="small">${esc(r.description)}</div>
-              ${(r.tags || []).length ? `<div class="small" style="margin-top:4px">${chips(r.tags)}</div>` : ""}</div>
-            <button class="btn ghost" type="button" data-preview="${i}">${esc(t("blueprint.preview"))}</button>
+              ${(r.tags || []).length ? `<div class="small" style="margin-top:4px">${chips(r.tags)}</div>` : ""}
+              ${tooOld.has(r.blueprintId + "@" + r.version) ? `<div class="small" style="margin-top:4px"><span class="chip small sv-warn" data-too-old>${esc(t("blueprint.route.needsAtlas", { min: tooOld.get(r.blueprintId + "@" + r.version) || "?", version: connection.done.atlasVersion }))}</span></div>` : ""}</div>
+            <button class="btn ghost" type="button" data-preview="${i}"${tooOld.has(r.blueprintId + "@" + r.version) ? " disabled" : ""}>${esc(t("blueprint.preview"))}</button>
           </div>`).join("")}</div>` : `<p class="muted">${esc(t("blueprint.empty"))}</p>`}`;
+      const folded = openRoute(body.querySelector(".hub-connected [data-route]"));
+      connection.events.forEach((event) => folded.update(event));
+      body.querySelector(".hub-connected [data-retry]").addEventListener("click", () => { void list(true); });
       body.querySelectorAll("[data-tag]").forEach((b) => {
         b.addEventListener("click", () => {
           activeTag = b.dataset.tag || "";
@@ -159,7 +202,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
             await reload();
           }
         } catch (err) {
-          if (!closed) notify(t("blueprint.failed") + ": " + (err.message || err), "err");
+          if (!closed) notify(t("blueprint.importFailed") + ": " + (err.message || err), "err");
         } finally {
           busy = false;
           if (!closed) install.disabled = false;

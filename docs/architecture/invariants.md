@@ -80,6 +80,23 @@ This document is the compact, checkable reference. The reasoning lives in the li
 
 ---
 
+## Cross-cutting architectural constraint — scale-out readiness
+
+Beyond I1–I6, **every feature must remain compatible with future horizontal
+scaling**. This is a mandatory design/review gate, **not** a seventh runtime
+invariant and **not** a claim that cluster mode exists today. The accepted
+partition ownership rules in ADR-0002/0006 already apply; ADR-0175 describes
+the proposed Milestone-5 replication/placement target.
+
+Before implementation, assess state ownership, stable key-based partition
+routing, distributed service boundaries, durable async messages, idempotency,
+failover/fencing, read consistency, migration seams, and continued standalone
+compatibility. The explicit requirements and PR evidence are in
+[scale-out readiness](scale-out-readiness.md). If incompatible, stop for
+architecture review and a focused ADR rather than adding hidden scale-out debt.
+
+---
+
 ## Quick pre-commit checklist for agents
 
 Before considering a change done, confirm:
@@ -90,6 +107,7 @@ Before considering a change done, confirm:
 - [ ] `applyToState` stays deterministic and side-effect-free; live == replay (I4)
 - [ ] No parsing/interning/string-lookup added to the hot path (I5)
 - [ ] Only events persisted; keys/timestamps frozen into events, not regenerated on replay (I6)
+- [ ] Scale-out readiness assessed in the PR, including state owner, routing, failover, retries, consistency and standalone compatibility; exceptions have an explicit ADR/follow-up
 - [ ] `go build ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` pass; `gofmt -l .` empty
 - [ ] New behavior has tests; persistence/processor changes have a recovery test
 - [ ] Any architectural change is captured in a new ADR

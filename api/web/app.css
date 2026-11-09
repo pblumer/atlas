@@ -1582,13 +1582,15 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .editor-bar .shown-version { position: relative; flex: 100 1 0; min-width: 2.5em; max-width: max-content;
   display: flex; margin-right: 6px; }
 .editor-bar .shown-version[hidden] { display: none; }
+.editor-bar .shown-version:has(.sv-step) { min-width: calc(2.5em + 42px); align-items: center; }
 .editor-bar .sv-chip { border: 0; cursor: pointer; font: inherit; font-size: 12px; min-width: 0; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; line-height: 18px; }
 .editor-bar .sv-chip.off { border: 1px solid var(--border); }
 .editor-bar .sv-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .editor-bar .sv-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; width: 340px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(20, 22, 26, .14); padding: 10px 12px; font-size: 13px; color: var(--text); }
+  box-shadow: 0 10px 30px rgba(20, 22, 26, .14); padding: 10px 12px; font-size: 13px; color: var(--text);
+  max-height: calc(100vh - var(--topbar-h, 0px) - 64px); overflow-y: auto; box-sizing: border-box; }
 .editor-bar .sv-pop[hidden] { display: none; }
 .sv-rows { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
 .sv-rows dt { color: var(--muted); white-space: nowrap; }
@@ -1596,6 +1598,32 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .sv-note { margin: 10px 0 0; line-height: 1.45; }
 .sv-note.warn { background: var(--warn-soft); color: var(--text); border-left: 3px solid var(--warn); padding: 6px 8px; border-radius: 4px; }
 .sv-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+/* The arrows beside the chip walk the process's records (ADR-0533). They keep their
+   width, and the chip between them is what gives way when the bar is short of room. */
+.editor-bar .sv-step { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: none;
+  color: var(--muted); cursor: pointer; }
+.editor-bar a.sv-step:hover { background: var(--bg); color: var(--text); }
+.editor-bar .sv-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor-bar .sv-step:disabled { opacity: .35; cursor: default; }
+.editor-bar .sv-step + .sv-chip { margin: 0 1px; }
+.sv-head { margin: 12px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.sv-vlist { list-style: none; margin: 0; padding: 0; max-height: 186px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px; }
+.sv-vlist li + li { border-top: 1px solid var(--border); }
+.sv-v { display: grid; grid-template-columns: minmax(3em, auto) minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  padding: 5px 8px; color: var(--text); text-decoration: none; font-size: 12px; }
+.sv-v:hover { background: var(--bg); }
+.sv-v:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sv-v.current { background: var(--accent-soft); }
+.sv-vl { font-weight: 600; white-space: nowrap; }
+.sv-vs { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-tags { display: flex; gap: 4px; }
+.sv-tag { font-size: 11px; padding: 0 6px; }
+.sv-restore { width: min(520px, 94vw); }
+.sv-restore .modal-body > p:first-child { margin-top: 10px; line-height: 1.45; }
+.sv-restore-warn p { margin: 0 0 6px; }
+.sv-restore-warn .btn { margin-top: 2px; }
 /* Deploy on a version opened read-only leaves the draft alone; the panel says so first. */
 .deploy-from-version { margin: 0 0 10px; padding: 6px 8px; border-left: 3px solid var(--warn);
   background: var(--warn-soft); border-radius: 4px; font-size: 13px; line-height: 1.45; }
@@ -4063,6 +4091,9 @@ details.fold-sub[open] > summary::before { transform: rotate(90deg); }
   display: inline-flex; align-items: center; gap: 6px; min-width: 60px;
 }
 .artifact-name { display: flex; align-items: center; gap: 10px; }
+/* The notation pill in an application's type column (BPMN, DMN, FORM) has one width,
+   so the plain-language type beside it lines up from row to row. */
+.artifact-type .chip { min-width: 46px; text-align: center; box-sizing: border-box; }
 /* A superseded deployment version: still listed and still addressable, but no
    longer the one that starts instances, so it recedes behind the current row. */
 .muted-row > td { opacity: .62; }
@@ -8269,6 +8300,15 @@ button.im-problem:hover { background: var(--accent-soft); }
 .import-choices .import-new ul { margin: 6px 0 0; max-height: 25vh; overflow: auto; }
 .import-choices .import-group { margin-top: 14px; }
 .import-choices .import-group h3 { font-size: 13px; margin: 0 0 2px; }
+/* Beside each row, what happens to it as its boxes stand; a model other applications
+   use too is set apart, because replacing it changes their decisions. */
+.import-choices .import-detail { margin-left: 1.6em; }
+.import-choices .import-fate { color: var(--muted); }
+.import-choices .import-fate-replace { color: var(--accent-text); }
+.import-choices .import-warning { margin: 2px 0 0 1.6em; padding: 4px 8px; border-radius: 4px;
+  background: var(--warn-soft); color: var(--warn); }
+.import-choices .import-target { margin: 0 0 6px; }
+.import-blocked { color: var(--warn); max-width: 60%; }
 
 /* What an application's processes need from the installation and no source download
    carries, before the download and after an import (ADR-0467). */
@@ -8435,4 +8475,59 @@ button.im-problem:hover { background: var(--accent-soft); }
 @media (max-width: 700px) {
   .mfe2-workspace { grid-template-columns: minmax(0, 1fr); }
   .mfe2-cause-pane, .mfe2-detail-pane { padding: 12px; }
+}
+
+/* The way to atlas hub (hub-connection.js): a route from this server to the hub,
+   one stop per station of the real request. A stop is waited on (active, with a
+   packet travelling down to it and a timer), passed (ok), where the way ended
+   (fail), or never reached (skipped). The thin bar under a passed stop is where
+   its time falls in the whole load, so a slow handshake stands out at a glance. */
+.hub-route { list-style: none; margin: 10px 0 6px; padding: 0; }
+.hub-stop {
+  position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-areas: "dot name ms" "dot detail detail" "dot track track" "dot note note";
+  column-gap: 10px; padding: 3px 0 9px;
+}
+.hub-stop::before {
+  content: ""; position: absolute; left: 8px; top: 17px; bottom: -3px; width: 2px; background: var(--border);
+}
+.hub-stop:last-child::before { display: none; }
+.hub-dot {
+  grid-area: dot; justify-self: center; position: relative; z-index: 1; margin-top: 3px;
+  width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface);
+}
+.hub-name { grid-area: name; font-size: 13px; font-weight: 600; }
+.hub-ms { grid-area: ms; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hub-detail { grid-area: detail; color: var(--muted); overflow-wrap: anywhere; }
+.hub-track { grid-area: track; display: block; height: 3px; margin-top: 4px; }
+.hub-bar { display: block; height: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+.hub-stop[data-state="ok"] .hub-dot { background: var(--ok); border-color: var(--ok); }
+.hub-stop[data-state="ok"]::before { background: var(--ok); }
+.hub-stop[data-state="active"] .hub-dot { border-color: var(--accent); animation: hub-pulse 1.2s ease-in-out infinite; }
+.hub-stop[data-state="active"] .hub-detail { color: var(--accent-text); }
+.hub-stop[data-state="active"]::after {
+  content: ""; position: absolute; left: 6px; top: -14px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); animation: hub-packet 1.2s linear infinite;
+}
+.hub-stop[data-state="fail"] .hub-dot { background: var(--danger); border-color: var(--danger); }
+.hub-stop[data-state="fail"]::before { background: none; border-left: 2px dashed var(--border); width: 0; }
+.hub-stop[data-state="fail"] .hub-detail { color: var(--danger); font-weight: 600; }
+.hub-stop[data-state="fail"] .hub-bar { background: var(--danger); }
+.hub-stop[data-state="skipped"] { opacity: 0.5; }
+.hub-stop[data-state="skipped"] .hub-dot { border-style: dashed; }
+.hub-stop[data-state="skipped"]::before { background: none; border-left: 2px dashed var(--border); width: 0; }
+.hub-note { grid-area: note; }
+.hub-finding {
+  margin: 8px 0 2px; padding: 10px 12px; border: 1px solid var(--danger); border-radius: 8px;
+  background: var(--danger-soft); overflow-wrap: anywhere;
+}
+.hub-finding p { margin: 5px 0 0; }
+.hub-finding p:first-child { margin-top: 0; }
+.hub-connected { margin: 4px 0 8px; border-bottom: 1px solid var(--border); }
+.hub-connected summary { cursor: pointer; padding: 6px 0; color: var(--muted); }
+@keyframes hub-pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); } 50% { box-shadow: 0 0 0 5px var(--accent-soft); } }
+@keyframes hub-packet { from { top: -14px; opacity: 0; } 20% { opacity: 1; } to { top: 4px; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .hub-stop[data-state="active"] .hub-dot, .hub-stop[data-state="active"]::after { animation: none; }
+  .hub-stop[data-state="active"]::after { display: none; }
 }

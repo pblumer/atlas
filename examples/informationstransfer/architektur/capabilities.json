@@ -1,0 +1,282 @@
+{
+  "_comment": "Was die Applikation beispiel-informationstransfer zur Capability-Landkarte des Servers beitraegt (ADR-0528): realizations sind die Prozesse dieser Applikation und die Capability, die sie realisieren; capabilities und valueStreams sind Vorschlaege. Die Landkarte gehoert dem Server: Hat er einen Key schon, wird nur verknuepft und nichts ueberschrieben; fehlt er, entscheidet beim Import eine Person (uebernehmen, einem vorhandenen Key zuordnen oder weglassen).",
+  "realizations": [
+    {
+      "capability": "it-cloudidentitaet-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_entra"
+    },
+    {
+      "capability": "it-postfach-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_adresse"
+    },
+    {
+      "capability": "it-postfach-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_inhalt"
+    },
+    {
+      "capability": "it-postfach-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_kontingent"
+    },
+    {
+      "capability": "it-postfach-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_postfaecher"
+    },
+    {
+      "capability": "it-transfer-steuern",
+      "kind": "process",
+      "processId": "proc_it_transfer"
+    },
+    {
+      "capability": "it-zugaenge-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_kuerzel"
+    },
+    {
+      "capability": "it-zugaenge-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_rechte"
+    },
+    {
+      "capability": "it-zugaenge-uebertragen",
+      "kind": "process",
+      "processId": "proc_it_telefon"
+    }
+  ],
+  "capabilities": [
+    {
+      "key": "it-transfer-steuern",
+      "name": "Informationstransfer steuern",
+      "summary": "Einen Transfer von Ressourcen zwischen zwei Konten bestellen, im Szenario prüfen, genehmigen und die Quelle danach als «Ressourcen transferiert» markieren.",
+      "scope": "Active Directory, Exchange und Entra ID (hybrid)",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Ausgeführter Transfer mit Protokoll",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "Identity Management",
+        "role": "Identitäten und Zugänge"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Identity Management"
+        },
+        {
+          "kind": "system",
+          "name": "ad_verzeichnis",
+          "ref": "ad_verzeichnis"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "informationstransfer",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "it-postfach-uebertragen",
+      "name": "Postfach übertragen",
+      "summary": "Primäradresse und UPN, Postfachinhalt und Kontingent von der Quelle auf das Ziel übertragen, auf dem Exchange Server oder in Exchange Online.",
+      "scope": "Active Directory, Exchange und Entra ID (hybrid)",
+      "inputs": [
+        {
+          "name": "Genehmigter Transfer",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Zielpostfach mit Adresse, Inhalt und Kontingent",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "Identity Management",
+        "role": "Identitäten und Zugänge"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Identity Management"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange_onprem",
+          "ref": "ucc_exchange_onprem"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [
+        "it-transfer-steuern"
+      ],
+      "tags": [
+        "informationstransfer",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "it-zugaenge-uebertragen",
+      "name": "Zugänge übertragen",
+      "summary": "Direkte manuelle Gruppenmitgliedschaften in AD und Entra ID, die Telefonnummer und das Kürzel von der Quelle auf das Ziel übertragen.",
+      "scope": "Active Directory, Exchange und Entra ID (hybrid)",
+      "inputs": [
+        {
+          "name": "Genehmigter Transfer",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Ziel mit Gruppen, Nummer und Kürzel",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "Identity Management",
+        "role": "Identitäten und Zugänge"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Identity Management"
+        },
+        {
+          "kind": "system",
+          "name": "ad_verzeichnis",
+          "ref": "ad_verzeichnis"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_teams",
+          "ref": "ucc_teams"
+        }
+      ],
+      "requires": [
+        "it-transfer-steuern"
+      ],
+      "tags": [
+        "informationstransfer",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "it-cloudidentitaet-uebertragen",
+      "name": "Cloud-Identität übertragen",
+      "summary": "Bei einer Internalisierung das bisherige Cloud-Konto über einen Hard Match (onPremisesImmutableId) mit dem neuen AD-Konto verknüpfen, nach Freigabe durch die Informationssicherheit.",
+      "scope": "Active Directory, Exchange und Entra ID (hybrid)",
+      "inputs": [
+        {
+          "name": "Genehmigter Transfer (Internalisierung)",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verknüpftes Cloud-Konto",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "Identity Management",
+        "role": "Identitäten und Zugänge"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Identity Management"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        }
+      ],
+      "requires": [
+        "it-transfer-steuern"
+      ],
+      "tags": [
+        "informationstransfer",
+        "beispiel"
+      ],
+      "state": "active"
+    }
+  ],
+  "valueStreams": [
+    {
+      "key": "it-ressourcen-weitergeben",
+      "name": "Ressourcen bei einem Wechsel weitergeben",
+      "description": "Von der Bestellung eines Transfers bei Internalisierung, Externalisierung, Amts- oder Abteilungswechsel bis zum markierten Quellkonto.",
+      "owner": {
+        "name": "Identity Management",
+        "role": "Identitäten und Zugänge"
+      },
+      "tags": [
+        "informationstransfer",
+        "beispiel"
+      ],
+      "stages": [
+        {
+          "key": "bestellen",
+          "name": "Bestellen und prüfen",
+          "capabilities": [
+            "it-transfer-steuern"
+          ]
+        },
+        {
+          "key": "identitaet",
+          "name": "Cloud-Identität übertragen",
+          "description": "Nur bei Internalisierung.",
+          "capabilities": [
+            "it-cloudidentitaet-uebertragen"
+          ]
+        },
+        {
+          "key": "zugaenge",
+          "name": "Zugänge übertragen",
+          "capabilities": [
+            "it-zugaenge-uebertragen"
+          ]
+        },
+        {
+          "key": "postfach",
+          "name": "Postfach übertragen",
+          "capabilities": [
+            "it-postfach-uebertragen"
+          ]
+        },
+        {
+          "key": "abschliessen",
+          "name": "Quelle markieren",
+          "capabilities": [
+            "it-transfer-steuern"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/netip"
 	"net/url"
 	"path"
@@ -28,6 +29,11 @@ type PublicClient struct {
 	indexURL   *url.URL
 	publicKeys []ed25519.PublicKey
 	httpClient *http.Client
+	// lookup and dial are the resolver and the TCP dial every connection goes
+	// through, after dialPublic has vetted the answer. Tests replace them to reach
+	// a local server under a public name; nothing else does.
+	lookup publicLookup
+	dial   publicDial
 }
 
 // NewPublicClient validates a static registry URL and the trusted public keys:
@@ -60,43 +66,79 @@ func NewPublicClient(indexURL string, publicKeys ...ed25519.PublicKey) (*PublicC
 		MaxConnsPerHost:     2,
 		MaxIdleConnsPerHost: 0,
 	}
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
-	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		return dialPublic(ctx, network, address, net.DefaultResolver.LookupIPAddr, dialer.DialContext)
-	}
-	return &PublicClient{
+	dialer := &net.Dialer{Timeout: dialTimeout}
+	c := &PublicClient{
 		indexURL:   u,
 		publicKeys: keys,
-		httpClient: &http.Client{
-			Transport: transport,
-			Timeout:   25 * time.Second,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return errors.New("registry redirects are disabled")
-			},
+		lookup:     net.DefaultResolver.LookupIPAddr,
+		dial:       dialer.DialContext,
+	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialPublic(ctx, network, address, c.lookup, c.dial)
+	}
+	c.httpClient = &http.Client{
+		Transport: transport,
+		Timeout:   25 * time.Second,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			// Where it was sent is the clue (a captive portal, a proxy's block
+			// page), so a traced load names the host; the redirect is refused alike.
+			tracerFrom(req.Context()).redirected(req.URL.Host)
+			return errors.New("registry redirects are disabled")
 		},
-	}, nil
+	}
+	return c, nil
 }
+
+// dialTimeout bounds one TCP connection attempt to one vetted address.
+const dialTimeout = 5 * time.Second
 
 // LoadIndex fetches signed metadata and refuses to expose any release until
 // the Ed25519 signature and the strict manifest checks both succeed.
 func (c *PublicClient) LoadIndex(ctx context.Context) (Index, error) {
+	return c.loadIndex(ctx, nil)
+}
+
+// LoadIndexTraced is LoadIndex reporting each station of the way as it is passed
+// or where it stops (Step): the name resolved, the connection made, the TLS
+// handshake, the index read, its signature verified. It is the same load — the
+// same transport, the same checks, the same refusals — not a separate probe, so
+// what it reports is what LoadIndex meets. report may be called from the
+// transport's own goroutines, never after LoadIndexTraced has returned.
+func (c *PublicClient) LoadIndexTraced(ctx context.Context, report func(Step)) (Index, error) {
+	tr := newTracer(report)
+	defer tr.close()
+	return c.loadIndex(ctx, tr)
+}
+
+func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (Index, error) {
 	if c == nil || c.httpClient == nil || c.indexURL == nil {
 		return Index{}, errors.New("registry client is not configured")
 	}
-	raw, err := c.readBounded(ctx, c.indexURL, MaxIndexBytes)
+	// Only the index request is traced station by station; the signature request
+	// takes the same way again and is reported as one station of its own.
+	raw, err := c.readBounded(withTracer(ctx, tr), c.indexURL, MaxIndexBytes)
 	if err != nil {
+		tr.failIndex(err)
 		return Index{}, fmt.Errorf("load registry index: %w", err)
 	}
+	tr.passIndex(len(raw))
 	signatureURL := *c.indexURL
 	signatureURL.Path += ".sig"
 	signature, err := c.readBounded(ctx, &signatureURL, maxSignatureBytes)
 	if err != nil {
+		tr.fail(Step{Stage: StageSignature, Cause: CauseSignatureUnavailable, Status: httpStatusOf(err), Err: err})
 		return Index{}, fmt.Errorf("load registry signature: %w", err)
 	}
-	index, _, err := VerifySignedIndexWithAny(raw, signature, c.publicKeys)
+	index, key, err := VerifySignedIndexWithAny(raw, signature, c.publicKeys)
 	if err != nil {
+		cause := CauseIndexInvalid
+		if errors.Is(err, ErrSignatureMismatch) {
+			cause = CauseNoPinnedKey
+		}
+		tr.fail(Step{Stage: StageSignature, Cause: cause, Err: err})
 		return Index{}, fmt.Errorf("verify registry: %w", err)
 	}
+	tr.pass(Step{Stage: StageSignature, Key: KeyFingerprint(key)})
 	return index, nil
 }
 
@@ -157,13 +199,17 @@ func (c *PublicClient) readBounded(ctx context.Context, location *url.URL, size 
 	if err != nil {
 		return nil, fmt.Errorf("construct registry request: %w", err)
 	}
+	tr := tracerFrom(ctx)
+	if tr != nil {
+		req = req.WithContext(httptrace.WithClientTrace(ctx, tr.clientTrace()))
+	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("registry HTTPS request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned HTTP %d", resp.StatusCode)
+		return nil, statusError{resp.StatusCode}
 	}
 	if resp.ContentLength > size {
 		return nil, errors.New("registry response exceeds configured byte limit")
@@ -247,31 +293,48 @@ func dialPublic(ctx context.Context, network, address string, lookup publicLooku
 	if err != nil || port != "443" || !validDNSHostname(host) {
 		return nil, errors.New("registry dial target must be a public DNS host on port 443")
 	}
+	tr := tracerFrom(ctx)
 	ips, err := lookup(ctx, host)
 	if err != nil {
+		tr.fail(Step{Stage: StageResolve, Cause: causeOfLookup(err), Host: host, Err: err})
 		return nil, fmt.Errorf("registry DNS lookup: %w", err)
 	}
+	answer := make([]string, 0, len(ips))
+	for _, candidate := range ips {
+		answer = append(answer, candidate.String())
+	}
 	if len(ips) == 0 || len(ips) > 16 {
-		return nil, errors.New("registry DNS answer is empty or oversized")
+		err := errors.New("registry DNS answer is empty or oversized")
+		tr.fail(Step{Stage: StageResolve, Cause: CauseDNSEmpty, Host: host, Addresses: answer, Err: err})
+		return nil, err
 	}
 	// Validate the entire answer, not just the address ultimately selected.
 	addrs := make([]netip.Addr, 0, len(ips))
 	for _, candidate := range ips {
 		addr, valid := netip.AddrFromSlice(candidate.IP)
 		if !valid || candidate.Zone != "" || !publicAddress(addr) {
-			return nil, errors.New("registry DNS answer contains nonpublic or invalid address")
+			err := errors.New("registry DNS answer contains nonpublic or invalid address")
+			tr.fail(Step{Stage: StageResolve, Cause: CauseNonpublicAddress, Host: host, Addresses: answer, Err: err})
+			return nil, err
 		}
 		addrs = append(addrs, addr.Unmap())
 	}
-	var lastErr error
+	tr.pass(Step{Stage: StageResolve, Host: host, Addresses: answer})
+	var (
+		lastErr  error
+		lastAddr string
+	)
 	for _, addr := range addrs {
 		// If a connection attempt fails, try only another vetted address.
-		conn, err := dial(ctx, network, net.JoinHostPort(addr.String(), port))
+		target := net.JoinHostPort(addr.String(), port)
+		conn, err := dial(ctx, network, target)
 		if err == nil {
+			tr.pass(Step{Stage: StageConnect, Address: target})
 			return conn, nil
 		}
-		lastErr = err
+		lastErr, lastAddr = err, target
 	}
+	tr.fail(Step{Stage: StageConnect, Cause: causeOfDial(lastErr), Address: lastAddr, Tried: len(addrs), Err: lastErr})
 	return nil, fmt.Errorf("registry HTTPS dial failed: %w", lastErr)
 }
 
@@ -318,4 +381,12 @@ func publicAddress(ip netip.Addr) bool {
 		}
 	}
 	return true
+}
+
+// Host is the registry's host name, as the operator configured it.
+func (c *PublicClient) Host() string {
+	if c == nil || c.indexURL == nil {
+		return ""
+	}
+	return c.indexURL.Hostname()
 }

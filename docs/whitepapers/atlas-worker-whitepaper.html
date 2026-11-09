@@ -1,0 +1,835 @@
+<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>atlas – Worker-Architektur · Technisches Whitepaper</title><meta name="description" content="Technisches Whitepaper über Worker Types, Worker Instances, Sicherheit und Abarbeitungsqualität in atlas"><style>
+:root{color-scheme:dark;--ink:#090f1c;--panel:#101c2e;--panel2:#17263b;--line:#2d4058;--muted:#9bb0cc;--white:#f4f7ff;--blue:#b8d7ff;--mint:#b8e5cd;--shadow:0 25px 60px #0006;font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(circle at top,#1d3357 0%,#14233d 42%,#111d33 100%);color:var(--white)}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+.stars{position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(circle at 15% 22%,#fff6 0 1px,transparent 1px),radial-gradient(circle at 82% 18%,#fff5 0 1px,transparent 1px),radial-gradient(circle at 33% 66%,#c8dbff50 0 1px,transparent 1px),radial-gradient(circle at 72% 74%,#eef5ff4b 0 1px,transparent 1px),radial-gradient(circle at 56% 37%,#a9c8f94f 0 1px,transparent 1px)}
+.frame{width:min(1050px,calc(100% - 60px));margin:auto;position:relative}
+.topnav{position:sticky;top:0;z-index:20;background:#13203ae8;backdrop-filter:blur(18px);border-bottom:1px solid #38516f;padding:12px 0;display:flex;justify-content:space-between;align-items:center}
+.topnav .frame{display:flex;align-items:center;justify-content:space-between}
+.topnav a{color:#d5e6fb}.brand-small{display:flex;align-items:center;gap:10px;font-size:23px;font-weight:800;letter-spacing:-.06em}.brand-small svg{width:35px;height:35px}
+.navtag{font-size:11px;color:#b4c8dd;letter-spacing:.15em;text-transform:uppercase}
+.cover{min-height:820px;padding-top:115px;display:flex;flex-direction:column;justify-content:space-between;position:relative;isolation:isolate}
+.cover::before{content:"";position:absolute;z-index:-1;inset:-60px -100px 0;background:radial-gradient(circle at 74% 33%,#476a964a,transparent 39%),radial-gradient(circle at 21% 66%,#1c385d,transparent 45%)}
+.kicker{display:flex;align-items:center;gap:12px;text-transform:uppercase;letter-spacing:.21em;font-size:12px;color:#aac8e9}
+.kicker::before{content:"";height:8px;width:8px;border-radius:100%;background:#b8e5cd;box-shadow:0 0 0 6px #b8e5cd22}
+.cover-symbol svg{width:62px;height:62px;display:block;margin:0 0 40px}
+.cover-title{font-size:clamp(4.5rem,9vw,7.5rem);letter-spacing:-.085em;line-height:.94;font-weight:800;margin:30px 0 25px;max-width:920px}
+.cover-title span{color:#cfe4ff}
+.cover-sub{font-size:1.33rem;color:#bbcee5;max-width:650px;margin:0 0 35px;line-height:1.65}
+.cover-line{width:165px;height:3px;background:linear-gradient(90deg,#a8d4ff,#b8e5cd)}
+.cover-metadata{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;padding:28px 0;border-top:1px solid #405671;color:#e1edfb}
+.cover-metadata div{font-size:14px}.cover-metadata strong{display:block;text-transform:uppercase;color:#92aece;letter-spacing:.13em;font-size:10px;margin-bottom:8px}
+.cover-end{font-size:13px;color:#9db6d3;letter-spacing:.1em;padding-bottom:28px}
+.reading-note{max-width:950px;padding:20px 25px;border-left:3px solid #96c8ff;background:#12233a;color:#bdcee4;margin-bottom:54px}
+.docbody{padding:20px 0 80px}
+.docbody>h2{font-size:clamp(2rem,3.8vw,3.1rem);line-height:1.12;letter-spacing:-.05em;margin:90px 0 23px;font-weight:800;padding-top:20px;border-top:1px solid #3b526f;color:#f6f9ff;break-after:avoid}
+.docbody>h2:first-child{border:0;margin-top:30px}
+.docbody>h3{font-size:1.33rem;letter-spacing:-.025em;margin:37px 0 14px;break-after:avoid;color:#d8eaff}
+.docbody p{font-size:1rem;line-height:1.78;color:#bfcee3;margin:0 0 20px;max-width:920px}
+.docbody strong{color:#f0f6ff;font-weight:700}
+.docbody code{font-family:ui-monospace,"Cascadia Code","DejaVu Sans Mono",monospace;font-size:.88em;color:#b6dcff;background:#152941;border:1px solid #324764;border-radius:4px;padding:.05em .27em;overflow-wrap:anywhere}
+.docbody blockquote{margin:25px 0;padding:20px 25px;border-left:3px solid var(--mint);background:#172b40;color:#d6eafa}
+.docbody blockquote p{margin:0;color:inherit}
+.docbody table{border-collapse:separate;border-spacing:0;width:100%;font-size:14px;margin:25px 0 36px;overflow:hidden;border:1px solid #3b526e;border-radius:12px;line-height:1.52}
+.docbody th,.docbody td{padding:13px 16px;border-bottom:1px solid #31465e;vertical-align:top}
+.docbody th{background:#233952;color:#dcecff;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.docbody tr:nth-child(odd) td{background:#14243a}.docbody tr:nth-child(even) td{background:#172a40}.docbody tr:last-child td{border-bottom:0}
+.docbody tbody td{color:#c4d5e8}.docbody td strong{color:#e9f4ff}
+.docbody ul,.docbody ol{color:#c2d5e8;line-height:1.74;padding-left:25px}
+.docbody li{margin-bottom:8px}
+.docbody hr{border:0;border-top:1px solid #3b526e;margin:50px 0}
+.visual-diagram{margin:30px 0 18px;padding:17px;background:#0c1c2e;border:1px solid #38506a;border-radius:18px;box-shadow:var(--shadow)}
+.visual-diagram>svg{display:block;width:100%;height:auto}
+.source-mermaid{margin-top:10px;color:#819dbd;font-size:13px}
+.source-mermaid summary{cursor:pointer}
+.source-mermaid pre{white-space:pre-wrap;color:#b8cee8;font-size:12px}
+.docbody p:has(> em:first-child){font-size:13px;color:#94afd0;max-width:100%;margin:12px 0 35px}
+.footer{border-top:1px solid #304760;padding:30px 0 50px;color:#7c97b6;font-size:13px}
+/* Match the published navy/blue/mint visual system on printed A4 pages. */
+@page{size:A4;margin:17mm 20mm 18mm;background:#101c2e;
+  @bottom-left{content:"atlas  /  WORKER ARCHITEKTUR";color:#849dbb;font:8pt system-ui,sans-serif;letter-spacing:1px}
+  @bottom-right{content:counter(page);color:#acc7e5;font:9pt system-ui,sans-serif}}
+@page:first{background:#0f1d33;@bottom-left{content:"";} @bottom-right{content:"";}}
+@media print{
+  :root{font-size:10.35pt;line-height:1.48}
+  html,body{background:#101c2e!important;color:#f4f7ff}
+  .topnav,.footer,.stars{display:none}
+  .frame{width:auto;margin:0}
+  .cover{min-height:0;height:257mm;page-break-after:always;padding-top:42mm}
+  .cover::before{inset:-10mm;background:radial-gradient(circle at 70% 30%,#2c4569,transparent 46%),radial-gradient(circle at 16% 76%,#142a46,transparent 48%)}
+  .cover-symbol svg{width:20mm;height:20mm;margin:0 0 9mm}
+  .cover-title{font-size:63pt;margin:20mm 0 8mm;line-height:.99;letter-spacing:-.075em}
+  .cover-sub{font-size:16pt;line-height:1.46;max-width:154mm}
+  .cover-metadata{grid-template-columns:1fr 1fr;row-gap:15mm}
+  .cover-end{padding-bottom:0}
+  .reading-note{display:none}
+  .docbody{padding:0}
+  .docbody>h2{font-size:19.5pt;margin:9mm 0 4mm;letter-spacing:-.035em;padding-top:4mm;break-after:avoid}
+  .docbody>h2:first-child{margin:0 0 7mm;padding:0}
+  .docbody>h3{font-size:12.5pt;margin:6mm 0 3mm}
+  .docbody p{font-size:9.55pt;line-height:1.45;margin:0 0 3.1mm;max-width:none}
+  .docbody ol,.docbody ul{font-size:9.3pt;line-height:1.38}
+  .docbody li{margin-bottom:1.5mm}
+  .docbody table{font-size:8pt;line-height:1.3;margin:4mm 0 6mm;border-radius:4px}
+  .docbody th,.docbody td{padding:1.85mm 2.4mm;border-color:#304760}
+  .docbody th{font-size:7.3pt;letter-spacing:.01em}
+  .docbody blockquote{padding:3mm 4mm;margin:4mm 0 6mm}
+  .docbody hr{margin:6mm 0}
+  .docbody code{font-size:.8em;white-space:normal;overflow-wrap:anywhere}
+  .docbody p:has(> em:first-child){font-size:8pt;line-height:1.3;margin:1mm 0 4mm}
+  .visual-diagram{margin:3mm 0 1mm;padding:2mm;box-shadow:none;break-inside:avoid}
+  .visual-diagram>svg{max-height:93mm}
+  .visual-diagram .sequence-diagram{max-height:114mm}
+  .source-mermaid{display:none}
+  .docbody p,li{orphans:3;widows:3}
+  .docbody tr{break-inside:avoid}
+  h2[id="18-statustabelle"] + p + table{font-size:7.3pt;line-height:1.18}
+  h2[id="18-statustabelle"] + p + table th,h2[id="18-statustabelle"] + p + table td{padding:1.25mm 1.8mm}
+  .docbody h2#inhaltsverzeichnis{page-break-before:always}
+  .docbody h2[id="1-zusammenfassung"]{page-break-before:always}
+
+
+
+
+}
+@media screen and (max-width:700px){.cover{min-height:590px;padding-top:78px}.cover-title{font-size:4rem}.cover-metadata{grid-template-columns:1fr 1fr}.docbody table{font-size:12px}.docbody th,.docbody td{padding:7px 9px}.docbody>h2{font-size:2.1rem}.topnav .navtag{display:none}}
+</style></head><body><div class="stars" aria-hidden="true"></div><header class="topnav"><div class="frame"><a href="#deckblatt" class="brand-small"><svg viewBox="0 0 256 256" role="img" aria-label="atlas Logo" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" rx="56" fill="#000"/><path fill="#fff" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path fill="#fff" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path fill="#fff" d="M133 93H162V211H133Z"/><path fill="#fff" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg> atlas</a><span class="navtag">WHITEPAPER / ENTWURF 0.1</span></div></header><section class="cover frame" id="deckblatt"><div><div class="cover-symbol"><svg viewBox="0 0 256 256" role="img" aria-label="atlas Logo" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" rx="56" fill="#000"/><path fill="#fff" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path fill="#fff" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path fill="#fff" d="M133 93H162V211H133Z"/><path fill="#fff" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg></div><div class="kicker">TECHNISCHES WHITEPAPER · ENTWURF 0.1</div><h1 class="cover-title">atlas<span>.</span><br>Worker-<br><span>Architektur.</span></h1><p class="cover-sub">Dauerhafte Prozessausführung. Unabhängige Integrationen. Klare Vertrauensgrenzen.</p><div class="cover-line"></div></div><div><div class="cover-metadata"><div><strong>Dokument</strong>Technisches Whitepaper<br>Entwurf 0.1</div><div><strong>Datum</strong>[Datum einsetzen]</div><div><strong>Zielgruppen</strong>Architektur · Betrieb · Sicherheit<br>Worker-Hersteller</div></div><div class="cover-end">BUILD SOMETHING GREAT. SHARE IT WITH THE UNIVERSE.</div></div></section><main class="docbody frame"><div class="reading-note"><strong>Fakten- und Statushinweis.</strong> «Umgesetzt» bezeichnet den bereitgestellten Implementierungsstand und keine unabhängige Prüfung. Funktionen, die erst geplant oder vorgeschlagen sind, werden ausdrücklich so gekennzeichnet.</div><h2 id="inhaltsverzeichnis">Inhaltsverzeichnis</h2>
+<ol>
+<li><a href="#1-zusammenfassung">Zusammenfassung</a></li>
+<li><a href="#2-ausgangslage-und-problem">Ausgangslage und Problem</a></li>
+<li><a href="#3-begriffe-und-abgrenzungen">Begriffe und Abgrenzungen</a></li>
+<li><a href="#4-architektur%C3%BCberblick">Architekturüberblick</a></li>
+<li><a href="#5-trennung-der-adressr%C3%A4ume">Trennung der Adressräume</a></li>
+<li><a href="#6-worker-protokoll-handshake-und-versionierung">Worker-Protokoll, Handshake und Versionierung</a></li>
+<li><a href="#7-bereitstellung-der-worker-binaries">Bereitstellung der Worker-Binaries</a></li>
+<li><a href="#8-supervisor-start-%C3%BCberwachung-und-konfiguration">Supervisor: Start, Überwachung und Konfiguration</a></li>
+<li><a href="#9-atlas-hub-verteilung-signaturen-und-kuratierung">atlas hub: Verteilung, Signaturen und Kuratierung</a></li>
+<li><a href="#10-berechtigungen-und-credentials">Berechtigungen und Credentials</a></li>
+<li><a href="#11-sicherheit-bedrohungen-schutzmassnahmen-restrisiken">Sicherheit: Bedrohungen, Schutzmassnahmen, Restrisiken</a></li>
+<li><a href="#12-qualit%C3%A4t-der-abarbeitung">Qualität der Abarbeitung</a></li>
+<li><a href="#13-aktualisierung-versionierung-und-widerruf">Aktualisierung, Versionierung und Widerruf</a></li>
+<li><a href="#14-zielumgebungen">Zielumgebungen</a></li>
+<li><a href="#15-lizenzmodell--vorschlag">Lizenzmodell – Vorschlag</a></li>
+<li><a href="#16-vorteile-und-faire-gegenposition">Vorteile und faire Gegenposition</a></li>
+<li><a href="#17-grenzen-offene-fragen-und-n%C3%A4chste-schritte">Grenzen, offene Fragen und nächste Schritte</a></li>
+<li><a href="#18-statustabelle">Statustabelle</a></li>
+</ol>
+<hr />
+<h2 id="1-zusammenfassung">1. Zusammenfassung</h2>
+<p><strong>Umgesetzt.</strong> atlas ist eine in Go implementierte BPMN-2.x-Workflow-Engine, die als einzelnes Server-Binary ausgeliefert wird. Sie protokolliert Zustandsänderungen zuerst als Ereignisse im Write-Ahead-Log (WAL, ein vor dem State-Commit geschriebener Ereignisspeicher). Auf das Anhängen und dauerhafte Synchronisieren mittels <code>fsync</code> folgt der Commit. Pro Partition ist eine einzige Goroutine schreibend tätig. Der Grundsatz <em>durable before visible</em> bedeutet für Worker: Ein Job wird erst angeboten, wenn er dauerhaft gespeichert ist.</p>
+<p><strong>Umgesetzt.</strong> Die bisher fest einkompilierten Integrationen werden durch ein Modell ergänzt, in dem Worker Types ausserhalb des Engine-Adressraums laufen. Das sprachneutrale Worker-Protokoll, ein Go-SDK, ein separates <code>atlas-workers</code>-Binary, die Installation lokaler Artefakte und die supervisor-gesteuerte Ausführung sind vorhanden. Ein Pilot-Worker Type demonstriert den vollständigen Pfad in einem automatisierten End-to-End-Test.</p>
+<p><strong>Umgesetzt, mit Einschränkung.</strong> Ein Worker erhält Jobs nach einem Lease-Verfahren mit einer Zustellgarantie von <em>mindestens einmal</em> (at least once). Ein Lease-Token schützt die Engine vor verspäteten Abschlussmeldungen. Ein fehlerhafter Worker wird von der Engine adressraumseitig getrennt; die vollständige Betriebssystem-Isolation installierter Drittanbieter-Artefakte ist damit aber noch nicht erreicht.</p>
+<p><strong>Geplant.</strong> atlas hub soll Worker Types in signierten Releases distribuieren. Publisher- und Registry-Signaturen sollen voneinander getrennt sein; Installation und Aktualisierung bleiben explizite Betreiberentscheidungen. Container-/Kubernetes-Launcher, signierte Widerrufe und feinere Vertrauensrichtlinien sind ebenfalls geplant.</p>
+<p><strong>Offene Sicherheitslücke.</strong> Alle installierten Worker Types teilen derzeit ein API-Token mit Scope <code>worker</code>. Dieser Scope grenzt das Protokoll ein, jedoch <strong>nicht</strong> die Job-Typen einzelner Worker Types. Die Entscheidung über Token pro Instanz mit Bindung an Manifest-Job-Typen ist ausstehend und gilt als Voraussetzung für produktiven Drittanbieterbetrieb.</p>
+<h2 id="2-ausgangslage-und-problem">2. Ausgangslage und Problem</h2>
+<p><strong>Umgesetzt – Ausgangssituation.</strong> Die ursprüngliche Verteilung enthält 33 fest einkompilierte Integrationen, unter anderem für Jira, Mail, SQL, Active Directory, Entra ID und Exchange. Teile davon besitzen typspezifischen Servercode, beispielsweise für Konfigurationsprüfungen, Credential-Übergabe oder Mock-Ansichten. Damit ist die Lifecycle-Verantwortung für die Integrationen direkt an diejenige der Engine gekoppelt.</p>
+<p>Eine geänderte Integration oder eine Sicherheitslücke in ihrer Abhängigkeit erfordert in diesem Modell ein neues atlas-Release. Drittanbieter können keine unabhängig auslieferbaren Integrationen beisteuern. Gleichzeitig wächst die Angriffsfläche des Prozesses, der die dauerhafte Ausführung und den Zustand der Engine verwaltet.</p>
+<p><strong>Umgesetzt – Zielrichtung in der Migration.</strong> Das neue Konzept behandelt externe Integrationen als Worker Types mit eigenem Prozess und standardisiertem HTTP-Vertrag. Es trennt die langlebige Prozessausführung von den potenziell wechselnden Technologien, Protokollen und Abhängigkeiten eines Zielsystems. Das beseitigt weder die Notwendigkeit operativer Freigaben noch die Notwendigkeit, Integrationen auf Vertrauenswürdigkeit zu prüfen.</p>
+<p><strong>Geplant – vollständige Entkopplung.</strong> Noch sind alle eingebauten Worker Types im Server-Binary enthalten, weil einzelne weiterhin innerhalb des Server-Prozesses arbeiten. Die vollständige Entfernung ist ein späterer Migrationsschritt. Daher ist «Integrationscode ist heute vollständig vom Server entkoppelt» ausdrücklich <strong>keine</strong> zutreffende Beschreibung des aktuellen Stands.</p>
+<h2 id="3-begriffe-und-abgrenzungen">3. Begriffe und Abgrenzungen</h2>
+<table>
+<thead>
+<tr>
+<th>Begriff</th>
+<th>Bedeutung</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Worker Type</strong></td>
+<td>Installierbare Implementierung einer Integrationsfähigkeit, z. B. «Jira».</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Worker</strong></td>
+<td>Konfiguration eines Worker Types mit Ziel, Identität und Credential-Verweisen, z. B. <code>jira-produktion</code>.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Worker Instance</strong></td>
+<td>Laufender Betriebssystem-Prozess, der Jobs abarbeitet. Pro Worker sind null bis viele Instanzen möglich.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Job</strong></td>
+<td>Dauerhafte Arbeitseinheit für einen BPMN Service Task.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Supervisor</strong></td>
+<td>Serverkomponente, die von ihr verwaltete Worker Instances startet und überwacht.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Lease</strong></td>
+<td>Zeitlich begrenzte Zuordnung eines Jobs zu einer Worker Instance.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Digest</strong></td>
+<td>Kryptografischer Hash, hier SHA-256, zur Prüfung der unveränderten Bytes eines Artefakts.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Vault</strong></td>
+<td>Verschlüsselte Ablage für Zugangsdaten und andere Secrets.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><strong>Publisher</strong></td>
+<td>Herausgeber eines Worker-Type-Releases, dessen Signatur die Release-Angaben absichern soll.</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td><strong>Registry</strong></td>
+<td>Verzeichnis signierter Release-Metadaten, das Releases listet und Widerrufe publizieren soll.</td>
+<td>geplant für Worker Types</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Umgesetzt.</strong> Nicht jede Aktivität im Prozessmodell ist ein Worker. Deterministische Engine-Semantik – FEEL-Ausdrücke, DMN und User Tasks – verbleibt in Engine-internen Handlern. Ein Worker übernimmt dagegen die Bearbeitung von Jobs für externe Integrationen.</p>
+<p><strong>Abgrenzung.</strong> Der <em>Worker Type</em> bezeichnet die Implementierung; der <em>Worker</em> deren konfigurierte Verwendung; die <em>Worker Instance</em> den ausführenden Prozess. Diese drei Ebenen sind auch für Identität, Überwachung und Governance separat zu betrachten.</p>
+<h2 id="4-architekturüberblick">4. Architekturüberblick</h2>
+<p><strong>Umgesetzt.</strong> Die Engine erzeugt einen persistenten Job, den eine Worker Instance über HTTP aktiviert. Die Worker Instance führt ihre Aktion gegenüber einem Zielsystem aus und meldet Abschluss, technischen Fehler oder BPMN-Fehler. Der Supervisor kann Worker Instances auf demselben Host verwalten; externe Instanzen werden durch den Betreiber selbst gestartet.</p>
+<div class="visual-diagram"><svg viewBox="0 0 980 420" xmlns="http://www.w3.org/2000/svg" class="architecture-diagram" role="img" aria-label="Komponentenübersicht: getrennte Verbindungen für Persistenz, Worker-Protokoll und Supervisor-Steuerung"><defs><marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto-start-reverse"><path d="M0 0 L7 3.5 L0 7z" fill="#9bc2ec"/></marker><marker id="ctl" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto-start-reverse"><path d="M0 0 L7 3.5 L0 7z" fill="#b8e5cd"/></marker></defs><rect x="18" y="28" width="455" height="362" rx="21" fill="#13243a" stroke="#3d5675" stroke-width="2"/><rect x="515" y="28" width="260" height="362" rx="21" fill="#13243a" stroke="#3d5675" stroke-width="2"/><text x="42" y="63" fill="#91b3d9" font-size="16" letter-spacing="1.5">ATLAS SERVER</text><text x="539" y="63" fill="#91b3d9" font-size="15" letter-spacing="1.2">EIGENE PROZESSE</text><rect x="56" y="93" width="155" height="58" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="133.5" y="128" fill="#b8e5cd" font-size="16" font-weight="650" text-anchor="middle">Vault</text><rect x="251" y="93" width="185" height="58" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="343.5" y="128" fill="#d6edff" font-size="16" font-weight="650" text-anchor="middle">Supervisor</text><rect x="56" y="197" width="155" height="62" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="133.5" y="234" fill="#d6edff" font-size="16" font-weight="650" text-anchor="middle">Engine / BPMN</text><rect x="251" y="197" width="185" height="62" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="343.5" y="234" fill="#d6edff" font-size="16" font-weight="650" text-anchor="middle">WAL / State</text><rect x="251" y="299" width="185" height="65" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="343.5" y="337.5" fill="#d6edff" font-size="16" font-weight="650" text-anchor="middle">Worker-API</text><rect x="551" y="108" width="190" height="70" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="646" y="149" fill="#d6edff" font-size="16" font-weight="650" text-anchor="middle">Worker Instance</text><rect x="551" y="281" width="190" height="70" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="646" y="322" fill="#d6edff" font-size="16" font-weight="650" text-anchor="middle">Externe Instance</text><rect x="815" y="187" width="149" height="88" rx="11" fill="#1b304a" stroke="#4b7399" stroke-width="1.6"/><text x="889.5" y="237" fill="#b8e5cd" font-size="16" font-weight="650" text-anchor="middle">Zielsystem</text><path d="M251 123 H211" fill="none" stroke="#b8e5cd" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#ctl)"/><path d="M436 121 H551" fill="none" stroke="#b8e5cd" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#ctl)" stroke-dasharray="7 5"/><path d="M211 220 H251" fill="none" stroke="#9bc2ec" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arr)"/><path d="M211 244 H235 V326 H251" fill="none" stroke="#9bc2ec" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arr)"/><path d="M436 314 H484 V158 H551" fill="none" stroke="#9bc2ec" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arr)" marker-start="url(#arr)"/><path d="M436 345 H492 V331 H551" fill="none" stroke="#9bc2ec" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arr)" marker-start="url(#arr)"/><path d="M741 141 L815 211" fill="none" stroke="#9bc2ec" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arr)"/><path d="M741 318 L815 250" fill="none" stroke="#9bc2ec" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arr)"/><text x="490" y="102" fill="#b8e5cd" font-size="12" text-anchor="middle">Start</text><text x="540" y="377" fill="#91b3d9" font-size="12" >HTTP Worker-Protokoll</text><text x="57" y="294" fill="#8da9c9" font-size="12" >durable before visible</text></svg><details class="source-mermaid"><summary>Mermaid-Quellcode</summary><pre><code>flowchart LR
+    subgraph A[atlas Server]
+        E[Engine / BPMN]
+        W[(WAL / State)]
+        API[Worker-API]
+        SUP[Supervisor]
+        V[(Verschlüsselter Vault)]
+        E --&gt;|persistieren| W
+        E --&gt; API
+        SUP --&gt; V
+    end
+    subgraph B[Eigene Prozesse]
+        WI[Worker Instance]
+        EX[Externe Worker Instance]
+    end
+    T[Zielsystem]
+    SUP -.-&gt;|Start / Restart| WI
+    API &lt;--&gt; |Jobs / Ergebnisse| WI
+    API &lt;--&gt; |Jobs / Ergebnisse| EX
+    WI --&gt; T
+    EX --&gt; T</code></pre></details></div><p><em>Abbildung 1: Komponentenübersicht. Die logische Darstellung zeigt den umgesetzten Ausführungspfad. Ein konkreter Schutz gegen bösartigen Drittanbieter-Code über den Betriebssystem-Prozess hinaus ist noch geplant.</em></p>
+<p><strong>Umgesetzt.</strong> Ein Service Task wird nicht durch das Starten einer beliebigen Programmdatei ausgeführt. Zwischen Prozessausführung und Zielsystem stehen die Engine, ein dauerhaft erzeugter Job, das API-Protokoll und der ausführende Worker. Der Supervisor entscheidet über den Lebenszyklus der von ihm gestarteten Worker Instances; er ersetzt nicht die fachlichen Entscheidungen im BPMN-Modell.</p>
+<p><strong>Umgesetzt.</strong> Der Server bietet ein separates Binary <code>atlas-workers</code>, das den Worker-Modus enthält, aber nicht Server, Engine, Web-Oberfläche oder MCP-Server. Die gemessenen Grössen für <code>linux/amd64</code> betragen 88 MB für <code>atlas</code> und 35 MB für <code>atlas-workers</code>. Dies ist eine Grössenangabe für Binaries, kein Laufzeit- oder Ressourcenbenchmark.</p>
+<p><strong>Architekturelle Wirkung.</strong> Der Datenfluss bewahrt die Ereignis- und Zustandsverantwortung innerhalb von atlas. Die Worker Instance erhält keine direkte Berechtigung, WAL, Partition-State oder Engine-internen Speicher zu mutieren.</p>
+<h2 id="5-trennung-der-adressräume">5. Trennung der Adressräume</h2>
+<p><strong>Umgesetzt.</strong> Installierter Fremdcode wird als eigener Betriebssystem-Prozess ausgeführt. Bewusst nicht gewählt wurden Go-Plugins (<code>plugin.Open</code>), WebAssembly im Engine-Prozess und beliebige Kommandozeilen aus installierten Paketen. Für die Kommunikation ist ausschliesslich das HTTP-basierte Worker-Protokoll vorgesehen.</p>
+<p>Diese Trennung begrenzt die unmittelbare Auswirkung von Worker-Abstürzen auf den Engine-Prozess. Sie verhindert nicht automatisch, dass ein Worker im Rahmen seiner Betriebssystemrechte Dateien liest, Netzwerke anspricht oder bereitgestellte Credentials missbraucht. Prozessgrenze und Sandbox sind unterschiedliche Sicherheitskontrollen.</p>
+<p><strong>Umgesetzt.</strong> Das Go-Paket <code>workersdk</code> importiert keine atlas-Engine-Pakete, keine Speicher-Engine und keine weiteren atlas-Pakete. Ein automatischer Test erzwingt diese Abhängigkeitsgrenze. Der Vertrag ist sprachneutral: Ein Worker Type muss nicht in Go implementiert sein.</p>
+<p><strong>Umgesetzt.</strong> Findet der Supervisor <code>atlas-workers</code> neben dem Server-Binary, verwendet er es für eingebaute Worker Types. Andernfalls wird der Worker-Modus des Server-Binaries verwendet. Mit <code>ATLAS_WORKERS_BINARY</code> kann der Betreiber <code>self</code> oder einen Pfad wählen.</p>
+<p><strong>Geplant.</strong> Eingebaute Integrationen, die heute noch serverseitige Bestandteile besitzen, werden sukzessive migriert. Erst nach der vollständigen Migration kann der Integrationscode aus dem Server-Binary entfernt werden.</p>
+<h2 id="6-worker-protokoll-handshake-und-versionierung">6. Worker-Protokoll, Handshake und Versionierung</h2>
+<p><strong>Umgesetzt.</strong> Das Worker-Protokoll v1 ist als sprachneutraler Vertrag dokumentiert. Das Aktivieren eines Jobs geschieht mittels Long Polling: Der Client darf auf eine Antwort mit Arbeit warten, statt in sehr kurzen Intervallen leere Abfragen zu senden. Die eigentliche Zuweisung wird über ein Lease abgesichert.</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Zweck</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /api/v1/jobs/activate</code></td>
+<td>Jobs aktivieren und Lease erhalten</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>…/complete</code></td>
+<td>Job erfolgreich abschliessen</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>…/fail</code></td>
+<td>Technisch fehlgeschlagenen Job mit Wiederholungsintervall melden</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>…/error</code></td>
+<td>Fachlichen BPMN-Fehler melden</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>…/authorize</code></td>
+<td>Ausführungsentscheidung vor einer Zielsystemaktion einholen</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>/api/v1/worker-queries/activate</code></td>
+<td>Kurzlebige Formular-Abfrage aktivieren</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>/api/v1/worker-queries/answer</code></td>
+<td>Ergebnis einer Formular-Abfrage liefern</td>
+<td>umgesetzt</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Umgesetzt.</strong> Jeder Poll trägt die Hauptversion <code>protocol</code> sowie optional <code>workerType</code> mit <code>id</code>, <code>version</code> und <code>digest</code>. Ohne explizite Versionsangabe wird Version 1 angenommen. Innerhalb einer Hauptversion sind Änderungen additiv. Der Server akzeptiert die aktuelle und die unmittelbar vorherige Hauptversion (N/N−1). Eine unbekannte Version führt zu HTTP 400 mit Angabe der unterstützten Versionen; jede Antwort enthält <code>X-Atlas-Worker-Protocol</code>.</p>
+<div class="visual-diagram"><svg viewBox="0 0 980 684" xmlns="http://www.w3.org/2000/svg" class="sequence-diagram" role="img" aria-label="Sequenzdiagramm ERFOLGSFALL · DURABLE BEFORE VISIBLE"><defs><marker id="seqarr" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="#a6c9ed"/></marker></defs><text x="25" y="29" fill="#9bb7d9" font-size="14" letter-spacing="2">ERFOLGSFALL · DURABLE BEFORE VISIBLE</text><rect x="7" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="92" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Engine</text><line x1="92" y1="96" x2="92" y2="666" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="204" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="289" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">WAL / State</text><line x1="289" y1="96" x2="289" y2="666" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="400" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="485" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Worker-API</text><line x1="485" y1="96" x2="485" y2="666" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="598" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="683" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Worker Instance</text><line x1="683" y1="96" x2="683" y2="666" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="793" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="878" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Zielsystem</text><line x1="878" y1="96" x2="878" y2="666" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><path d="M106 139 L275 139" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="68.5" y="105" width="244" height="26" rx="5" fill="#101d2f"/><text x="190.5" y="124" text-anchor="middle" fill="#c8dcf4" font-size="14">Job-Ereignis schreiben</text><text x="20" y="144" fill="#7597bc" font-size="12">01</text><path d="M275 193 L106 193" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="68.5" y="159" width="244" height="26" rx="5" fill="#101d2f"/><text x="190.5" y="178" text-anchor="middle" fill="#c8dcf4" font-size="14">fsync + Commit</text><text x="20" y="198" fill="#7597bc" font-size="12">02</text><path d="M669 247 L499 247" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="462.0" y="213" width="244" height="26" rx="5" fill="#101d2f"/><text x="584.0" y="232" text-anchor="middle" fill="#c8dcf4" font-size="14">activate + Protokoll</text><text x="20" y="252" fill="#7597bc" font-size="12">03</text><path d="M499 301 L669 301" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="462.0" y="267" width="244" height="26" rx="5" fill="#101d2f"/><text x="584.0" y="286" text-anchor="middle" fill="#c8dcf4" font-size="14">Job + Lease-Token</text><text x="20" y="306" fill="#7597bc" font-size="12">04</text><path d="M697 355 L864 355" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="658.5" y="321" width="244" height="26" rx="5" fill="#101d2f"/><text x="780.5" y="340" text-anchor="middle" fill="#c8dcf4" font-size="14">Aktion ausführen</text><text x="20" y="360" fill="#7597bc" font-size="12">05</text><path d="M864 409 L697 409" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="658.5" y="375" width="244" height="26" rx="5" fill="#101d2f"/><text x="780.5" y="394" text-anchor="middle" fill="#c8dcf4" font-size="14">Ergebnis</text><text x="20" y="414" fill="#7597bc" font-size="12">06</text><path d="M669 463 L499 463" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="462.0" y="429" width="244" height="26" rx="5" fill="#101d2f"/><text x="584.0" y="448" text-anchor="middle" fill="#c8dcf4" font-size="14">complete + Lease</text><text x="20" y="468" fill="#7597bc" font-size="12">07</text><path d="M471 517 L303 517" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="265.0" y="483" width="244" height="26" rx="5" fill="#101d2f"/><text x="387.0" y="502" text-anchor="middle" fill="#c8dcf4" font-size="14">Abschluss persistieren</text><text x="20" y="522" fill="#7597bc" font-size="12">08</text><path d="M303 571 L471 571" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="265.0" y="537" width="244" height="26" rx="5" fill="#101d2f"/><text x="387.0" y="556" text-anchor="middle" fill="#c8dcf4" font-size="14">fsync + Commit</text><text x="20" y="576" fill="#7597bc" font-size="12">09</text><path d="M499 625 L669 625" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="462.0" y="591" width="244" height="26" rx="5" fill="#101d2f"/><text x="584.0" y="610" text-anchor="middle" fill="#c8dcf4" font-size="14">Bestätigung</text><text x="20" y="630" fill="#7597bc" font-size="12">10</text></svg><details class="source-mermaid"><summary>Mermaid-Quellcode</summary><pre><code>sequenceDiagram
+    autonumber
+    participant BPMN as BPMN / Engine
+    participant WAL as WAL / State
+    participant API as Worker-API
+    participant W as Worker Instance
+    participant SYS as Zielsystem
+    BPMN-&gt;&gt;WAL: Job-Ereignis anhängen
+    WAL--&gt;&gt;BPMN: fsync, danach State-Commit
+    W-&gt;&gt;API: activate(protocol, workerType)
+    API--&gt;&gt;W: Job + Lease-Token
+    W-&gt;&gt;SYS: Aktion (idempotent auslegen)
+    SYS--&gt;&gt;W: Ergebnis
+    W-&gt;&gt;API: complete(Job, Lease-Token)
+    API-&gt;&gt;WAL: Abschluss dauerhaft speichern
+    WAL--&gt;&gt;API: fsync / Commit
+    API--&gt;&gt;W: Bestätigung
+</code></pre></details></div><p><em>Abbildung 2: Job von der Erzeugung bis zum Abschluss. Vereinfachter Erfolgsfall. Im Fehlerfall gelten Wiederholung, Incident oder BPMN-Fehlerbehandlung gemäss Kapitel 12.</em></p>
+<p><strong>Umgesetzt.</strong> Ein Lease-Token schützt vor verspäteten Ergebnissen. Nach Ablauf des Leases weist die Engine eine Meldung des alten Besitzers ab, während der Job erneut angeboten werden kann. Damit ist ein doppelter externer Effekt nicht ausgeschlossen: Die Verarbeitung muss für Seiteneffekte idempotent gestaltet werden.</p>
+<p><strong>Umgesetzt.</strong> Formular-Lookups sind nicht dauerhaft. Fehlerantworten enthalten nur einen Code und keine potenziell personenbezogene Suchzeichenfolge aus einer Anbieterfehlermeldung.</p>
+<h2 id="7-bereitstellung-der-worker-binaries">7. Bereitstellung der Worker-Binaries</h2>
+<p><strong>Umgesetzt.</strong> Ein Administrator kann für die Plattform des Servers ein Manifest und ein ausführbares Artefakt per Multipart-Upload an <code>POST /api/v1/worker-types/installed</code> übergeben. Der Server prüft die Datei gegen den im Manifest angegebenen SHA-256-Digest, bevor er sie behält. Die Ablage erfolgt inhaltsadressiert unter <code>&lt;data&gt;/workertypes/&lt;id&gt;/&lt;version&gt;/&lt;sha256&gt;/</code>; die Dateien werden atomar geschrieben, Metadaten zuletzt.</p>
+<p><strong>Umgesetzt.</strong> Ein Release ist unveränderlich. Wird dieselbe Version mit identischem Digest erneut eingereicht, ändert sich nichts. Bei gleichem Release-Namen, aber anderem Digest antwortet die API mit HTTP 409. Per <code>GET</code> können installierte Releases aufgelistet und per <code>DELETE …/{id}/{version}</code> entfernt werden; vor dem Entfernen stoppt der Supervisor die Instanz.</p>
+<p><strong>Umgesetzt.</strong> Das Manifest verwendet <code>apiVersion: atlas.io/v1alpha1</code> und <code>kind: WorkerType</code>. <code>metadata.id</code> nutzt umgekehrte DNS-Schreibweise wie <code>com.example.sap-s4</code>, <code>metadata.version</code> SemVer. Unter <code>spec</code> werden Job-Typen, Operationen, Artefakte und ein JSON Schema zur Konfiguration deklariert. Ein Artefakt nennt <code>platform</code> (<code>os/arch</code>), den Media Type <code>application/vnd.atlas.worker.executable</code> und einen SHA-256-Digest.</p>
+<div class="visual-diagram"><svg viewBox="0 0 980 630" xmlns="http://www.w3.org/2000/svg" class="sequence-diagram" role="img" aria-label="Sequenzdiagramm LOKALE INSTALLATION · SUPERVISOR"><defs><marker id="seqarr" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="#a6c9ed"/></marker></defs><text x="25" y="29" fill="#9bb7d9" font-size="14" letter-spacing="2">LOKALE INSTALLATION · SUPERVISOR</text><rect x="7" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="92" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Admin</text><line x1="92" y1="96" x2="92" y2="612" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="204" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="289" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">atlas API</text><line x1="289" y1="96" x2="289" y2="612" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="400" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="485" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Artefaktablage</text><line x1="485" y1="96" x2="485" y2="612" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="598" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="683" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Supervisor</text><line x1="683" y1="96" x2="683" y2="612" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><rect x="793" y="44" width="170" height="52" rx="10" fill="#213754" stroke="#4e7195"/><text x="878" y="76" text-anchor="middle" fill="#e4f0ff" font-size="16" font-weight="650">Worker Instance</text><line x1="878" y1="96" x2="878" y2="612" stroke="#385471" stroke-width="1.4" stroke-dasharray="7 7"/><path d="M106 139 L275 139" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="68.5" y="105" width="244" height="26" rx="5" fill="#101d2f"/><text x="190.5" y="124" text-anchor="middle" fill="#c8dcf4" font-size="14">Manifest + Binary</text><text x="20" y="144" fill="#7597bc" font-size="12">01</text><path d="M300 193 H353 V213 H303" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="207" y="159" width="244" height="26" rx="5" fill="#101d2f"/><text x="329" y="178" text-anchor="middle" fill="#c8dcf4" font-size="14">SHA-256 / Schema prüfen</text><text x="20" y="198" fill="#7597bc" font-size="12">02</text><path d="M303 247 L471 247" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="265.0" y="213" width="244" height="26" rx="5" fill="#101d2f"/><text x="387.0" y="232" text-anchor="middle" fill="#c8dcf4" font-size="14">Atomar installieren</text><text x="20" y="252" fill="#7597bc" font-size="12">03</text><path d="M471 301 L303 301" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="265.0" y="267" width="244" height="26" rx="5" fill="#101d2f"/><text x="387.0" y="286" text-anchor="middle" fill="#c8dcf4" font-size="14">Release bereit</text><text x="20" y="306" fill="#7597bc" font-size="12">04</text><path d="M106 355 L275 355" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="68.5" y="321" width="244" height="26" rx="5" fill="#101d2f"/><text x="190.5" y="340" text-anchor="middle" fill="#c8dcf4" font-size="14">Worker konfigurieren</text><text x="20" y="360" fill="#7597bc" font-size="12">05</text><path d="M303 409 L669 409" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="364.0" y="375" width="244" height="26" rx="5" fill="#101d2f"/><text x="486.0" y="394" text-anchor="middle" fill="#c8dcf4" font-size="14">Start auslösen</text><text x="20" y="414" fill="#7597bc" font-size="12">06</text><path d="M669 463 L499 463" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="462.0" y="429" width="244" height="26" rx="5" fill="#101d2f"/><text x="584.0" y="448" text-anchor="middle" fill="#c8dcf4" font-size="14">Digest erneut prüfen</text><text x="20" y="468" fill="#7597bc" font-size="12">07</text><path d="M697 517 L864 517" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="658.5" y="483" width="244" height="26" rx="5" fill="#101d2f"/><text x="780.5" y="502" text-anchor="middle" fill="#c8dcf4" font-size="14">Prozess starten</text><text x="20" y="522" fill="#7597bc" font-size="12">08</text><path d="M864 571 L303 571" stroke="#a6c9ed" fill="none" stroke-width="2.2" marker-end="url(#seqarr)"/><rect x="461.5" y="537" width="244" height="26" rx="5" fill="#101d2f"/><text x="583.5" y="556" text-anchor="middle" fill="#c8dcf4" font-size="14">Poll + Identität</text><text x="20" y="576" fill="#7597bc" font-size="12">09</text></svg><details class="source-mermaid"><summary>Mermaid-Quellcode</summary><pre><code>sequenceDiagram
+    autonumber
+    participant A as Administrator
+    participant API as atlas API
+    participant Store as Artefaktablage
+    participant S as Supervisor
+    participant W as Worker Instance
+    A-&gt;&gt;API: Manifest + Binary hochladen
+    API-&gt;&gt;API: Manifest / SHA-256 prüfen
+    API-&gt;&gt;Store: Atomare, inhaltsadressierte Ablage
+    Store--&gt;&gt;API: Release bereit
+    A-&gt;&gt;API: Worker konfigurieren (Vault-Verweise)
+    API-&gt;&gt;API: JSON Schema prüfen
+    API-&gt;&gt;S: Start / Neustart auslösen
+    S-&gt;&gt;Store: Digest erneut prüfen
+    S-&gt;&gt;W: Prozess mit erlaubter Umgebung starten
+    W-&gt;&gt;API: Poll mit Protokoll und Identität
+</code></pre></details></div><p><em>Abbildung 3: Installation und Start eines Worker Types. Die manuelle lokale Installation ist umgesetzt; der signierte Hub-Download ist es noch nicht.</em></p>
+<p><strong>Geplant.</strong> Für netzverbundene Systeme ist ein signaturgeprüfter Download aus atlas hub vorgesehen. Für isolierte Netze ist Datei-Import geplant. Erstanbieter-Artefakte sollen dem Distributionsarchiv beigelegt sein. Pflichtplattformen für Hub-Listings sollen <code>linux/amd64</code>, <code>linux/arm64</code> und <code>windows/amd64</code> sein; OCI-Images sind optional.</p>
+<h2 id="8-supervisor-start-überwachung-und-konfiguration">8. Supervisor: Start, Überwachung und Konfiguration</h2>
+<p><strong>Umgesetzt.</strong> Der Supervisor startet installierte Programme ohne Kommandozeilenargumente. Die Startumgebung besteht aus einer Positivliste – unter anderem <code>PATH</code>, <code>HOME</code>, temporäre Verzeichnisse, Locale und Proxy-Variablen – und dem expliziten Worker-Vertrag. Die übrige Serverumgebung wird nicht übernommen.</p>
+<table>
+<thead>
+<tr>
+<th>Startvariable</th>
+<th>Bedeutung</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ATLAS_SERVER_URL</code></td>
+<td>Zieladresse des atlas-Servers</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>ATLAS_WORKER_ID</code></td>
+<td>Kennung des konfigurierten Workers</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>ATLAS_TOKEN</code></td>
+<td>API-Zugang mit Scope <code>worker</code></td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>ATLAS_WORKER_TYPE_ID</code></td>
+<td>Vom Supervisor geprüfte Type-ID</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>ATLAS_WORKER_TYPE_VERSION</code></td>
+<td>Vom Supervisor geprüfte Release-Version</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>ATLAS_WORKER_TYPE_DIGEST</code></td>
+<td>Vom Supervisor geprüfter Digest</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td><code>ATLAS_WORKER_CONFIG</code></td>
+<td>Aufgelöste Konfiguration, einschliesslich der nötigen Secrets</td>
+<td>umgesetzt</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Umgesetzt.</strong> Vor jedem Start berechnet der Supervisor den Artefakt-Digest erneut. Ist die Programmdatei verändert, wird ihr Start im Zustand <code>refused</code> verweigert. Installierte Releases werden beim Serverstart wieder gestartet. Ein abgestürzter Worker wird mit anwachsender Wartezeit zwischen 0,5 und 30 Sekunden neu gestartet.</p>
+<p><strong>Umgesetzt.</strong> Ein Worker ohne erforderliche Konfiguration endet mit Exit-Code 78 und wird geparkt, statt endlos neu zu starten. Sobald Konfiguration vorhanden ist, kann er wieder anlaufen. Unter Windows enden überwachte Worker auch bei einem Absturz des Servers; dazu gehört ADR-0439.</p>
+<p><strong>Umgesetzt.</strong> Ein Administrator konfiguriert Worker mit <code>PUT /api/v1/worker-types/installed/{id}/workers/{name}</code>. Einstellungen werden gegen das JSON Schema jedes installierten Releases geprüft. Als Secret wird ausschliesslich der Name eines Vault-Eintrags referenziert; der Server löst den Wert erst für den Start auf. Eine Konfigurationsänderung löst einen Neustart der Worker Instance aus. Dafür ist keine typspezifische Serverlogik erforderlich.</p>
+<p><strong>Umgesetzt.</strong> Ein Echo-Pilot, der nur das <code>workersdk</code> verwendet, zeigt den vollständigen Installations- und Ausführungspfad in einem automatisierten End-to-End-Test.</p>
+<p><strong>Geplant.</strong> Für vorgezogene Betriebsdiagnosen fehlen <code>check-connection</code> und <code>diagnostics</code>. Auch <code>validate-config</code> als Worker-seitige Abfrage ist noch offen. Der heutige schema-basierte Konfigurationscheck ist davon zu unterscheiden.</p>
+<h2 id="9-atlas-hub-verteilung-signaturen-und-kuratierung">9. atlas hub: Verteilung, Signaturen und Kuratierung</h2>
+<p><strong>Umgesetzt, aber noch nicht für Worker Types.</strong> atlas hub verfügt für Application Blueprints bereits über eine statische Registry mit <code>index.json</code> und Ed25519-Signatur über die exakten Index-Bytes. Der vertrauenswürdige Schlüssel ist beim Betreiber fest hinterlegt. Es gibt weder «Trust on first use» noch eine Schlüsselübernahme aus heruntergeladenen Inhalten. Bis zu zwei Schlüssel können für einen Wechsel parallel hinterlegt sein. Die Ankündigung neuer Schlüssel nutzt einen mit dem alten Schlüssel signierten Kanal mit mindestens sieben Tagen Vorlauf. Downloads unterliegen Grössengrenzen, Weiterleitungs- und SSRF-Schutz (SSRF: unerwünschte Serveranfragen durch fremde Adressen).</p>
+<p><strong>Geplant für Worker Types.</strong> Eine neue Release-Art <code>worker-type</code> soll in einer neuen Version des Index-Schemas erscheinen. Zwei voneinander unabhängige Signaturen werden Pflicht: eine Publisher-Signatur über Manifest- und Artefakt-Digests sowie eine Registry-Signatur über den Index. Ein Namespace soll genau einem Publisher gehören. <code>io.atlas.*</code> soll ausschliesslich mit dem atlas-Release-Schlüssel akzeptiert werden.</p>
+<p><strong>Geplant.</strong> Vorgesehen sind vier Herkünfte: kostenlose atlas-Releases, kommerzielle atlas-Releases, Community-/Drittanbieter-Releases und organisationsinterne Releases über eigene Registries oder Datei-Import.</p>
+<p><strong>Vorschlag: Kuratierungsrichtlinie, Status «Proposed».</strong> Die Stufe <code>verified</code> verlangt geprüfte Identität und Domain, Build-Herkunft, automatische Prüfungen sowie manuelles Review. Bei geschlossenem Quellcode kann das Review unter Geheimhaltung erfolgen; alternativ sind Herstellerzusicherung plus Verhaltenstest vorgesehen. Diese Stufe wäre standardmässig erlaubt. Die Stufe <code>community</code> verlangt Identitätsprüfung und automatisierte Prüfungen, wäre standardmässig abgelehnt und – bei Freigabe – nur mit Container oder Kubernetes zugelassen. Ungeprüfter Code würde nicht mit dem Hub-Schlüssel signiert, sondern nur in bewusst hinzugefügten Drittregistries verfügbar sein.</p>
+<p><strong>Geplant.</strong> Der signierte Index soll pro Release offenlegen, welche Prüfungen durchgeführt wurden. Eine Signatur bescheinigt dann nachvollziehbare Herkunft und geprüfte Metadaten, <strong>nicht</strong> die Schadlosigkeit des Codes.</p>
+<h2 id="10-berechtigungen-und-credentials">10. Berechtigungen und Credentials</h2>
+<h3 id="101-rollen-api-zugriff-und-worker-scope">10.1 Rollen, API-Zugriff und Worker-Scope</h3>
+<p><strong>Umgesetzt.</strong> Die API verwendet die Rollen <code>admin</code>, <code>operator</code>, <code>modeler</code> und <code>user</code>. Routen des Worker-Protokolls verlangen mindestens die Rolle <code>operator</code>. Installation, Konfiguration und Entfernung von Worker Types bleiben Administratoren vorbehalten und sind bewusst nicht als MCP-Aktionen für KI-Agenten verfügbar.</p>
+<p><strong>Umgesetzt.</strong> Maschinen nutzen API-Tokens mit einem Scope (Geltungsbereich), wie in ADR-0194 beschrieben. Der Scope <code>worker</code> ist eine abschliessende Positivliste ausschliesslich für das Worker-Protokoll. Selbst eine weiter reichende Rolle erweitert diesen Scope nicht. Auch das vom Supervisor ausgestellte interne Token verwendet den Scope <code>worker</code> (ADR-0297). Externe Worker benötigen ein entsprechend beschränktes <code>ATLAS_TOKEN</code>; ein ungültiges Token führt beim Start zu einer Serverwarnung.</p>
+<p><strong>Offene Lücke – sicherheitskritisch.</strong> Aktuell erhalten alle installierten Worker Types <strong>dasselbe</strong> Token mit Scope <code>worker</code>. Das Token begrenzt die API-Routen, aber <strong>nicht die Job-Typen</strong> einer Worker-Type-Installation. Damit kann ein installierter Worker Type technisch Jobs anderer Typen aktivieren. Ein Token pro Instanz mit Beschränkung auf die im Manifest deklarierten Job-Typen ist noch nicht entschieden. Vor dem produktiven Einsatz fremder Worker Types ist diese Grenze verbindlich zu schliessen.</p>
+<h3 id="102-ablage-und-übergabe-von-secrets">10.2 Ablage und Übergabe von Secrets</h3>
+<p><strong>Umgesetzt.</strong> Zielsystem-Credentials werden weder in BPMN-Modellen noch in Ereignissen oder im WAL abgelegt. Ein Job transportiert aufgelöste Fachwerte, nicht die Zugangsdaten (ADR-0168). Secrets liegen im verschlüsselten Server-Vault (ADR-0069/0070), der standardmässig eingeschaltet ist. Sein Schlüssel wird erzeugt und ist nur für das Dienstkonto lesbar; alternativ kann der Betreiber <code>ATLAS_VAULT_KEY</code> setzen. Jeder Eintrag ist einzeln versiegelt. Eine Manipulation oder ein unpassender Schlüssel führt zu einem Fehler statt zu einer stillen Fehlinterpretation.</p>
+<table>
+<thead>
+<tr>
+<th>Ausführungsart</th>
+<th>Ort / Übergabe der Credentials</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Extern betriebener Worker</td>
+<td>Verwaltet seine Zielsystem-Credentials selbst; der atlas-Server kennt sie nicht.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Überwachter eingebauter Worker</td>
+<td>Erhält Credentials beim Start aus dem Vault.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Installierter Worker Type</td>
+<td>Konfiguration referenziert Vault-Einträge; aufgelöste Secrets gelangen beim Start in <code>ATLAS_WORKER_CONFIG</code>.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Installierter Worker Type mit Credential-Broker pro Job</td>
+<td>Job-bezogene Ausgabe statt Startübergabe.</td>
+<td><strong>geplant / offen</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Umgesetzt.</strong> Eine Worker Instance meldet bei Job-Abrufen ausschliesslich die Namen der Worker, für die sie Credentials hält. Der Server gibt Jobs, die einen bestimmten Worker nennen, nur an eine Instance aus, die diesen Worker hält. Die Namen dienen also der Job-Zuordnung; die Secret-Werte werden nicht im Poll transportiert.</p>
+<h3 id="103-identitätsbewusste-ausführung">10.3 Identitätsbewusste Ausführung</h3>
+<p><strong>Umgesetzt, für vom Server kontrollierte Aktionen (ADR-0475).</strong> Vor einer Aktion am Zielsystem kann der Worker über <code>/authorize</code> die Berechtigung einholen. Die Engine persistiert ihre Entscheidung vor der Antwort. Die Antwort bindet die Autorisierung an die berücksichtigten Parameter. Die Modi sind <code>off</code> (keine Richtlinie), <code>shadow</code> (entscheiden und protokollieren, ohne durchzusetzen) und <code>enforce</code> (durchsetzen).</p>
+<p><strong>Umgesetzt, begrenzter Einsatzbereich.</strong> Eine delegierte Aktion kann ein kurzlebiges Token im Namen der Person erhalten, aber nur für vom Server überwachte Worker Instances, die einen Broker-Schlüssel vorweisen. Bei Ablehnung ist der Job serverseitig bereits abgeschlossen; der Worker übermittelt dann keine weitere Abschlussmeldung.</p>
+<p><strong>Nicht umgesetzt für installierte Worker Types.</strong> Der Credential-Broker pro Job fehlt. Das ist von der grundsätzlichen Funktion der Autorisierungs-API und den bereits vorhandenen Delegationsmöglichkeiten zu trennen.</p>
+<h2 id="11-sicherheit-bedrohungen-schutzmassnahmen-restrisiken">11. Sicherheit: Bedrohungen, Schutzmassnahmen, Restrisiken</h2>
+<h3 id="111-der-tatsächlich-vorhandene-schutz">11.1 Der tatsächlich vorhandene Schutz</h3>
+<p><strong>Umgesetzt.</strong> Die Engine startet installierte Worker Types nicht in ihrem eigenen Prozess. Installer und Supervisor prüfen Artefakt-Digests bei der Installation bzw. vor jedem Start. Die Prozessumgebung wird auf eine Positivliste reduziert; Secrets sind auf Vault-Verweise in der Konfiguration begrenzt. Worker-Type-Verwaltung erfordert Administratorrechte und ist nicht über MCP erreichbar.</p>
+<p><strong>Umgesetzt, mit wesentlicher Einschränkung.</strong> Unsigned-Installationen sind standardmässig mit HTTP 403 abgelehnt und können nur über <code>--allow-unsigned-worker-types</code> freigegeben werden. Dieser Schalter ist ausdrücklich für Entwicklung vorgesehen. Eine technische Signaturprüfung für Worker Types ist noch <strong>nicht</strong> umgesetzt. Somit darf der heutige lokale Pilotpfad nicht mit einer produktionsreifen signierten Software-Lieferkette verwechselt werden.</p>
+<h3 id="112-bedrohungsmodell-des-geplanten-hub-vertrauenssystems">11.2 Bedrohungsmodell des geplanten Hub-Vertrauenssystems</h3>
+<table>
+<thead>
+<tr>
+<th>Angriffsszenario</th>
+<th>Geplante Begrenzung / verbleibende Wirkung</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nur Publisher-Schlüssel kompromittiert</td>
+<td>Der Angreifer kann signieren, aber nicht in fremden Registries oder Namespaces listen.</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td>Nur Registry-Schlüssel kompromittiert</td>
+<td>Der Angreifer kann listen und widerrufen, jedoch keine gültige neue Publisher-Signatur erzeugen.</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td>Beide Schlüssel kompromittiert</td>
+<td>Bösartige Releases können gelistet werden; Installation bleibt explizite Betreiberentscheidung.</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td>Registry-Host kompromittiert</td>
+<td>Veränderte oder unpassende Bytes bestehen Digest- bzw. Signaturprüfung nicht.</td>
+<td>geplant</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Geplantes Restrisiko.</strong> Ein Betreiber könnte ein schädliches Update genehmigen, dessen beide Signaturen gültig sind. Der vorgesehene Entscheidungsdialog soll deshalb Publisher, Signaturstatus, Digest und geänderte Anforderungen offenlegen. Diese Anzeige reduziert nicht die technische Wirkung eines bereits genehmigten schädlichen Workers.</p>
+<p><strong>Geplant.</strong> Signierte Widerrufe sollen Release-ID, Versionsbereich oder Digest, Schweregrad und Grund nennen. Ein Widerruf soll nur verhindern oder stoppen können, nicht installieren, starten oder umkonfigurieren. Damit soll der Hub kein Fernsteuerungskanal werden. Beim Stilllegen eines Workers bleiben seine Jobs dauerhaft vorhanden. Ohne Registry-Verbindung soll die letzte verifizierte Liste mit Altersanzeige gelten.</p>
+<p><strong>Geplant.</strong> Die Vertrauensrichtlinie soll erlaubte Registries, Publisher, Namespaces und Launcher abhängig von der Vertrauensstufe begrenzen. Unter Linux sind Landlock/seccomp analog zur vorhandenen Script-Sandbox vorgesehen. Unter Windows soll ein Job-Objekt zunächst Ressourcengrenzen setzen, jedoch keine gleichwertige Abschottung bieten. Ein fremder Worker Type soll deshalb unter Windows als Prozess nur nach ausdrücklicher Freigabe laufen. Diese OS-Abschottung ist für installierte Artefakte <strong>nicht umgesetzt</strong>.</p>
+<h3 id="113-ausdrücklich-verbleibende-risiken">11.3 Ausdrücklich verbleibende Risiken</h3>
+<p><strong>Offen.</strong> Ein kompromittierter Worker kann mit dem heute gemeinsam genutzten Worker-Token Jobs ausserhalb seiner deklarierten Job-Typen aktivieren. Zusätzlich erhält ein installierter Worker Type seine aufgelösten Secrets zur Startzeit und nicht über einen pro Job gebundenen Credential-Broker. Die Prozessgrenze schützt den Engine-Adressraum, aber nicht automatisch das Betriebssystem, das lokale Netzwerk oder die übergebenen Zielsystem-Credentials.</p>
+<p><strong>Offen.</strong> Die Unterlagen belegen keine bereits implementierte End-to-End-Publisher-Signaturprüfung für Worker Types, keinen fertig durchgesetzten Revocation-Mechanismus und keine vollwertige Sandbox für installierte Binärdateien. Diese Punkte dürfen in einer Produktivfreigabe nicht als vorhandene Kontrollen ausgewiesen werden.</p>
+<h2 id="12-qualität-der-abarbeitung">12. Qualität der Abarbeitung</h2>
+<h3 id="121-dauerhaftigkeit-und-zustellung">12.1 Dauerhaftigkeit und Zustellung</h3>
+<p><strong>Umgesetzt.</strong> Jobs werden erst sichtbar, wenn ihre Ereignisse dauerhaft geschrieben sind, und überstehen Neustarts von Server und Worker. Die Zustellgarantie lautet <em>mindestens einmal</em> und nicht <em>genau einmal</em>. Der Standard-Lease beträgt fünf Minuten. Ein Lease-Token verwirft verspätete Abschlussmeldungen, nachdem ein Lease ausgelaufen ist; die Arbeit kann inzwischen neu angeboten worden sein.</p>
+<p><strong>Konsequenz für Hersteller.</strong> Ein Worker-Handler mit Seiteneffekten muss idempotent sein: Eine wiederholte Bearbeitung desselben Jobs darf im Zielsystem nicht unkontrolliert denselben Effekt erneut erzeugen. Der dauerhafte Job-Key bietet sich als Deduplizierungskennzeichen an. Ein Lease-Token sichert den Engine-Status, nicht automatisch die Transaktion im entfernten Zielsystem.</p>
+<h3 id="122-wiederholung-bpmn-fehler-und-incidents">12.2 Wiederholung, BPMN-Fehler und Incidents</h3>
+<p><strong>Umgesetzt.</strong> Bei einem technischen Fehler wird ein Versuch verbraucht. Bleibt ein Versuch übrig, erfolgt der nächste Versuch nach 60 Sekunden; bleiben mehrere, nach 15 Sekunden (ADR-0111). Bei drei Standardversuchen ergeben sich insgesamt 75 Sekunden Wartezeit zwischen den Versuchen, bevor ein Incident entstehen kann. Diese Abstimmung berücksichtigt insbesondere kurzzeitige Replikationsverzögerungen bei Microsoft Graph und eine zeitnahe Störungserkennung. Auch externe Worker respektieren die von der Engine zurückgegebene Wartezeit; dies wird getestet.</p>
+<p><strong>Umgesetzt.</strong> Sind alle Versuche verbraucht, entsteht ein Incident (ADR-0061). Der Prozess wartet auf Behebung; die Behebung startet den Job erneut. Ein fachlicher BPMN-Fehler wird dagegen über <code>…/error</code> geworfen, verbraucht keinen technischen Versuch und kann durch ein passendes BPMN-Fehlerereignis behandelt werden. Ohne passende Fehlerbehandlung wartet der Job auf einem Incident.</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Verhalten</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Worker stürzt ab / Lease läuft aus</td>
+<td>Job kann erneut angeboten werden; verspätete Rückmeldung wird abgelehnt.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Technischer Fehler</td>
+<td>Versuch verbrauchen, Wartezeit einhalten, gegebenenfalls Incident.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Fachlicher BPMN-Fehler</td>
+<td>BPMN-Fehlerpfad, kein technischer Retry-Verbrauch.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Incident behoben</td>
+<td>Job erneut starten.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Poll schlägt fehl, etwa bei Server-Neustart</td>
+<td>Worker Instance protokolliert den Fehler und pollt weiter.</td>
+<td>umgesetzt</td>
+</tr>
+</tbody>
+</table>
+<h3 id="123-durchsatzschutz-und-fehlerausbreitung">12.3 Durchsatzschutz und Fehlerausbreitung</h3>
+<p><strong>Umgesetzt.</strong> Eine Worker Instance aktiviert nur so viele Jobs, wie sie freie Ausführungsplätze besitzt (ADR-0440). Ein aktivierter Job startet unmittelbar, statt vor seinem Start bereits Lease-Zeit zu verlieren.</p>
+<p><strong>Umgesetzt.</strong> Ein Circuit Breaker, also eine Schutzschaltung bei wiederholt ausfallenden Zielsystemen, arbeitet pro Kombination von Job-Typ und Worker (ADR-0340). Er lässt Probe-Jobs zur Erkennung der Erholung zu. Das Öffnen setzt Fehler über verschiedene Prozessinstanzen voraus, damit problematische Daten eines einzelnen Vorgangs nicht die gesamte Integration blockieren. Die Störung wird beim Worker abgefangen, bevor viele Jobs unnötig Versuche verbrauchen.</p>
+<h3 id="124-betriebsüberwachung">12.4 Betriebsüberwachung</h3>
+<p><strong>Umgesetzt.</strong> Die Workers-Ansicht zeigt pro Instance abonnierte Job-Typen, gehaltene Worker-Namen, Zähler für abgerufene, abgeschlossene und fehlgeschlagene Jobs, laufende Jobs je Typ, Protokollversion, Worker-Type-ID, Version und Digest. Die letzten Jobs werden samt Ein- und Ausgabe angezeigt. Dieser lokale Verlauf ist begrenzt und nach einem Neustart leer.</p>
+<p><strong>Umgesetzt.</strong> Für einen dauerhaften Job-Verlauf lässt sich ein clio-Event-Store konfigurieren (ADR-0179). Hinzu kommen Prometheus-Metriken sowie die Anzeige von in Modellen referenzierten Workern, für die keine Instance verfügbar ist. Für eingebaute Worker-Type-Operationen existieren technische Konformitätsnachweise nach ADR-0483.</p>
+<p><strong>Geplant.</strong> Konformitätsnachweise auch für ausserhalb des Repositorys gebaute Worker Types sowie Betriebsaktionen <code>check-connection</code> und <code>diagnostics</code> sind noch offen.</p>
+<h2 id="13-aktualisierung-versionierung-und-widerruf">13. Aktualisierung, Versionierung und Widerruf</h2>
+<p><strong>Umgesetzt.</strong> Worker-Type-Releases sind nach ID, Version und Digest unveränderlich. Eine aktualisierte Implementation wird als neue Version installiert; mehrere Versionen dürfen parallel vorhanden sein. Die Protokoll-Kompatibilität folgt der Regel aktuelle plus vorherige Hauptversion.</p>
+<p><strong>Geplant.</strong> Ein BPMN-Deployment soll Worker-Type-ID und Hauptversion festschreiben. Damit sollen Installieren oder Entfernen von Worker Types bestehende Deployments nicht verändern. Das Entfernen einer noch genutzten Version soll verweigert werden. Diese Deployment-Bindung ist derzeit <strong>nicht</strong> umgesetzt; die heutige Unveränderlichkeit eines installierten Releases ersetzt diese Bindung nicht.</p>
+<p><strong>Geplant.</strong> Updates erfolgen nicht automatisch. Der Betreiber entscheidet einzeln über neue Releases. Der Hub soll signierte Widerrufe verteilen und betroffene Worker stoppen, ohne Jobs zu verlieren. Die letzte validierte Widerrufsliste mit erkennbarer Aktualität soll auch bei unterbrochener Registry-Verbindung weiter gelten.</p>
+<p><strong>Betriebliche Einordnung.</strong> Die Entscheidungsfreiheit des Betreibers schützt vor einem unbemerkten automatischen Codewechsel. Gleichzeitig verlangt sie Prozesse für Freigabe, zeitnahe Sicherheitsreaktion und Nachvollziehbarkeit. Ein signierter Widerruf ersetzt nicht die Entscheidung, welche Ersatzversion im Zielbetrieb zulässig ist.</p>
+<h2 id="14-zielumgebungen">14. Zielumgebungen</h2>
+<p><strong>Umgesetzt.</strong> Artefaktformat und Launcher werden getrennt betrachtet. Der Launcher <code>process</code> startet native Binaries auf Windows, Linux und macOS. Der Modus <code>external</code> erlaubt selbst betriebene Worker Instances auf anderen Rechnern über <code>atlas worker</code> oder <code>atlas-workers</code>. Für native Programme wird kein Container vorausgesetzt; das ist insbesondere für Windows-Umgebungen wichtig, in denen Container nicht zur Verfügung stehen.</p>
+<table>
+<thead>
+<tr>
+<th>Umgebung / Launcher</th>
+<th>Fähigkeit</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows, Linux, macOS / <code>process</code></td>
+<td>Nativen Worker-Prozess starten und überwachen.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Extern / <code>external</code></td>
+<td>Worker unabhängig betreiben; Kommunikation über Worker-Protokoll.</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>Docker oder Podman / <code>container</code></td>
+<td>OCI-basierten Worker starten.</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td>Kubernetes / <code>kubernetes</code></td>
+<td>Worker über Kubernetes starten, nur nach Freischaltung wegen benötigter RBAC-Rechte.</td>
+<td>geplant</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Geplant.</strong> OCI-Images sollen eine optionale Auslieferungsform für Isolation und mitgebrachte Laufzeitabhängigkeiten sein, beispielsweise PowerShell für Exchange und Teams. Das native Binary bleibt das Basisformat, weil es unabhängig von Containerdiensten einsetzbar ist.</p>
+<p><strong>Sicherheitliche Differenzierung.</strong> Die vorhandene native Prozess-Trennung ist nicht gleichzusetzen mit einer ausgereiften Linux- oder Windows-Sandbox. Unter Linux sind weitergehende Mechanismen geplant, während der vorgesehene Windows-Ansatz ausdrücklich schwächer ist. Die Wahl der Zielplattform beeinflusst daher die Freigabefähigkeit eines fremden Worker Types.</p>
+<h2 id="15-lizenzmodell-vorschlag">15. Lizenzmodell – Vorschlag</h2>
+<p><strong>Umgesetzt.</strong> Die atlas-Engine ist unter <strong>AGPL-3.0-only</strong> lizenziert. Das Go-SDK <code>workersdk</code> ist so entkoppelt, dass es keine atlas-Pakete und insbesondere keinen AGPL-lizenzierten Engine-Code importiert. Dieser Abhängigkeitszustand wird automatisch geprüft.</p>
+<p><strong>Vorschlag; nicht entschieden.</strong> SDK und Protokollbeschreibung sollen unter <strong>Apache-2.0</strong> veröffentlicht werden. Ziel ist, dass Hersteller Worker Types unabhängig entwickeln und bei Bedarf ohne Offenlegung ihres eigenen Quellcodes vertreiben können. Das SDK als eigenständiges Go-Modul bleibt bis zur Lizenzentscheidung zurückgestellt.</p>
+<p><strong>Offen.</strong> Die Zustimmung der betroffenen Rechteinhaber und die juristische Beurteilung sind noch ausstehend. Deshalb darf dieses Whitepaper weder eine bereits vollzogene Apache-2.0-Lizenzierung noch eine verbindliche Aussage zu allen lizenzrechtlichen Folgen für Drittanbieter behaupten.</p>
+<h2 id="16-vorteile-und-faire-gegenposition">16. Vorteile und faire Gegenposition</h2>
+<h3 id="161-vorteile-des-neuen-modells">16.1 Vorteile des neuen Modells</h3>
+<p><strong>Umgesetzt bzw. durch Umgesetztes ermöglicht.</strong> Externe Worker-Prozesse reduzieren die unmittelbare Kopplung zwischen Integrationsfehlern und Engine-Laufzeit. Ein eigener Protokollvertrag begrenzt die technische Schnittstelle. Installation per Manifest, inhaltsadressierte Ablage und konfigurierbare Worker schaffen den Grundpfad, über den später unabhängige Releases möglich werden.</p>
+<p><strong>Geplanter Nutzen, noch nicht vollständig realisiert.</strong> Mit dem vollständigen Hub- und Migrationsmodell könnten Integrationen unabhängig ausgeliefert, geprüft, signiert und aktualisiert werden. Drittanbieter und interne Organisationen könnten eigene Worker Types anbieten. Sicherheitskorrekturen müssten dann nicht zwangsläufig mit einem vollständigen Engine-Release zusammenfallen.</p>
+<h3 id="162-die-stärkste-gegenposition">16.2 Die stärkste Gegenposition</h3>
+<p><strong>Gegenposition.</strong> Alle Integrationen fest einzukompilieren ist aus Betriebssicht plausibel: Ein Binary, eine Version, weniger Komponenten, keine zusätzliche Software-Lieferkette und ein einfacher Start auf Windows-Rechnern ohne Container. Versionsunterschiede zwischen Engine und Workern entfallen. Installation, Freigabe und Support sind organisatorisch zunächst leichter zu kontrollieren.</p>
+<p><strong>Abwägung.</strong> Diese Einfachheit wird mit einer dauerhaft gekoppelten Release-Frequenz und wachsender Vertrauensfläche erkauft. Jede Änderung einer Integration muss den Engine-Release-Prozess durchlaufen. Eine Sicherheitslücke in einer Integrationsabhängigkeit ist dadurch eine Frage der Engine-Auslieferung. Gleichzeitig bleibt die Erweiterung durch Dritte eingeschränkt. Das neue Modell löst diese Probleme nur dann überzeugend, wenn seine zusätzlichen Sicherheits- und Betriebsmechanismen tatsächlich vollständig umgesetzt werden.</p>
+<h3 id="163-echte-kosten-des-neuen-modells">16.3 Echte Kosten des neuen Modells</h3>
+<p><strong>Grenzen.</strong> Eine Kompatibilitätsmatrix aus atlas-, Worker-Type- und Protokollversion entsteht. Mehr Artefakte, Plattformpakete und Launcher müssen getestet werden. Signaturen und Kuratierung erfordern Governance; bei geschlossenem Quellcode entstehen Haftungs- und Review-Fragen. Die Isolation bleibt unter Windows schwächer. Die Migration anspruchsvoller Integrationen – insbesondere Active Directory, Entra, Exchange, Teams Phone, SQL, Mail und Script – ist aufwendig.</p>
+<p><strong>Bewertung.</strong> Die Architektur ist für einen offen erweiterbaren Integrationsmarkt geeignet, solange Sicherheitsreife nicht mit der blossen Existenz eines Worker-Protokolls gleichgesetzt wird. Für einen streng kontrollierten Betrieb kann das einkompilierte Modell weiterhin eine sachlich vertretbare Option sein, bis die noch offenen Vertrauensgrenzen geschlossen sind.</p>
+<h2 id="17-grenzen-offene-fragen-und-nächste-schritte">17. Grenzen, offene Fragen und nächste Schritte</h2>
+<h3 id="171-unmittelbare-sperrpunkte">17.1 Unmittelbare Sperrpunkte</h3>
+<p><strong>Offen – vor produktivem Drittanbieterbetrieb zu entscheiden.</strong> Erstens muss der Scope von installierten Worker Instances an die erlaubten Manifest-Job-Typen gebunden werden. Ein gemeinsames Token für alle installierten Worker Types ist keine ausreichende Mandatsgrenze. Zweitens fehlen die pro Release verifizierte Signaturkette und ihre Durchsetzung für Hub-Installationen. Drittens fehlt die Betriebssystemabschottung installierter Fremd-Artefakte. Viertens fehlt der Credential-Broker pro Job für installierte Worker Types.</p>
+<p>Diese Punkte sind nicht bloss Bedienungsverbesserungen. Sie entscheiden, welche Code- und Zielsystemrechte ein fremder Publisher faktisch erhält. Bis zu ihrer Umsetzung ist der heutige Installationspfad als kontrollierter Pilotpfad und nicht als allgemeine Drittanbieter-Plattform zu behandeln.</p>
+<h3 id="172-migrationsschritte-nach-vorliegender-faktenbasis">17.2 Migrationsschritte nach vorliegender Faktenbasis</h3>
+<table>
+<thead>
+<tr>
+<th>Schritt</th>
+<th>Gegenstand</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>SDK, Protokollbeschreibung und Handshake</td>
+<td>umgesetzt; eigenes SDK-Go-Modul zurückgestellt</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Separates <code>atlas-workers</code>-Binary</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Geprüfte lokale Artefakte, Supervisor, Pilot-Worker Type</td>
+<td>umgesetzt</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Generische Serverhälfte, Schema und Vault-Verweise</td>
+<td>teilweise umgesetzt</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Signaturen, Worker-Type-Release im Hub, Widerruf</td>
+<td>geplant; Voraussetzung vor öffentlichem Worker-Binary</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Container- und Kubernetes-Launcher</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Migration aufwendiger eingebauter Worker Types</td>
+<td>geplant</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Entfernen eingebauter Worker Types aus dem Server-Binary</td>
+<td>geplant</td>
+</tr>
+</tbody>
+</table>
+<h3 id="173-offene-fachliche-und-technische-fragen">17.3 Offene fachliche und technische Fragen</h3>
+<p><strong>Offen:</strong> Wie genau werden pro Worker Instance Tokens ausgestellt, erneuert und an die Manifest-Job-Typen gebunden? Wie wird die Zuordnung eines BPMN Service Tasks zu einem <strong>bestimmten</strong> Worker umgesetzt? Wann wird der Credential-Broker für installierte Worker Types verfügbar? Wie werden <code>validate-config</code>, <code>check-connection</code> und <code>diagnostics</code> spezifiziert und abgesichert?</p>
+<p><strong>Offen:</strong> Welcher verbindliche Review- und Haftungsprozess gilt für <code>verified</code> und <code>community</code>? Welche Vertrauensstufen dürfen auf Windows ohne starke Sandbox ausgeführt werden? Wie wird eine produktive Sicherheitsfreigabe geprüft, solange Signaturprüfung, Widerruf und Sandbox noch nicht ausgerollt sind?</p>
+<p><strong>Offen:</strong> Wie wird die geplante Deployment-Bindung von Worker-Type-ID und Hauptversion mit vorhandenen Deployments, parallel installierten Versionen und Löschsperren eingeführt? Wie werden externe Konformitätsnachweise unabhängig vom atlas-Repository erzeugt? Wann können die integrierten Worker Types vollständig aus dem Server entfernt werden?</p>
+<p><strong>Vorschlag für die Reihenfolge.</strong> Zuerst die Job-Type-Sicherheitsgrenze pro Instance entscheiden und testen; anschliessend die generische Zuordnung im BPMN-Modell und den pro Job gebundenen Credential-Broker vervollständigen. Vor einer öffentlichen Worker-Type-Distribution Signaturprüfung, Freigabedialog, Widerruf und Plattformrestriktionen abschliessen. Danach externe Konformitätstests, Launcher und die schrittweise Migration komplexer Worker Types durchführen. Das ist eine Empfehlung auf Basis der beschriebenen Risiken, keine behauptete Projektplanung.</p>
+<h2 id="18-statustabelle">18. Statustabelle</h2>
+<p>Die folgenden Statusangaben beziehen sich ausschliesslich auf die bereitgestellte Faktenbasis. «Teilweise» wird in der Erläuterung präzisiert; die Spalte verwendet die geforderten Werte <strong>umgesetzt</strong>, <strong>geplant</strong> oder <strong>Vorschlag</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Funktion / Entscheidung</th>
+<th>Status</th>
+<th>Einordnung</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Durable Jobs, WAL vor Sichtbarkeit, Single Writer</td>
+<td>umgesetzt</td>
+<td>Engine-Grundlage</td>
+</tr>
+<tr>
+<td>Worker-Protokoll v1 inkl. <code>activate</code>, <code>complete</code>, <code>fail</code>, <code>error</code></td>
+<td>umgesetzt</td>
+<td>HTTP-Vertrag</td>
+</tr>
+<tr>
+<td>Versionierter Handshake, N/N−1</td>
+<td>umgesetzt</td>
+<td>Poll mit optionaler Identität</td>
+</tr>
+<tr>
+<td>Formular-Lookups mit minimierten Fehlerdetails</td>
+<td>umgesetzt</td>
+<td>Kurzlebig, nicht dauerhaft</td>
+</tr>
+<tr>
+<td>Prozess-Trennung für installierte Worker Types</td>
+<td>umgesetzt</td>
+<td>Keine vollständige OS-Sandbox</td>
+</tr>
+<tr>
+<td><code>workersdk</code> ohne atlas-Engine-Abhängigkeiten</td>
+<td>umgesetzt</td>
+<td>Automatisch geprüft</td>
+</tr>
+<tr>
+<td>Eigenes Binary <code>atlas-workers</code></td>
+<td>umgesetzt</td>
+<td>Eingebaute Types noch im Server-Binary</td>
+</tr>
+<tr>
+<td>Lokaler Upload, SHA-256-Prüfung, unveränderliche Releases</td>
+<td>umgesetzt</td>
+<td>Administrations-API</td>
+</tr>
+<tr>
+<td>Schema-Konfiguration mit Vault-Referenzen</td>
+<td>umgesetzt</td>
+<td>Generische Serverhälfte</td>
+</tr>
+<tr>
+<td>Supervisor-Start, Restart, Digest-Prüfung, Exit-Code 78</td>
+<td>umgesetzt</td>
+<td>Prozess-Launcher</td>
+</tr>
+<tr>
+<td>Echo-End-to-End-Test</td>
+<td>umgesetzt</td>
+<td>Pilot-Nachweis</td>
+</tr>
+<tr>
+<td>API-Rollen, <code>worker</code>-Scope, kein MCP-Adminzugriff</td>
+<td>umgesetzt</td>
+<td>Scope nicht job-typgebunden</td>
+</tr>
+<tr>
+<td>Verschlüsselter Vault, keine Secrets in WAL / BPMN</td>
+<td>umgesetzt</td>
+<td>Zielsystem-Credentials</td>
+</tr>
+<tr>
+<td><code>/authorize</code>, <code>off</code> / <code>shadow</code> / <code>enforce</code></td>
+<td>umgesetzt</td>
+<td>Serverseitig gesteuerte Aktionen</td>
+</tr>
+<tr>
+<td>Kurzlebige delegierte Tokens für berechtigte überwachte Instanzen</td>
+<td>umgesetzt</td>
+<td>Mit Broker-Schlüssel</td>
+</tr>
+<tr>
+<td>Job-Typ-Bindung pro installiertem Worker-Token</td>
+<td>geplant</td>
+<td>Sicherheitskritische Entscheidung offen</td>
+</tr>
+<tr>
+<td>Credential-Broker pro Job für installierte Types</td>
+<td>geplant</td>
+<td>Noch nicht umgesetzt</td>
+</tr>
+<tr>
+<td>At-least-once, Lease-Token, Retry und Incident</td>
+<td>umgesetzt</td>
+<td>Idempotenz im Handler erforderlich</td>
+</tr>
+<tr>
+<td>Backpressure und Circuit Breaker</td>
+<td>umgesetzt</td>
+<td>ADR-0440 / ADR-0340</td>
+</tr>
+<tr>
+<td>Workers-Ansicht, Metriken, clio-Event-Store-Option</td>
+<td>umgesetzt</td>
+<td>Lokaler Verlauf flüchtig</td>
+</tr>
+<tr>
+<td>Konformität für eingebaute Operationen</td>
+<td>umgesetzt</td>
+<td>ADR-0483</td>
+</tr>
+<tr>
+<td>Konformität für externe Worker Types</td>
+<td>geplant</td>
+<td>Nicht vorhanden</td>
+</tr>
+<tr>
+<td><code>validate-config</code>, <code>check-connection</code>, <code>diagnostics</code></td>
+<td>geplant</td>
+<td>Worker-seitige Abfragen</td>
+</tr>
+<tr>
+<td>Worker-Type-Release-Art in atlas hub</td>
+<td>geplant</td>
+<td>Hub-Signaturen existieren für Blueprints</td>
+</tr>
+<tr>
+<td>Publisher- und Registry-Signatur für Worker Types</td>
+<td>geplant</td>
+<td>Vor Veröffentlichung erforderlich</td>
+</tr>
+<tr>
+<td>Release-Kuratierung <code>verified</code> / <code>community</code></td>
+<td>Vorschlag</td>
+<td>Status «Proposed»</td>
+</tr>
+<tr>
+<td>Signierter Widerruf, Offline-Last-Known-Good</td>
+<td>geplant</td>
+<td>Kein Fernsteuerungskanal</td>
+</tr>
+<tr>
+<td>OS-Abschottung installierter Artefakte</td>
+<td>geplant</td>
+<td>Linux stärker vorgesehen als Windows</td>
+</tr>
+<tr>
+<td>Deployment-Bindung Type-ID / Hauptversion</td>
+<td>geplant</td>
+<td>Bisher nicht umgesetzt</td>
+</tr>
+<tr>
+<td>Verweigerung des Löschens genutzter Versionen</td>
+<td>geplant</td>
+<td>Bisher nicht umgesetzt</td>
+</tr>
+<tr>
+<td>Manuelle, nicht automatische Updates</td>
+<td>geplant</td>
+<td>Betreiberentscheidung</td>
+</tr>
+<tr>
+<td>Nativer <code>process</code>- und externer Launcher</td>
+<td>umgesetzt</td>
+<td>Windows, Linux, macOS / Remote</td>
+</tr>
+<tr>
+<td>Docker/Podman- und Kubernetes-Launcher</td>
+<td>geplant</td>
+<td>RBAC-Freigabe für Kubernetes</td>
+</tr>
+<tr>
+<td>Migration aller eingebauten Integrationen</td>
+<td>geplant</td>
+<td>Umfangreich</td>
+</tr>
+<tr>
+<td>Entfernung eingebauter Integrationen aus dem Server-Binary</td>
+<td>geplant</td>
+<td>Abschluss der Migration</td>
+</tr>
+<tr>
+<td>Apache-2.0 für SDK und Protokoll</td>
+<td>Vorschlag</td>
+<td>Zustimmung und Rechtsprüfung ausstehend</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="offene-fragen-kompakte-abschlussliste">Offene Fragen (kompakte Abschlussliste)</h3>
+<ul>
+<li>Wie wird das API-Token pro installierter Worker Instance an die Manifest-Job-Typen gebunden?</li>
+<li>Wie erfolgt die konkrete Zuordnung eines BPMN Service Tasks zu einem bestimmten Worker?</li>
+<li>Wie wird der Credential-Broker pro Job auf installierte Worker Types erweitert?</li>
+<li>Wann werden <code>validate-config</code>, <code>check-connection</code>, <code>diagnostics</code> und externe Konformitätsnachweise umgesetzt?</li>
+<li>Wie werden Publisher- und Registry-Signaturen, Widerruf und Offline-Verhalten produktiv durchgesetzt?</li>
+<li>Welche verbindlichen Sandbox-, Vertrauens- und Freigabevorgaben gelten für Windows, Linux und Kubernetes?</li>
+<li>Wie erfolgen die Deployment-Bindung an Worker-Type-Hauptversionen, die Migration der eingebauten Integrationen und die geplante SDK-Umlizenzierung?</li>
+</ul>
+<h3 id="dokumenthinweise">Dokumenthinweise</h3>
+<p><strong>Quellenrahmen.</strong> Die technischen Aussagen entstammen der vom Auftraggeber bereitgestellten Beschreibung A–O. Zugehörige Entscheidungsreferenzen sind ADR-0061, ADR-0069/0070, ADR-0111, ADR-0168, ADR-0179, ADR-0194, ADR-0297, ADR-0340, ADR-0439, ADR-0440, ADR-0475 und ADR-0483. Für das Erscheinungsbild wurde die Quellstruktur von <a href="https://github.com/pblumer/atlas-cloud"><code>pblumer/atlas-cloud</code></a> herangezogen. Eine formelle Abnahme des technischen Stands, der Sicherheitskontrollen und des Lizenzvorschlags ist nicht Bestandteil dieses Entwurfs.</p>
+</main><footer class="footer frame">atlas / technisches Whitepaper · Entwurf 0.1 · Design basierend auf dem atlas-cloud-Auftritt</footer></body></html>

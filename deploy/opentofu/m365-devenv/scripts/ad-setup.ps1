@@ -14,14 +14,24 @@
       OU=AtlasTest (and only there) plus "Replicating Directory Changes" on the
       domain, so the sync operation (DirSync) can be tested,
     - creates the test users and a test group in OU=AtlasTest,
+    - creates what examples/ad-dienste needs below OU=AtlasTest (see phase 3),
     - asks AD DS to load the LDAPS certificate, removes the settings file and the task.
+  Phase 3 (on a running domain controller, needs no settings):
+    - creates, idempotently, the objects examples/ad-dienste addresses below OU=AtlasTest:
+      OU=Atlas with the OUs its constants AD_GRUPPEN_OU ... AD_SCHULUNG_OU name
+      (scripts/install-ad-dienste.py sets them there), OU=Personen with FIN, HR and IT
+      (table AdOe), OU=Gruppen with OU=Berechtigungen and OU=Organisation and the groups
+      the tables AdBerechtigungen and AdOe name. A forest built before phase 2 did this
+      gets them with
+        az vm run-command invoke -g <env>-rg -n <env>-dc --command-id RunPowerShellScript \
+          --scripts @scripts/ad-setup.ps1 --parameters Phase=3
   Log: C:\AtlasSetup\setup-phase<N>.log. Done marker: C:\AtlasSetup\phase2.done.
 
   Written for Windows PowerShell 5.1.
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('1', '2')] [string] $Phase,
+    [Parameter(Mandatory)] [ValidateSet('1', '2', '3')] [string] $Phase,
     [string] $ConfigB64
 )
 
@@ -39,6 +49,42 @@ function Protect-File([string] $Path) {
 
 function ConvertTo-PlainSecure([string] $Text) {
     ConvertTo-SecureString -String $Text -AsPlainText -Force
+}
+
+function New-OuIfMissing([string] $Name, [string] $Path) {
+    if (-not (Get-ADOrganizationalUnit -LDAPFilter "(ou=$Name)" -SearchBase $Path -SearchScope OneLevel)) {
+        New-ADOrganizationalUnit -Name $Name -Path $Path -ProtectedFromAccidentalDeletion $false
+        Write-Host "OU=$Name,$Path created."
+    }
+    "OU=$Name,$Path"
+}
+
+# The objects examples/ad-dienste addresses below the test OU. The DNs of the tables
+# AdBerechtigungen and AdOe are the package's with DC=contoso,DC=local replaced by the test
+# OU (scripts/install-ad-dienste.py), so these names must follow the tables.
+function New-AdDiensteObjects([string] $TestOU) {
+    $atlas = New-OuIfMissing 'Atlas' $TestOU
+    foreach ($ou in 'Gruppen', 'Admins', 'Servicekonten', 'Testkonten', 'Extern', 'Kontakte',
+        'Funktionskonten', 'Rollenkonten', 'Schulungskonten') {
+        New-OuIfMissing $ou $atlas | Out-Null
+    }
+    $personen = New-OuIfMissing 'Personen' $TestOU
+    foreach ($ou in 'FIN', 'HR', 'IT') { New-OuIfMissing $ou $personen | Out-Null }
+    $gruppen = New-OuIfMissing 'Gruppen' $TestOU
+    $groups = @{
+        'Berechtigungen' = @('SG-FIN-Fileshare-Finanzen-Lesen', 'SG-FIN-Fileshare-Finanzen-Aendern', 'SG-APP-CRM-Benutzer')
+        'Organisation'   = @('SG-ORG-FIN-Alle', 'SG-ORG-FIN-Drucker', 'SG-ORG-HR-Alle', 'SG-ORG-IT-Alle')
+    }
+    foreach ($ou in $groups.Keys) {
+        $path = New-OuIfMissing $ou $gruppen
+        foreach ($g in $groups[$ou]) {
+            if (-not (Get-ADGroup -Filter "Name -eq '$g'" -SearchBase $path -SearchScope OneLevel)) {
+                New-ADGroup -Name $g -GroupScope Global -GroupCategory Security -Path $path `
+                    -Description 'Atlas test group (examples/ad-dienste)'
+                Write-Output "CN=$g,$path created."
+            }
+        }
+    }
 }
 
 try {
@@ -87,6 +133,13 @@ try {
         # Reboot shortly after the extension has reported success.
         & shutdown.exe /r /t 30 /c 'Atlas AD test forest: reboot after promotion' /d p:4:2
         Write-Output 'Phase 1 complete; rebooting.'
+        exit 0
+    }
+
+    if ($Phase -eq '3') {
+        Import-Module ActiveDirectory
+        New-AdDiensteObjects "OU=AtlasTest,$((Get-ADDomain).DistinguishedName)"
+        Write-Output 'Phase 3 complete.'
         exit 0
     }
 
@@ -144,6 +197,7 @@ try {
             -Description 'Atlas test group'
     }
     if ($members.Count -gt 0) { Add-ADGroupMember -Identity $cfg.groupName -Members $members }
+    New-AdDiensteObjects $testOU
 
     # AD DS loads a server certificate at start-up; ask it once more in case the
     # certificate store was read before the certificate was usable.

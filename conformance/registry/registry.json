@@ -1,0 +1,3424 @@
+{
+  "schemaVersion": 1,
+  "standard": "OMG BPMN 2.0.2",
+  "standardUrl": "https://www.omg.org/spec/BPMN/2.0.2/PDF/",
+  "target": "process-execution",
+  "sourceCommit": "662c9e92e28b384a8c1ff4ddec7311ebf74ef87e",
+  "reviewDate": "2026-11-08",
+  "denominatorApproved": false,
+  "reviewState": "provisional",
+  "scopeNote": "CON0 normative candidate list, not a signed-off statement-level denominator. Source references identify code surfaces, not definitive proof. WCP is a separate non-normative axis. None of these values constitutes an OMG conformance claim.",
+  "requirements": [
+    {
+      "id": "FLOW-01",
+      "title": "Process and explicit creation; none start/end",
+      "conformanceClass": "process-execution",
+      "clause": "13.2",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "sequence"
+      ],
+      "limitations": "`conformance/scenario.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-02",
+      "title": "Sequence flow, conditions, defaults",
+      "conformanceClass": "process-execution",
+      "clause": "13.3.1",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "sequence",
+        "linear-independent"
+      ],
+      "limitations": "`sequence`, `exclusive-gateway`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-03",
+      "title": "Exclusive choice and simple merge",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "exclusive-gateway"
+      ],
+      "limitations": "`exclusive-gateway`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-04",
+      "title": "Parallel split and synchronizing join",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "parallel-independent"
+      ],
+      "limitations": "`parallel-independent`; add edge cases",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-05",
+      "title": "Inclusive choice/synchronizing merge",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "inclusive-gateway"
+      ],
+      "limitations": "`inclusive-gateway`; ADR-0033 limits cycles",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-06",
+      "title": "Cyclic or unstructured inclusive join",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0033 explicitly notes open gap",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-07",
+      "title": "Exclusive event-based gateway",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "event-gateway-message",
+        "event-gateway-timer"
+      ],
+      "limitations": "`event-gateway-message`, `event-gateway-timer`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-08",
+      "title": "Parallel event-based gateway",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "unsupported",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [
+        "compiler/eventgateway_instantiate_test.go:TestParseRefusesAnEventGatewayAtlasDoesNotRun"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/validation.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-09",
+      "title": "Instantiating event-based gateway",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "unsupported",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [
+        "compiler/eventgateway_instantiate_test.go:TestParseRefusesAnEventGatewayAtlasDoesNotRun"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/eventgateway_instantiate_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-10",
+      "title": "Complex Gateway",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "unsupported",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [
+        "compiler/parse_test.go:TestParseUnsupportedElementMessage"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/scope_compile.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-11",
+      "title": "Multiple incoming/outgoing flows without gateways",
+      "conformanceClass": "process-execution",
+      "clause": "13.3.1",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "inspect normative token semantics",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-12",
+      "title": "Unstructured cycles and process completion",
+      "conformanceClass": "process-execution",
+      "clause": "13.2",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "add divergent token/recovery tests",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-13",
+      "title": "Gateway default-flow and no-match failure",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "explicit variant oracles",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-14",
+      "title": "Model validation: reachability/scope/refs",
+      "conformanceClass": "process-execution",
+      "clause": "13.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`compiler/validation.go`; diagnostic matrix incomplete",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-15",
+      "title": "Uncontrolled flow: one activity arrival per token, multiple outgoing flow, mixed conditional/unconditional",
+      "conformanceClass": "process-execution",
+      "clause": "13.3.1",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "OMG §13.3.1; distinct from AND/OR gateways; review `engine/behavior.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "FLOW-16",
+      "title": "Process completion: no tokens and no active activities, including boundary/event subprocess/MI",
+      "conformanceClass": "process-execution",
+      "clause": "13.2",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/validation.go",
+        "compiler/process.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "OMG §13.2; live and crash/replay proof outstanding",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-01",
+      "title": "Generic task and manual task",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "non-operational",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/parse_test.go:TestParsePlainTaskPassThrough"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/parse_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-02",
+      "title": "User Task; start, park, complete",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "user-task"
+      ],
+      "limitations": "`user-task`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-03",
+      "title": "Service Task; worker job completion",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "service-task"
+      ],
+      "limitations": "`service-task`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-04",
+      "title": "Script Task; FEEL execution and script errors",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "sequence"
+      ],
+      "limitations": "`script-task`; dialect distinction required",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-05",
+      "title": "Business Rule Task; local/remote DMN",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/parse_test.go:TestParseBusinessRuleTask"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/process.go`, `engine/behavior.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-06",
+      "title": "Send Task; message kind and worker kind",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`compiler/scope_compile.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-07",
+      "title": "Receive Task; correlation and boundaries",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "receive-task"
+      ],
+      "limitations": "`receive-task`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-08",
+      "title": "Embedded Subprocess and nested scope",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "subprocess"
+      ],
+      "limitations": "`subprocess`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-09",
+      "title": "Event Subprocess: interrupting / non-interrupting",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "event-subprocess-concurrent-runs"
+      ],
+      "limitations": "concurrent non-interrupting scenario only",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-10",
+      "title": "Transaction: normal commit, cancel, compensation",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "transaction-cancel"
+      ],
+      "limitations": "`transaction-cancel` narrow variant",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-11",
+      "title": "Ad-hoc Subprocess, parallel ordering",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/adhoc_test.go:TestParseAdHocSubProcess"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/adhoc_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-12",
+      "title": "Ad-hoc Subprocess, sequential ordering",
+      "conformanceClass": "process-execution",
+      "clause": "13.3.5",
+      "applicability": "required",
+      "implementation": "unsupported",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/adhoc_test.go:TestParseAdHocSequentialRejected"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/adhoc_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-13",
+      "title": "Ad-hoc completionCondition/cancelRemainingInstances",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0138; add variant tests",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-14",
+      "title": "Call Activity, binding, child error/termination",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "call-activity"
+      ],
+      "limitations": "`call-activity`; edge cases not in suite",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-15",
+      "title": "Standard loop: before/after/max/zero repeats",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "standard-loop"
+      ],
+      "limitations": "`standard-loop` covers one variant",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-16",
+      "title": "Parallel Multi-Instance; cardinality/empty input",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "multi-instance"
+      ],
+      "limitations": "`multi-instance` narrow variant",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-17",
+      "title": "Sequential Multi-Instance; cancellation/outputs",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "multi-instance-sequential"
+      ],
+      "limitations": "`multi-instance-sequential` narrow variant",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-18",
+      "title": "MI completionCondition and ordered outputCollection",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "map existing engine tests",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-19",
+      "title": "Activity I/O mappings and variable scope",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0068; not centrally registered",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-20",
+      "title": "Compensation handler selection/reverse completion order",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "compensation"
+      ],
+      "limitations": "`compensation`; broader spec matrix",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-21",
+      "title": "Activity lifecycle, boundary interruption, nested termination",
+      "conformanceClass": "process-execution",
+      "clause": "13.3",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "OMG §13.3; recovery checkpoints",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "ACT-22",
+      "title": "Receive Task with instantiate=true",
+      "conformanceClass": "process-execution",
+      "clause": "13.2",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "OMG §13.2 permits instance creation; ordinary `receive-task` does not verify this",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-01",
+      "title": "None Start",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "sequence"
+      ],
+      "limitations": "`sequence`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-02",
+      "title": "Message Start",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "message-start"
+      ],
+      "limitations": "`message-start`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-03",
+      "title": "Timer Start: date, duration, cycle",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "timer-start"
+      ],
+      "limitations": "`timer-start` tests limited variant",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-04",
+      "title": "Signal Start",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "signal-start"
+      ],
+      "limitations": "`signal-start`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-05",
+      "title": "Process-root Conditional Start",
+      "conformanceClass": "process-execution",
+      "clause": "13.2",
+      "applicability": "required",
+      "implementation": "unsupported",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/conditional_test.go:TestParseRefusesAProcessLevelConditionalStart"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/validation.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-06",
+      "title": "Conditional/Error/Escalation Start in event subprocess",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "legal context must be verified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-07",
+      "title": "Multiple Start / Parallel Multiple Start",
+      "conformanceClass": "process-execution",
+      "clause": "13.2",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "inspect spec and compiler",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-08",
+      "title": "Intermediate Message Catch",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "message-catch"
+      ],
+      "limitations": "`message-catch`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-09",
+      "title": "Intermediate Timer Catch",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/parse_test.go:TestParseTimerCatchEvent"
+      ],
+      "scenarioIds": [
+        "timer-catch"
+      ],
+      "limitations": "`timer-catch` covers a subset; `compiler/scope_compile.go` rejects intermediate-catch `timeCycle`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-10",
+      "title": "Intermediate Signal Catch",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "signal-throw-catch"
+      ],
+      "limitations": "`signal-throw-catch`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-11",
+      "title": "Intermediate Conditional Catch",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/conditional_test.go:TestParseConditionalCatch"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/conditional_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-12",
+      "title": "Intermediate Link Catch",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0132",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-13",
+      "title": "Intermediate Multiple/Parallel Multiple Catch",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "inspect spec and compiler",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-14",
+      "title": "Intermediate None Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "model/legal position review",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-15",
+      "title": "Intermediate Message Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md` Milestone 2",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-16",
+      "title": "Intermediate Signal Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "signal-throw-catch"
+      ],
+      "limitations": "`signal-throw-catch`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-17",
+      "title": "Intermediate Escalation Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/escalation_test.go:TestParseEscalationThrowInterrupting"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/escalation_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-18",
+      "title": "Intermediate Compensation Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "compensation"
+      ],
+      "limitations": "`compensation`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-19",
+      "title": "Intermediate Link Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0132",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-20",
+      "title": "Intermediate Multiple Throw",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "spec/legal positions",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-21",
+      "title": "Boundary Timer interrupting",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "boundary-timer-interrupting"
+      ],
+      "limitations": "`boundary-timer-interrupting`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-22",
+      "title": "Boundary Timer non-interrupting, recurring",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0054",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-23",
+      "title": "Boundary Message interrupting/non",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "boundary-message-noninterrupting"
+      ],
+      "limitations": "`boundary-message-noninterrupting`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-24",
+      "title": "Boundary Signal interrupting/non",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "signal-boundary"
+      ],
+      "limitations": "`signal-boundary`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-25",
+      "title": "Boundary Error",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "boundary-error"
+      ],
+      "limitations": "`boundary-error`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-26",
+      "title": "Boundary Escalation interrupting/non",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/escalation_test.go:TestParseEscalationEndAndBoundary"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/escalation_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-27",
+      "title": "Boundary Conditional interrupting/non, repeatability",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "engine/conditional_test.go:TestConditionalBoundaryNonInterruptingFiresOnce"
+      ],
+      "scenarioIds": [],
+      "limitations": "ADR-0137 repeat limitation",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-28",
+      "title": "Boundary Compensation",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "compensation"
+      ],
+      "limitations": "`compensation`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-29",
+      "title": "Boundary Cancel on Transaction",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "transaction-cancel"
+      ],
+      "limitations": "`transaction-cancel`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-30",
+      "title": "Boundary Multiple/Parallel Multiple",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "inspect spec and compiler",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-31",
+      "title": "Event Subprocess message/timer/signal start, both modes",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "event-subprocess-concurrent-runs"
+      ],
+      "limitations": "existing engine tests, coverage unknown",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-32",
+      "title": "Event Subprocess Conditional non-interrupting repeat",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "engine/conditional_test.go:TestConditionalEventSubNonInterrupting"
+      ],
+      "scenarioIds": [],
+      "limitations": "once-per-arm limitation",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-33",
+      "title": "End None",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "sequence"
+      ],
+      "limitations": "`sequence`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-34",
+      "title": "End Message",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-35",
+      "title": "End Error",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-36",
+      "title": "End Escalation",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/escalation_test.go:TestParseEscalationEndAndBoundary"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/escalation_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-37",
+      "title": "End Signal",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-38",
+      "title": "End Terminate",
+      "conformanceClass": "process-execution",
+      "clause": "13.5.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "compiler/parse_test.go:TestParseTerminateEndCompiles"
+      ],
+      "scenarioIds": [],
+      "limitations": "`compiler/parse_test.go`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-39",
+      "title": "End Cancel in Transaction",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "transaction-cancel"
+      ],
+      "limitations": "`transaction-cancel`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-40",
+      "title": "End Compensation",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-41",
+      "title": "End Multiple",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "spec/legal positions",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-42",
+      "title": "Error and escalation propagation across scopes/call activity",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "package-tested",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [
+        "engine/escalation_phase4_test.go:TestChildEscalationCaughtByCallerBoundary"
+      ],
+      "scenarioIds": [],
+      "limitations": "needs independent semantics oracle",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-43",
+      "title": "Message delivery, correlation, deduplication and races",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "distinguish BPMN and atlas extensions",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVT-44",
+      "title": "Timer events across restart / cancelled losing waits",
+      "conformanceClass": "process-execution",
+      "clause": "13.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/scope_compile.go",
+        "engine/behavior.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "mid-flight recovery required",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-01",
+      "title": "DataObject/Reference/DataState",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "data-object"
+      ],
+      "limitations": "`data-object`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-02",
+      "title": "Collection DataObject",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "collection-data-object"
+      ],
+      "limitations": "`collection-data-object`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-03",
+      "title": "Field-level DataObject writes",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "sample-tested",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [
+        "data-object-fields"
+      ],
+      "limitations": "`data-object-fields`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-04",
+      "title": "DataInput/DataOutput and Associations",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0058/0059",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-05",
+      "title": "Assignment/transformation and item definition",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "verify spec-supported dialect",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-06",
+      "title": "DataStore/DataStoreReference metadata",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "declarative layer in ROADMAP",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-07",
+      "title": "DataStore runtime reads/writes",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "runtime read pending, writes refused",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-08",
+      "title": "Property, variables and scope propagation",
+      "conformanceClass": "process-execution",
+      "clause": "10.4",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "BPMN vs Zeebe semantics",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "DATA-09",
+      "title": "Group, TextAnnotation, Association",
+      "conformanceClass": "process-modeling",
+      "clause": "10.4",
+      "applicability": "out-of-scope",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "modelling class, not execution",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "COLL-01",
+      "title": "Collaboration with multiple pools/participants",
+      "conformanceClass": "process-import",
+      "clause": "9.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md` Milestone 3",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "COLL-02",
+      "title": "Black-box participants",
+      "conformanceClass": "process-import",
+      "clause": "9.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "`ROADMAP.md`",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "COLL-03",
+      "title": "Message flow and runtime message relationships",
+      "conformanceClass": "process-import",
+      "clause": "9.3",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "message-flow validation outstanding",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "COLL-04",
+      "title": "Lane/childLaneSet and flowNodeRef",
+      "conformanceClass": "process-import",
+      "clause": "9.3",
+      "applicability": "required",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "ADR-0121 Layer A",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "COLL-05",
+      "title": "Collaboration import, atomic multi-process deployment",
+      "conformanceClass": "process-import",
+      "clause": "2.3.2",
+      "applicability": "required",
+      "implementation": "partial",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "roadmap gap",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "COLL-06",
+      "title": "Resource/role and interface/operation metadata",
+      "conformanceClass": "process-import",
+      "clause": "9.3",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "compiler/parse.go"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "model metadata vs execution",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-01",
+      "title": "BPMN XML/XSD import and validation",
+      "conformanceClass": "process-import",
+      "clause": "2.3.2",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "class §2.3 import requirement",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-02",
+      "title": "BPMNDI/layout/visual round trip",
+      "conformanceClass": "process-modeling",
+      "clause": "2.2",
+      "applicability": "out-of-scope",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "modelling conformance, separate KPI",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-03",
+      "title": "XML export/foreign namespaces and extensions",
+      "conformanceClass": "process-import",
+      "clause": "2.3.2",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "interoperability evaluation",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-04",
+      "title": "Documentation/artifacts",
+      "conformanceClass": "process-modeling",
+      "clause": "2.2",
+      "applicability": "out-of-scope",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "non-executable subset",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-05",
+      "title": "Choreography Task/Sub-Choreography",
+      "conformanceClass": "choreography-modeling",
+      "clause": "2.2",
+      "applicability": "out-of-scope",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "separate OMG conformance class",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-06",
+      "title": "Conversation Node/Link",
+      "conformanceClass": "process-modeling",
+      "clause": "2.2",
+      "applicability": "out-of-scope",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "modelling/interchange classification",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-07",
+      "title": "BPEL Process Execution mapping",
+      "conformanceClass": "bpel-execution",
+      "clause": "2.2",
+      "applicability": "out-of-scope",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "separate OMG class, evaluate out-of-scope",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "MODEL-08",
+      "title": "Activity/process lifecycle and token semantics (OMG §13)",
+      "conformanceClass": "process-execution",
+      "clause": "13.1",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "sourceRefs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "testRefs": [],
+      "scenarioIds": [],
+      "limitations": "cross-cutting semantic requirements",
+      "reviewState": "provisional"
+    }
+  ],
+  "eventPositions": [
+    {
+      "id": "EVPOS-NONE-TOP-START",
+      "family": "None",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "None",
+      "position": "event-subprocess-start-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "None",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-INTERMEDIATE-CATCH",
+      "family": "None",
+      "position": "intermediate-catch",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-BOUNDARY-INTERRUPTING",
+      "family": "None",
+      "position": "boundary-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-BOUNDARY-NONINTERRUPTING",
+      "family": "None",
+      "position": "boundary-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-INTERMEDIATE-THROW",
+      "family": "None",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-NONE-END",
+      "family": "None",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-TOP-START",
+      "family": "Message",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Message",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Message",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-INTERMEDIATE-CATCH",
+      "family": "Message",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-BOUNDARY-INTERRUPTING",
+      "family": "Message",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-BOUNDARY-NONINTERRUPTING",
+      "family": "Message",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-INTERMEDIATE-THROW",
+      "family": "Message",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MESSAGE-END",
+      "family": "Message",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-TOP-START",
+      "family": "Timer",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Timer",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Timer",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-INTERMEDIATE-CATCH",
+      "family": "Timer",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-BOUNDARY-INTERRUPTING",
+      "family": "Timer",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-BOUNDARY-NONINTERRUPTING",
+      "family": "Timer",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-INTERMEDIATE-THROW",
+      "family": "Timer",
+      "position": "intermediate-throw",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TIMER-END",
+      "family": "Timer",
+      "position": "end",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-TOP-START",
+      "family": "Error",
+      "position": "top-start",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Error",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Error",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-INTERMEDIATE-CATCH",
+      "family": "Error",
+      "position": "intermediate-catch",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-BOUNDARY-INTERRUPTING",
+      "family": "Error",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-BOUNDARY-NONINTERRUPTING",
+      "family": "Error",
+      "position": "boundary-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-INTERMEDIATE-THROW",
+      "family": "Error",
+      "position": "intermediate-throw",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ERROR-END",
+      "family": "Error",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-TOP-START",
+      "family": "Escalation",
+      "position": "top-start",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Escalation",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Escalation",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-INTERMEDIATE-CATCH",
+      "family": "Escalation",
+      "position": "intermediate-catch",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-BOUNDARY-INTERRUPTING",
+      "family": "Escalation",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-BOUNDARY-NONINTERRUPTING",
+      "family": "Escalation",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-INTERMEDIATE-THROW",
+      "family": "Escalation",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-ESCALATION-END",
+      "family": "Escalation",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-TOP-START",
+      "family": "Cancel",
+      "position": "top-start",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Cancel",
+      "position": "event-subprocess-start-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Cancel",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-INTERMEDIATE-CATCH",
+      "family": "Cancel",
+      "position": "intermediate-catch",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-BOUNDARY-INTERRUPTING",
+      "family": "Cancel",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-BOUNDARY-NONINTERRUPTING",
+      "family": "Cancel",
+      "position": "boundary-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-INTERMEDIATE-THROW",
+      "family": "Cancel",
+      "position": "intermediate-throw",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CANCEL-END",
+      "family": "Cancel",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-TOP-START",
+      "family": "Compensation",
+      "position": "top-start",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Compensation",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Compensation",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-INTERMEDIATE-CATCH",
+      "family": "Compensation",
+      "position": "intermediate-catch",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-BOUNDARY-INTERRUPTING",
+      "family": "Compensation",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-BOUNDARY-NONINTERRUPTING",
+      "family": "Compensation",
+      "position": "boundary-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-INTERMEDIATE-THROW",
+      "family": "Compensation",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-COMPENSATION-END",
+      "family": "Compensation",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-TOP-START",
+      "family": "Conditional",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unsupported",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Conditional",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Conditional",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-INTERMEDIATE-CATCH",
+      "family": "Conditional",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-BOUNDARY-INTERRUPTING",
+      "family": "Conditional",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-BOUNDARY-NONINTERRUPTING",
+      "family": "Conditional",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-INTERMEDIATE-THROW",
+      "family": "Conditional",
+      "position": "intermediate-throw",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-CONDITIONAL-END",
+      "family": "Conditional",
+      "position": "end",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-TOP-START",
+      "family": "Link",
+      "position": "top-start",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Link",
+      "position": "event-subprocess-start-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Link",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-INTERMEDIATE-CATCH",
+      "family": "Link",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-BOUNDARY-INTERRUPTING",
+      "family": "Link",
+      "position": "boundary-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-BOUNDARY-NONINTERRUPTING",
+      "family": "Link",
+      "position": "boundary-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-INTERMEDIATE-THROW",
+      "family": "Link",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-LINK-END",
+      "family": "Link",
+      "position": "end",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-TOP-START",
+      "family": "Signal",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Signal",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Signal",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-INTERMEDIATE-CATCH",
+      "family": "Signal",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-BOUNDARY-INTERRUPTING",
+      "family": "Signal",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-BOUNDARY-NONINTERRUPTING",
+      "family": "Signal",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-INTERMEDIATE-THROW",
+      "family": "Signal",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-SIGNAL-END",
+      "family": "Signal",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-TOP-START",
+      "family": "Terminate",
+      "position": "top-start",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Terminate",
+      "position": "event-subprocess-start-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Terminate",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-INTERMEDIATE-CATCH",
+      "family": "Terminate",
+      "position": "intermediate-catch",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-BOUNDARY-INTERRUPTING",
+      "family": "Terminate",
+      "position": "boundary-interrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-BOUNDARY-NONINTERRUPTING",
+      "family": "Terminate",
+      "position": "boundary-noninterrupting",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-INTERMEDIATE-THROW",
+      "family": "Terminate",
+      "position": "intermediate-throw",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-TERMINATE-END",
+      "family": "Terminate",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-TOP-START",
+      "family": "Multiple",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Multiple",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Multiple",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-INTERMEDIATE-CATCH",
+      "family": "Multiple",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-BOUNDARY-INTERRUPTING",
+      "family": "Multiple",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-BOUNDARY-NONINTERRUPTING",
+      "family": "Multiple",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-INTERMEDIATE-THROW",
+      "family": "Multiple",
+      "position": "intermediate-throw",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-MULTIPLE-END",
+      "family": "Multiple",
+      "position": "end",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-TOP-START",
+      "family": "Parallel Multiple",
+      "position": "top-start",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-EVENT-SUBPROCESS-START-INTERRUPTING",
+      "family": "Parallel Multiple",
+      "position": "event-subprocess-start-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-EVENT-SUBPROCESS-START-NONINTERRUPTING",
+      "family": "Parallel Multiple",
+      "position": "event-subprocess-start-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-INTERMEDIATE-CATCH",
+      "family": "Parallel Multiple",
+      "position": "intermediate-catch",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-BOUNDARY-INTERRUPTING",
+      "family": "Parallel Multiple",
+      "position": "boundary-interrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-BOUNDARY-NONINTERRUPTING",
+      "family": "Parallel Multiple",
+      "position": "boundary-noninterrupting",
+      "legal": true,
+      "clause": "10.5.5",
+      "applicability": "required",
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-INTERMEDIATE-THROW",
+      "family": "Parallel Multiple",
+      "position": "intermediate-throw",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "EVPOS-PARALLEL-MULTIPLE-END",
+      "family": "Parallel Multiple",
+      "position": "end",
+      "legal": false,
+      "clause": "10.5.5",
+      "applicability": "not-applicable",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "reviewState": "provisional"
+    }
+  ],
+  "wcp": [
+    {
+      "id": "WCP-1",
+      "name": "Sequence",
+      "group": "Basic control-flow",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-2",
+      "name": "Parallel Split",
+      "group": "Basic control-flow",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-3",
+      "name": "Synchronization",
+      "group": "Basic control-flow",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-4",
+      "name": "Exclusive Choice",
+      "group": "Basic control-flow",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-5",
+      "name": "Simple Merge",
+      "group": "Basic control-flow",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-6",
+      "name": "Multi-Choice",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-7",
+      "name": "Structured Synchronizing Merge",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-8",
+      "name": "Multi-Merge",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-9",
+      "name": "Structured Discriminator",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-10",
+      "name": "Arbitrary Cycles",
+      "group": "Iteration / termination",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-11",
+      "name": "Implicit Termination",
+      "group": "Iteration / termination",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-12",
+      "name": "Multiple Instances without Synchronization",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-13",
+      "name": "Multiple Instances with a Priori Design-Time Knowledge",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-14",
+      "name": "Multiple Instances with a Priori Run-Time Knowledge",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-15",
+      "name": "Multiple Instances without a Priori Run-Time Knowledge",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-16",
+      "name": "Deferred Choice",
+      "group": "State-based",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-17",
+      "name": "Interleaved Parallel Routing",
+      "group": "State-based",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-18",
+      "name": "Milestone",
+      "group": "State-based",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-19",
+      "name": "Cancel Activity",
+      "group": "Cancellation",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-20",
+      "name": "Cancel Case",
+      "group": "Cancellation",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-21",
+      "name": "Structured Loop",
+      "group": "Iteration",
+      "suiteRegistered": true,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-22",
+      "name": "Recursion",
+      "group": "Iteration",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-23",
+      "name": "Transient Trigger",
+      "group": "Triggers",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-24",
+      "name": "Persistent Trigger",
+      "group": "Triggers",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-25",
+      "name": "Cancel Region",
+      "group": "Cancellation / multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-26",
+      "name": "Cancel Multiple Instance Activity",
+      "group": "Cancellation / multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-27",
+      "name": "Complete Multiple Instance Activity",
+      "group": "Cancellation / multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-28",
+      "name": "Blocking Discriminator",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-29",
+      "name": "Cancelling Discriminator",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-30",
+      "name": "Structured Partial Join",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-31",
+      "name": "Blocking Partial Join",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-32",
+      "name": "Cancelling Partial Join",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-33",
+      "name": "Generalized AND-Join",
+      "group": "Advanced branching and synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-34",
+      "name": "Static Partial Join for Multiple Instances",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-35",
+      "name": "Cancelling Partial Join for Multiple Instances",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-36",
+      "name": "Dynamic Partial Join for Multiple Instances",
+      "group": "Multiple instances",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-37",
+      "name": "Acyclic Synchronizing Merge",
+      "group": "Advanced synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-38",
+      "name": "General Synchronizing Merge",
+      "group": "Advanced synchronization",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-39",
+      "name": "Critical Section",
+      "group": "State-based",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-40",
+      "name": "Interleaved Routing",
+      "group": "State-based",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-41",
+      "name": "Thread Merge",
+      "group": "Thread management",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-42",
+      "name": "Thread Split",
+      "group": "Thread management",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    },
+    {
+      "id": "WCP-43",
+      "name": "Explicit Termination",
+      "group": "Termination",
+      "suiteRegistered": false,
+      "implementation": "unknown",
+      "verification": "unverified",
+      "reviewState": "provisional"
+    }
+  ]
+}

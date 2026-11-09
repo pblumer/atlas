@@ -235,6 +235,20 @@ const STRINGS = {
     'services.col.order': 'Bestellung',
     'services.count': '{n} vorhanden',
     'services.building': '{n} im Aufbau',
+    'services.part.goneSince': 'inzwischen nicht mehr vorhanden',
+    'services.incomplete': 'Unvollständig: {done} von {total} vorhanden',
+    'services.phase.incomplete': 'Unvollständig',
+    'services.parts': 'Bestandteile',
+    'services.part.held': 'Vorhanden',
+    'services.part.gone': 'Nicht mehr vorhanden',
+    'services.part.notHeld': 'Nicht bezogen',
+    'services.part.notChosen': 'Nicht gewählt',
+    'services.part.included': 'inkludiert',
+    'services.part.option': 'Option',
+    'services.orders': 'Bestellungen',
+    'services.olderOrders': 'Frühere Bestellungen anzeigen ({n})',
+    'services.olderHide': 'Frühere Bestellungen ausblenden',
+    'services.since': 'seit {n}',
     'link.copy': 'Link kopieren',
     'link.copied': 'Link kopiert.',
     'link.copyFailed': 'Der Link konnte nicht kopiert werden.',
@@ -505,6 +519,20 @@ const STRINGS = {
     'services.col.order': 'Order',
     'services.count': '{n} held',
     'services.building': '{n} being set up',
+    'services.part.goneSince': 'no longer held now',
+    'services.incomplete': 'Incomplete: {done} of {total} held',
+    'services.phase.incomplete': 'Incomplete',
+    'services.parts': 'Parts',
+    'services.part.held': 'Held',
+    'services.part.gone': 'No longer held',
+    'services.part.notHeld': 'Not held',
+    'services.part.notChosen': 'Not chosen',
+    'services.part.included': 'included',
+    'services.part.option': 'option',
+    'services.orders': 'Orders',
+    'services.olderOrders': 'Show earlier orders ({n})',
+    'services.olderHide': 'Hide earlier orders',
+    'services.since': 'since {n}',
     'link.copy': 'Copy link',
     'link.copied': 'Link copied.',
     'link.copyFailed': 'The link could not be copied.',
@@ -775,6 +803,20 @@ const STRINGS = {
     'services.col.order': 'Commande',
     'services.count': '{n} disponible(s)',
     'services.building': '{n} en cours de mise en place',
+    'services.part.goneSince': 'plus disponible aujourd’hui',
+    'services.incomplete': 'Incomplète : {done} sur {total} disponibles',
+    'services.phase.incomplete': 'Incomplète',
+    'services.parts': 'Composants',
+    'services.part.held': 'Disponible',
+    'services.part.gone': 'Plus disponible',
+    'services.part.notHeld': 'Non détenu',
+    'services.part.notChosen': 'Non choisi',
+    'services.part.included': 'inclus',
+    'services.part.option': 'option',
+    'services.orders': 'Commandes',
+    'services.olderOrders': 'Afficher les commandes antérieures ({n})',
+    'services.olderHide': 'Masquer les commandes antérieures',
+    'services.since': 'depuis le {n}',
     'link.copy': 'Copier le lien',
     'link.copied': 'Lien copié.',
     'link.copyFailed': 'Le lien n’a pas pu être copié.',
@@ -1044,6 +1086,20 @@ const STRINGS = {
     'services.col.order': 'Ordine',
     'services.count': '{n} disponibili',
     'services.building': '{n} in allestimento',
+    'services.part.goneSince': 'non più disponibile ora',
+    'services.incomplete': 'Incompleta: {done} di {total} disponibili',
+    'services.phase.incomplete': 'Incompleta',
+    'services.parts': 'Componenti',
+    'services.part.held': 'Disponibile',
+    'services.part.gone': 'Non più disponibile',
+    'services.part.notHeld': 'Non ottenuto',
+    'services.part.notChosen': 'Non scelto',
+    'services.part.included': 'incluso',
+    'services.part.option': 'opzione',
+    'services.orders': 'Ordini',
+    'services.olderOrders': 'Mostra ordini precedenti ({n})',
+    'services.olderHide': 'Nascondi ordini precedenti',
+    'services.since': 'dal {n}',
     'link.copy': 'Copia link',
     'link.copied': 'Link copiato.',
     'link.copyFailed': 'Non è stato possibile copiare il link.',
@@ -1604,6 +1660,8 @@ const state = {
   // ended). svcOpen is the entry whose positions, tasks and actions are open.
   svc: { who: 'me', q: '', phase: '' },
   svcOpen: '',
+  // svcHistory is the entry whose older, settled orders are shown too.
+  svcHistory: '',
   // info is the service whose details are open, empty for none.
   info: '',
   // favourites is what this person marked, as ids — a bookmark and never an
@@ -4276,6 +4334,10 @@ function lineItem(o, l) {
   return el('li', {},
     el('span', { class: `dot ${l.status}` }),
     ' ', lineLabel(l), ' \u2014 ', t(`status.${l.status}`),
+    // "Already held" was true when the order was placed; said as it stands now
+    // where the reader has given the part back since.
+    l.status === 'skipped' && entryWho(o) === 'me' && !state.held.has(l.itemId)
+      ? el('span', { class: 'muted' }, ` (${t('services.part.goneSince')})`) : null,
     l.blockedBy && l.blockedBy.length
       ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
     l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
@@ -4870,11 +4932,18 @@ function progressOf(rel, id, open) {
     ...offeringParts(rel, item, 'options').filter(taken).map((p) => p.id)];
   const unique = [...new Set(parts)];
   const ready = unique.filter((p) => state.held.has(p)).length;
+  // What is not held is either on its way (an open position) or not: given back,
+  // withdrawn, refused, or never delivered. Only the first is "being set up"; a
+  // Marktleistung whose missing parts nobody is providing is incomplete, and
+  // saying "being set up" about it promises something no process is doing.
+  const coming = unique.filter((p) => !state.held.has(p) && open.has(p));
   let status = 'done';
   if (ready < unique.length) {
-    status = unique.some((p) => (open.get(p) || {}).status === 'running') ? 'running' : 'pending';
+    if (coming.some((p) => open.get(p).status === 'running')) status = 'running';
+    else if (coming.length) status = 'pending';
+    else status = 'incomplete';
   }
-  return { ready, total: unique.length, status };
+  return { ready, total: unique.length, status, coming: coming.length };
 }
 
 // serviceState is the light and the words beside a row of "my services", the same
@@ -4892,7 +4961,6 @@ function serviceState(rel, id, open, lineOf) {
   const parts = [];
   if (n > 1 || (n && coming)) parts.push(fill(t('services.count'), n));
   if (coming) parts.push(fill(t('services.building'), coming.count));
-  if (status !== 'done' && status !== 'returning' && !coming) parts.push(progressText(prog));
   return {
     status, label, n, prog,
     lead: el('span', { class: `dot ${status}`, title: label, role: 'img', 'aria-label': label }),
@@ -4901,7 +4969,8 @@ function serviceState(rel, id, open, lineOf) {
 }
 
 function progressText(prog) {
-  return t('services.progress').replace('{done}', String(prog.ready)).replace('{total}', String(prog.total));
+  const key = prog.status === 'incomplete' ? 'services.incomplete' : 'services.progress';
+  return t(key).replace('{done}', String(prog.ready)).replace('{total}', String(prog.total));
 }
 
 // lackingOf is what a held Marktleistung carries and this person does not hold:
@@ -4992,13 +5061,15 @@ function ordersState(e) {
   else if (lines.some((l) => l.status === 'pending' || l.status === 'blocked')) status = 'pending';
   else if (lines.some((l) => l.status === 'returning')) status = 'returning';
   else if (ready < lines.length) {
-    const own = newest.get(e.id) || lines.find((l) => l.status !== 'done' && l.status !== 'skipped');
-    status = own ? own.status : 'cancelled';
+    // The Marktleistung itself refused, withdrawn or given back says so; one that
+    // is there with parts missing and nothing on its way is incomplete.
+    const own = newest.get(e.id);
+    status = own && own.status !== 'done' && own.status !== 'skipped' ? own.status : 'incomplete';
   }
   prog.status = status;
   const n = e.refs.filter((r) => r.line.itemId === e.id && (r.line.status === 'done' || r.line.status === 'returning')).length;
   let label = t('services.ready');
-  if (status === 'running' || status === 'pending') label = progressText(prog);
+  if (status === 'running' || status === 'pending' || status === 'incomplete') label = progressText(prog);
   else if (status !== 'done') label = t(`status.${status}`);
   return { status, label, n, prog, meta: null };
 }
@@ -5013,6 +5084,7 @@ function entryState(rel, e, open, lineOf) {
   const tasks = e.refs.filter((r) => tasksOf(r.order, r.line).length).length;
   let phase = 'ended';
   if (st.status === 'done') phase = 'ready';
+  else if (st.status === 'incomplete') phase = 'incomplete';
   else if (['running', 'pending', 'blocked', 'returning'].includes(st.status)) phase = 'building';
   return { ...st, tasks, phase };
 }
@@ -5045,8 +5117,8 @@ function entryActions(e) {
   const held = e.refs.filter((r) => !r.order.held
     && (state.lineActions.get(`${r.order.id}|${lineKey(r.line)}`) || []).length);
   if (!held.length) return null;
-  return el('div', { class: 'svc-actions' },
-    el('strong', {}, t('services.actions')),
+  return el('section', { class: 'svc-section svc-actions' },
+    el('h4', {}, t('services.actions')),
     held.map((r) => el('div', { class: 'svc-action-row' },
       r.line.itemId !== e.id || held.length > 1 ? el('span', { class: 'muted' }, `${lineLabel(r.line)}:`) : null,
       actionButtons(r.order, r.line),
@@ -5054,27 +5126,114 @@ function entryActions(e) {
       actionPanel(r.order, r.line))));
 }
 
-// entryDetail is an entry opened: its actions first, because they are what
-// somebody opens a service for, then every order behind it with its positions
-// and their tasks, and last what a held Marktleistung lacks, to order on its own.
-function entryDetail(rel, e) {
+// The states a position is still moving in: provisioned, waiting, being given back.
+const LINE_OPEN = ['pending', 'blocked', 'running', 'returning', 'returnFailed'];
+
+// entryParts is what a Marktleistung is made of, one row per part — the offering
+// itself, every part it always brings, every option it offers — each with where it
+// stands now: there, on its way, given back, or never taken. It is the pie spelled
+// out: what the icon fills, and what it does not and why. A part the reader could
+// add (one they do not hold and have not ordered again) carries the catalogue's
+// basket control, as the catalogue does.
+function entryParts(rel, e) {
+  const by = itemsById(rel);
+  const item = by[e.id];
+  if (!item) return null;
+  const newest = new Map();
+  for (const r of e.refs) if (!newest.has(r.line.itemId)) newest.set(r.line.itemId, r.line);
+  const rows = [{ id: e.id, kind: '' },
+    ...offeringParts(rel, item, 'includes').map((p) => ({ id: p.id, kind: 'included' })),
+    ...offeringParts(rel, item, 'options').map((p) => ({ id: p.id, kind: 'option' }))];
+  const seen = new Set();
+  const row = ({ id, kind }) => {
+    if (seen.has(id)) return null;
+    seen.add(id);
+    const line = newest.get(id);
+    const held = e.mine ? state.held.has(id) : !!(line && (line.status === 'done' || line.status === 'skipped'));
+    let st;
+    let label;
+    if (line && LINE_OPEN.includes(line.status)) {
+      st = line.status;
+      label = t(`status.${line.status}`);
+    } else if (held) {
+      st = 'done';
+      label = t('services.part.held');
+    } else if (line && (line.status === 'done' || line.status === 'skipped')) {
+      // Delivered once (or found already there), and no longer held: given back
+      // through another order, or by an operator.
+      st = 'returned';
+      label = t('services.part.gone');
+    } else if (line) {
+      st = line.status;
+      label = t(`status.${line.status}`);
+    } else {
+      st = 'none';
+      label = kind === 'option' ? t('services.part.notChosen') : t('services.part.notHeld');
+    }
+    const offerable = e.mine && id !== e.id && !held && !(line && LINE_OPEN.includes(line.status))
+      && state.held.has(e.id) && !orderedAlready(id);
+    return el('div', { class: offerable ? 'svc-part offerable' : 'svc-part', 'data-part': id },
+      el('span', { class: `dot ${st}` }),
+      el('span', { class: 'svc-part-name' }, textOf((by[id] || {}).texts, id)),
+      el('span', { class: 'svc-part-kind muted' },
+        kind ? t(kind === 'option' ? 'services.part.option' : 'services.part.included') : ''),
+      el('span', { class: `svc-part-state ${st}` }, label),
+      el('span', { class: 'svc-part-act' }, offerable ? toggle(rel, id, kind === 'included') : null));
+  };
+  return el('section', { class: 'svc-section' },
+    el('h4', {}, t('services.parts')),
+    el('div', { class: 'svc-parts' }, rows.map(row)));
+}
+
+// entryOrders is the orders behind an entry, newest first, each with the positions
+// of this entry. The ones still moving — a position open, a task waiting, something
+// that can still be withdrawn — and the newest are shown; older, settled ones wait
+// behind one button, so the history does not bury what is happening now.
+function entryOrders(e) {
   const orders = [];
   for (const r of e.refs) if (!orders.includes(r.order)) orders.push(r.order);
-  const lacking = e.mine ? lackingOf(rel, e.id) : [];
-  const nameOf = (id) => textOf((itemsById(rel)[id] || {}).texts, id);
-  return el('div', { class: 'svc-detail' },
-    el('div', { class: 'svc-link' }, linkButton()),
-    entryActions(e),
-    orders.map((o) => el('div', { class: 'svc-order-block' },
-      orderNote(o),
-      el('ul', { class: 'lines' },
-        e.refs.filter((r) => r.order === o).map((r) => lineItem(o, r.line))))),
-    orders.length ? null : el('p', { class: 'muted' }, t('services.noOrder')),
-    lacking.length
-      ? el('div', { class: 'svc-lacking' },
-        el('span', { class: 'muted' }, `${t('services.notHeld')}:`),
-        lacking.map((d) => el('span', { class: 'svc-offer' }, toggle(rel, d.id, d.integral), ' ', nameOf(d.id))))
+  if (!orders.length) return el('p', { class: 'muted' }, t('services.noOrder'));
+  const refsOf = (o) => e.refs.filter((r) => r.order === o);
+  const moving = (o) => cancellable(o)
+    || refsOf(o).some((r) => LINE_OPEN.includes(r.line.status) || tasksOf(o, r.line).length
+      || state.editing === `${o.id}|${lineKey(r.line)}`);
+  const shown = orders.filter((o, i) => i === 0 || moving(o));
+  const older = orders.filter((o) => !shown.includes(o));
+  const all = state.svcHistory === e.key;
+  const block = (o) => el('div', { class: 'svc-order-block' },
+    orderNote(o),
+    el('ul', { class: 'lines' }, refsOf(o).map((r) => lineItem(o, r.line))));
+  return el('section', { class: 'svc-section' },
+    el('h4', {}, t('services.orders')),
+    (all ? orders : shown).map(block),
+    older.length
+      ? el('button', {
+        class: 'linkish svc-older', type: 'button',
+        onclick: () => { harvest(); state.svcHistory = all ? '' : e.key; render(); },
+      }, all ? t('services.olderHide') : fill(t('services.olderOrders'), older.length))
       : null);
+}
+
+// entryDetail is an entry opened: what it is and how it stands, what it is made of,
+// what can be asked of it, and the orders behind it.
+function entryDetail(rel, e, st) {
+  const by = itemsById(rel);
+  const since = (e.mine && state.held.get(e.id)) || (e.refs[0] && e.refs[0].order.createdAt);
+  const state0 = st || { prog: { ready: 1, total: 1 }, label: '' };
+  return el('div', { class: 'svc-detail' },
+    el('div', { class: 'svc-detail-head' },
+      pieIcon(by[e.id], state0.prog, state0.label),
+      el('div', { class: 'svc-detail-title' },
+        el('h3', {}, textOf((by[e.id] || {}).texts, e.id)),
+        el('span', { class: 'muted' }, [
+          state0.label,
+          e.mine ? '' : `${t('services.for')} ${personName(e.who)}`,
+          since ? fill(t('services.since'), new Date(since / 1e6).toLocaleDateString(locale)) : '',
+        ].filter(Boolean).join(' · '))),
+      el('div', { class: 'svc-link' }, linkButton())),
+    entryParts(rel, e),
+    entryActions(e),
+    entryOrders(e));
 }
 
 // toggleEntry opens an entry, or closes the one open.
@@ -5099,7 +5258,8 @@ function servicesFilterBar(repaint) {
     pick('who', [['me', t('services.who.me')], ['others', t('services.who.others')], ['all', t('services.who.all')]],
       t('services.who')),
     pick('phase', [['', t('services.phase.all')], ['ready', t('services.phase.ready')],
-      ['building', t('services.phase.building')], ['task', t('services.phase.task')],
+      ['building', t('services.phase.building')], ['incomplete', t('services.phase.incomplete')],
+      ['task', t('services.phase.task')],
       ['ended', t('services.phase.ended')]], t('services.phase')),
     el('input', {
       type: 'search', class: 'svc-find', value: state.svc.q,
@@ -5168,7 +5328,7 @@ function renderServicesList(rel, shown, open, lineOf) {
             }, 'X')
             : null,
           infoButton(e.id))),
-      opened ? entryDetail(rel, e) : null);
+      opened ? entryDetail(rel, e, st) : null);
   };
   const head = el('div', { class: 'svc-row svc-head', 'aria-hidden': 'true' },
     el('span', {}), el('span', {}, t('services.col.service')), el('span', {}, t('services.col.qty')),
@@ -5256,7 +5416,7 @@ function renderServicesCascade(rel, shown) {
       chosen
         ? el('div', { class: 'col' },
           el('div', { class: 'colhead' }, t('services.col.detail')),
-          entryDetail(rel, chosen.e))
+          entryDetail(rel, chosen.e, chosen.st))
         : null));
 }
 

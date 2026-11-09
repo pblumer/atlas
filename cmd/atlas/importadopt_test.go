@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/importplan"
 )
 
 const heldBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -114,5 +116,43 @@ func TestImportAsksToAdoptAtATerminal(t *testing.T) {
 	}
 	if !holds(t, ts, "nehmer") {
 		t.Fatal("the process adopted at the terminal did not move")
+	}
+}
+
+// A model other applications' decisions use is replaced only when --overwrite names
+// it: --overwrite all leaves it undecided, and the plan says which decision changes
+// with it (ADR-0467 amendment 2026-11-05).
+func TestASharedModelIsNotReplacedByOverwriteAll(t *testing.T) {
+	shared := importplan.Artifact{Ref: "model:noten", Name: "noten", Status: importplan.Changed,
+		SharedWith: []importplan.Use{{Decision: "d9", Name: "Notenschluessel", Application: &importplan.Holder{ID: "x", Name: "Pruefung"}}}}
+	other := importplan.Artifact{Ref: "form:f1", Status: importplan.Changed}
+	plan := func() importPlan {
+		return importPlan{artifacts: []planned{{Artifact: shared, detail: sharedDetail(shared)}, {Artifact: other}}}
+	}
+
+	p := plan()
+	p.decide(importplan.Decisions{OverwriteAll: true})
+	if p.artifacts[0].Outcome != importplan.Undecided || p.artifacts[1].Outcome != importplan.Updated {
+		t.Fatalf("--overwrite all = %+v", p.artifacts)
+	}
+	if q := p.query(); strings.Contains(q, "model") {
+		t.Fatalf("--overwrite all sent the shared model: %s", q)
+	}
+	if !strings.Contains(p.artifacts[0].detail, `decision "Notenschluessel" in application "Pruefung"`) {
+		t.Errorf("detail = %q", p.artifacts[0].detail)
+	}
+
+	p = plan()
+	p.decide(importplan.Decisions{Overwrite: map[string]bool{"model:noten": true}})
+	if p.artifacts[0].Outcome != importplan.Updated || !strings.Contains(p.query(), "model%3Anoten") {
+		t.Fatalf("--overwrite model:noten = %+v, %s", p.artifacts[0], p.query())
+	}
+
+	behind := shared
+	behind.Status = importplan.Behind
+	p = importPlan{artifacts: []planned{{Artifact: behind}}}
+	p.decide(importplan.Decisions{})
+	if p.artifacts[0].Outcome != importplan.Undecided {
+		t.Fatalf("a behind shared model = %+v, want it asked", p.artifacts[0])
 	}
 }

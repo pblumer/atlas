@@ -20,7 +20,8 @@
         "m365-engage",
         "m365-funktionspostfach",
         "m365-verteiler",
-        "m365-postfachzugriff"
+        "m365-postfachzugriff",
+        "m365-kalender"
       ],
       "groups": [
         "{{zielgruppe}}"
@@ -53,6 +54,7 @@
         "m365-funktionspostfach",
         "m365-verteiler",
         "m365-postfachzugriff",
+        "m365-kalender",
         "m365-raum",
         "m365-geraet",
         "m365-warteschlange",
@@ -460,6 +462,20 @@
             "en": "Create a channel"
           },
           "form": "m365-team-kanal"
+        },
+        {
+          "key": "sichtbarkeit",
+          "message": "m365.team.sichtbarkeit",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Sichtbarkeit ändern",
+            "en": "Change the visibility"
+          },
+          "form": "m365-sichtbarkeit"
         }
       ],
       "keywords": [
@@ -485,8 +501,8 @@
         "en": "SharePoint: team site"
       },
       "descriptions": {
-        "de": "Eine moderne SharePoint-Teamwebsite mit Microsoft-365-Gruppe unter einer selbst gewählten URL, mit zwei Besitzern. Danach: Gäste einladen, Besitzer ändern, Speicher erhöhen, löschen und innert 30 Tagen wiederherstellen.",
-        "en": "A modern SharePoint team site with a Microsoft 365 group at a URL of your choice, with two owners. Afterwards: invite guests, change owners, increase storage, delete and restore within 30 days."
+        "de": "Eine moderne SharePoint-Teamwebsite mit Microsoft-365-Gruppe unter einer selbst gewählten URL, mit zwei Besitzern. Danach: Gäste einladen, Besitzer ändern, Speicher erhöhen, die Sichtbarkeit ändern, löschen und innert 30 Tagen wiederherstellen.",
+        "en": "A modern SharePoint team site with a Microsoft 365 group at a URL of your choice, with two owners. Afterwards: invite guests, change owners, increase storage, change the visibility, delete and restore within 30 days."
       },
       "approval": {
         "kind": "proc_m365_genehmigung_vorgesetzter"
@@ -553,6 +569,20 @@
             "en": "Increase the storage quota"
           },
           "form": "m365-sharepoint-kontingent"
+        },
+        {
+          "key": "sichtbarkeit",
+          "message": "m365.site.sichtbarkeit",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Sichtbarkeit ändern",
+            "en": "Change the visibility"
+          },
+          "form": "m365-sichtbarkeit"
         },
         {
           "key": "loeschen",
@@ -855,6 +885,88 @@
         "Vollzugriff",
         "Full Access",
         "Send As"
+      ],
+      "category": "mail",
+      "categoryTexts": {
+        "de": "E-Mail und Kalender",
+        "en": "Mail and calendar"
+      }
+    },
+    {
+      "id": "m365-kalender",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Zusätzlicher Kalender",
+        "en": "Additional calendar"
+      },
+      "descriptions": {
+        "de": "Ein eigener Kalender für ein Team oder ein Vorhaben, z.B. ein Ferienplan, mit Personen, die ihn lesen oder bearbeiten. Der Name folgt der Namensregel (KAL-…); in Outlook fügt man ihn über «Kalender hinzufügen» › «Aus Verzeichnis» hinzu.",
+        "en": "A calendar of its own for a team or a project, e.g. a holiday plan, with people who read or edit it. Its name follows the naming rule (KAL-…); add it in Outlook with «Add calendar» › «From directory»."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_kalender",
+      "configForm": "m365-kalender-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.kalender.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.kalender.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kalender zurückgeben",
+            "en": "Return the calendar"
+          }
+        },
+        {
+          "key": "berechtigung-erteilen",
+          "message": "m365.kalender.berechtigung-erteilen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigung erteilen",
+            "en": "Grant permission"
+          },
+          "form": "m365-kalender-berechtigung"
+        },
+        {
+          "key": "berechtigung-entziehen",
+          "message": "m365.kalender.berechtigung-entziehen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigung entziehen",
+            "en": "Revoke permission"
+          },
+          "form": "m365-kalender-berechtigung"
+        }
+      ],
+      "keywords": [
+        "Kalender",
+        "Calendar",
+        "Gruppenkalender",
+        "Teamkalender",
+        "Ferienplan",
+        "Freigegebener Kalender",
+        "Shared Calendar",
+        "Exchange"
       ],
       "category": "mail",
       "categoryTexts": {

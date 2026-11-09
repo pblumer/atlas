@@ -305,6 +305,12 @@ var catalogSources = []catalogSource{
 	{ID: "lizenzmanagement", Dir: "lizenzmanagement", NoInstall: true,
 		Main: "lizenzmanagement/vertrag.bpmn",
 		Shop: true},
+	// Resources of one account moved to another (internalisation, externalisation, change
+	// of office or department) across AD, Exchange and Entra ID, one subprocess per resource.
+	// It installs with its installieren.sh.
+	{ID: "informationstransfer", Dir: "informationstransfer", NoInstall: true,
+		Main: "informationstransfer/informationstransfer.bpmn",
+		Shop: true},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it

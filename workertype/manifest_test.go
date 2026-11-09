@@ -15,7 +15,7 @@ func TestParseManifestAcceptsValidExternalWorkerType(t *testing.T) {
 			"workerProtocol":"v1",
 			"runtime":{"mode":"external"},
 			"jobTypes":["io.example.sap-s4"],
-			"operations":[{"id":"create-business-partner","jobType":"io.example.sap-s4"}],
+			"operations":[{"id":"create-business-partner","jobType":"io.example.sap-s4","idempotency":"check","effect":"reversible"}],
 			"configurationSchema":"config.schema.json",
 			"modelerTemplate":"template.json",
 			"artifact":{
@@ -46,7 +46,7 @@ func validManifest() Manifest {
 			WorkerProtocol:      WorkerProtocolV1,
 			Runtime:             Runtime{Mode: RuntimeExternal},
 			JobTypes:            []string{"io.example.mail"},
-			Operations:          []Operation{{ID: "send", JobType: "io.example.mail"}},
+			Operations:          []Operation{{ID: "send", JobType: "io.example.mail", Idempotency: IdempotencyNone, Effect: EffectReversible}},
 			ConfigurationSchema: "config.schema.json",
 			ModelerTemplate:     "template.json",
 			Artifact: &Artifact{
@@ -230,7 +230,7 @@ func TestParseManifestRejectsUnknownFields(t *testing.T) {
 }
 
 func TestParseManifestRejectsMultipleOrMalformedJSONValues(t *testing.T) {
-	valid := `{"apiVersion":"atlas.io/v1alpha1","kind":"WorkerType","metadata":{"id":"com.example.mail","version":"1.0.0","name":"Mail"},"spec":{"atlasCompatibility":">=1.0.0","workerProtocol":"v1","runtime":{"mode":"bundled"},"jobTypes":["mail"],"operations":[{"id":"send","jobType":"mail"}],"configurationSchema":"config.json","modelerTemplate":"template.json"}}`
+	valid := `{"apiVersion":"atlas.io/v1alpha1","kind":"WorkerType","metadata":{"id":"com.example.mail","version":"1.0.0","name":"Mail"},"spec":{"atlasCompatibility":">=1.0.0","workerProtocol":"v1","runtime":{"mode":"bundled"},"jobTypes":["mail"],"operations":[{"id":"send","jobType":"mail","idempotency":"none","effect":"reversible"}],"configurationSchema":"config.json","modelerTemplate":"template.json"}}`
 	for _, tc := range []struct {
 		name string
 		data string

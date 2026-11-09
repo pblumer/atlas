@@ -1,6 +1,6 @@
 # ADR-0462: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
 
-- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-0519; amended 2026-11-04: remote mailboxes for Exchange hybrid, on Exchange Server only)
+- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-0519; amended 2026-11-04: remote mailboxes for Exchange hybrid, on Exchange Server only; amended 2026-11-05: `disable-mailbox` and `restore-mailbox-content`, on Exchange Server only, see [ADR-0534](0534-informationstransfer-operations.md))
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers

@@ -25,6 +25,8 @@ The skeleton that proves the three pillars fit together end to end.
 
 The control-flow basics most real models use.
 
+- 🚧 **BPMN 2.x Conformance (CON) programme — CON0/CON1 implementation in review**: [programme plan](docs/planning/bpmn-conformance-program.md), [source baseline](docs/planning/bpmn-conformance-baseline.md), [normative inventory seed](docs/planning/bpmn-conformance-feature-inventory.md), [implementation runbook](docs/planning/bpmn-conformance-implementation-runbook.md), and [operational manifest](docs/programs/bpmn-conformance/program.json). CON0 audits OMG BPMN 2.0.2 against the implemented compiler/engine and tests; CON1–CON5 deliver truthful cataloguing, executable/negative/recovery/differential evidence and reporting; CON6 addresses separately approved engine gaps. **Current 34 registered features / 9 patterns and "Gaps: None" are registry-local figures, not proof of complete OMG coverage.** The provisional [machine-readable normative candidate register](conformance/registry/registry.json) and [generated separate coverage report](conformance/NORMATIVE_COVERAGE.md) hold 105 candidate rows, a 13×8 event legality matrix and 43 independent WCP identifiers, **without an approved denominator or any OMG conformance claim**. CON0 reviewer sign-off and CON1 CI/PR acceptance are still outstanding.
+
 - ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
   `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
 - ✅ **Script tasks**: evaluate FEEL in-engine (reading input variables) and write
@@ -1334,7 +1336,12 @@ What it takes to run this for real.
 
 ## Milestone 5 — Scale-out 🔲
 
-Beyond a single node.
+Beyond a single node. The target topology is described in
+[ADR-0175](docs/adr/0175-replicated-partition-cells.md)
+(**Proposed / Not started**). Until clustering lands, **all new milestone work
+must pass the [scale-out readiness review](docs/architecture/scale-out-readiness.md)**.
+This is a forward-compatibility design gate, not evidence that multi-node
+execution or HA is available. Existing standalone operation remains supported.
 
 - 🔲 Networked inter-partition message transport (ADR-0006)
 - 🔲 Cross-partition message correlation and call activities
@@ -2213,6 +2220,13 @@ dataset of up to 50 000 cases":
   compares it with a deployed version, ignoring the diagram. Deploy from a draft or a new diagram
   saves it first, so the draft stays what runs; a version opened read-only is deployed without
   touching the draft, and the Deploy panel says so.
+- ✅ **Stepping between versions, and restoring one as the draft**
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)):
+  arrows on the version chip open the version before or after the one shown (the draft after the
+  newest), and its panel lists every version. **Restore as draft** on a version warns when the draft
+  holds something the newest version does not, then saves the version as the draft and opens it, so
+  Deploy runs it as a new version. The restore cannot be undone; a checkpoint before it is
+  [ADR-0031](docs/adr/0031-diagram-version-history.md)'s.
 - ✅ **A model's source, in place** ([ADR-0457](docs/adr/0457-modeler-xml-source.md)):
   **XML source** in the process and decision editors' `⋯` menu shows the BPMN or DMN document as
   the canvas holds it, in the Modeler's code editor, and **Apply** rebuilds the canvas from a

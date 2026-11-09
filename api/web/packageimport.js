@@ -130,7 +130,10 @@ export async function importPackage(file, { call, title = t("package.title") }) 
     if (res.status >= 200 && res.status < 300) return res.data;
     const d = res.data || {};
     const problems = (d.problems || []).map((p) => (p.subject ? `${p.subject}: ${p.problem}` : p.problem || p.detail));
-    throw new Error(`${what}: ${d.error || "HTTP " + res.status}${problems.length ? " — " + problems.join("; ") : ""}`);
+    // A refused publish answers its cause under reason, not error (a draft that does
+    // not compile is a 409 with deployed:false): name it, or the person reads a bare
+    // status and has to publish by hand to learn why.
+    throw new Error(`${what}: ${d.error || d.reason || "HTTP " + res.status}${problems.length ? " — " + problems.join("; ") : ""}`);
   };
   const q = (query, sep = "?") => (query ? sep + query : "");
   const source = async (query) => ok(await call("POST", "/api/v1/applications/source" + q(query), bytes, "application/gzip"),
@@ -184,7 +187,7 @@ export async function importPackage(file, { call, title = t("package.title") }) 
     ...((shopPlan && shopPlan.artifacts) || [])];
   let query = "";
   if (needsAsking(artifacts)) {
-    const choice = await openImportChoices({ title, artifacts });
+    const choice = await openImportChoices({ title, artifacts, target: plan.name });
     if (!choice) return null;
     query = decisionQuery(choice);
   }
