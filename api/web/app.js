@@ -1040,7 +1040,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
 const WORKER_TYPES = [
   {
     id: "temis", name: "temis", kind: "Decision engine",
-    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's DMN references at deploy time.",
+    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's rules (DMN references) at deploy time.",
     refs: "ADR-0014 · ADR-0034", status: "active", statusLabel: "embedded",
   },
   {
@@ -4198,11 +4198,17 @@ async function viewProjectDetail(id) {
 
     // star is the favourite mark for a stored diagram (diagram-shortcuts.js), empty for
     // a row that is not one.
-    const nameCell = (chip, title, sub, href, star = "") => {
+    const nameCell = (title, sub, href, star = "") => {
       const link = href ? `<a href="${href}"><b>${esc(title)}</b></a>` : `<b>${esc(title)}</b>`;
-      return `<td><div class="artifact-name"><span class="chip">${chip}</span>${link}${star}</div>` +
-        `<div class="muted" style="font-size:12px; padding-left:26px">${sub}</div></td>`;
+      return `<td><div class="artifact-name">${link}${star}</div>` +
+        `<div class="muted" style="font-size:12px">${sub}</div></td>`;
     };
+    // The type column carries the notation pill (BPMN, DMN, FORM) next to the
+    // plain-language type, so the name column is left to the name alone. The
+    // data-filter/data-sort value keeps a space between the two for the table filter.
+    const typeCell = (chip, label) =>
+      `<td class="muted" data-filter="${esc(chip + " " + label)}" data-sort="${esc(label)}">` +
+      `<div class="artifact-name artifact-type"><span class="chip">${chip}</span>${esc(label)}</div></td>`;
 
     const draftRow = (d) => {
       const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
@@ -4213,8 +4219,8 @@ async function viewProjectDetail(id) {
         { label: tr("common.delete"), icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
       );
       return `<tr>
-        ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
-        <td class="muted">${esc(tr("application.type.diagram"))}</td>
+        ${nameCell(d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
+        ${typeCell("BPMN", tr("application.type.diagram"))}
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -4232,8 +4238,8 @@ async function viewProjectDetail(id) {
       // what a publish would ship is the model, not that work.
       const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `${mark}${esc(tr("application.ref.model", { model: r.modelRef }))} · <span data-refstatus="${esc(r.id)}">${esc(tr("application.ref.notValidated"))}</span>`, href, starButton("decision", r.id))}
-        <td class="muted">${esc(tr("application.type.decisionRef"))}</td>
+        ${nameCell(r.name, `${mark}${esc(tr("application.ref.model", { model: r.modelRef }))} · <span data-refstatus="${esc(r.id)}">${esc(tr("application.ref.notValidated"))}</span>`, href, starButton("decision", r.id))}
+        ${typeCell("DMN", tr("application.type.decisionRef"))}
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -4248,8 +4254,8 @@ async function viewProjectDetail(id) {
         { label: tr("common.delete"), icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
       );
       return `<tr>
-        ${nameCell("DMN", d.name || tr("application.type.decision"), `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ${esc(tr("application.decisionDraft.sub"))}`, href, starButton("decision", d.id))}
-        <td class="muted">${esc(tr("application.type.decision"))}</td>
+        ${nameCell(d.name || tr("application.type.decision"), `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ${esc(tr("application.decisionDraft.sub"))}`, href, starButton("decision", d.id))}
+        ${typeCell("DMN", tr("application.type.decision"))}
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -4266,8 +4272,8 @@ async function viewProjectDetail(id) {
         ? trPlural("application.model.decisions", m.decisions.length, { names: m.decisions.join(", ") })
         : tr("application.model.noCompile"));
       return `<tr>
-        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">${esc(tr("application.chip.noReference"))}</span> ${esc(m.handle)}.dmn · ${what}`, "")}
-        <td class="muted">${esc(tr("application.type.decisionModel"))}</td>
+        ${nameCell(m.modelName || m.handle, `<span class="chip draft-chip">${esc(tr("application.chip.noReference"))}</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        ${typeCell("DMN", tr("application.type.decisionModel"))}
         <td class="muted" data-sort="0">—</td>
         <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
     };
@@ -4279,8 +4285,8 @@ async function viewProjectDetail(id) {
         { label: tr("common.delete"), icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
       );
       return `<tr>
-        ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
-        <td class="muted">${esc(tr("application.type.form"))}</td>
+        ${nameCell(f.name || f.id, esc(f.id), href)}
+        ${typeCell("FORM", tr("application.type.form"))}
         <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -6724,7 +6730,7 @@ async function validateProject(projectId) {
 // show under "Deployed". Uses a raw fetch so the refusal body (which is not an
 // {error} shape) is read instead of thrown away.
 async function deployProject(id, reload) {
-  if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
+  if (!window.confirm("Publish this application? Its rules are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
     const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/deploy`, { method: "POST" });

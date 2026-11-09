@@ -85,6 +85,16 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
+  the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
+  "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact
+  table, *Create new* ("Regel (DMN)", "Prozess (BPMN)"), validating and publishing an application,
+  adding, moving and deleting one, and deleting an application. The type column of an
+  application's artifacts reads "Prozess" (was "Diagramm") and "Regel", and the notation pill
+  (BPMN, DMN, FORM) moved from the name column into it. The MCP tool descriptions say "rule" and
+  keep "decision reference" in brackets, so an agent finds the term both ways; tool names, the
+  HTTP routes and the API's own error messages are unchanged. "Entscheidung" / "decision" stays
+  the DMN term for a decision inside a model.
 - **The replay names a multi-instance activity once below the diagram.** The token row under
   an instance replay listed one chip per token, so a multi-instance task with 200 iterations
   filled the screen with 200 identical "Token … — Datensatz prüfen" lines and pushed the diagram
