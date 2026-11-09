@@ -560,3 +560,33 @@ func TestStoreAttachmentAnswersAReference(t *testing.T) {
 		t.Errorf("store-attachment without the document store = %v", err)
 	}
 }
+
+// objectlessDocuments holds Atlas's document store but no S3 Worker, as a Worker
+// Instance that serves mail alone does.
+type objectlessDocuments struct{ atlasDocuments }
+
+func (objectlessDocuments) HoldsObjectStores() bool { return false }
+
+type failingAtlasDocuments struct{ fakeDocuments }
+
+func (*failingAtlasDocuments) StoreDocument(context.Context, string, string, []byte) (map[string]any, error) {
+	return nil, errors.New("store full")
+}
+
+// An export needs an S3 Worker and says so before the mailbox is read, even where the
+// document store is in reach; a store that refuses an attachment fails the task.
+func TestStoreAndExportNeedTheirOwnStores(t *testing.T) {
+	c := &mailboxClient{doc: pdfDoc}
+	j := mail.Job{Connector: "box", Operation: mail.OpExportAttachment, Target: "m1", Attachment: "2", Store: "belege", Bucket: "b", Key: "k"}
+	if _, err := mail.RunWith(context.Background(), j, registryWith(c), &objectlessDocuments{}); err == nil || len(c.calls) != 0 {
+		t.Fatalf("export without an S3 Worker = %v, mailbox calls %v", err, c.calls)
+	}
+	j = mail.Job{Connector: "box", Operation: mail.OpStoreAttachment, Target: "m1", Attachment: "2"}
+	if _, err := mail.RunWith(context.Background(), j, registryWith(&mailboxClient{doc: pdfDoc}), &failingAtlasDocuments{}); err == nil ||
+		!strings.Contains(err.Error(), "store full") {
+		t.Fatalf("a refused store = %v", err)
+	}
+	if !mail.ReadsMailbox(mail.OpStoreAttachment) || mail.ChangesMailbox(mail.OpStoreAttachment) || !mail.HandsOnDocuments(mail.OpStoreAttachment) {
+		t.Fatal("store-attachment is a read that hands a document on")
+	}
+}

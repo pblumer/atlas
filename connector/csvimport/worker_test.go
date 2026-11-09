@@ -270,3 +270,21 @@ func TestCSVRowsFromADocument(t *testing.T) {
 		t.Error("a JSON object that names no document was parsed")
 	}
 }
+
+// A job resolved where no document is read carries the document's id; run without the
+// bytes it says which document it did not read, rather than parsing an empty file.
+func TestARunNamesTheDocumentItWasNotGiven(t *testing.T) {
+	_, err := Run(Job{SourceDocument: "doc_x", HasHeader: true})
+	if err == nil || !strings.Contains(err.Error(), "doc_x") {
+		t.Fatalf("Run without the document's bytes = %v", err)
+	}
+	if forInstance(nil, 1) != nil {
+		t.Fatal("a nil reader bound to an instance is not nil")
+	}
+	read := forInstance(func(instance uint64, id string) ([]byte, error) {
+		return []byte(fmt.Sprintf("%d/%s", instance, id)), nil
+	}, 7)
+	if b, _ := read("doc_y"); string(b) != "7/doc_y" {
+		t.Fatalf("bound reader read %q", b)
+	}
+}

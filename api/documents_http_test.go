@@ -1,6 +1,8 @@
 package api_test
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -244,5 +246,97 @@ func TestADocumentIsOnlyItsUploadersUntilItEntersAnInstance(t *testing.T) {
 	// Bound, it is readable by whoever may read the instance — an operator may.
 	if code, _ := asBert(http.MethodGet, "/api/v1/documents/"+ref.ID, "", ""); code != http.StatusOK {
 		t.Fatalf("an operator could not read a document of an instance they can read: %d", code)
+	}
+}
+
+// Every route that lets variable values in refuses a reference to a document that does
+// not exist, before anything is submitted; a tool call's arguments refuse any
+// reference (ADR-draft-a-file-is-a-document-not-a-variable).
+func TestEveryEntryRefusesAnUnknownDocument(t *testing.T) {
+	ts := newTestServer(t)
+	do := func(method, path, body string) (int, []byte) { return doReq(t, ts, method, path, body, "application/json") }
+	const unknown = `{"$document":"doc_aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	key := deployDoc(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, csvDocBPMN)
+	_ = key
+	ref := uploadDoc(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, "z.csv", docCSV)
+	refJSON, _ := json.Marshal(ref)
+	code, out := do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", key), `{"variables":{"upload":`+string(refJSON)+`}}`)
+	if code != http.StatusOK {
+		t.Fatalf("start: %d %s", code, out)
+	}
+	var started struct {
+		InstanceKey uint64 `json:"instanceKey"`
+	}
+	_ = json.Unmarshal(out, &started)
+	_, out = do(http.MethodGet, "/api/v1/tasks", "")
+	var tasks []struct {
+		Key uint64 `json:"key"`
+	}
+	_ = json.Unmarshal(listRows(t, out), &tasks)
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %s", out)
+	}
+	for _, tc := range []struct{ path, body string }{
+		{fmt.Sprintf("/api/v1/instances/%d/variables", started.InstanceKey), `{"variables":{"d":` + unknown + `}}`},
+		{fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), `{"variables":{"d":` + unknown + `}}`},
+		{fmt.Sprintf("/api/v1/jobs/%d/complete", tasks[0].Key), `{"variables":{"d":` + unknown + `},"reason":"test"}`},
+		{"/api/v1/processes/csvdoc/triggers/go", `{"triggerId":"t-1","variables":{"d":` + unknown + `}}`},
+	} {
+		if code, out := do(http.MethodPost, tc.path, tc.body); code != http.StatusBadRequest || !strings.Contains(string(out), "does not exist") {
+			t.Errorf("POST %s = %d %s, want 400 naming the missing document", tc.path, code, out)
+		}
+	}
+	// An operator may point a variable at a document they may read, and it is bound.
+	other := uploadDoc(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, "o.csv", docCSV)
+	otherJSON, _ := json.Marshal(other)
+	if code, out := do(http.MethodPost, fmt.Sprintf("/api/v1/instances/%d/variables", started.InstanceKey),
+		`{"variables":{"zweit":`+string(otherJSON)+`}}`); code != http.StatusOK {
+		t.Fatalf("set a variable to a document: %d %s", code, out)
+	}
+	if _, meta := docMeta(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, other.ID); meta["state"] != "bound" {
+		t.Fatalf("the document a variable change named = %v, want bound", meta)
+	}
+	// A task completed with a document binds it too.
+	third := uploadDoc(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, "t.csv", docCSV)
+	thirdJSON, _ := json.Marshal(third)
+	if code, out := do(http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key),
+		`{"variables":{"antwort":`+string(thirdJSON)+`}}`); code != http.StatusOK {
+		t.Fatalf("complete with a document: %d %s", code, out)
+	}
+	if _, meta := docMeta(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, third.ID); meta["state"] != "bound" {
+		t.Fatalf("the document a completion carried = %v, want bound", meta)
+	}
+}
+
+// A whole-instance snapshot carries the document store only when asked to.
+func TestFullBackupCarriesDocumentsOnRequest(t *testing.T) {
+	ts := newTestServer(t)
+	uploadDoc(t, func(m, p, b, ct string) (int, []byte) { return doReq(t, ts, m, p, b, ct) }, "a.csv", docCSV)
+	names := func(query string) map[string]bool {
+		res, err := http.Get(ts.URL + "/api/v1/backup/full" + query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		gz, err := gzip.NewReader(res.Body)
+		if err != nil {
+			t.Fatalf("snapshot%s: %v", query, err)
+		}
+		tr := tar.NewReader(gz)
+		got := map[string]bool{}
+		for {
+			h, err := tr.Next()
+			if err != nil {
+				break
+			}
+			got[strings.SplitN(h.Name, "/", 2)[0]] = true
+		}
+		return got
+	}
+	if got := names(""); got["documents"] || !got["wal"] {
+		t.Fatalf("default snapshot tops = %v", got)
+	}
+	if got := names("?documents=true"); !got["documents"] {
+		t.Fatalf("snapshot with documents tops = %v", got)
 	}
 }
