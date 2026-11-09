@@ -220,6 +220,25 @@
 
       window.__save = () => document.getElementById("form-save").click();
       window.__cleanup = cleanup; // stands in for the navigation teardown (route → __atlasCleanup)
+      // Every __mount* call returns the mount's promise, and Playwright awaits it over the
+      // DevTools protocol. On the CI runner that promise was garbage-collected while the
+      // mount was still finishing — the protocol answers "Promise was collected", which
+      // Playwright reports as "Execution context was destroyed, most likely because of a
+      // navigation", although nothing navigated. Holding each promise in a page-global
+      // set until it settles keeps it, and Playwright's own wrapper chained on it,
+      // reachable for as long as the test is waiting on it.
+      const held = new Set();
+      const hold = (p) => {
+        if (!p || typeof p.then !== "function") return p;
+        held.add(p);
+        const drop = () => { held.delete(p); };
+        p.then(drop, drop);
+        return p;
+      };
+      for (const name of Object.keys(window).filter((k) => k.startsWith("__mount"))) {
+        const mount = window[name];
+        window[name] = (...args) => hold(mount(...args));
+      }
       window.__ready = true;
     </script>
   </body>
