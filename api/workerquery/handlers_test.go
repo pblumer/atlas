@@ -194,7 +194,7 @@ func TestTheWorkerAPINormalizesWhatItPassesOn(t *testing.T) {
 }
 
 // An installed Worker Type's instance polls and answers only as itself, and polls only
-// its own job types (ADR-draft-installed-worker-instances-hold-their-own-credential).
+// its own job types (ADR-0545).
 func TestTheWorkerAPIHoldsAnInstalledInstanceToItsBinding(t *testing.T) {
 	s := NewService(testBroker(newClock()), 1<<20)
 	bound := &httpapi.Principal{Instance: &httpapi.InstanceBinding{Worker: "workertype:x@1", JobTypes: []string{"com.x.a"}}}

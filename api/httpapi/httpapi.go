@@ -120,7 +120,7 @@ type Principal struct {
 	Session bool
 	// Instance binds a principal to one Worker Instance and the job types it serves.
 	// Only the credential an installed Worker Type's instance is launched with sets it
-	// (ADR-draft-installed-worker-instances-hold-their-own-credential): the scope
+	// (ADR-0545): the scope
 	// says which routes, and this says which work on them, which no route pattern can
 	// — a job key does not say its type. Nil narrows nothing.
 	Instance *InstanceBinding

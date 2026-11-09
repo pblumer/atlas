@@ -19,7 +19,7 @@ import (
 )
 
 // An installed Worker Type's instance holds a credential of its own, confined to the
-// job types its manifest declares (ADR-draft-installed-worker-instances-hold-their-own-credential).
+// job types its manifest declares (ADR-0545).
 // Before it, every supervised child held this server's internal token, whose worker
 // scope reaches every job type: an artifact atlas did not build could lease and settle
 // the jobs of every other Worker Type.

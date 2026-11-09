@@ -638,3 +638,75 @@ func TestWriteOutcomeMapsStoreErrors(t *testing.T) {
 		t.Fatalf("explicit conflict = %d %s", w.Code, w.Body.String())
 	}
 }
+
+// TestServiceReadsSayWhetherTheProcessWouldBeOffered: the two grant reads carry the
+// blockers of the process's newest version, by the same rule the preview and the
+// self-service routes apply, so an administrator's table can say "offered" or why
+// not without asking the preview once per subject (MFE1A).
+func TestServiceReadsSayWhetherTheProcessWouldBeOffered(t *testing.T) {
+	f := newFixture(t)
+	never := f.get("app_field", "safety")
+	if never.code != http.StatusOK || never.body["blockers"] == nil || len(ids(never.body["blockers"])) != 0 ||
+		never.body["definitionKey"] != float64(4242) || never.body["version"] != float64(3) {
+		t.Fatalf("never-granted eligible scope = %d %s, want blockers [] and the newest version", never.code, never.raw)
+	}
+	f.blockers["safety"] = []string{BlockInactive}
+	if got := f.get("app_field", "safety"); !reflect.DeepEqual(ids(got.body["blockers"]), []string{BlockInactive}) {
+		t.Fatalf("deactivated = %s", got.raw)
+	}
+	if got := f.put("app_field", "safety", `{"userIds":["usr_alice"],"expectedRevision":0}`, adminSession); got.code != http.StatusOK {
+		t.Fatalf("grant = %d %s", got.code, got.raw)
+	}
+	// A grant whose process moved to another application keeps its record and says why
+	// it offers nothing.
+	f.process["safety"] = "app_other"
+	got := f.get("app_field", "safety")
+	if got.body["granted"] != true || !reflect.DeepEqual(ids(got.body["blockers"]), []string{BlockInactive, BlockOtherApplication}) {
+		t.Fatalf("granted, process elsewhere = %s", got.raw)
+	}
+	delete(f.process, "safety")
+	if got := f.get("app_field", "safety"); got.body["definitionKey"] != nil || got.body["version"] != nil {
+		t.Fatalf("undeployed process names a version: %s", got.raw)
+	}
+}
+
+func TestServiceListSaysPerProcessWhetherItWouldBeOffered(t *testing.T) {
+	f := newFixture(t)
+	f.process["second"] = "app_field"
+	for _, p := range []string{"safety", "second"} {
+		if got := f.put("app_field", p, `{"groupIds":["grp_field"],"expectedRevision":0}`, adminSession); got.code != http.StatusOK {
+			t.Fatalf("grant %s = %d", p, got.code)
+		}
+	}
+	f.blockers["second"] = []string{BlockNotExecutable}
+	l := f.call(f.svc.HandleList, http.MethodGet, "/x", "", adminSession, "id", "app_field")
+	items, _ := l.body["items"].([]any)
+	if l.code != http.StatusOK || len(items) != 2 {
+		t.Fatalf("list = %d %s", l.code, l.raw)
+	}
+	a, b := items[0].(map[string]any), items[1].(map[string]any)
+	if a["processId"] != "safety" || len(ids(a["blockers"])) != 0 || a["blockers"] == nil || a["definitionKey"] != float64(4242) {
+		t.Fatalf("eligible item = %v", a)
+	}
+	if b["processId"] != "second" || !reflect.DeepEqual(ids(b["blockers"]), []string{BlockNotExecutable}) {
+		t.Fatalf("blocked item = %v", b)
+	}
+	// Writes answer the scope as it now stands and nothing about offering it: a
+	// write's answer is not the table.
+	w := f.put("app_field", "safety", `{"groupIds":["grp_field"],"userIds":["usr_bob"],"expectedRevision":1}`, adminSession)
+	if _, has := w.body["blockers"]; has || w.code != http.StatusOK {
+		t.Fatalf("write answer carries blockers: %d %s", w.code, w.raw)
+	}
+	// The resolver failing for one process fails the list rather than leaving a row
+	// that looks offered.
+	resolve := f.svc.resolve
+	f.svc.resolve = func(app, proc string) (Target, error) {
+		if proc == "second" {
+			return Target{}, errors.New("registry unreadable")
+		}
+		return resolve(app, proc)
+	}
+	if got := f.call(f.svc.HandleList, http.MethodGet, "/x", "", adminSession, "id", "app_field"); got.code != http.StatusInternalServerError {
+		t.Fatalf("list with an unreadable process = %d, want 500", got.code)
+	}
+}

@@ -180,7 +180,7 @@ _Changed_ / _Removed_ for each version.
   of the built-in Worker Types are out of its reach. The credential ends when the release
   is removed and is replaced at every server start. Built-in supervised workers and
   external workers with API tokens are unchanged
-  (ADR-draft-installed-worker-instances-hold-their-own-credential).
+  (ADR-0545).
 - **Every process, decision and form belongs to an application.** Nothing new is created,
   deployed or moved outside one (ADR-0544): a draft, form,
   decision draft or decision reference without a `projectId`, a decision deployment without one,

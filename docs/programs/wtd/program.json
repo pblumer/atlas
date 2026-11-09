@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../adr/0535-worker-types-as-distributed-artifacts.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "WTD3: owner review of the per-release credential (ADR-draft-installed-worker-instances-hold-their-own-credential, merged in #1646); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: decide whether a second create-site of SharePoint Server should succeed (it ends in SITE_EXISTS today).",
+  "next_action": "WTD3: owner review of the per-release credential (ADR-0545, merged in #1646); then the reported-digest comparison and process confinement. WTD4: the validate-config, check-connection and diagnostics queries. Owner: decide whether a second create-site of SharePoint Server should succeed (it ends in SITE_EXISTS today).",
   "slices": [
     {
       "id": "WTD1",
@@ -61,7 +61,7 @@
         1595,
         1646
       ],
-      "note": "On main (#1595): content-addressed store workertype/install, digest checked at install and before every launch, /api/v1/worker-types/installed, --allow-unsigned-worker-types for development, allowlisted launch environment, pilot examples/workertypes/echo. Credential per installed release (#1646; ADR-draft-installed-worker-instances-hold-their-own-credential, Proposed/Partial pending owner acceptance): in-memory secret confined to the manifest's job types and the instance's own id, revoked at removal, replaced at server start; closes the shared worker-token gap for installed artifacts. Open: (1) process confinement for installed artifacts (Landlock/seccomp, Windows job object); (2) the Console view of installed releases; (3) comparing the reported digest with the launched one (ADR-0535 §3). Placement per configured Worker belongs with WTD6.",
+      "note": "On main (#1595): content-addressed store workertype/install, digest checked at install and before every launch, /api/v1/worker-types/installed, --allow-unsigned-worker-types for development, allowlisted launch environment, pilot examples/workertypes/echo. Credential per installed release (#1646; ADR-0545, Proposed/Partial pending owner acceptance): in-memory secret confined to the manifest's job types and the instance's own id, revoked at removal, replaced at server start; closes the shared worker-token gap for installed artifacts. Open: (1) process confinement for installed artifacts (Landlock/seccomp, Windows job object); (2) the Console view of installed releases; (3) comparing the reported digest with the launched one (ADR-0535 §3). Placement per configured Worker belongs with WTD6.",
       "evidence": [
         "../../../workertype/install/install_test.go",
         "../../../api/workertypeinstall_internal_test.go",

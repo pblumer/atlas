@@ -2,7 +2,7 @@
 
 **Programme:** [Mobile & Field Experience](mobile-field-experience-program.md) ·
 **Manifest:** [MFE](../programs/mfe/program.json) · **Slice:** MFE1A ·
-**Owner:** pblumer · **Status:** planned (2026-11-09)
+**Owner:** pblumer · **Status:** active (planned and started 2026-11-09)
 
 **Decision basis:** [ADR-0516](../adr/0516-scoped-authenticated-process-start.md)
 (Accepted / Landed). This slice adds a surface to the decision already taken; it
