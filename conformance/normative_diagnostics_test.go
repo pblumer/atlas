@@ -201,7 +201,8 @@ func TestCON2ModelingSmellsAreWarningsNotRefusals(t *testing.T) {
 // pending the CON0 per-clause review:
 //   - a start event must not be the target of a sequence flow;
 //   - an end event must not be the source of a sequence flow;
-//   - a gateway's default must be one of its own outgoing sequence flows.
+//   - a gateway's default must be one of its own outgoing sequence flows; when it
+//     names another gateway's flow, that other gateway is silently misrouted.
 //
 // The runtime consequences are asserted too, because they are what makes each gap
 // matter: the outgoing flow of an end event is silently never taken, and a default
@@ -273,5 +274,39 @@ func TestCON2KnownAcceptedSpecViolations(t *testing.T) {
 				t.Fatalf("incidents on %v, want exactly one on gw", on)
 			}
 		})
+	})
+
+	// A default that names *another* gateway's flow is worse than ignored: the
+	// compiler marks that flow as the other gateway's default, so the other
+	// gateway routes there although the flow's own condition is false, and the
+	// modeler drops its missing-default warning for that gateway. Here x = 1:
+	// gw2's flows test x = 2 and x = 3, so gw2 must not route at all (it would
+	// park with an incident), yet it reaches "no".
+	t.Run("default-naming-another-gateways-flow/misroutes", func(t *testing.T) {
+		cond := func(id, from, to, c string) string {
+			return `<sequenceFlow id="` + id + `" sourceRef="` + from + `" targetRef="` + to +
+				`"><conditionExpression>` + c + `</conditionExpression></sequenceFlow>`
+		}
+		xml := con2Defs("", `<startEvent id="s"/>`+S("x")+`<exclusiveGateway id="gw1" default="b_no"/>`+
+			`<exclusiveGateway id="gw2"/><endEvent id="yes"/><endEvent id="no"/><endEvent id="other"/>`+
+			F("f1", "s", "x")+F("f2", "x", "gw1")+cond("a1", "gw1", "gw2", "= x = 1")+cond("a2", "gw1", "other", "= x = 5")+
+			cond("b_no", "gw2", "no", "= x = 2")+cond("b_yes", "gw2", "yes", "= x = 3"))
+		if _, err := compiler.Parse(defKey, 1, bytes.NewReader(xml)); err != nil {
+			t.Fatalf("compiler now refuses this violation (%v): move it to the located table and update FLOW-14", err)
+		}
+		problems := con2Problems(t, xml)
+		for _, p := range problems {
+			if p.Severity == compiler.SeverityError {
+				t.Fatalf("modeler now reports error %+v: move the case and update FLOW-14", p)
+			}
+		}
+		if con2HasProblem(problems, compiler.RuleGatewayMissingDefault, "gw2", compiler.SeverityWarning) {
+			t.Fatalf("gw2 is warned as lacking a default again; the foreign default no longer leaks: %+v", problems)
+		}
+		got := con2Run(t, xml)
+		if got.State != model.PICompleted {
+			t.Fatalf("state %v, want completed (misrouted through the leaked default)", got.State)
+		}
+		con2Expect(t, "FLOW-14", got, map[string]int{"gw2": 1, "no": 1, "yes": 0, "other": 0})
 	})
 }
