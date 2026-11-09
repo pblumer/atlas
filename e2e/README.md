@@ -103,6 +103,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   included) and what outside the application stops working, and is armed only once the
   application's name is typed; a refusal in the preview, or a caller who may not cancel
   instances, keeps it disarmed; Escape cancels.
+- **`modeler-home-applications.spec.mjs`**, **`application-deployments-processes.spec.mjs`** and
+  **`application-deployments-frozen.spec.mjs`**
+  ([ADR-draft-the-application-holds-its-deployments](../docs/adr/draft-the-application-holds-its-deployments.md)):
+  the Modeler home is one folding table of applications with no deployed list of its own, and
+  its *Deployed* column counts each application's processes and paused ones and opens its
+  Deployments tab; that tab lists one row per process with the older versions folded under it,
+  pauses, resumes and deletes from the row's menu, marks a definition frozen on a decision version,
+  and has a counterpart under *Not assigned*. `live-process-heading.spec.mjs` covers the pause
+  switch in the Operations live view.
 - **`appearance.spec.mjs`**
   ([ADR-0507](../docs/adr/0507-ui-appearance-modes.md)):
   the light, dark and system appearance, a display preference kept with the account and

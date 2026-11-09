@@ -112,6 +112,20 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **An application lists what it has deployed; the Modeler home lists applications.** The
+  Modeler home's *Deployed* list is gone: the same processes were also listed in each
+  application's *Deployments* tab and under *Operations › Instances*, and pausing or deleting
+  one was offered only on the home page. The home page is now one table of applications that
+  folds under its heading like every other list, with a column saying how many processes each
+  has deployed and how many of them are paused, linking to its Deployments tab
+  (`#/modeler/p/{id}/deployments`, a new address for the tab). The Deployments tab lists one row
+  per process instead of one per version: its newest version with the older ones folded under it,
+  its state, the instances all its versions hold, the mark for a definition frozen on a decision
+  version, and a menu to open it in the Modeler, see its instances, pause or resume its automatic
+  starts, or delete it. *Not assigned* gains a Deployments tab of its own, so the home page names
+  it once. The Operations live view says when a definition is paused and gives an operator the
+  pause switch on the newest version. `GET /api/v1/applications/{id}/deployments` now carries
+  each definition's `frozenDecisions`. ADR-draft-the-application-holds-its-deployments.
 - **A DMN reference is called a rule, and the artifact table names types plainly.** Throughout
   the Console, its editors and the handbook a DMN reference is a "Regel" / "rule" (was
   "Entscheidungsreferenz" / "DMN-Referenz", "decision reference" / "DMN reference"): the artifact
