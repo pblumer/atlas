@@ -46,6 +46,12 @@ func hubTools() []Tool {
 		"description": "Refs of gaps the person decided to leave out (capability:<key>, valuestream:<key>, or *)"}
 	importSchema["required"] = []any{"blueprintId", "version", "digest"}
 
+	architectureSchema := release()
+	archProps := architectureSchema["properties"].(map[string]any)
+	archProps["digest"] = stringProp("The digest atlas_hub_preview_release reported for this release; the sketch is refused if the registry now serves other bytes.")
+	archProps["layers"] = stringProp("Comma-separated layers to show: strategy, business, application, data, technology. A package records application, business and data. Default application,technology.")
+	architectureSchema["required"] = []any{"blueprintId", "version", "digest"}
+
 	return []Tool{
 		{
 			Name: "atlas_hub_list_releases",
@@ -54,7 +60,9 @@ func hubTools() []Tool {
 				"description, license, tags, atlas (the versions it is offered to), needs (Worker Types " +
 				"and server constants it declares — not verified) and artifact (path, digest, size). " +
 				"The index is verified against the operator's pinned Ed25519 key before anything is " +
-				"answered; an unconfigured registry answers 503, an unreachable or wrongly signed one 502. " +
+				"answered; an unconfigured registry answers 503, an unreachable or wrongly signed one 502 " +
+				"naming the station the way ended at and its cause — \"(stopped at tls: unknown_authority)\", " +
+				"for example; say that to the person, it tells a firewall from a wrong key. " +
 				"Filter by tags yourself. Nothing is installed.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, _ map[string]any) (string, error) {
@@ -67,7 +75,9 @@ func hubTools() []Tool {
 				"pinned registry, checks it against the signed digest and inspects the archive in memory, " +
 				"and answers the application it installs (applicationKey, applicationName), its files, the " +
 				"catalogues and products it offers, its declared needs and its digest. Pass that digest to " +
-				"atlas_hub_import_release. Nothing is written.",
+				"atlas_hub_import_release. When the registry cannot be read, or the package differs from " +
+				"the signed index, it answers 502 naming the station it stopped at and its cause. Nothing " +
+				"is written.",
 			InputSchema: release(),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				path, err := releasePath(args, "/preview")
@@ -75,6 +85,36 @@ func hubTools() []Tool {
 					return "", err
 				}
 				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_hub_release_architecture",
+			Description: "The architecture sketch of an atlas hub release's application before it is installed " +
+				"(ADR-0539), as data: the server derives it from the process " +
+				"models of the verified package and from nothing else — the messages its processes receive " +
+				"(entryPoints), the workers, job types, decisions and calls they name (dependencies), the data " +
+				"objects and personal data they declare (data), the roles their user tasks name (business) and " +
+				"the names they throw and catch (coupling). It is marked packaged: it has no physical part, no " +
+				"strategy layer, no catalogue products and no applications at the other end of a name, because " +
+				"those belong to an installation, and a release published after installing records its own " +
+				"snapshot (atlas_release_architecture), which can differ. Pass the digest " +
+				"atlas_hub_preview_release reported; layers as on atlas_release_architecture (strategy, " +
+				"business, application, data, technology; default application,technology). Nothing is written.",
+			InputSchema: architectureSchema,
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := releasePath(args, "/architecture")
+				if err != nil {
+					return "", err
+				}
+				digest, _ := args["digest"].(string)
+				if strings.TrimSpace(digest) == "" {
+					return "", errors.New("digest is required: preview the release with atlas_hub_preview_release first")
+				}
+				q := url.Values{"digest": {digest}}
+				if layers, _ := args["layers"].(string); strings.TrimSpace(layers) != "" {
+					q.Set("layers", layers)
+				}
+				return asText(c.get(path + "?" + q.Encode()))
 			},
 		},
 		{

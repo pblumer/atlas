@@ -16,6 +16,7 @@ import (
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/sharepointserver"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
@@ -425,6 +426,16 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		workerOnly:     true,
 		validateCreate: validateExchangeConnector,
 		jobTypes:       []int32{compiler.ExchangeJobTypeIndex},
+	},
+	{
+		// A SharePoint Server task administers a site collection on a farm
+		// (ADR-0540). Worker-only because the work is PowerShell
+		// only a farm server can run; the record exists so a deploy can check the name and
+		// the Console can show the web application.
+		name:           connectorKindSharePointServer,
+		workerOnly:     true,
+		validateCreate: validateSharePointServerConnector,
+		jobTypes:       []int32{compiler.SharePointServerJobTypeIndex},
 	},
 	{
 		// A Microsoft Teams Phone task provisions or removes a voice app and its
@@ -1095,6 +1106,20 @@ func validateExchangeConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender, p.Model = "", "", ""
 	if p.CredentialsRef == "" {
 		return "an exchange worker requires a credentialsRef naming a vault bundle: {organization, clientId, certificate} for Exchange Online, or {\"target\": \"onprem\", …} for an Exchange Server"
+	}
+	return ""
+}
+
+// validateSharePointServerConnector checks a SharePoint Server Worker a Console operator
+// is adding: the endpoint must be the web application's URL. The settings are optional
+// and hold no credential, so they are read only when they are given.
+func validateSharePointServerConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if strings.TrimSpace(p.Endpoint) == "" {
+		return "a sharepointserver worker requires an endpoint: the web application's URL, such as http://sp01.contoso.local"
+	}
+	if err := sharepointserver.CheckBundle(p.Endpoint, ""); err != nil {
+		return strings.TrimPrefix(err.Error(), "sharepointserver: ")
 	}
 	return ""
 }

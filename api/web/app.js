@@ -12,7 +12,7 @@ import {
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
 import { foldCards, pageOf } from "./fold.js";
-import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderTraceTable, placeTracePop, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
 import { outcomeSummary } from "./importchoices.js";
@@ -1107,6 +1107,11 @@ const WORKER_TYPES = [
     id: "entra", name: "Entra ID", kind: "Cloud directory",
     desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId} bundle with a client secret or a certificate lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "sharepointserver", name: "SharePoint Server", kind: "Site administration",
+    desc: "Administers site collections on a SharePoint Server farm (Subscription Edition, on-premises) from a process: create a team site, set owners, site administrators and the default groups, delete to the recycle bin, restore, and set the storage quota. Runs fixed PowerShell on a server of the farm, as the account the worker runs under, one process per job; no credential reaches Atlas.",
+    refs: "ADR-0540", status: "active", statusLabel: "configured below",
   },
   {
     id: "exchange", name: "Microsoft Exchange", kind: "Mailbox administration",
@@ -5583,7 +5588,7 @@ function wireWorkerManagement(workers) {
       }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="sharepointserver">sharepointserver</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -9288,10 +9293,7 @@ async function viewDecisionDetail(id) {
     pop.innerHTML = `<div class="pop-title">${esc(id)}</div>` +
       tables.map((tt, i) => miniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
     pop.hidden = false;
-    const box = row.getBoundingClientRect();
-    const top = box.top - pop.offsetHeight - 10;
-    pop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
-    pop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+    placeTracePop(pop, row.getBoundingClientRect());
   };
   const hidePop = () => { pop.hidden = true; };
   // Opening the graph is the deliberate half of the same question the hover answers

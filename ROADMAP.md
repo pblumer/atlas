@@ -663,6 +663,10 @@ The control-flow basics most real models use.
   record's open question), Exchange mailbox contacts through Microsoft Graph, and no
   capability claim yet — the two contact Worker Types are not declared interchangeable
   ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  **SharePoint Server farms are a Worker Type too**
+  (ADR-0540): a service task marked
+  `<atlas:sharepointServerConnector>` creates and administers site collections on an
+  on-premises farm through a worker on that farm; not yet walked on a real farm.
   **wikiwikibangbang wikis are a Worker Type too**
   ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)): a
   service task marked `<atlas:wikiwikibangbangConnector connector operation …>` opens,
@@ -1354,7 +1358,7 @@ execution or HA is available. Existing standalone operation remains supported.
 
 Adoption and polish.
 
-- 🚧 **atlas hub (legacy delivery ID BMP):** trusted discovery and distribution for solutions: process applications and their product catalogues now, with standalone catalogues, reusable components and public, internal or commercial offers as separately governed extensions. Signed Blueprint Registry v1 retains its existing versioned application package, safety checks and native import baselines. **Proposed extension:** application-plus-product-catalogue solution bundles by default, standalone catalogue offers, free/paid/internal access and explicitly governed update policies; unattended publication requires a separate ADR/recovery gate. The free engine does not depend on payments or runtime licence checks. [Programme](docs/planning/blueprint-marketplace-program.md) · [Accepted ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md) · [Catalogue extension plan](docs/planning/blueprint-catalogue-bundles.md) · [Proposed ADR](docs/adr/0506-marketplace-catalogue-bundles-and-updates.md).
+- 🚧 **atlas hub (legacy delivery ID BMP):** trusted discovery and distribution for solutions: process applications and their product catalogues now, with standalone catalogues, reusable components and public, internal or commercial offers as separately governed extensions. Signed Blueprint Registry v1 retains its existing versioned application package, safety checks and native import baselines. **Proposed extension:** application-plus-product-catalogue solution bundles by default, standalone catalogue offers, free/paid/internal access and explicitly governed update policies; unattended publication requires a separate ADR/recovery gate. The free engine does not depend on payments or runtime licence checks. Before installing, the preview shows the application's architecture sketch, derived by the server from the verified package's process models, and draws each BPMN model read-only ([ADR draft](docs/adr/0539-blueprint-architecture-preview.md)). [Programme](docs/planning/blueprint-marketplace-program.md) · [Accepted ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md) · [Catalogue extension plan](docs/planning/blueprint-catalogue-bundles.md) · [Proposed ADR](docs/adr/0506-marketplace-catalogue-bundles-and-updates.md).
 
 - 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
   descriptor for a Worker Type operation's claimed semantics: resource kind and

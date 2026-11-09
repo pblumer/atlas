@@ -2409,14 +2409,24 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .res-rule { font: 600 10px/1.4 ui-monospace, monospace; color: #15803d; background: #dcfce7; padding: 1px 7px; border-radius: 999px; }
 
 /* The hover popover: a frosted card holding the matched-rule table. */
+/* The card is a hover — pointer-events: none — so nothing inside it can be scrolled
+   to. A wide table (a long list of literals in one cell, a long input expression)
+   therefore has to fit, not overflow: the card may grow to the viewport, and in it
+   the matrix's cells wrap instead of holding to one line. They used to hold, and a
+   wide table ran out past the card's edge and over the page beneath it. The other
+   places that draw the matrix (.drg-rules, the editor's Test panel) are read, not
+   glanced at, and scroll instead, so the wrapping is the card's alone. */
 .dec-pop {
-  position: fixed; z-index: 60; pointer-events: none; max-width: 480px;
+  position: fixed; z-index: 60; pointer-events: none;
+  max-width: min(760px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: hidden;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 11px;
   box-shadow: 0 10px 30px rgba(20, 33, 61, 0.22);
 }
 .dec-pop[hidden] { display: none; }
+.dec-pop .mgrid th, .dec-pop .mgrid td { white-space: normal; overflow-wrap: break-word; vertical-align: top; }
+.dec-pop .mgrid .mcol-idx { white-space: nowrap; }
 .pop-title { font: 700 12px/1 system-ui, sans-serif; margin-bottom: 6px; color: var(--text); }
 .mtable { margin-top: 6px; }
 .mtable-head { display: flex; align-items: center; gap: 8px; font: 600 11px/1 system-ui, sans-serif; margin-bottom: 4px; color: var(--text); }

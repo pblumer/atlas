@@ -98,8 +98,10 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindDiscord:      {compiler.DiscordJobTypeIndex},
 	connectorKindS3:           {compiler.S3JobTypeIndex},
 	connectorKindExchange:     {compiler.ExchangeJobTypeIndex},
-	"webscrape":               {compiler.WebScrapeJobTypeIndex},
-	"userconnector":           {compiler.UserConnectorJobTypeIndex},
+
+	connectorKindSharePointServer: {compiler.SharePointServerJobTypeIndex},
+	"webscrape":                   {compiler.WebScrapeJobTypeIndex},
+	"userconnector":               {compiler.UserConnectorJobTypeIndex},
 
 	// Keyed by the kind's name, like Teams Phone's above.
 	connectorKindGoogleContacts: {compiler.GoogleContactsJobTypeIndex},

@@ -2451,6 +2451,10 @@ type xmlServiceTask struct {
 	// permission, a distribution group, a mailbox setting — against an Exchange Online
 	// or Exchange Server organization a *worker* holds the credential for.
 	Exchange *xmlExchangeConnector `xml:"extensionElements>exchangeConnector"`
+	// SharePointServer, when present, marks this service task a SharePoint Server task
+	// (ADR-0540): one site administration step on a farm whose
+	// worker runs on that farm.
+	SharePointServer *xmlSharePointServerConnector `xml:"extensionElements>sharepointServerConnector"`
 	// TeamsPhone, when present, marks this service task a Microsoft Teams Phone task
 	// (ADR-0463): one voice-app operation — resolve users, ensure a
 	// resource account, a call queue or an auto attendant, or remove one — against a
@@ -2753,6 +2757,20 @@ type xmlExchangeConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	MaxResults         string `xml:"maxResults,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlSharePointServerConnector is the <atlas:sharepointServerConnector> extension on a
+// service task. connector names the Worker; operation is a row of
+// connector/sharepointserver/catalog; parameters is that operation's JSON object, each
+// value literal or =FEEL; resultVariable receives what a read or create returned.
+type xmlSharePointServerConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Parameters     string `xml:"parameters,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

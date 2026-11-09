@@ -6,7 +6,7 @@
 // The actual import is ADR-0467's existing packageimport.js workflow — including
 // dry-run conflict decisions, caller authorization, optional publish and needs.
 import { importPackage, packageSummary } from "./packageimport.js";
-import { connectToHub, openRoute, routeSummary } from "./hub-connection.js";
+import { connectToHub, explainStop, openRoute, routeSummary } from "./hub-connection.js";
 import { t } from "./i18n.js";
 
 const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g,
@@ -15,10 +15,22 @@ const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g,
 const route = (id, version) => "/api/v1/blueprints/" + encodeURIComponent(id) +
   "/releases/" + encodeURIComponent(version);
 
+// refused is the error a refused registry request throws. When the registry could
+// not be read, the server names the station the way ended at; the error carries it,
+// so the dialog can say where and why instead of the server's one English sentence.
+function refused(data) {
+  const err = new Error(data.error || t("blueprint.failed"));
+  if (data.station && data.station.stage) {
+    err.station = data.station;
+    err.host = data.registryHost || "";
+  }
+  return err;
+}
+
 async function trustedJSON(url) {
   const res = await fetch(url, { cache: "no-store" });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || t("blueprint.failed"));
+  if (!res.ok) throw refused(data);
   return data;
 }
 
@@ -40,9 +52,18 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   const body = ov.querySelector("[data-body]");
   let closed = false;
   let busy = false;
+  // What a preview holds beyond its markup: the sketch's object URL and the diagram
+  // viewer. Released whenever the preview is left, so neither outlives what it shows.
+  let sketchURL = null;
+  let viewer = null;
+  const releaseExtras = () => {
+    if (sketchURL) { URL.revokeObjectURL(sketchURL); sketchURL = null; }
+    if (viewer) { viewer.destroy(); viewer = null; }
+  };
   const close = () => {
     if (closed || busy) return;
     closed = true;
+    releaseExtras();
     document.removeEventListener("keydown", onEscape);
     ov.remove();
   };
@@ -51,9 +72,24 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   ov.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
 
+  // error replaces the dialog's content with what went wrong. Where the registry
+  // could not be read, it says at which station the way ended and what that cause
+  // usually means, as the route does, and offers to check the whole way again.
   const error = (err) => {
-    if (!closed) body.innerHTML = `<p class="muted">${esc(t("blueprint.failed"))}: ${esc(err.message || err)}</p>
-      <button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>`;
+    if (closed) return;
+    if (err && err.station) {
+      const stop = explainStop(err.station, err.host);
+      body.innerHTML = `<p class="muted" data-stopped>${esc(t("blueprint.failed"))}. ${esc(stop.line)}</p>
+        ${stop.html}
+        <div class="between" style="margin-top:10px">
+          <button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>
+          <button type="button" class="btn ghost" data-retry>${esc(t("blueprint.route.retry"))}</button>
+        </div>`;
+      body.querySelector("[data-retry]").addEventListener("click", () => { void list(true); });
+    } else {
+      body.innerHTML = `<p class="muted">${esc(t("blueprint.failed"))}: ${esc(err.message || err)}</p>
+        <button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>`;
+    }
     body.querySelector("[data-back]")?.addEventListener("click", () => { void list(); });
   };
 
@@ -97,6 +133,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   };
 
   const list = async (reconnect = false) => {
+    releaseExtras();
     if ((!connection || reconnect) && !(await connect())) return;
     try {
       if (closed) return;
@@ -172,11 +209,24 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
         <p>${esc(t("blueprint.digest"))}: <code>${esc(inspected.digest)}</code></p>
         <p><b>${esc(t("blueprint.needs"))}:</b> ${esc(needs.join(", ") || t("blueprint.none"))}</p>
         ${catalogues ? `<p><b>${esc(t("transfer.catalogues"))}:</b></p><ul>${catalogues}</ul>` : ""}
+        <section data-architecture>
+          <p><b>${esc(t("blueprint.architecture.title"))}</b></p>
+          <p class="muted small">${esc(t("blueprint.architecture.hint"))}</p>
+          <div data-sketch><p class="muted small">${esc(t("blueprint.architecture.loading"))}</p></div>
+        </section>
+        <section data-diagrams>
+          <p><b>${esc(t("blueprint.diagrams.title"))}</b></p>
+          <p class="muted small">${esc(t("blueprint.diagrams.hint"))}</p>
+          <div data-diagram-picker><button type="button" class="btn ghost small" data-show-diagrams>${esc(t("blueprint.diagrams.show"))}</button></div>
+          <div class="tp-canvas" data-diagram hidden></div>
+        </section>
         <p><b>${esc(t("blueprint.files"))}:</b></p><ul>${fileRows}</ul>
         <p>${esc(t("blueprint.warning"))}</p>
         <div class="between"><button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>
           <button type="button" class="btn" data-install>${esc(t("blueprint.import"))}</button></div>`;
       body.querySelector("[data-back]").addEventListener("click", () => { void list(); });
+      void showSketch(inspected);
+      body.querySelector("[data-show-diagrams]").addEventListener("click", () => { void showDiagrams(inspected); });
       const install = body.querySelector("[data-install]");
       install.addEventListener("click", async () => {
         if (busy || !window.confirm(t("blueprint.confirm", { name: inspected.applicationName }))) return;
@@ -186,10 +236,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
           const res = await fetch(route(inspected.blueprintId, inspected.version) + "/package", {
             cache: "no-store", headers: { "If-Match": '"' + inspected.digest + '"' },
           });
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || t("blueprint.failed"));
-          }
+          if (!res.ok) throw refused(await res.json().catch(() => ({})));
           // The server rechecks its pinned index and inspected digest. Importing
           // a package is still a separate authorized user action, not a GET effect.
           const file = new File([await res.blob()], "blueprint-" + inspected.version + ".tar.gz", {
@@ -202,7 +249,8 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
             await reload();
           }
         } catch (err) {
-          if (!closed) notify(t("blueprint.importFailed") + ": " + (err.message || err), "err");
+          const reason = err && err.station ? explainStop(err.station, err.host).line : (err.message || err);
+          if (!closed) notify(t("blueprint.importFailed") + ": " + reason, "err");
         } finally {
           busy = false;
           if (!closed) install.disabled = false;
@@ -211,6 +259,80 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
     } catch (err) {
       if (!closed) error(err);
     }
+  };
+
+  // The sketch and the models are read for the digest this preview reported, so what
+  // they show is the package the person is looking at (ADR-0539).
+  const pinned = (inspected, tail, extra = "") => route(inspected.blueprintId, inspected.version) + tail +
+    "?digest=" + encodeURIComponent(inspected.digest) + extra;
+
+  // showSketch draws the server's sketch of the package as an image: the SVG is the
+  // server's own rendering, carries no script and is shown through an <img>, which runs
+  // none either. A failure says so in place and leaves the rest of the preview usable.
+  const showSketch = async (inspected) => {
+    const slot = body.querySelector("[data-sketch]");
+    try {
+      const res = await fetch(pinned(inspected, "/architecture.svg", "&layers=application,business,data"), { cache: "no-store" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || res.statusText);
+      }
+      const svg = await res.blob();
+      if (closed || !slot.isConnected) return;
+      if (sketchURL) URL.revokeObjectURL(sketchURL);
+      sketchURL = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      const file = "architecture-" + String(inspected.blueprintId).replace(/[^A-Za-z0-9._-]+/g, "-") + "-" +
+        String(inspected.version).replace(/[^A-Za-z0-9._-]+/g, "-") + ".svg";
+      slot.innerHTML = `<div style="overflow:auto; background:#fff; border:1px solid var(--border); border-radius:var(--radius)">
+          <img data-sketch-img alt="${esc(t("blueprint.architecture.alt", { name: inspected.applicationName }))}" style="display:block; max-width:100%; height:auto">
+        </div>
+        <div class="between" style="margin-top:6px"><span></span>
+          <a class="btn ghost small" data-sketch-save download="${esc(file)}">${esc(t("blueprint.architecture.save"))}</a></div>`;
+      slot.querySelector("[data-sketch-img]").src = sketchURL;
+      slot.querySelector("[data-sketch-save]").href = sketchURL;
+    } catch (err) {
+      if (!closed && slot.isConnected) {
+        slot.innerHTML = `<p class="muted small" data-sketch-failed>${esc(t("blueprint.architecture.failed"))}: ${esc(err.message || err)}</p>`;
+      }
+    }
+  };
+
+  // showDiagrams loads the package's models on request — a further download of the
+  // package, so not before somebody asks — and draws the chosen one read-only.
+  const showDiagrams = async (inspected) => {
+    const picker = body.querySelector("[data-diagram-picker]");
+    const canvas = body.querySelector("[data-diagram]");
+    picker.innerHTML = `<p class="muted small">${esc(t("blueprint.diagrams.loading"))}</p>`;
+    let processes;
+    try {
+      processes = (await trustedJSON(pinned(inspected, "/diagrams"))).processes || [];
+    } catch (err) {
+      if (!closed && picker.isConnected) picker.innerHTML = `<p class="muted small">${esc(t("blueprint.diagrams.failed"))}: ${esc(err.message || err)}</p>`;
+      return;
+    }
+    if (closed || !picker.isConnected) return;
+    if (!processes.length) {
+      picker.innerHTML = `<p class="muted small">${esc(t("blueprint.diagrams.none"))}</p>`;
+      return;
+    }
+    picker.innerHTML = `<div role="group" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px">${processes.map((p, i) =>
+      `<button type="button" class="btn ghost small toggle" data-diagram-pick="${i}" aria-pressed="false">${esc(p.name || p.processId)}</button>`).join("")}</div>`;
+    const draw = async (i) => {
+      picker.querySelectorAll("[data-diagram-pick]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.diagramPick) === i)));
+      if (viewer) { viewer.destroy(); viewer = null; }
+      canvas.hidden = false;
+      canvas.innerHTML = `<p class="tp-msg muted">${esc(t("blueprint.diagrams.loading"))}</p>`;
+      try {
+        const { mountDiagramPreview } = await import("./editor.js");
+        const handle = await mountDiagramPreview(canvas, processes[i].xml);
+        if (closed || !canvas.isConnected) { handle.destroy(); return; }
+        viewer = handle;
+      } catch (err) {
+        if (!closed && canvas.isConnected) canvas.innerHTML = `<p class="tp-msg muted" data-diagram-failed>${esc(t("blueprint.diagrams.failed"))}: ${esc(err.message || err)}</p>`;
+      }
+    };
+    picker.querySelectorAll("[data-diagram-pick]").forEach((b) => b.addEventListener("click", () => { void draw(Number(b.dataset.diagramPick)); }));
+    await draw(0);
   };
 
   const closeAfterImport = () => {

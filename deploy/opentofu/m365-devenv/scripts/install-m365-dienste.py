@@ -30,7 +30,9 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
      the map already has. A hub import through the Console asks the same in its dialog;
   6. sets the application constants: NAME_PREFIX (the environment's prefix, so everything
      the catalogue creates lies in the shared tenant's Exchange scope and is removed by
-     the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE.
+     the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE;
+  7. installs the on-premises variant: the Exchange products when exchange_onprem is built,
+     the SharePoint Server team site when enable_sharepoint_server is on.
 
 Re-running is safe: existing groups are kept, the application and the catalogue are updated.
 Test persons join the approver and audience groups only once they have signed in to Atlas;
@@ -196,8 +198,15 @@ ONLINE_STORE = "Exchange Online: Empfaenger"
 ONPREM_STORE = "Exchange Server: Empfaenger"
 
 
-def build_onprem(pkg, dst):
+SHAREPOINT_SERVER_DIR = "sharepoint-server"
+
+
+def build_onprem(pkg, dst, with_exchange=True, with_sharepoint=False):
     """Writes the on-premises variant of the adapted package pkg into dst.
+
+    Exchange Server products come with exchange_onprem, the SharePoint Server team site
+    (sharepoint-server/produkt.json) only with enable_sharepoint_server; either alone
+    gives the catalogue cat-m365-onprem with what is there.
 
     Every process the Exchange products run, every form they show and every message
     they start by is copied under a name of its own (process ids and form ids get
@@ -214,7 +223,7 @@ def build_onprem(pkg, dst):
     cat = json.load(open(os.path.join(pkg, "katalog.json"), encoding="utf-8"))
     path_of = {x["id"]: x["path"] for x in man["processes"]}
     form_path = {x["id"]: x["path"] for x in man["forms"]}
-    products = [x for x in cat["products"] if x["id"] in ONPREM_PRODUCTS]
+    products = [x for x in cat["products"] if x["id"] in ONPREM_PRODUCTS] if with_exchange else []
     procs, forms, messages = set(), set(), set()
     for x in products:
         for k in ("lifecycleProcess", "provisionProcess", "deprovisionProcess"):
@@ -278,17 +287,31 @@ def build_onprem(pkg, dst):
     # the online realizations of the processes it copies, under their copies' ids. The
     # proposals are the online package's: installed after it, the variant finds every key
     # in the map and only links.
+    extra = json.load(open(os.path.join(pkg, SHAREPOINT_SERVER_DIR, "produkt.json"), encoding="utf-8")) if with_sharepoint else None
+    if extra:
+        # The team site is written for the variant from the start: it needs no renaming,
+        # only its files beside the copies.
+        os.makedirs(os.path.join(dst, SHAREPOINT_SERVER_DIR))
+        for entry in [extra["process"]] + extra["forms"]:
+            shutil.copy(os.path.join(pkg, entry["path"]), os.path.join(dst, entry["path"]))
+        out_procs.append({"id": extra["process"]["id"], "name": extra["process"]["name"], "path": extra["process"]["path"]})
+        out_forms += [{"id": f["id"], "name": f["id"], "path": f["path"]} for f in extra["forms"]]
     os.makedirs(os.path.join(dst, "architektur"))
     model = json.load(open(os.path.join(pkg, man["informationModels"][0]["path"]), encoding="utf-8"))
     for st in model["stores"]:
         if st["name"] == ONLINE_STORE:
             st["name"], st["worker"] = ONPREM_STORE, ONPREM_WORKER
     model["name"] += " (Exchange Server)"
+    if extra:
+        model["classes"].append(extra["class"])
+        model["stores"].append(extra["store"])
     json.dump(model, open(os.path.join(dst, "architektur", "informationsmodell.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
     arch = json.load(open(os.path.join(pkg, man["architecture"]), encoding="utf-8"))
     arch["realizations"] = [dict(r, processId=proc(r["processId"])) for r in arch["realizations"]
                             if r.get("kind") == "process" and r.get("processId") in procs]
+    if extra:
+        arch["realizations"].append(extra["realization"])
     json.dump(arch, open(os.path.join(dst, "architektur", "capabilities.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
     json.dump({"formatVersion": man["formatVersion"], "key": APP_KEY + "-onprem",
@@ -318,11 +341,17 @@ def build_onprem(pkg, dst):
                 a["message"] = message(a["message"])
         y["texts"] = {k: v + " (Exchange Server)" for k, v in x["texts"].items()}
         out_products.append(y)
+    if extra:
+        out_products.append(extra["product"])
+    # The catalogue's name says what its products run on, and what is switched on.
+    label = {(True, False): ("Exchange Server (OnPrem)", "Exchange Server (on-premises)"),
+             (False, True): ("SharePoint Server (OnPrem)", "SharePoint Server (on-premises)"),
+             (True, True): ("Exchange und SharePoint Server (OnPrem)", "Exchange and SharePoint Server (on-premises)")}[(with_exchange, with_sharepoint)]
     # A person sees every catalogue they are the audience for (ADR-0522), so the
     # variant's catalogue, with the staff audience, is offered beside the online ones.
     doc = {"publish": cat.get("publish", True),
            "catalogs": [{"id": "cat-m365-onprem",
-                         "texts": {"de": "Exchange Server (OnPrem)", "en": "Exchange Server (on-premises)"},
+                         "texts": {"de": label[0], "en": label[1]},
                          "rank": 400, "languages": ["de", "en"], "items": [y["id"] for y in out_products],
                          "groups": ["{{zielgruppe}}"], "edges": []}],
            "products": out_products}
@@ -335,19 +364,42 @@ MODELS = ["m365-lizenzprofil", "m365-namensregel", "m365-postfachkontingent", "m
 
 
 def gap_decisions(plan):
-    """The query that settles the capability map's gaps of a planned source import: every
+    """The query that settles a planned source import. Changed artifacts take the package's version; every
     gap the package proposes a record for is adopted, and each is named in the log. A gap
     without a proposal stops the installer — mapping it onto another key is a person's
     decision, made in the Console."""
+    query = {}
+    # An artifact of this package that differs from the server's: the package is what this
+    # installer installs, so it wins, and each one is named in the log. Without a decision
+    # the server refuses the whole import with 409.
+    changed = [a["ref"] for a in plan.get("artifacts", []) if a.get("status") == "changed"]
+    for ref in changed:
+        log(f"overwriting with the package's version: {ref}")
+    if changed:
+        query["overwrite"] = ",".join(changed)
     gaps = [a for a in plan.get("artifacts", []) if a.get("status") == "gap"]
     if not gaps:
-        return ""
+        return "?" + urllib.parse.urlencode(query) if query else ""
     bare = [a["ref"] for a in gaps if not a.get("proposed")]
     if bare:
         sys.exit(f"the capability map lacks {', '.join(bare)} and the package proposes nothing for it: decide in the Console")
     for a in gaps:
         log(f"capability map: adopting the package's proposal {a['ref']} ({a.get('name', '')})")
-    return "?" + urllib.parse.urlencode({"adopt": ",".join(a["ref"] for a in gaps)})
+    query["adopt"] = ",".join(a["ref"] for a in gaps)
+    return "?" + urllib.parse.urlencode(query)
+
+
+def sharepoint_enabled(tofu_dir):
+    """Whether the SharePoint Server of this environment is built. Tolerant on purpose:
+    the output arrived after this script, and a state written without it means off."""
+    run = subprocess.run(["tofu", "output", "-json", "sharepoint_server"], cwd=tofu_dir,
+                         capture_output=True, text=True)
+    if run.returncode != 0:
+        return False
+    try:
+        return bool(json.loads(run.stdout).get("enabled"))
+    except (ValueError, AttributeError):
+        return False
 
 
 def install(atlas, pkg):
@@ -404,6 +456,8 @@ def main():
     ap.add_argument("--mail-domain", help="domain of the catalogue's addresses (default: the initial domain)")
     ap.add_argument("--no-onprem", action="store_true",
                     help="leave out the Exchange Server variant even when exchange_onprem is built")
+    ap.add_argument("--no-sharepoint-server", action="store_true",
+                    help="leave out the SharePoint Server team site even when enable_sharepoint_server is on")
     ap.add_argument("--site-inventory", help="SITE_INVENTAR, the site carrying the list «Site-Inventar» "
                     "(host:/sites/path); without it the SharePoint team site is left out")
     args = ap.parse_args()
@@ -453,7 +507,11 @@ def main():
 
     example = os.path.abspath(args.example)
     onprem = tofu_output(tofu_dir, "exchange_onprem")
-    with_onprem = bool(onprem) and not args.no_onprem
+    with_exchange = bool(onprem) and not args.no_onprem
+    # The output comes with enable_sharepoint_server; on a tofu state from before it
+    # existed the call fails, and that reads as off (ADR-draft-sharepoint-server-worker).
+    with_sharepoint = sharepoint_enabled(tofu_dir) and not args.no_sharepoint_server
+    with_onprem = with_exchange or with_sharepoint
 
     work = tempfile.mkdtemp(prefix="m365-dienste-")
     try:
@@ -491,7 +549,7 @@ def main():
             adapt(os.path.abspath(args.example), pkg, sku, with_telephony, prefix.rstrip("-") if prefix else "",
                   sharepoint_host, bool(args.site_inventory))
             var = os.path.join(work, "onprem")
-            build_onprem(pkg, var)
+            build_onprem(pkg, var, with_exchange, with_sharepoint)
             install(atlas, var)
         finally:
             shutil.rmtree(work, ignore_errors=True)
@@ -499,7 +557,7 @@ def main():
         app = next((a for a in items(apps, "applications") if a.get("key") == APP_KEY + "-onprem"), None)
         if not app:
             sys.exit(f"the application {APP_KEY}-onprem is not listed after the import")
-        onprem_domain = onprem["fqdn"].split(".", 1)[1]
+        onprem_domain = onprem["fqdn"].split(".", 1)[1] if with_exchange else domain
         atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": [
             {"name": "NAME_PREFIX", "type": "json", "value": json.dumps(prefix)},
             {"name": "MAIL_DOMAIN", "type": "string", "value": onprem_domain},
@@ -508,7 +566,7 @@ def main():
             # against the Exchange Server, so the room processes skip it (raumliste.bpmn).
             {"name": "ORTSANGABEN", "type": "json", "value": "false"},
         ]})
-        log(f"on-premises variant installed: catalogue cat-m365-onprem, worker {ONPREM_WORKER}, MAIL_DOMAIN={onprem_domain}")
+        log(f"on-premises variant installed: catalogue cat-m365-onprem, exchange={with_exchange}, sharepoint-server={with_sharepoint}, MAIL_DOMAIN={onprem_domain}")
     log("done")
 
 

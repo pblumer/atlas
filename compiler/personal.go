@@ -209,6 +209,8 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.ExchangeConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ExchangeParameters.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
+	"connectorTasks.SharePointServerParameters.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
 	// Teams Phone's values are one list keyed by attribute name rather than a field per
 	// attribute, so one path covers every value its operations take.
 	"connectorTasks.TeamsPhoneArgs.Val.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

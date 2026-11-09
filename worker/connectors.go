@@ -506,6 +506,19 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Queries[compiler.ExchangeJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
 				return exchange.RunLookup(ctx, connector, q, reg)
 			}
+		case "sharepointserver":
+			reg, names, err := sharePointServerRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.SharePointServerJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunSharePointServerJob(ctx, j, reg)
+			})
 		case "googlecontacts":
 			reg, names, err := googleContactsRegistryFromEnv(env)
 			if err != nil {
@@ -633,20 +646,22 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 // (ldap, rest, soap, scim), it has nothing to reach (csv, script), or its address is
 // a fixed service the configuration does not name (teamsphone).
 var endpointKeys = map[string]struct{ prefix, field string }{
-	"ad":           {adDirEnvPrefix, "URL"},
-	"agent":        {agentEnvPrefix, "ENDPOINT"},
-	"clio":         {clioEnvPrefix, "ENDPOINT"},
-	"discord":      {discordEnvPrefix, "URL"},
-	"entra":        {entraEnvPrefix, "BASE_URL"},
-	"exchange":     {exchangeEnvPrefix, "URL"},
-	"googlesheets": {googleSheetsEnvPrefix, "ENDPOINT"},
-	"jira":         {jiraEnvPrefix, "URL"},
-	"mail":         {mailEnvPrefix, "ENDPOINT"},
-	"paperless":    {paperlessEnvPrefix, "URL"},
-	"remedy":       {remedyEnvPrefix, "ENDPOINT"},
-	"s3":           {s3EnvPrefix, "URL"},
-	"sharepoint":   {sharepointEnvPrefix, "ENDPOINT"},
-	"temis":        {temisEnvPrefix, "URL"},
+	"ad":       {adDirEnvPrefix, "URL"},
+	"agent":    {agentEnvPrefix, "ENDPOINT"},
+	"clio":     {clioEnvPrefix, "ENDPOINT"},
+	"discord":  {discordEnvPrefix, "URL"},
+	"entra":    {entraEnvPrefix, "BASE_URL"},
+	"exchange": {exchangeEnvPrefix, "URL"},
+
+	"sharepointserver": {sharePointServerEnvPrefix, "URL"},
+	"googlesheets":     {googleSheetsEnvPrefix, "ENDPOINT"},
+	"jira":             {jiraEnvPrefix, "URL"},
+	"mail":             {mailEnvPrefix, "ENDPOINT"},
+	"paperless":        {paperlessEnvPrefix, "URL"},
+	"remedy":           {remedyEnvPrefix, "ENDPOINT"},
+	"s3":               {s3EnvPrefix, "URL"},
+	"sharepoint":       {sharepointEnvPrefix, "ENDPOINT"},
+	"temis":            {temisEnvPrefix, "URL"},
 	// A People API base an operator behind a proxy names; empty for most, and then
 	// nothing is reported. A block of its own so the table above keeps its alignment.
 	"googlecontacts": {googleContactsEnvPrefix, "URL"},
@@ -711,7 +726,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
+	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "sharepointserver", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

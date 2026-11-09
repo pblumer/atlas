@@ -1,0 +1,229 @@
+{
+  "_comment": "Das Produkt, die Teamwebsite auf SharePoint Server: nur in der On-Premises-Variante (scripts/install-m365-dienste.py, build_onprem), nicht im Paket atlas.json. Klasse und Datenspeicher ergänzen dort das Informationsmodell der Variante.",
+  "process": {
+    "id": "proc_m365_spserver_site",
+    "name": "SharePoint Server: Teamwebsite",
+    "path": "sharepoint-server/sharepoint-server-site.bpmn"
+  },
+  "forms": [
+    {
+      "id": "m365-spserver-site-bestellung",
+      "path": "sharepoint-server/m365-spserver-site-bestellung.form.json"
+    },
+    {
+      "id": "m365-spserver-site-besitzer",
+      "path": "sharepoint-server/m365-spserver-site-besitzer.form.json"
+    },
+    {
+      "id": "m365-spserver-site-mitglieder",
+      "path": "sharepoint-server/m365-spserver-site-mitglieder.form.json"
+    },
+    {
+      "id": "m365-spserver-site-kontingent",
+      "path": "sharepoint-server/m365-spserver-site-kontingent.form.json"
+    }
+  ],
+  "product": {
+    "id": "m365-spserver-site",
+    "homeCatalog": "cat-m365-onprem",
+    "state": "active",
+    "multipleAllowed": true,
+    "texts": {
+      "de": "Teamwebsite",
+      "en": "Team site"
+    },
+    "descriptions": {
+      "de": "Eine Websitesammlung auf SharePoint Server unter einer selbst gewählten URL, mit Besitzer und Stellvertretung. Danach: Besitzer und Mitglieder ändern, das Speicherkontingent setzen, löschen und wiederherstellen.",
+      "en": "A site collection on SharePoint Server at a URL of your choice, with an owner and a deputy. Afterwards: change owners and members, set the storage quota, delete and restore."
+    },
+    "approval": {
+      "kind": "proc_m365_genehmigung_vorgesetzter"
+    },
+    "lifecycleProcess": "proc_m365_spserver_site",
+    "configForm": "m365-spserver-site-bestellung",
+    "actions": [
+      {
+        "key": "provision",
+        "message": "m365onprem.spsite.erstellen",
+        "effect": "provision"
+      },
+      {
+        "key": "deprovision",
+        "message": "m365onprem.spsite.rueckgabe",
+        "effect": "deprovision",
+        "triggers": [
+          "customer",
+          "operator"
+        ],
+        "labels": {
+          "de": "Teamwebsite endgültig zurückgeben",
+          "en": "Return the team site for good"
+        }
+      },
+      {
+        "key": "besitzer",
+        "message": "m365onprem.spsite.besitzer",
+        "effect": "change",
+        "triggers": [
+          "customer",
+          "operator"
+        ],
+        "labels": {
+          "de": "Besitzer ändern",
+          "en": "Change the owners"
+        },
+        "form": "m365-spserver-site-besitzer"
+      },
+      {
+        "key": "mitglieder",
+        "message": "m365onprem.spsite.mitglieder",
+        "effect": "change",
+        "triggers": [
+          "customer",
+          "operator"
+        ],
+        "labels": {
+          "de": "Mitglieder ändern",
+          "en": "Change the members"
+        },
+        "form": "m365-spserver-site-mitglieder"
+      },
+      {
+        "key": "kontingent",
+        "message": "m365onprem.spsite.kontingent",
+        "effect": "change",
+        "triggers": [
+          "customer",
+          "operator"
+        ],
+        "labels": {
+          "de": "Speicherkontingent setzen",
+          "en": "Set the storage quota"
+        },
+        "form": "m365-spserver-site-kontingent"
+      },
+      {
+        "key": "loeschen",
+        "message": "m365onprem.spsite.loeschen",
+        "effect": "change",
+        "triggers": [
+          "customer",
+          "operator"
+        ],
+        "labels": {
+          "de": "Website löschen",
+          "en": "Delete the site"
+        }
+      },
+      {
+        "key": "wiederherstellen",
+        "message": "m365onprem.spsite.wiederherstellen",
+        "effect": "change",
+        "triggers": [
+          "customer",
+          "operator"
+        ],
+        "labels": {
+          "de": "Wiederherstellen",
+          "en": "Restore"
+        }
+      }
+    ],
+    "keywords": [
+      "SharePoint Server",
+      "Website",
+      "Teamwebsite",
+      "Zusammenarbeit"
+    ],
+    "category": "zusammenarbeit",
+    "categoryTexts": {
+      "de": "Zusammenarbeit",
+      "en": "Collaboration"
+    }
+  },
+  "class": {
+    "id": "cls-sharepointserversite",
+    "name": "SharePointServerSite",
+    "documentation": "Eine Websitesammlung auf SharePoint Server: die Einheit einer Teamwebsite on-premises.",
+    "stereotype": "businessObject",
+    "attributes": [
+      {
+        "name": "url",
+        "type": "string",
+        "multiplicity": "1"
+      },
+      {
+        "name": "titel",
+        "type": "string",
+        "multiplicity": "1"
+      },
+      {
+        "name": "kontingentGB",
+        "type": "number",
+        "multiplicity": "0..1"
+      }
+    ],
+    "x": 40,
+    "y": 2100,
+    "identity": [
+      "url"
+    ],
+    "lifecycle": {
+      "states": [
+        {
+          "name": "Angefordert",
+          "x": 40,
+          "y": 40,
+          "initial": true
+        },
+        {
+          "name": "Bereit",
+          "x": 200,
+          "y": 40
+        },
+        {
+          "name": "Geloescht",
+          "x": 360,
+          "y": 40
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t-spss-1",
+          "from": "Angefordert",
+          "to": "Bereit"
+        },
+        {
+          "id": "t-spss-2",
+          "from": "Bereit",
+          "to": "Bereit"
+        },
+        {
+          "id": "t-spss-3",
+          "from": "Bereit",
+          "to": "Geloescht"
+        },
+        {
+          "id": "t-spss-4",
+          "from": "Geloescht",
+          "to": "Bereit"
+        }
+      ]
+    }
+  },
+  "store": {
+    "id": "store-sp-server-sites",
+    "name": "SharePoint Server: Sites",
+    "documentation": "Die Websitesammlungen der Webanwendung; ihre Eigenschaften atlas.* sind das Inventar.",
+    "class": "SharePointServerSite",
+    "worker": "ucc_sharepoint_onprem",
+    "mode": "readwrite",
+    "x": 1600,
+    "y": 1700
+  },
+  "realization": {
+    "capability": "m365-zusammenarbeit",
+    "kind": "process",
+    "processId": "proc_m365_spserver_site"
+  }
+}
