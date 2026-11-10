@@ -1,6 +1,6 @@
 // Package keep is the Entra Worker's delta filter: the tiny predicate a delta-users or
 // delta-groups task names in its keep attribute, and the decision it makes about one
-// object of a delta page (ADR-draft-entra-delta-keep).
+// object of a delta page (ADR-0553).
 //
 // It exists because Graph's /users/delta and /groups/delta take no $filter beyond one
 // on ids, and because a job's result is frozen into the instance's events before any

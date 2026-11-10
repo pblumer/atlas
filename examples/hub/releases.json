@@ -291,6 +291,12 @@
       "version": "1.0.2",
       "digest": "sha256:d1d743ee16bb29d605bea31de1634fa981f25f45ccf45e11632f8b8298fc75ad",
       "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "identitaet",
+      "version": "1.0.3",
+      "digest": "sha256:0ea23c03f214afa6235acbe822c029200d589ff7039d0d72abb86d45a78cd9bb",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }

@@ -2752,7 +2752,7 @@ type xmlEntraConnector struct {
 	AdvancedQuery      string `xml:"advancedQuery,attr"`
 	DeltaLink          string `xml:"deltaLink,attr"`
 	// Keep is a delta query's own filter, applied by the Worker to every page before it
-	// answers, so only matching objects reach the job's result (ADR-draft-entra-delta-keep).
+	// answers, so only matching objects reach the job's result (ADR-0553).
 	// A literal predicate in the language of connector/entra/keep, never FEEL.
 	Keep string `xml:"keep,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a

@@ -1017,7 +1017,7 @@ type ConnectorTaskDetail struct {
 	EntraDeltaLink RestExpr
 	// EntraKeep is the interned keep predicate of a delta query: the filter the Worker
 	// applies to each page before it answers, so only matching objects leave it
-	// (ADR-draft-entra-delta-keep). The compiler has parsed it and held its fields
+	// (ADR-0553). The compiler has parsed it and held its fields
 	// against EntraSelect; the Worker parses it again because a job carries text. -1
 	// when the task keeps everything, and on every other operation.
 	EntraKeep int32

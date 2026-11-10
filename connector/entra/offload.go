@@ -286,7 +286,7 @@ type Job struct {
 	// endpoint, client.go) and returns only what changed since it was minted. It is zero
 	// on every non-delta operation.
 	DeltaLink string `json:"deltaLink,omitempty"`
-	// Keep is a delta query's filter (ADR-draft-entra-delta-keep): a predicate in the
+	// Keep is a delta query's filter (ADR-0553): a predicate in the
 	// language of connector/entra/keep that this worker applies to every page before
 	// it answers, so only the objects it keeps reach the result — and the log. Empty
 	// keeps every object. It is zero on every non-delta operation.
@@ -719,7 +719,7 @@ func deltaPath(j Job, collection string) string {
 // watching for — so without a keep the page is passed through as Graph sent it,
 // deletions included.
 //
-// With a keep (ADR-draft-entra-delta-keep) every page is filtered as it arrives, before
+// With a keep (ADR-0553) every page is filtered as it arrives, before
 // anything is answered: only objects the predicate keeps are added, so in a tenant this
 // process shares with real people nothing about them reaches the job's result, which
 // the engine writes into the log before any output mapping runs (I6). A removed object

@@ -511,7 +511,7 @@ und was ein Job zurückgibt, steht im Ereignisprotokoll, bevor das Modell etwas 
 kann. In einem geteilten Tenant wären das die Namen und Adressen echter Menschen. Das Skript
 spielt deshalb eine Kopie ein, deren Delta-Tasks ein `keep` tragen: Der Entra-Worker filtert
 jede Seite, bevor er antwortet, und nur die Testkonten und -gruppen dieser Umgebung verlassen
-ihn ([ADR-draft-entra-delta-keep](../../../docs/adr/draft-entra-delta-keep.md)).
+ihn ([ADR-0553](../../../docs/adr/0553-entra-delta-keep.md)).
 
 ```bash
 python3 scripts/install-verzeichnisabgleich.py --cafile out/caddy-root.crt            # Trockenlauf einspielen

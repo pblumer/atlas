@@ -1845,7 +1845,7 @@ type EntraConfig struct {
 	// the first. Zero on every other operation.
 	DeltaLink RestExpr
 	// Keep is a delta query's keep predicate as authored, already parsed and held
-	// against Select by the compiler (ADR-draft-entra-delta-keep); empty keeps every
+	// against Select by the compiler (ADR-0553); empty keeps every
 	// object, which is what a delta did before keep existed.
 	Keep    string
 	Retries int32

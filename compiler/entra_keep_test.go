@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// A delta query may name a keep (ADR-draft-entra-delta-keep): the filter the Entra
+// A delta query may name a keep (ADR-0553): the filter the Entra
 // Worker applies to every page before it answers. It compiles to the interned text the
 // job carries; a task without one carries none.
 func TestEntraKeepCompiles(t *testing.T) {
