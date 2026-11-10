@@ -1,0 +1,48 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.calendar.booking.get",
+    "version": "1.0.0",
+    "profile": "free-busy-calendar",
+    "name": "Read whether a booking still exists, and when"
+  },
+  "spec": {
+    "resourceKind": "calendar-booking",
+    "identityScope": "calendar",
+    "verb": "get",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "calendar": { "type": "string", "minLength": 1 },
+        "bookingId": { "type": "string", "minLength": 1 },
+        "timeZone": { "type": "string", "minLength": 1 }
+      },
+      "required": ["calendar", "bookingId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string", "minLength": 1 },
+        "calendar": { "type": "string", "minLength": 1 },
+        "exists": { "type": "boolean" },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "calendar", "exists"],
+      "if": { "properties": { "exists": { "const": true } } },
+      "then": { "required": ["start", "end"] },
+      "else": { "not": { "anyOf": [{ "required": ["start"] }, { "required": ["end"] }] } },
+      "additionalProperties": false
+    },
+    "errors": [
+      {"code": "CALENDAR_NOT_FOUND", "description": "The calendar does not exist or the caller cannot see it", "retryable": false}
+    ],
+    "idempotency": "read-only",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}

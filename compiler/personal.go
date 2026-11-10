@@ -87,7 +87,7 @@ var engineEvaluatedExpressions = map[string]bool{
 // inline attributes), connector/jira/worker.go:82,
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
 // connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
-// connector/googlecontacts/offload.go, connector/carddav/offload.go and
+// connector/googlecontacts/offload.go, connector/carddav/offload.go, connector/calendar/resolve.go and
 // connector/wikiwikibangbang/offload.go (Resolve and resolveValue) and
 // connector/agent/aitask.go:133, each over the scope variables handed to that call.
 //
@@ -230,6 +230,10 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.CardDAVField.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// The calendar Worker's (ADR-draft-calendar-worker-type).
+	"connectorTasks.CalendarConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CalendarInput.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
 	// The wikiwikibangbang Worker's (ADR-0498).
 	"connectorTasks.WikiConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

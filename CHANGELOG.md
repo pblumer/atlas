@@ -13,6 +13,24 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Processes find free slots in a calendar and book into it, never twice.** The new calendar
+  Worker Type (`atlas.calendar`, job type `io.atlas.calendar`, ADR-draft-calendar-worker-type) has
+  five operations: `find-free-slots` lays a grid over opening hours in local wall time and offers the
+  slots no busy appointment touches, in one calendar, any of several or all of them together;
+  `reserve-slot` enters a placeholder, reads the slot again and gives it up with the BPMN error
+  `CALENDAR_SLOT_TAKEN` when anything else takes its time, so two customers never get the same slot;
+  `confirm-booking` sets subject, body and attendees once the slot is certain; `cancel-booking` and
+  `get-booking` act on the booking afterwards. A task carries one `input` object, the operation's
+  technical capability contract input. Which calendar answers is the Worker's bundle: Microsoft 365
+  through Microsoft Graph, or an in-memory mock to try a process out; the Worker reads only times and
+  availability of other people's appointments. The five operations are drafted as contracts under the
+  one profile `free-busy-calendar`, and their conformance suites run every case against the mock and a
+  fake of Graph; whether Graph shows a new event to the next read, which the no-double-booking rule
+  needs, is still to be shown against a tenant.
+- **Example: appointment booking.** `examples/terminbuchung` is a public wizard in which a visitor
+  without an account picks a service, chooses one of the free slots read from the workshop's
+  calendar, gives their details and books; a slot taken meanwhile leads back to the choice with a
+  fresh list. It ships as its own atlas hub bundle and runs against the calendar mock.
 - **Corrections can be written back into the checked file.** The CSV Worker Type gains
   `operation="apply-corrections"`. It writes a corrected copy of an uploaded file: every
   record a correction names by its `_row` is replaced or, with `_drop`, left out; every
@@ -103,6 +121,10 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **A public wizard screen shows the options a worker found.** A choice field whose options come from
+  a variable (`valuesKey`) now gets that variable on a public wizard step, as its own fields do; a
+  submission naming the variable is still refused, so a visitor cannot send a list of their own
+  (ADR-0449, amended).
 - **The Problems panel points at the element behind a compile error.** A fault the compiler
   meets while building a process — a duplicate id, an unknown error, message, signal or
   escalation reference, a link throw without its catch, a condition that does not parse, a

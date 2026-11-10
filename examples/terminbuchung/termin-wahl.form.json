@@ -1,0 +1,29 @@
+{
+  "type": "default",
+  "id": "termin-wahl",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Termin wählen\n\nDie Liste zeigt die freien Termine der nächsten zwei Wochen. Verbindlich ist ein Termin erst mit der Buchung im letzten Schritt."
+    },
+    {
+      "type": "text",
+      "text": "**Der gewählte Termin wurde eben vergeben.** Die Liste ist neu gelesen; bitte wählen Sie einen anderen.",
+      "conditional": { "hide": "=terminVergeben != true" }
+    },
+    {
+      "key": "terminVergeben",
+      "type": "checkbox",
+      "label": "Termin vergeben",
+      "disabled": true,
+      "conditional": { "hide": "=true" }
+    },
+    {
+      "key": "termin",
+      "type": "select",
+      "label": "Freier Termin",
+      "valuesKey": "terminOptionen",
+      "validate": { "required": true }
+    }
+  ]
+}

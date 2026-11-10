@@ -536,7 +536,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Accepted | Landed |
 | [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Accepted | Landed |
 | [0448](0448-trusted-proxies.md) | Trusted proxies — the client's address behind a load balancer, and the health check that is not news | Accepted | Landed |
-| [0449](0449-a-wizard-is-a-subprocess-one-filler-walks-through.md) | A wizard is a subprocess one filler walks through | Accepted | Landed |
+| [0449](0449-a-wizard-is-a-subprocess-one-filler-walks-through.md) | A wizard is a subprocess one filler walks through | Accepted (amended) | Landed |
 | [0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md) | A scope drains only when no token is in transit into it | Accepted | Landed |
 | [0451](0451-catalogue-export.md) | A catalogue is exported as the document it is imported as | Accepted | Landed |
 | [0452](0452-modeler-shows-its-version.md) | The Modeler says which version it shows, and Deploy saves the draft | Accepted | Landed |

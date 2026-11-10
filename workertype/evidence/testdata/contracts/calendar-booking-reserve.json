@@ -1,0 +1,48 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.calendar.booking.reserve",
+    "version": "1.0.0",
+    "profile": "free-busy-calendar",
+    "name": "Reserve one slot in a calendar, never twice"
+  },
+  "spec": {
+    "resourceKind": "calendar-booking",
+    "identityScope": "calendar",
+    "verb": "reserve",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "calendar": { "type": "string", "minLength": 1 },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" },
+        "subject": { "type": "string", "maxLength": 255 },
+        "timeZone": { "type": "string", "minLength": 1 }
+      },
+      "required": ["calendar", "start", "end"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string", "minLength": 1 },
+        "calendar": { "type": "string", "minLength": 1 },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "calendar", "start", "end"],
+      "additionalProperties": false
+    },
+    "errors": [
+      {"code": "SLOT_TAKEN", "description": "Another appointment takes time of the slot; the reservation is removed and nothing is kept", "retryable": false},
+      {"code": "CALENDAR_NOT_FOUND", "description": "The calendar does not exist or the caller cannot see it; nothing is created", "retryable": false},
+      {"code": "CALENDAR_NOT_WRITABLE", "description": "The caller may read the calendar but not write to it; nothing is created", "retryable": false}
+    ],
+    "idempotency": "conditional",
+    "consistency": "strong",
+    "pagination": "none"
+  }
+}

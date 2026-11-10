@@ -480,6 +480,17 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.CardDAVJobTypeIndex},
 	},
 	{
+		// A calendar task finds free slots in one or more calendars, reserves one,
+		// confirms, cancels or reads a booking (ADR-draft-calendar-worker-type), in
+		// Microsoft 365 or the mock — the provider is the bundle's. Worker-only for
+		// CardDAV's reason: the credential reaches every calendar it may read and has no
+		// business on the engine's run loop.
+		name:           connectorKindCalendar,
+		workerOnly:     true,
+		validateCreate: validateCalendarConnector,
+		jobTypes:       []int32{compiler.CalendarJobTypeIndex},
+	},
+	{
 		// A wikiwikibangbang task creates, reads, updates or moves an item of a
 		// wikiwikibangbang wiki, comments on it, queries items, reads a page as Markdown or
 		// appends to one (ADR-0498). Worker-only for CardDAV's
@@ -752,7 +763,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindWiki, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindCalendar, connectorKindWiki, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -1079,6 +1090,19 @@ func validateCardDAVConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a carddav worker requires a credentialsRef naming a vault bundle: {username, password, groups}"
+	}
+	return ""
+}
+
+// validateCalendarConnector checks a calendar account a Console operator is adding. The
+// bundle behind credentialsRef says which provider and as whom; the endpoint is the
+// provider's API root and may stay empty for its public one. Whether the two build a
+// backend is decided where the backend is built (calendar.CheckBundle), which is also
+// what supervision asks.
+func validateCalendarConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.CredentialsRef == "" {
+		return "a calendar worker requires a credentialsRef naming a vault bundle: {provider, tenantId, clientId, clientSecret} for Microsoft 365, or {provider: \"mock\", calendars}"
 	}
 	return ""
 }

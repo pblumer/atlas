@@ -848,6 +848,288 @@
       ]
     },
     {
+      "id": "terminbuchung",
+      "path": "terminbuchung",
+      "app": "Beispiel: Terminbuchung",
+      "processes": [
+        {
+          "processId": "proc_terminbuchung",
+          "name": "Terminbuchung",
+          "file": "terminbuchung/terminbuchung.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Terminbuchung — ein öffentlicher Wizard, der freie Termine aus einem Kalender liest\n  und den gewählten Termin dort bucht (ADR-draft-calendar-worker-type, ADR-0449).\n\n    Start \"Termin anfragen\"          (Startformular termin-dienstleistung; öffentlicher Link)\n     → Subprozess \"Buchungsassistent\" (atlas:wizard=\"public\")\n          Script     \"Dienstleistung nachschlagen\"   (Name und Dauer)\n          Kalender   \"Freie Termine suchen\"          (find-free-slots → freieTermine)\n          Script     \"Termine aufbereiten\"           (terminOptionen für die Auswahl)\n          User-Task  \"Termin wählen\"                 (termin-wahl, Optionen aus terminOptionen)\n          Script     \"Termin übernehmen\"             (slot: nur ein angebotener Termin)\n          Gateway    kein angebotener Termin → zurück zur Wahl\n          User-Task  \"Ihre Angaben\"                  (termin-angaben)\n          Kalender   \"Termin reservieren\"            (reserve-slot → buchung)\n              Fehler CALENDAR_SLOT_TAKEN → \"Termin vergeben\" → Termine neu suchen\n          Kalender   \"Buchung bestätigen\"            (confirm-booking, lädt die Kundin ein)\n          User-Task  \"Bestätigung\"                   (termin-bestaetigung)\n        Timer am Rand: 30 Minuten ohne Abschluss → \"Sitzung abgelaufen\"\n     → User-Task \"Termin vorbereiten\" (Werkstatt, candidateGroups werkstatt)\n     → Ende \"Termin vorbereitet\"\n\n  Der Kalender-Worker \"filiale\" ist eine Einstellung des Servers, nicht des Modells: ein\n  Microsoft-365-Tenant oder, zum Ausprobieren, der Mock. Das Modell bleibt gleich.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_terminbuchung\" targetNamespace=\"http://atlas/examples\"\u003e\n  \u003cerror id=\"err_slot_taken\" name=\"Termin vergeben\" errorCode=\"CALENDAR_SLOT_TAKEN\"/\u003e\n  \u003cprocess id=\"proc_terminbuchung\" name=\"Terminbuchung\" isExecutable=\"true\"\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Termin anfragen\"\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"termin-dienstleistung\"/\u003e\n      \u003c/extensionElements\u003e\n        \u003coutgoing\u003ef_start\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003csubProcess id=\"assistent\" name=\"Buchungsassistent\" atlas:wizard=\"public\"\u003e\n      \u003cdocumentation\u003eDie Masken nach der Wahl der Dienstleistung. Wer den öffentlichen Link geöffnet hat, sieht die freien Termine aus dem Kalender der Werkstatt, wählt einen, gibt seine Angaben ein und bucht.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:output source=\"=dienstleistung\" target=\"dienstleistung\"/\u003e\n          \u003czeebe:output source=\"=leistung\" target=\"leistung\"/\u003e\n          \u003czeebe:output source=\"=slot\" target=\"slot\"/\u003e\n          \u003czeebe:output source=\"=buchung\" target=\"buchung\"/\u003e\n          \u003czeebe:output source=\"=kunde\" target=\"kunde\"/\u003e\n          \u003czeebe:output source=\"=velo\" target=\"velo\"/\u003e\n          \u003czeebe:output source=\"=mitteilung\" target=\"mitteilung\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_start\u003c/incoming\u003e\n        \u003coutgoing\u003ef_assistent\u003c/outgoing\u003e\n\n      \u003cstartEvent id=\"a_start\"\u003e\n        \u003coutgoing\u003ef_a1\u003c/outgoing\u003e\n      \u003c/startEvent\u003e\n\n      \u003cscriptTask id=\"leistung\" name=\"Dienstleistung nachschlagen\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:script resultVariable=\"leistung\"\n            expression=\"= if dienstleistung = \u0026quot;beratung\u0026quot; then {name: \u0026quot;Beratung Velokauf\u0026quot;, dauer: 60} else if dienstleistung = \u0026quot;ergonomie\u0026quot; then {name: \u0026quot;Ergonomie-Check\u0026quot;, dauer: 30} else {name: \u0026quot;Veloservice\u0026quot;, dauer: 60}\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a1\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a2\u003c/outgoing\u003e\n      \u003c/scriptTask\u003e\n\n      \u003cserviceTask id=\"suchen\" name=\"Freie Termine suchen\"\u003e\n        \u003cdocumentation\u003eLiest die belegten Zeiten des Werkstattkalenders der nächsten zwei Wochen und legt das Raster der Dienstleistung über die Öffnungszeiten.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003catlas:calendarConnector connector=\"filiale\" operation=\"find-free-slots\" resultVariable=\"freieTermine\"\n            input=\"{\u0026quot;calendars\u0026quot;: [\u0026quot;werkstatt@velo-beispiel.ch\u0026quot;],\u0026#10; \u0026quot;from\u0026quot;: \u0026quot;=string(today()) + \\\u0026quot;T00:00:00Z\\\u0026quot;\u0026quot;,\u0026#10; \u0026quot;to\u0026quot;: \u0026quot;=string(today() + duration(\\\u0026quot;P14D\\\u0026quot;)) + \\\u0026quot;T00:00:00Z\\\u0026quot;\u0026quot;,\u0026#10; \u0026quot;durationMinutes\u0026quot;: \u0026quot;=leistung.dauer\u0026quot;,\u0026#10; \u0026quot;timeZone\u0026quot;: \u0026quot;Europe/Zurich\u0026quot;,\u0026#10; \u0026quot;openingHours\u0026quot;: {\u0026#10;  \u0026quot;tue\u0026quot;: [{\u0026quot;from\u0026quot;: \u0026quot;09:00\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;12:00\u0026quot;}, {\u0026quot;from\u0026quot;: \u0026quot;13:30\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;18:00\u0026quot;}],\u0026#10;  \u0026quot;wed\u0026quot;: [{\u0026quot;from\u0026quot;: \u0026quot;09:00\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;12:00\u0026quot;}, {\u0026quot;from\u0026quot;: \u0026quot;13:30\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;18:00\u0026quot;}],\u0026#10;  \u0026quot;thu\u0026quot;: [{\u0026quot;from\u0026quot;: \u0026quot;09:00\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;12:00\u0026quot;}, {\u0026quot;from\u0026quot;: \u0026quot;13:30\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;18:00\u0026quot;}],\u0026#10;  \u0026quot;fri\u0026quot;: [{\u0026quot;from\u0026quot;: \u0026quot;09:00\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;12:00\u0026quot;}, {\u0026quot;from\u0026quot;: \u0026quot;13:30\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;18:00\u0026quot;}],\u0026#10;  \u0026quot;sat\u0026quot;: [{\u0026quot;from\u0026quot;: \u0026quot;09:00\u0026quot;, \u0026quot;to\u0026quot;: \u0026quot;16:00\u0026quot;}]},\u0026#10; \u0026quot;minLeadMinutes\u0026quot;: 120,\u0026#10; \u0026quot;maxResults\u0026quot;: 60}\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a2\u003c/incoming\u003e\n        \u003cincoming\u003ef_vergeben_suchen\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a3\u003c/outgoing\u003e\n      \u003c/serviceTask\u003e\n\n      \u003cscriptTask id=\"aufbereiten\" name=\"Termine aufbereiten\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:script resultVariable=\"terminOptionen\"\n            expression=\"= for s in freieTermine.slots return {label: s.date + \u0026quot; \u0026quot; + s.time, value: s.start}\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a3\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a4\u003c/outgoing\u003e\n      \u003c/scriptTask\u003e\n\n      \u003cuserTask id=\"wahl\" name=\"Termin wählen\"\u003e\n        \u003cdocumentation\u003eDie freien Termine kommen aus dem Kalender der Werkstatt. Verbindlich wird ein Termin erst mit der Buchung.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"termin-wahl\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a4\u003c/incoming\u003e\n        \u003cincoming\u003ef_gw_wahl\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a5\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cscriptTask id=\"uebernehmen\" name=\"Termin übernehmen\"\u003e\n        \u003cdocumentation\u003eNur ein angebotener Termin wird übernommen: Die Auswahl schickt der Browser, und ein Besucher könnte jeden Wert schicken.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:script resultVariable=\"slot\" expression=\"= freieTermine.slots[item.start = termin][1]\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a5\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a6\u003c/outgoing\u003e\n      \u003c/scriptTask\u003e\n\n      \u003cexclusiveGateway id=\"gw_slot\" name=\"Angebotener Termin?\" default=\"f_gw_angaben\"\u003e\n        \u003cincoming\u003ef_a6\u003c/incoming\u003e\n        \u003coutgoing\u003ef_gw_angaben\u003c/outgoing\u003e\n        \u003coutgoing\u003ef_gw_wahl\u003c/outgoing\u003e\n      \u003c/exclusiveGateway\u003e\n\n      \u003cuserTask id=\"angaben\" name=\"Ihre Angaben\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"termin-angaben\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_gw_angaben\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a7\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cserviceTask id=\"reservieren\" name=\"Termin reservieren\"\u003e\n        \u003cdocumentation\u003eTrägt den Termin als Platzhalter ein und prüft den Kalender danach: Ist inzwischen etwas anderes eingetragen, wird der Platzhalter entfernt und der Fehler CALENDAR_SLOT_TAKEN geworfen.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003catlas:calendarConnector connector=\"filiale\" operation=\"reserve-slot\" resultVariable=\"buchung\"\n            input=\"{\u0026quot;calendar\u0026quot;: \u0026quot;=slot.calendars[1]\u0026quot;, \u0026quot;start\u0026quot;: \u0026quot;=slot.start\u0026quot;, \u0026quot;end\u0026quot;: \u0026quot;=slot.end\u0026quot;,\u0026#10; \u0026quot;subject\u0026quot;: \u0026quot;=\\\u0026quot;Reserviert: \\\u0026quot; + leistung.name\u0026quot;, \u0026quot;timeZone\u0026quot;: \u0026quot;Europe/Zurich\u0026quot;}\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a7\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a8\u003c/outgoing\u003e\n      \u003c/serviceTask\u003e\n\n      \u003cboundaryEvent id=\"err_vergeben\" name=\"Termin vergeben\" attachedToRef=\"reservieren\"\u003e\n        \u003coutgoing\u003ef_err\u003c/outgoing\u003e\n        \u003cerrorEventDefinition errorRef=\"err_slot_taken\"/\u003e\n      \u003c/boundaryEvent\u003e\n\n      \u003cscriptTask id=\"vergeben\" name=\"Hinweis: Termin vergeben\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:script resultVariable=\"terminVergeben\" expression=\"= true\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_err\u003c/incoming\u003e\n        \u003coutgoing\u003ef_vergeben_suchen\u003c/outgoing\u003e\n      \u003c/scriptTask\u003e\n\n      \u003cserviceTask id=\"kalender_bestaetigen\" name=\"Buchung bestätigen\"\u003e\n        \u003cdocumentation\u003eErst jetzt, da der Termin sicher ist, erhält er Betreff, Text und die Kundin als Teilnehmerin; der Kalender lädt sie ein.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003catlas:calendarConnector connector=\"filiale\" operation=\"confirm-booking\" resultVariable=\"buchung\"\n            input=\"{\u0026quot;calendar\u0026quot;: \u0026quot;=buchung.calendar\u0026quot;, \u0026quot;bookingId\u0026quot;: \u0026quot;=buchung.bookingId\u0026quot;,\u0026#10; \u0026quot;subject\u0026quot;: \u0026quot;=leistung.name + \\\u0026quot; – \\\u0026quot; + kunde.name\u0026quot;,\u0026#10; \u0026quot;body\u0026quot;: \u0026quot;=\\\u0026quot;Velo: \\\u0026quot; + velo.typ + (if velo.marke = null then \\\u0026quot;\\\u0026quot; else \\\u0026quot;, \\\u0026quot; + velo.marke) + (if mitteilung = null then \\\u0026quot;\\\u0026quot; else \\\u0026quot;. \\\u0026quot; + mitteilung)\u0026quot;,\u0026#10; \u0026quot;attendees\u0026quot;: [{\u0026quot;email\u0026quot;: \u0026quot;=kunde.email\u0026quot;, \u0026quot;name\u0026quot;: \u0026quot;=kunde.name\u0026quot;}],\u0026#10; \u0026quot;timeZone\u0026quot;: \u0026quot;Europe/Zurich\u0026quot;}\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a8\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a9\u003c/outgoing\u003e\n      \u003c/serviceTask\u003e\n\n      \u003cuserTask id=\"quittung\" name=\"Bestätigung\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"termin-bestaetigung\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a9\u003c/incoming\u003e\n        \u003coutgoing\u003ef_a10\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cendEvent id=\"a_end\"\u003e\n        \u003cincoming\u003ef_a10\u003c/incoming\u003e\n      \u003c/endEvent\u003e\n\n      \u003csequenceFlow id=\"f_a1\" sourceRef=\"a_start\" targetRef=\"leistung\"/\u003e\n      \u003csequenceFlow id=\"f_a2\" sourceRef=\"leistung\" targetRef=\"suchen\"/\u003e\n      \u003csequenceFlow id=\"f_a3\" sourceRef=\"suchen\" targetRef=\"aufbereiten\"/\u003e\n      \u003csequenceFlow id=\"f_a4\" sourceRef=\"aufbereiten\" targetRef=\"wahl\"/\u003e\n      \u003csequenceFlow id=\"f_a5\" sourceRef=\"wahl\" targetRef=\"uebernehmen\"/\u003e\n      \u003csequenceFlow id=\"f_a6\" sourceRef=\"uebernehmen\" targetRef=\"gw_slot\"/\u003e\n      \u003csequenceFlow id=\"f_gw_angaben\" sourceRef=\"gw_slot\" targetRef=\"angaben\"/\u003e\n      \u003csequenceFlow id=\"f_gw_wahl\" sourceRef=\"gw_slot\" targetRef=\"wahl\"\u003e\n        \u003cconditionExpression\u003e= slot = null\u003c/conditionExpression\u003e\n      \u003c/sequenceFlow\u003e\n      \u003csequenceFlow id=\"f_a7\" sourceRef=\"angaben\" targetRef=\"reservieren\"/\u003e\n      \u003csequenceFlow id=\"f_a8\" sourceRef=\"reservieren\" targetRef=\"kalender_bestaetigen\"/\u003e\n      \u003csequenceFlow id=\"f_a9\" sourceRef=\"kalender_bestaetigen\" targetRef=\"quittung\"/\u003e\n      \u003csequenceFlow id=\"f_a10\" sourceRef=\"quittung\" targetRef=\"a_end\"/\u003e\n      \u003csequenceFlow id=\"f_err\" sourceRef=\"err_vergeben\" targetRef=\"vergeben\"/\u003e\n      \u003csequenceFlow id=\"f_vergeben_suchen\" sourceRef=\"vergeben\" targetRef=\"suchen\"/\u003e\n      \u003csequenceFlow id=\"f_assistent\" sourceRef=\"assistent\" targetRef=\"vorbereiten\"/\u003e\n    \u003c/subProcess\u003e\n\n    \u003cboundaryEvent id=\"verfallen\" name=\"30 Minuten ohne Abschluss\" attachedToRef=\"assistent\"\u003e\n        \u003coutgoing\u003ef_verfallen\u003c/outgoing\u003e\n      \u003ctimerEventDefinition\u003e\n        \u003ctimeDuration\u003ePT30M\u003c/timeDuration\u003e\n      \u003c/timerEventDefinition\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cendEvent id=\"end_verfallen\" name=\"Sitzung abgelaufen\"\u003e\n        \u003cincoming\u003ef_verfallen\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cuserTask id=\"vorbereiten\" name=\"Termin vorbereiten\"\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"werkstatt\"/\u003e\n        \u003czeebe:formDefinition formId=\"termin-vorbereiten\"/\u003e\n      \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_assistent\u003c/incoming\u003e\n        \u003coutgoing\u003ef_vorbereiten\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cendEvent id=\"end\" name=\"Termin vorbereitet\"\u003e\n        \u003cincoming\u003ef_vorbereiten\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start\" sourceRef=\"start\" targetRef=\"assistent\"/\u003e\n    \u003csequenceFlow id=\"f_assistent\" sourceRef=\"assistent\" targetRef=\"vorbereiten\"/\u003e\n    \u003csequenceFlow id=\"f_vorbereiten\" sourceRef=\"vorbereiten\" targetRef=\"end\"/\u003e\n    \u003csequenceFlow id=\"f_verfallen\" sourceRef=\"verfallen\" targetRef=\"end_verfallen\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane\" bpmnElement=\"proc_terminbuchung\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"92\" y=\"302\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"60\" y=\"344\" width=\"100\" height=\"27\"/\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"assistent_di\" bpmnElement=\"assistent\" isExpanded=\"true\"\u003e\n        \u003cdc:Bounds x=\"180\" y=\"160\" width=\"1700\" height=\"400\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"a_start_di\" bpmnElement=\"a_start\"\u003e\n        \u003cdc:Bounds x=\"212\" y=\"302\" width=\"36\" height=\"36\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"leistung_di\" bpmnElement=\"leistung\"\u003e\n        \u003cdc:Bounds x=\"270\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"suchen_di\" bpmnElement=\"suchen\"\u003e\n        \u003cdc:Bounds x=\"430\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"aufbereiten_di\" bpmnElement=\"aufbereiten\"\u003e\n        \u003cdc:Bounds x=\"590\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"wahl_di\" bpmnElement=\"wahl\"\u003e\n        \u003cdc:Bounds x=\"750\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"uebernehmen_di\" bpmnElement=\"uebernehmen\"\u003e\n        \u003cdc:Bounds x=\"910\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"gw_slot_di\" bpmnElement=\"gw_slot\"\u003e\n        \u003cdc:Bounds x=\"1085\" y=\"295\" width=\"50\" height=\"50\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"1060\" y=\"351\" width=\"100\" height=\"27\"/\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"angaben_di\" bpmnElement=\"angaben\"\u003e\n        \u003cdc:Bounds x=\"1180\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"reservieren_di\" bpmnElement=\"reservieren\"\u003e\n        \u003cdc:Bounds x=\"1340\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"kalender_bestaetigen_di\" bpmnElement=\"kalender_bestaetigen\"\u003e\n        \u003cdc:Bounds x=\"1500\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"quittung_di\" bpmnElement=\"quittung\"\u003e\n        \u003cdc:Bounds x=\"1660\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"a_end_di\" bpmnElement=\"a_end\"\u003e\n        \u003cdc:Bounds x=\"1812\" y=\"302\" width=\"36\" height=\"36\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"vergeben_di\" bpmnElement=\"vergeben\"\u003e\n        \u003cdc:Bounds x=\"1340\" y=\"440\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"err_vergeben_di\" bpmnElement=\"err_vergeben\"\u003e\n        \u003cdc:Bounds x=\"1382\" y=\"342\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"1424\" y=\"382\" width=\"100\" height=\"27\"/\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"vorbereiten_di\" bpmnElement=\"vorbereiten\"\u003e\n        \u003cdc:Bounds x=\"1930\" y=\"280\" width=\"120\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_di\" bpmnElement=\"end\"\u003e\n        \u003cdc:Bounds x=\"2112\" y=\"302\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"2080\" y=\"344\" width=\"100\" height=\"27\"/\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"verfallen_di\" bpmnElement=\"verfallen\"\u003e\n        \u003cdc:Bounds x=\"242\" y=\"542\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"284\" y=\"582\" width=\"100\" height=\"27\"/\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_verfallen_di\" bpmnElement=\"end_verfallen\"\u003e\n        \u003cdc:Bounds x=\"242\" y=\"642\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"210\" y=\"684\" width=\"100\" height=\"27\"/\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_start_di\" bpmnElement=\"f_start\"\u003e\n        \u003cdi:waypoint x=\"128\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"180\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a1_di\" bpmnElement=\"f_a1\"\u003e\n        \u003cdi:waypoint x=\"248\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"270\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a2_di\" bpmnElement=\"f_a2\"\u003e\n        \u003cdi:waypoint x=\"390\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"430\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a3_di\" bpmnElement=\"f_a3\"\u003e\n        \u003cdi:waypoint x=\"550\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"590\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a4_di\" bpmnElement=\"f_a4\"\u003e\n        \u003cdi:waypoint x=\"710\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"750\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a5_di\" bpmnElement=\"f_a5\"\u003e\n        \u003cdi:waypoint x=\"870\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"910\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a6_di\" bpmnElement=\"f_a6\"\u003e\n        \u003cdi:waypoint x=\"1030\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1085\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_gw_angaben_di\" bpmnElement=\"f_gw_angaben\"\u003e\n        \u003cdi:waypoint x=\"1135\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1180\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_gw_wahl_di\" bpmnElement=\"f_gw_wahl\"\u003e\n        \u003cdi:waypoint x=\"1110\" y=\"295\"/\u003e\n        \u003cdi:waypoint x=\"1110\" y=\"220\"/\u003e\n        \u003cdi:waypoint x=\"810\" y=\"220\"/\u003e\n        \u003cdi:waypoint x=\"810\" y=\"280\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a7_di\" bpmnElement=\"f_a7\"\u003e\n        \u003cdi:waypoint x=\"1300\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1340\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a8_di\" bpmnElement=\"f_a8\"\u003e\n        \u003cdi:waypoint x=\"1460\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1500\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a9_di\" bpmnElement=\"f_a9\"\u003e\n        \u003cdi:waypoint x=\"1620\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1660\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_a10_di\" bpmnElement=\"f_a10\"\u003e\n        \u003cdi:waypoint x=\"1780\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1812\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_err_di\" bpmnElement=\"f_err\"\u003e\n        \u003cdi:waypoint x=\"1400\" y=\"378\"/\u003e\n        \u003cdi:waypoint x=\"1400\" y=\"440\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_vergeben_suchen_di\" bpmnElement=\"f_vergeben_suchen\"\u003e\n        \u003cdi:waypoint x=\"1340\" y=\"480\"/\u003e\n        \u003cdi:waypoint x=\"490\" y=\"480\"/\u003e\n        \u003cdi:waypoint x=\"490\" y=\"360\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_assistent_di\" bpmnElement=\"f_assistent\"\u003e\n        \u003cdi:waypoint x=\"1880\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"1930\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_vorbereiten_di\" bpmnElement=\"f_vorbereiten\"\u003e\n        \u003cdi:waypoint x=\"2050\" y=\"320\"/\u003e\n        \u003cdi:waypoint x=\"2112\" y=\"320\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_verfallen_di\" bpmnElement=\"f_verfallen\"\u003e\n        \u003cdi:waypoint x=\"260\" y=\"578\"/\u003e\n        \u003cdi:waypoint x=\"260\" y=\"642\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "termin-angaben",
+          "name": "termin-angaben",
+          "file": "terminbuchung/termin-angaben.form.json",
+          "schema": {
+            "type": "default",
+            "id": "termin-angaben",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Ihre Angaben\n\nWir brauchen Ihren Namen und eine E-Mail-Adresse für die Bestätigung."
+              },
+              {
+                "key": "dienstleistung",
+                "type": "textfield",
+                "label": "Dienstleistung",
+                "disabled": true,
+                "conditional": {
+                  "hide": "=true"
+                }
+              },
+              {
+                "key": "kunde.name",
+                "type": "textfield",
+                "label": "Name",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "kunde.email",
+                "type": "textfield",
+                "label": "E-Mail",
+                "validate": {
+                  "required": true,
+                  "validationType": "email"
+                }
+              },
+              {
+                "key": "kunde.telefon",
+                "type": "textfield",
+                "label": "Telefon"
+              },
+              {
+                "key": "velo.typ",
+                "type": "select",
+                "label": "Velo-Typ",
+                "values": [
+                  {
+                    "label": "Citybike",
+                    "value": "city"
+                  },
+                  {
+                    "label": "E-Bike",
+                    "value": "ebike"
+                  },
+                  {
+                    "label": "Mountainbike",
+                    "value": "mtb"
+                  },
+                  {
+                    "label": "Rennvelo",
+                    "value": "rennvelo"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "velo.marke",
+                "type": "textfield",
+                "label": "Velo-Marke"
+              },
+              {
+                "key": "koerpergroesse",
+                "type": "number",
+                "label": "Körpergrösse (cm)",
+                "conditional": {
+                  "hide": "=dienstleistung != \"beratung\""
+                }
+              },
+              {
+                "key": "mitteilung",
+                "type": "textarea",
+                "label": "Möchten Sie uns noch etwas mitteilen?"
+              }
+            ]
+          }
+        },
+        {
+          "id": "termin-bestaetigung",
+          "name": "termin-bestaetigung",
+          "file": "terminbuchung/termin-bestaetigung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "termin-bestaetigung",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Ihr Termin ist gebucht\n\nDer Termin steht im Kalender der Werkstatt. Eine Einladung geht an Ihre E-Mail-Adresse."
+              },
+              {
+                "key": "slot.date",
+                "type": "textfield",
+                "label": "Datum",
+                "disabled": true
+              },
+              {
+                "key": "slot.time",
+                "type": "textfield",
+                "label": "Uhrzeit",
+                "disabled": true
+              },
+              {
+                "key": "leistung.name",
+                "type": "textfield",
+                "label": "Dienstleistung",
+                "disabled": true
+              },
+              {
+                "key": "gelesen",
+                "type": "checkbox",
+                "label": "Verstanden",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "termin-dienstleistung",
+          "name": "termin-dienstleistung",
+          "file": "terminbuchung/termin-dienstleistung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "termin-dienstleistung",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Termin buchen\n\nWählen Sie die Dienstleistung. Im nächsten Schritt sehen Sie die freien Termine, gelesen aus dem Kalender der Werkstatt."
+              },
+              {
+                "key": "dienstleistung",
+                "type": "radio",
+                "label": "Dienstleistung",
+                "values": [
+                  {
+                    "label": "Beratung Velokauf (60 Min.)",
+                    "value": "beratung"
+                  },
+                  {
+                    "label": "Veloservice (60 Min.)",
+                    "value": "service"
+                  },
+                  {
+                    "label": "Ergonomie-Check (30 Min.)",
+                    "value": "ergonomie"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "termin-vorbereiten",
+          "name": "termin-vorbereiten",
+          "file": "terminbuchung/termin-vorbereiten.form.json",
+          "schema": {
+            "type": "default",
+            "id": "termin-vorbereiten",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Termin vorbereiten\n\nEine Kundin oder ein Kunde hat online gebucht. Der Termin steht im Kalender der Werkstatt."
+              },
+              {
+                "key": "slot.date",
+                "type": "textfield",
+                "label": "Datum",
+                "disabled": true
+              },
+              {
+                "key": "slot.time",
+                "type": "textfield",
+                "label": "Uhrzeit",
+                "disabled": true
+              },
+              {
+                "key": "leistung.name",
+                "type": "textfield",
+                "label": "Dienstleistung",
+                "disabled": true
+              },
+              {
+                "key": "kunde.name",
+                "type": "textfield",
+                "label": "Name",
+                "disabled": true
+              },
+              {
+                "key": "kunde.email",
+                "type": "textfield",
+                "label": "E-Mail",
+                "disabled": true
+              },
+              {
+                "key": "mitteilung",
+                "type": "textarea",
+                "label": "Mitteilung",
+                "disabled": true
+              },
+              {
+                "key": "vorbereitet",
+                "type": "checkbox",
+                "label": "Termin ist vorbereitet",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "termin-wahl",
+          "name": "termin-wahl",
+          "file": "terminbuchung/termin-wahl.form.json",
+          "schema": {
+            "type": "default",
+            "id": "termin-wahl",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Termin wählen\n\nDie Liste zeigt die freien Termine der nächsten zwei Wochen. Verbindlich ist ein Termin erst mit der Buchung im letzten Schritt."
+              },
+              {
+                "type": "text",
+                "text": "**Der gewählte Termin wurde eben vergeben.** Die Liste ist neu gelesen; bitte wählen Sie einen anderen.",
+                "conditional": {
+                  "hide": "=terminVergeben != true"
+                }
+              },
+              {
+                "key": "terminVergeben",
+                "type": "checkbox",
+                "label": "Termin vergeben",
+                "disabled": true,
+                "conditional": {
+                  "hide": "=true"
+                }
+              },
+              {
+                "key": "termin",
+                "type": "select",
+                "label": "Freier Termin",
+                "valuesKey": "terminOptionen",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "arbeitsplatz",
       "path": "arbeitsplatz",
       "app": "Beispiel: Arbeitsplatz-Ausstattung",

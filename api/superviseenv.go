@@ -236,6 +236,9 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// CardDAV likewise: the bundle holds the password and the endpoint says which
 		// server, and a supervised worker has neither of its own.
 		connectorKindCardDAV: s.cardDAVWorkerEnv,
+		// The calendar likewise: the bundle says which provider and as whom, and a
+		// supervised worker has no vault of its own.
+		connectorKindCalendar: s.calendarWorkerEnv,
 		// The wiki likewise: the bundle holds the token and the endpoint says which wiki,
 		// and a supervised worker has neither of its own.
 		connectorKindWiki: s.wikiWorkerEnv,

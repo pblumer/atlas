@@ -1,0 +1,54 @@
+{
+  "type": "default",
+  "id": "termin-vorbereiten",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Termin vorbereiten\n\nEine Kundin oder ein Kunde hat online gebucht. Der Termin steht im Kalender der Werkstatt."
+    },
+    {
+      "key": "slot.date",
+      "type": "textfield",
+      "label": "Datum",
+      "disabled": true
+    },
+    {
+      "key": "slot.time",
+      "type": "textfield",
+      "label": "Uhrzeit",
+      "disabled": true
+    },
+    {
+      "key": "leistung.name",
+      "type": "textfield",
+      "label": "Dienstleistung",
+      "disabled": true
+    },
+    {
+      "key": "kunde.name",
+      "type": "textfield",
+      "label": "Name",
+      "disabled": true
+    },
+    {
+      "key": "kunde.email",
+      "type": "textfield",
+      "label": "E-Mail",
+      "disabled": true
+    },
+    {
+      "key": "mitteilung",
+      "type": "textarea",
+      "label": "Mitteilung",
+      "disabled": true
+    },
+    {
+      "key": "vorbereitet",
+      "type": "checkbox",
+      "label": "Termin ist vorbereitet",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

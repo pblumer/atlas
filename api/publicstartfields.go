@@ -181,3 +181,33 @@ func (s *formShape) checkObject(val any, path string, bad []string) []string {
 	}
 	return bad
 }
+
+// collectFormOptionKeys adds to out the variables a form's choice fields take their
+// options from (form-js's valuesKey), by their first path segment. A public wizard step
+// is prefilled with them beside the fields' own values, so a list a worker found between
+// two screens — the free slots of a calendar — is what the screen offers
+// (ADR-0449, amended 2026-11-10). It is a read: what a submission may carry stays
+// formShapeOf's, which a valuesKey never enters, and the order and task paths that
+// decide what is *written* do not call it.
+func collectFormOptionKeys(schema []byte, out map[string]bool) {
+	var doc map[string]any
+	if json.Unmarshal(schema, &doc) != nil {
+		return
+	}
+	var walk func(components any)
+	walk = func(components any) {
+		list, _ := components.([]any)
+		for _, c := range list {
+			comp, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			if vk, _ := comp["valuesKey"].(string); strings.TrimSpace(vk) != "" {
+				root, _, _ := strings.Cut(strings.TrimSpace(vk), ".")
+				out[root] = true
+			}
+			walk(comp["components"])
+		}
+	}
+	walk(doc["components"])
+}

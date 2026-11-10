@@ -144,6 +144,8 @@ var releasedKinds = []releasedKind{
 	{JobType: compiler.WikiwikibangbangJobType, Slug: "wikiwikibangbang-worker", Class: classConnector, Package: "atlas.wikiwikibangbang"},
 	{JobType: compiler.SharePointServerJobType, Slug: "sharepoint-server-worker", Class: classConnector, Package: "atlas.sharepoint-server",
 		Manifest: "connector/sharepointserver/manifest.json"},
+	{JobType: compiler.CalendarJobType, Slug: "calendar-worker-type", Class: classConnector, Package: "atlas.calendar",
+		Manifest: "connector/calendar/manifest.json"},
 }
 
 // kindsWithoutManifest are the connector kinds released before every new built-in

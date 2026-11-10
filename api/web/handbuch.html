@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">51</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">52</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">51</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">52</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -3715,6 +3715,62 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               choosing a shape.</li>
           </ul>
         </details>
+      </div>
+
+      <div class="bsp" id="bsp-terminbuchung">
+        <h4><span class="rz-emoji" aria-hidden="true">📅</span>
+          <span data-l="de">Terminbuchung: freie Termine aus dem Kalender, ohne Doppelbuchung</span><span data-l="en">Appointment booking: free slots from the calendar, never booked twice</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err" data-l="de">Kalender-Worker</span><span class="tag err" data-l="en">calendar worker</span>
+          <span class="tag">Mockup</span>
+          <span class="tag" data-l="de">öffentlicher Wizard</span><span class="tag" data-l="en">public wizard</span>
+          <span class="tag">Microsoft 365</span>
+          <span class="tag">examples/terminbuchung/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Ein Veloladen lässt Kundinnen und Kunden online einen Termin buchen: Dienstleistung wählen,
+              freien Termin wählen, Angaben machen, verbindlich buchen. <b>Frei ist, was der Kalender der Werkstatt
+              sagt</b> – auch das, was jemand von Hand in Outlook eingetragen hat. Nach der Buchung bereitet die
+              Werkstatt den Termin vor. Eine Beratung, eine Sprechstunde oder eine Raumreservation folgt demselben
+              Muster.</p>
+            <p data-l="en">A bike shop lets customers book an appointment online: choose a service, choose a free slot,
+              give their details, book. <b>Free is what the workshop's calendar says</b> – including what somebody
+              entered by hand in Outlook. After the booking the workshop prepares the appointment. A consultation, a
+              surgery hour or a room reservation follows the same pattern.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein <a href="#wizards">öffentlicher Wizard</a> mit drei Tasks des
+              <a href="#runbook-calendar">Kalender-Workers</a>: <code>find-free-slots</code> legt das Raster der
+              Dienstleistung über die Öffnungszeiten und liest die belegten Zeiten, die Auswahl der Maske kommt über
+              <code>valuesKey</code> aus dem Ergebnis. Ein Script übernimmt nur einen angebotenen Termin.
+              <code>reserve-slot</code> trägt einen Platzhalter ein und prüft danach; ist der Termin inzwischen
+              vergeben, wirft es <code>CALENDAR_SLOT_TAKEN</code>, und ein Fehler-Grenzereignis führt mit neu gelesener
+              Liste zurück zur Wahl. Erst <code>confirm-booking</code> lädt die Kundin ein. Welcher Kalender antwortet –
+              Microsoft 365 oder der Mock –, ist die Einstellung des Workers <code>filiale</code>, nicht des Modells.</p>
+            <p data-l="en">A <a href="#wizards">public wizard</a> with three tasks of the
+              <a href="#runbook-calendar">calendar worker</a>: <code>find-free-slots</code> lays the service's grid over
+              the opening hours and reads the busy times, and the screen's choice takes its options from the result
+              through <code>valuesKey</code>. A script takes only a slot that was offered. <code>reserve-slot</code>
+              enters a placeholder and checks afterwards; if the slot was taken in the meantime it throws
+              <code>CALENDAR_SLOT_TAKEN</code>, and an error boundary leads back to the choice with a list read again.
+              Only <code>confirm-booking</code> invites the customer. Which calendar answers – Microsoft 365 or the
+              mock – is the setting of the worker <code>filiale</code>, not of the model.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Lege unter <b>Workers</b> einen Worker <code>filiale</code> vom Typ <b>Calendar booking</b> an, mit einem Secret <code>{"provider": "mock", "calendars": {"werkstatt@velo-beispiel.ch": {}}}</code>.</span><span data-l="en">Under <b>Workers</b>, add a worker <code>filiale</code> of type <b>Calendar booking</b>, with a secret <code>{"provider": "mock", "calendars": {"werkstatt@velo-beispiel.ch": {}}}</code>.</span></li>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b>, dann in der Tasks-App unter <i>Start process</i> bei <b>Terminbuchung</b> auf <i>Publish public link</i>.</span><span data-l="en">Click <b>⬇ Install</b>, then in the Tasks app under <i>Start process</i> click <i>Publish public link</i> for <b>Terminbuchung</b>.</span></li>
+            <li><span data-l="de">Öffne den Link in einem privaten Browserfenster und buche einen Termin.</span><span data-l="en">Open the link in a private browser window and book a slot.</span></li>
+          </ol>
+        </div>
       </div>
 
       <div class="bsp" id="bsp-arbeitsplatz">
@@ -7942,6 +7998,55 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           contact</i> or a group change ends with the error code <code>CARDDAV_CONTACT_NOT_FOUND</code> when the
           process catches it with an error boundary event; otherwise an incident is raised.</p>
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+
+      <div class="card" id="runbook-calendar">
+        <h4>Calendar booking</h4>
+        <p data-l="de">Ein Kalender-Worker steht für <b>ein Kalenderkonto</b>: einen Microsoft-365-Tenant über
+          Microsoft Graph oder, zum Ausprobieren, Kalender im Speicher des Workers. Ein Prozess findet darin freie
+          Termine über Öffnungszeiten, reserviert einen so, dass nie zwei Kundinnen denselben erhalten, bestätigt ihn
+          mit Betreff, Text und Teilnehmenden, storniert und liest ihn. Ein Task nennt einen Kalender mit der Adresse
+          seines Postfachs, normalerweise eines <b>Ressourcenpostfachs</b>. <i>Die Schritte sind gegen das
+          prozessinterne Graph-Fake und den Mock durchgegangen worden; die Schritte für Microsoft 365 folgen der
+          Dokumentation von Microsoft und wurden noch in keinem Tenant durchgegangen.</i></p>
+        <p data-l="en">A calendar worker stands for <b>one calendar account</b>: a Microsoft 365 tenant through
+          Microsoft Graph or, to try a process out, calendars in the worker's memory. A process finds free slots in it
+          over opening hours, reserves one so that two customers never get the same slot, confirms it with subject,
+          body and attendees, cancels and reads it. A task names a calendar by its mailbox address, normally a
+          <b>resource mailbox</b>. <i>These steps have been walked against the in-process Graph fake and the mock; the
+          Microsoft 365 steps are written from Microsoft's documentation and have not yet been walked in a
+          tenant.</i></p>
+        <ol>
+          <li data-l="de">Pro buchbarer Sache — Werkstattplatz, Raum, Schalter — ein <b>Ressourcenpostfach</b> im Exchange
+            Admin Center anlegen (<i>Empfänger → Ressourcen</i>).</li>
+          <li data-l="en">Create a <b>resource mailbox</b> per bookable thing — a workshop bay, a room, a counter — in the
+            Exchange admin center (<i>Recipients → Resources</i>).</li>
+          <li data-l="de">In Entra ID eine App registrieren, die <b>Anwendungsberechtigung</b>
+            <code>Calendars.ReadWrite</code> von Microsoft Graph hinzufügen, die Administratorzustimmung erteilen und ein
+            Client-Secret erstellen. Danach in Exchange Online auf die Buchungspostfächer einschränken — uneingeschränkt
+            erreicht die Berechtigung jedes Postfach des Tenants.</li>
+          <li data-l="en">In Entra ID, register an app, add the <b>application</b> permission
+            <code>Calendars.ReadWrite</code> of Microsoft Graph, grant admin consent and create a client secret. Then
+            restrict it in Exchange Online to the booking mailboxes — unrestricted, the permission reaches every mailbox
+            of the tenant.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>kalender_filiale</code>: <code>{"provider": "microsoft-graph",
+            "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>. Zum Ausprobieren:
+            <code>{"provider": "mock", "calendars": {"werkstatt@firma.ch": {}}}</code>.</li>
+          <li data-l="en">Create a secret, e.g. <code>kalender_filiale</code>: <code>{"provider": "microsoft-graph",
+            "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>. To try a process out:
+            <code>{"provider": "mock", "calendars": {"werkstatt@firma.ch": {}}}</code>.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Calendar booking</b>, ein Name (den ein Task nennt), kein Endpoint und die
+            Credential-Referenz <code>kalender_filiale</code>. Speichern genügt; atlas startet den Worker selbst.</li>
+          <li data-l="en">Create the worker: type <b>Calendar booking</b>, a name (the one a task names), no endpoint and the
+            credential reference <code>kalender_filiale</code>. Saving is enough; atlas starts the worker itself.</li>
+        </ol>
+        <p data-l="de"><b>Vergebene Termine abfangen:</b> Wird ein Termin vergeben, während die Kundin wählt, endet
+          <i>Termin reservieren</i> mit dem Fehlercode <code>CALENDAR_SLOT_TAKEN</code>, wenn der Prozess ihn mit einem
+          Fehler-Grenzereignis abfängt, und führt zurück zur Terminwahl.</p>
+        <p data-l="en"><b>Catching a taken slot:</b> if a slot is taken while the customer chooses, <i>Reserve a
+          slot</i> ends with the error code <code>CALENDAR_SLOT_TAKEN</code> when the process catches it with an error
+          boundary event, and leads back to choosing a slot.</p>
+        <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
       <div class="card" id="runbook-wikiwikibangbang">
@@ -14804,7 +14909,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">51</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">51</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">52</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">52</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

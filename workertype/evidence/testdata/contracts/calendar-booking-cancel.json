@@ -1,0 +1,36 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.calendar.booking.cancel",
+    "version": "1.0.0",
+    "profile": "free-busy-calendar",
+    "name": "Cancel a booking; a booking already gone is cancelled"
+  },
+  "spec": {
+    "resourceKind": "calendar-booking",
+    "identityScope": "calendar",
+    "verb": "cancel",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "calendar": { "type": "string", "minLength": 1 },
+        "bookingId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["calendar", "bookingId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "null"
+    },
+    "errors": [
+      {"code": "CALENDAR_NOT_FOUND", "description": "The calendar does not exist or the caller cannot see it; nothing is changed", "retryable": false},
+      {"code": "CALENDAR_NOT_WRITABLE", "description": "The caller may read the calendar but not write to it; nothing is changed", "retryable": false}
+    ],
+    "idempotency": "idempotent",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}

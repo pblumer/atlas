@@ -581,6 +581,18 @@
       ]
     },
     {
+      "name": "CalendarConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "input", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WikiwikibangbangConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

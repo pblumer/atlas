@@ -13,6 +13,7 @@ import (
 
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/compiler"
+	calendarcatalog "github.com/pblumer/atlas/connector/calendar/catalog"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/internal/impldigest"
 	"github.com/pblumer/atlas/worker"
@@ -62,6 +63,10 @@ type catalogue struct {
 
 var catalogues = map[string]catalogue{
 	"entra": {jobType: compiler.EntraJobType, has: func(op string) bool { _, ok := entra.Ops[op]; return ok }},
+	"calendar": {jobType: compiler.CalendarJobType, has: func(op string) bool {
+		_, ok := calendarcatalog.Lookup(op)
+		return ok
+	}},
 }
 
 // StaleError is a record that no longer matches the module: what it binds is still
