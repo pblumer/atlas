@@ -100,6 +100,12 @@ const (
 	// account's username and password (connector/carddav.Bundle). The engine builds no
 	// client from it.
 	connectorKindCardDAV = "carddav"
+	// connectorKindCalendar is the calendar Worker Type
+	// (ADR-draft-calendar-worker-type). Worker-only like CardDAV: a record holds the
+	// endpoint — the provider's API root, empty for its public one — and a credentialsRef
+	// naming the vault bundle that says which provider and as whom
+	// (connector/calendar.Bundle). The engine builds no client from it.
+	connectorKindCalendar = "calendar"
 	// connectorKindWiki is the wikiwikibangbang Worker Type
 	// (ADR-0498). Worker-only like CardDAV: a record holds the
 	// endpoint — the wiki's base URL — and a credentialsRef naming the vault bundle with

@@ -16,7 +16,10 @@
 package catalog
 
 import (
+	"fmt"
+	"slices"
 	"sort"
+	"strings"
 )
 
 // Profile is the technical capability profile every operation claims.
@@ -76,8 +79,17 @@ type Op struct {
 	// Create marks the one operation that creates an event, and so needs the job's
 	// create key to be safe to repeat.
 	Create bool
-	// Result is what the operation answers.
-	Result Result
+	// Inputs are the keys the task's input object may carry — exactly the properties of
+	// the operation's contract input — and Required those it must. The compiler refuses
+	// a key outside Inputs, so a misspelt one is an error at deploy, not a value the
+	// Worker ignores.
+	Inputs   []string
+	Required []string
+	// Result is what the operation answers; NeedsResult marks the operations whose
+	// answer a process must keep (a read that discards its result is one nothing asked
+	// for, and a reservation's bookingId is what confirms and cancels it).
+	Result      Result
+	NeedsResult bool
 	// MaxResults bounds the slot list; the zero value on every other operation.
 	MaxResults Bounds
 	// Idempotency and Effect are the operation's ADR-0538 declarations.
@@ -109,31 +121,42 @@ func claim(id string) []CapabilityClaim {
 var Ops = map[string]Op{
 	OpFindFreeSlots: {
 		Label: "find the free slots of one or more calendars", FindsSlots: true,
-		Result: ResultObject, MaxResults: SlotBounds,
+		Inputs: []string{"calendars", "from", "to", "durationMinutes", "gridMinutes", "bufferMinutes", "minLeadMinutes",
+			"timeZone", "openingHours", "closedDates", "require", "maxResults"},
+		Required: []string{"calendars", "from", "to", "durationMinutes", "timeZone", "openingHours"},
+		Result:   ResultObject, NeedsResult: true, MaxResults: SlotBounds,
 		Idempotency: IdempotencyNatural, Effect: EffectReversible,
 		Capabilities: claim("io.atlas.calendar.slot.find"),
 	},
 	OpReserveSlot: {
 		Label: "reserve one slot in a calendar", NeedsSlot: true, Create: true,
-		Result:      ResultObject,
+		Inputs:   []string{"calendar", "start", "end", "subject", "timeZone"},
+		Required: []string{"calendar", "start", "end"},
+		Result:   ResultObject, NeedsResult: true,
 		Idempotency: IdempotencyKey, Effect: EffectReversible,
 		Capabilities: claim("io.atlas.calendar.booking.reserve"),
 	},
 	OpConfirmBooking: {
 		Label: "confirm a reserved booking", NeedsBooking: true, TakesDetails: true,
+		Inputs:      []string{"calendar", "bookingId", "subject", "body", "attendees", "timeZone"},
+		Required:    []string{"calendar", "bookingId"},
 		Result:      ResultObject,
 		Idempotency: IdempotencyNatural, Effect: EffectReversible,
 		Capabilities: claim("io.atlas.calendar.booking.confirm"),
 	},
 	OpCancelBooking: {
 		Label: "cancel a booking", NeedsBooking: true,
+		Inputs:      []string{"calendar", "bookingId"},
+		Required:    []string{"calendar", "bookingId"},
 		Result:      ResultNone,
 		Idempotency: IdempotencyNatural, Effect: EffectReversible,
 		Capabilities: claim("io.atlas.calendar.booking.cancel"),
 	},
 	OpGetBooking: {
 		Label: "read a booking", NeedsBooking: true,
-		Result:      ResultObject,
+		Inputs:   []string{"calendar", "bookingId", "timeZone"},
+		Required: []string{"calendar", "bookingId"},
+		Result:   ResultObject, NeedsResult: true,
 		Idempotency: IdempotencyNatural, Effect: EffectReversible,
 		Capabilities: claim("io.atlas.calendar.booking.get"),
 	},
@@ -193,3 +216,28 @@ const (
 	// room together.
 	RequireAll = "all"
 )
+
+// TakesResult reports whether the operation writes a result variable at all.
+func (o Op) TakesResult() bool { return o.Result != ResultNone }
+
+// CheckInputKeys reports the first key of an input object the operation does not take,
+// and the first it needs that is missing.
+func CheckInputKeys(name string, keys []string) error {
+	op, ok := Ops[name]
+	if !ok {
+		return fmt.Errorf("calendar: unknown operation %q", name)
+	}
+	have := map[string]bool{}
+	for _, k := range keys {
+		if !slices.Contains(op.Inputs, k) {
+			return fmt.Errorf("calendar: operation %q does not take %q in its input (it takes %s)", name, k, strings.Join(op.Inputs, ", "))
+		}
+		have[k] = true
+	}
+	for _, k := range op.Required {
+		if !have[k] {
+			return fmt.Errorf("calendar: operation %q needs %q in its input", name, k)
+		}
+	}
+	return nil
+}

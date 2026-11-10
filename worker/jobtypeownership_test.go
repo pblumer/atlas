@@ -55,6 +55,7 @@ var connectorJobTypes = map[string][]string{
 	// alignment.
 	"googlecontacts": {compiler.GoogleContactsJobType},
 	"carddav":        {compiler.CardDAVJobType},
+	"calendar":       {compiler.CalendarJobType},
 
 	"wikiwikibangbang": {compiler.WikiwikibangbangJobType},
 	"sharepointserver": {compiler.SharePointServerJobType},
@@ -122,6 +123,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_CARDDAV_CONNECTORS":          "verkauf",
 			"ATLAS_CARDDAV_VERKAUF_URL":         "https://dav.example.ch/",
 			"ATLAS_CARDDAV_VERKAUF_CREDENTIALS": `{"username":"u","password":"p"}`,
+		}
+	case "calendar":
+		return map[string]string{
+			"ATLAS_CALENDAR_CONNECTORS":          "filiale",
+			"ATLAS_CALENDAR_FILIALE_CREDENTIALS": `{"provider":"mock","calendars":{"werkstatt@firma.ch":{}}}`,
 		}
 	case "sharepointserver":
 		return map[string]string{

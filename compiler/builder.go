@@ -557,6 +557,20 @@ const SharePointServerJobType = "io.atlas.sharepointserver"
 // it is always 39.
 const SharePointServerJobTypeIndex int32 = 39
 
+// CalendarJobType is the reserved job type a calendar task carries
+// (ADR-draft-calendar-worker-type). One job type serves every operation on a calendar —
+// find free slots, reserve one, confirm, cancel and read a booking — and every provider
+// behind it: which kind of calendar answers is the configured Worker's, so a booking
+// process runs unchanged against Microsoft 365 or the mock.
+//
+// Nothing in the engine subscribes to it: the kind is worker-only, so the credential
+// that reaches a tenant's calendars never enters the engine.
+const CalendarJobType = "io.atlas.calendar"
+
+// CalendarJobTypeIndex is the interned index CalendarJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it forty-first, so it is always 40.
+const CalendarJobTypeIndex int32 = 40
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -608,6 +622,8 @@ var reservedJobTypes = []string{
 	WikiwikibangbangJobType, // 38
 
 	SharePointServerJobType, // 39
+
+	CalendarJobType, // 40
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2629,6 +2645,43 @@ func (b *Builder) AddCardDAVConnectorTask(cfg CardDAVConfig) int32 {
 		CardDAVContact:    cfg.Contact,
 		CardDAVContactVar: b.intern(cfg.ContactVar),
 		CardDAVMaxResults: cfg.MaxResults,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// CalendarConfig is the deploy-time configuration of a calendar task
+// (ADR-draft-calendar-worker-type). Worker names the configured calendar account and
+// WorkerExpr carries it as literal-or-FEEL; Op is a row of connector/calendar/catalog.
+// Input is the authored input object — the operation's contract input — compiled to
+// one FEEL context at deploy (I5).
+type CalendarConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	Input      RestExpr
+	ResultVar  string
+	Retries    int32
+}
+
+// AddCalendarConnectorTask adds a calendar task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// CalendarJobType, which nothing in the engine subscribes to.
+func (b *Builder) AddCalendarConnectorTask(cfg CalendarConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:           b.intern(CalendarJobType),
+		Connector:         b.intern(cfg.Worker),
+		CalendarConnector: cfg.WorkerExpr,
+		Subject:           -1, // not a clio task
+		EventType:         -1,
+		ClioQuery:         -1,
+		ReduceSpec:        -1,
+		Method:            -1, // a calendar operation, not an HTTP method, is authored
+		Auth:              -1, // the credential lives on the worker
+		ResultVar:         b.intern(cfg.ResultVar),
+		Retries:           cfg.Retries,
+		CalendarOp:        b.intern(cfg.Op),
+		CalendarInput:     cfg.Input,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

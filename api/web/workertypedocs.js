@@ -383,6 +383,19 @@ export const WORKER_TYPE_DOCS = {
     trap: "workerDoc.carddav.trap",
   },
 
+  calendar: {
+    anchor: "runbook-calendar", title: "workerDoc.calendar.title",
+    checked: "2026-11",
+    needs: "workerDoc.calendar.needs",
+    steps: [
+      "workerDoc.calendar.step1",
+      "workerDoc.calendar.step2",
+      "workerDoc.calendar.step3",
+      "workerDoc.calendar.step4",
+    ],
+    trap: "workerDoc.calendar.trap",
+  },
+
   sharepointserver: {
     anchor: "runbook-sharepointserver", title: "SharePoint Server",
     checked: "2026-11",

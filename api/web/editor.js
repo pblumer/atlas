@@ -17,6 +17,7 @@ import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } 
 import { sharepointServerOperationOptions, sharepointServerParametersPlaceholder, sharepointServerParametersHint, sharepointServerResultType, sharepointServerResultShape } from "./sharepointserver-ops.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
+import { calendarOperationOptions, calendarResultType, calendarResultShape, calendarInputHint, calendarInputPlaceholder } from "./calendar-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
 import { wikiOperationOptions, wikiUses, wikiResultType, wikiResultShape, wikiMaxPlaceholder, wikiMaxHint, wikiPropertiesPlaceholder } from "./wikiwikibangbang-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
@@ -5600,6 +5601,39 @@ const SERVICE_TASK_KINDS = [
         resultType: (v) => cardDAVResultType(v.operation || "find-contacts"),
         showIf: (v) => !!cardDAVResultType(v.operation || "find-contacts"),
         hint: (v) => cardDAVResultShape(v.operation || "find-contacts"),
+      },
+    ],
+  },
+  {
+    id: "calendar", name: "Calendar booking", group: "Applications",
+    desc: "Find free slots in a calendar — a workshop bay, a room, any free advisor — reserve one so that no two customers get it, confirm the booking with its details and attendees, cancel or read it; Microsoft 365 or the mock, as the Worker says",
+    icon: "K",
+    // A calendar page with one slot taken, on amber: a booking, told apart from the
+    // contact cards beside it.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#b45309"/><rect x="2.8" y="3.6" width="10.4" height="9.6" rx="1.2" fill="#fff"/><rect x="2.8" y="3.6" width="10.4" height="2.4" fill="#fde68a"/><rect x="4.6" y="2.4" width="1.2" height="2.4" rx=".5" fill="#fff"/><rect x="10.2" y="2.4" width="1.2" height="2.4" rx=".5" fill="#fff"/><rect x="4.4" y="7.4" width="2.4" height="2" fill="#b45309"/><rect x="7.9" y="7.4" width="2.4" height="2" fill="#fcd34d"/><rect x="4.4" y="10.3" width="2.4" height="2" fill="#fcd34d"/></svg>`,
+    ext: "atlas:CalendarConnector",
+    fields: [
+      { group: "Calendar" },
+      {
+        key: "connector", label: "Worker", datalist: "calendar", placeholder: "filiale-bern",
+        hint: "The configured calendar Worker whose calendars this task uses, by its name under Workers in the Console. Which provider answers — Microsoft 365 or the mock — and as whom is the Worker's; the credential reaches that worker and never the engine. A value starting with = is a FEEL expression.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: calendarOperationOptions(),
+      },
+      {
+        key: "input", label: "Input", type: "json", rows: 10,
+        placeholder: (v) => calendarInputPlaceholder(v.operation || "find-free-slots"),
+        hint: (v) => calendarInputHint(v.operation || "find-free-slots"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "freieTermine",
+        resultType: (v) => calendarResultType(v.operation || "find-free-slots"),
+        showIf: (v) => !!calendarResultType(v.operation || "find-free-slots"),
+        hint: (v) => calendarResultShape(v.operation || "find-free-slots"),
       },
     ],
   },

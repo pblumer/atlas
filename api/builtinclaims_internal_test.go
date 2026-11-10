@@ -27,6 +27,18 @@ var reviewedBuiltInCapabilityClaims = map[string]map[string][]workertype.Capabil
 		"create-channel":  {{ID: "io.atlas.collaboration.channel.create", Version: "1.0.0", Profile: "microsoft-teams"}},
 		"archive-team":    {{ID: "io.atlas.collaboration.space.archive", Version: "0.1.0", Profile: "microsoft-teams"}},
 	},
+	// The calendar Worker's claims carry one provider-neutral profile instead of a
+	// provider's: one operation serves every backend, and ADR-0480 refuses two
+	// profiles of one contract version on one operation (ADR-draft-calendar-worker-type).
+	// The contracts are drafted at 1.0.0 and checked by suites that run every case
+	// against every backend.
+	connectorKindCalendar: {
+		"find-free-slots": {{ID: "io.atlas.calendar.slot.find", Version: "1.0.0", Profile: "free-busy-calendar"}},
+		"reserve-slot":    {{ID: "io.atlas.calendar.booking.reserve", Version: "1.0.0", Profile: "free-busy-calendar"}},
+		"confirm-booking": {{ID: "io.atlas.calendar.booking.confirm", Version: "1.0.0", Profile: "free-busy-calendar"}},
+		"cancel-booking":  {{ID: "io.atlas.calendar.booking.cancel", Version: "1.0.0", Profile: "free-busy-calendar"}},
+		"get-booking":     {{ID: "io.atlas.calendar.booking.get", Version: "1.0.0", Profile: "free-busy-calendar"}},
+	},
 	connectorKindTeamsPhone: {
 		"ensure-resource-account": {{ID: "io.atlas.telephony.service-account.ensure", Version: "0.1.0", Profile: "microsoft-teams-phone"}},
 		"remove-resource-account": {{ID: "io.atlas.telephony.service-account.remove", Version: "0.1.0", Profile: "microsoft-teams-phone"}},

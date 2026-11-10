@@ -2470,6 +2470,10 @@ type xmlServiceTask struct {
 	// search, list, create, update or delete a contact, or change its groups — through a
 	// server a *worker* holds the credential for.
 	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
+	// Calendar, when present, marks this service task a calendar task
+	// (ADR-draft-calendar-worker-type): find free slots, reserve one, confirm, cancel or
+	// read a booking, in a calendar a *worker* holds the credential for.
+	Calendar *xmlCalendarConnector `xml:"extensionElements>calendarConnector"`
 	// Wiki, when present, marks this service task a wikiwikibangbang task
 	// (ADR-0498): one operation on a wikiwikibangbang wiki —
 	// create, read, update or move an item, comment on it, query items, read a page as
@@ -2826,6 +2830,21 @@ type xmlCardDAVConnector struct {
 	ContactVariable string `xml:"contactVariable,attr"`
 	MaxResults      string `xml:"maxResults,attr"`
 	ResultVariable  string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlCalendarConnector is the <atlas:calendarConnector> extension on a service task
+// (ADR-draft-calendar-worker-type). connector names the calendar Worker
+// (literal-or-FEEL), and there is no credential attribute, because none enters the
+// engine. operation is a row of connector/calendar/catalog, and input is one JSON
+// object — the operation's contract input — whose values may be =expressions.
+type xmlCalendarConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Input          string `xml:"input,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

@@ -1275,6 +1275,15 @@ type ConnectorTaskDetail struct {
 	CardDAVContact    RestExpr
 	CardDAVContactVar int32
 	CardDAVMaxResults int32
+	// Calendar fields (JobType == CalendarJobType, ADR-draft-calendar-worker-type).
+	// Connector (above) names the configured calendar account, and CalendarConnector
+	// carries it as literal-or-FEEL. CalendarOp is the interned operation — a row of
+	// connector/calendar/catalog. CalendarInput is the authored input object, the
+	// operation's contract input, compiled to one FEEL context at deploy (I5). All are
+	// the zero value for a task of another kind.
+	CalendarConnector RestExpr
+	CalendarOp        int32
+	CalendarInput     RestExpr
 	// wikiwikibangbang fields (JobType == WikiwikibangbangJobType,
 	// ADR-0498). Connector (above) names the configured wiki,
 	// and WikiConnector carries it as literal-or-FEEL. WikiOp is the interned operation —

@@ -22,6 +22,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/agent"
+	"github.com/pblumer/atlas/connector/calendar"
 	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
@@ -7575,6 +7576,25 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 			"createKey": j.CreateKey,
 		}}
+	case compiler.CalendarJobTypeIndex:
+		// CardDAV's arm for a calendar: the evaluated input travels, and nothing that
+		// says which provider or as whom (ADR-draft-calendar-worker-type). The create key
+		// does, so a reservation repeated after a lease elapsed finds the placeholder the
+		// first round made. The fields are the resolved job's own, marshalled rather than
+		// listed, so the arm cannot send a field the job lacks or drop one it carries.
+		j, err := calendar.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey, jobKey, s.nodeID)
+		if err != nil {
+			return nil
+		}
+		raw, err := json.Marshal(j)
+		if err != nil {
+			return nil
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "calendar", Fields: fields}
 	case compiler.WikiwikibangbangJobTypeIndex:
 		// The evaluated values travel, and nothing that says which wiki or as whom
 		// (ADR-0498). So does whether the job has been leased

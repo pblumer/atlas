@@ -161,6 +161,11 @@ var connectorCompilers = []connectorCompiler{
 		compile: compileCardDAVConnectorTask,
 	},
 	{
+		present: func(st xmlServiceTask) bool { return st.Calendar != nil },
+		retries: func(st xmlServiceTask) string { return st.Calendar.Retries },
+		compile: compileCalendarConnectorTask,
+	},
+	{
 		present: func(st xmlServiceTask) bool { return st.Wiki != nil },
 		retries: func(st xmlServiceTask) string { return st.Wiki.Retries },
 		compile: compileWikiConnectorTask,

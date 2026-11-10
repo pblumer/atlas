@@ -2,12 +2,16 @@ package calendarbooking
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pblumer/atlas/connector/calendar"
+	"github.com/pblumer/atlas/connector/calendar/catalog"
 	"github.com/pblumer/atlas/workertype"
 	"github.com/pblumer/atlas/workertype/evidence"
 )
@@ -169,5 +173,46 @@ func TestAPlainFailureIsNotACode(t *testing.T) {
 	}
 	if r := got[caseCancelRemoves]; r.Outcome != evidence.OutcomePassed {
 		t.Fatalf("removes = %+v, want passed", r)
+	}
+}
+
+// TestTheCatalogTakesExactlyTheContractsInput holds the operation table to the
+// contracts: the keys a model's input object may carry are the contract input's
+// properties, and the ones it must carry are the contract's required ones.
+func TestTheCatalogTakesExactlyTheContractsInput(t *testing.T) {
+	for name, opName := range operationOf {
+		raw, err := os.ReadFile(draftContract[name])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var c struct {
+			Spec struct {
+				InputSchema struct {
+					Properties map[string]any `json:"properties"`
+					Required   []string       `json:"required"`
+				} `json:"inputSchema"`
+			} `json:"spec"`
+		}
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.Fatal(err)
+		}
+		op, _ := catalog.Lookup(opName)
+		props := make([]string, 0, len(c.Spec.InputSchema.Properties))
+		for k := range c.Spec.InputSchema.Properties {
+			props = append(props, k)
+		}
+		sort.Strings(props)
+		inputs := append([]string(nil), op.Inputs...)
+		sort.Strings(inputs)
+		required := append([]string(nil), op.Required...)
+		sort.Strings(required)
+		want := append([]string(nil), c.Spec.InputSchema.Required...)
+		sort.Strings(want)
+		if !reflect.DeepEqual(inputs, props) {
+			t.Errorf("%s: the catalog takes %v, the contract %v", opName, inputs, props)
+		}
+		if !reflect.DeepEqual(required, want) {
+			t.Errorf("%s: the catalog requires %v, the contract %v", opName, required, want)
+		}
 	}
 }

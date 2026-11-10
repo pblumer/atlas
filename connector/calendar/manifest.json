@@ -1,0 +1,38 @@
+{
+  "apiVersion": "atlas.io/v1alpha1",
+  "kind": "WorkerType",
+  "metadata": {
+    "id": "atlas.calendar",
+    "version": "1.0.0",
+    "name": "Calendar booking"
+  },
+  "spec": {
+    "atlasCompatibility": ">0.24.0",
+    "workerProtocol": "v1",
+    "runtime": {
+      "mode": "bundled"
+    },
+    "jobTypes": [
+      "io.atlas.calendar"
+    ],
+    "operations": [
+      {"id": "find-free-slots", "jobType": "io.atlas.calendar", "idempotency": "natural", "effect": "reversible",
+        "capabilities": [{"id": "io.atlas.calendar.slot.find", "version": "1.0.0", "profile": "free-busy-calendar"}]},
+      {"id": "reserve-slot", "jobType": "io.atlas.calendar", "idempotency": "key", "effect": "reversible",
+        "capabilities": [{"id": "io.atlas.calendar.booking.reserve", "version": "1.0.0", "profile": "free-busy-calendar"}]},
+      {"id": "confirm-booking", "jobType": "io.atlas.calendar", "idempotency": "natural", "effect": "reversible",
+        "capabilities": [{"id": "io.atlas.calendar.booking.confirm", "version": "1.0.0", "profile": "free-busy-calendar"}]},
+      {"id": "cancel-booking", "jobType": "io.atlas.calendar", "idempotency": "natural", "effect": "reversible",
+        "capabilities": [{"id": "io.atlas.calendar.booking.cancel", "version": "1.0.0", "profile": "free-busy-calendar"}]},
+      {"id": "get-booking", "jobType": "io.atlas.calendar", "idempotency": "natural", "effect": "reversible",
+        "capabilities": [{"id": "io.atlas.calendar.booking.get", "version": "1.0.0", "profile": "free-busy-calendar"}]}
+    ],
+    "configurationSchema": "#/spec/configuration",
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "modelerTemplate": "api/repository_catalog/calendar.json"
+  }
+}

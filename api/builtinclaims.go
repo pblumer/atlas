@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	calendarcatalog "github.com/pblumer/atlas/connector/calendar/catalog"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/teamsphone"
 )
@@ -53,6 +54,11 @@ var builtInClaimSources = map[string]func() []claimRow{
 	connectorKindEntra: func() []claimRow {
 		return rowsOf(entra.Ops, func(o entra.Op) []WorkerTypeCapabilityClaim {
 			return candidates(o.Capabilities, func(c entra.CapabilityClaim) (string, string, string) { return c.ID, c.Version, c.Profile })
+		})
+	},
+	connectorKindCalendar: func() []claimRow {
+		return rowsOf(calendarcatalog.Ops, func(o calendarcatalog.Op) []WorkerTypeCapabilityClaim {
+			return candidates(o.Capabilities, func(c calendarcatalog.CapabilityClaim) (string, string, string) { return c.ID, c.Version, c.Profile })
 		})
 	},
 	connectorKindTeamsPhone: func() []claimRow {

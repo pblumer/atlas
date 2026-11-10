@@ -44,6 +44,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{TeamsPhone: &xmlTeamsPhoneConnector{}},
 		{GoogleContacts: &xmlGoogleContactsConnector{}},
 		{CardDAV: &xmlCardDAVConnector{}},
+		{Calendar: &xmlCalendarConnector{}},
 		{Wiki: &xmlWikiConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {

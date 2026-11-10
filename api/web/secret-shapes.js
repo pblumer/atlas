@@ -104,6 +104,12 @@ export const SECRET_SHAPES = {
     skeleton: { username: "verkauf@firma.ch", password: "\u2026", groups: "categories" },
     note: "Use an <b>app-specific password</b> where the provider issues one: iCloud requires it, and Fastmail, mailbox.org and a Nextcloud with two-factor sign-in offer it. <code>\"groups\"</code> is <code>\"categories\"</code> (the default: Nextcloud, ownCloud, most servers) or <code>\"group-vcards\"</code> for iCloud and Fastmail, whose groups are cards of their own. The server's address is the Worker's endpoint, not part of this bundle.",
   },
+  "calendar:": {
+    what: "which calendar provider the Worker uses and as whom (JSON)",
+    fields: ["provider"],
+    skeleton: { provider: "microsoft-graph", tenantId: "\u2026", clientId: "\u2026", clientSecret: "\u2026" },
+    note: "<b>Microsoft 365:</b> an app registration with the <b>application</b> permission <code>Calendars.ReadWrite</code>, admin-consented. Unrestricted, that permission reaches <b>every mailbox of the tenant</b>: restrict it in Exchange Online to the booking calendars (RBAC for Applications, or an application access policy) before you store the secret here. A calendar is then a mailbox address, normally a resource mailbox such as <code>werkstatt@firma.ch</code>. <b>Trying a process out:</b> <code>{\"provider\": \"mock\", \"calendars\": {\"werkstatt@firma.ch\": {}}}</code> keeps the calendars in the worker\u0027s memory, with <code>\"busy\"</code> appointments you seed.",
+  },
   "wikiwikibangbang:": {
     what: "the API token of the wiki account the Worker writes as (JSON)",
     fields: ["token"],
