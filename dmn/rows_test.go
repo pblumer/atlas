@@ -151,9 +151,15 @@ func docVar(name string) model.VariableValue {
 	return model.VariableValue{Name: "antrag", Kind: model.VarJSON, Text: `{"$document":"doc_src","name":"` + name + `","contentType":"text/csv"}`}
 }
 
+// resultRows reads a document the check wrote. Each one opens with a UTF-8 byte-order
+// mark, which Excel needs to read the umlauts right.
 func resultRows(t *testing.T, data []byte) [][]string {
 	t.Helper()
-	rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
+	text, ok := strings.CutPrefix(string(data), "\uFEFF")
+	if !ok {
+		t.Fatalf("result document has no byte-order mark: %q", string(data[:min(len(data), 20)]))
+	}
+	rows, err := csv.NewReader(strings.NewReader(text)).ReadAll()
 	if err != nil {
 		t.Fatalf("result document: %v\n%s", err, data)
 	}

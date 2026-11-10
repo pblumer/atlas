@@ -95,7 +95,12 @@ func TestABusinessRuleTaskChecksAFile(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("download result: %d %s", code, body)
 	}
-	rows, err := csv.NewReader(strings.NewReader(string(body))).ReadAll()
+	// It opens with a UTF-8 byte-order mark, for Excel.
+	text, bom := strings.CutPrefix(string(body), "\uFEFF")
+	if !bom {
+		t.Errorf("the result document has no byte-order mark")
+	}
+	rows, err := csv.NewReader(strings.NewReader(text)).ReadAll()
 	if err != nil || len(rows) != 4 || strings.Join(rows[0][:6], ",") != "email,group,license,note,_row,_valid" || rows[3][5] != "false" {
 		t.Fatalf("result document = %q (%v)", body, err)
 	}

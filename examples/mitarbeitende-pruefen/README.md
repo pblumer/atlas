@@ -44,7 +44,11 @@ Datei hochladen -> Datensätze prüfen -> Befunde?
   Regeln und einer leeren Spalte `_drop`. Der Task *Datei korrigieren* bietet sie zum
   Herunterladen an. Werte in den Spalten des Personalstamms korrigieren, `_row` stehen
   lassen, `x` in `_drop` verwirft einen Datensatz, die Datei wieder hochladen. Oder die
-  verbleibenden Befunde mit einer Begründung akzeptieren.
+  verbleibenden Befunde mit einer Begründung akzeptieren. Die Datei öffnet in Excel mit
+  richtigen Umlauten (sie beginnt mit einem Byte-Order-Mark), und ob Excel sie mit Komma
+  oder Semikolon speichert, spielt keine Rolle: Das Trennzeichen wird aus der Kopfzeile
+  gelesen. **Achtung bei Datumsspalten:** Excel kann `2020-01-01` beim Speichern als
+  `01.01.2020` schreiben; die Nachprüfung meldet einen solchen Datensatz dann erneut.
 - **Korrekturen anwenden** (`atlas:csvConnector operation="apply-corrections"`): schreibt eine
   korrigierte Kopie der geprüften Datei. Jeder Datensatz, den eine Korrektur über seine
   `_row` nennt, wird ersetzt oder verworfen; alle anderen bleiben, wie sie sind; Kopfzeile,

@@ -20,7 +20,10 @@ _Changed_ / _Removed_ for each version.
   uploaded file is never changed. The corrections are a list (from a correction task per
   finding) or a file (the check's new failures document, `failuresDocument`, after a
   person corrected it). A `_row` the file does not have, a line named twice or a field
-  without a column fails the task. A task form's file field whose variable already holds
+  without a column fails the task. The result and failures documents open with a UTF-8
+  byte-order mark, so Excel shows the umlauts right, and a corrected file's separator is
+  read off its header, so a file Excel saved with semicolons is read as it is. A task
+  form's file field whose variable already holds
   a document now offers it for download, and `readonly` takes no file. The example
   *Mitarbeitende prüfen und korrigieren* goes from upload to corrected file: up to 20
   findings as a task each with an immediate re-check, more as a file, or the rest

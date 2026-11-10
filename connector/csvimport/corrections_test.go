@@ -245,3 +245,43 @@ func TestTheHandlerAppliesCorrections(t *testing.T) {
 		t.Errorf("no corrections = %v", err)
 	}
 }
+
+// A corrected file comes back from a spreadsheet with its separator: a semicolon in
+// German and Swiss Excel, whatever the file had when it went out. Its header says
+// which, and the corrected copy keeps the source's.
+func TestApplyCorrectionsReadsTheSeparatorOfTheCorrectedFile(t *testing.T) {
+	comma := strings.ReplaceAll(staff, ";", ",")
+	docs := &corrDocs{files: map[string]string{
+		"staff": comma,
+		"excel": "\uFEFFpersonalnummer;name;mail;pensum;_row;_mailGueltig;_drop\r\n100002;Beat;beat@x.ch;100;3;false;\r\n",
+	}}
+	j := corrJob(nil, nil)
+	j.Delimiter, j.CorrectionsDocument = ",", "excel"
+	out, err := ApplyCorrections(context.Background(), j, docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := out["korrigiert"].(map[string]any); res["replaced"] != 1 {
+		t.Fatalf("result = %v", res)
+	}
+	text := docs.stored["staff.corrected.csv"]
+	if !strings.Contains(text, "100002,Beat,beat@x.ch,100\n") {
+		t.Fatalf("corrected file = %q", text)
+	}
+}
+
+func TestSniffDelimiter(t *testing.T) {
+	for in, want := range map[string]string{
+		"a;b;c\n1;2;3":        ";",
+		"a,b,c\n1;2;3":        ",",
+		"\uFEFFa\tb\tc\r\n":   "\t",
+		"\"x;y\",b,c\n":       ",",
+		"a|b\n":               "|",
+		"single\n1\n":         "#",
+		"\"a,b\";\"c,d\";e\n": ";",
+	} {
+		if got := sniffDelimiter([]byte(in), "#"); got != want {
+			t.Errorf("sniffDelimiter(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

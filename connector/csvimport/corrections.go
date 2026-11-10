@@ -213,7 +213,10 @@ func fieldText(v any) string {
 // person changed it.
 func correctionsFromFile(data []byte, delimiter string) ([]map[string]any, error) {
 	var out []map[string]any
-	cfg := Config{Delimiter: delimiter}
+	// The corrected file has been through a person's spreadsheet, which saves CSV with
+	// the separator of its locale — a semicolon in German and Swiss Excel — whatever
+	// the file had. Its own header row says which it is.
+	cfg := Config{Delimiter: sniffDelimiter(data, delimiter)}
 	_, err := EachRow(cfg, bytes.NewReader(data), func(rec Record) error {
 		r := make(map[string]any, len(rec.Header))
 		for i, name := range rec.Header {
@@ -228,6 +231,40 @@ func correctionsFromFile(data []byte, delimiter string) ([]map[string]any, error
 		return nil, fmt.Errorf("csv-import: read the corrections: %v", err)
 	}
 	return out, nil
+}
+
+// delimiterCandidates are the separators a spreadsheet writes CSV with.
+var delimiterCandidates = []byte{',', ';', '\t', '|'}
+
+// sniffDelimiter reads a file's separator off its first line: the candidate that
+// occurs there most often outside quotes. A line holding none of them — a file of one
+// column — keeps the delimiter the task names.
+func sniffDelimiter(data []byte, fallback string) string {
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		data = data[:i]
+	}
+	counts := map[byte]int{}
+	quoted := false
+	for _, c := range data {
+		if c == '"' {
+			quoted = !quoted
+			continue
+		}
+		if !quoted && bytes.IndexByte(delimiterCandidates, c) >= 0 {
+			counts[c]++
+		}
+	}
+	best, most := byte(0), 0
+	for _, c := range delimiterCandidates {
+		if counts[c] > most {
+			best, most = c, counts[c]
+		}
+	}
+	if most == 0 {
+		return fallback
+	}
+	return string(best)
 }
 
 type correctionStats struct{ total, replaced, dropped int }
