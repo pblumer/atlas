@@ -500,7 +500,8 @@ ein SharePoint Server gebaut ist.
   Besitzer und Stellvertretung als AD-Konto. Genehmigt wird wie bei der Online-Teamwebsite.
 - **Adresse frei?** Das Feld URL prüft beim Tippen, ob unter `/sites/<url>` schon eine Website liegt
   (ADR-0519, Quelle `sharepointserver/sites`): `get-site` über `ucc_sharepoint_onprem`. Dafür braucht
-  der Worker in der Console den Schalter «Forms may search» (`formLookups`). Jede Abfrage startet
+  der Worker in der Console den Schalter «Forms may search» (`formLookups`; in der M365-Testumgebung
+  setzt ihn `install-m365-dienste.py`). Jede Abfrage startet
   PowerShell mit dem SharePoint-Snap-in; dauert das länger als die acht Sekunden, die das Formular wartet,
   warnt es nur nicht vor, bestellt werden kann trotzdem. Wie das Online-Formular fragt es die URL ohne
   `NAME_PREFIX`; ist ein Präfix gesetzt, sieht nur die Prüfung im Prozess die richtige Adresse. Der
