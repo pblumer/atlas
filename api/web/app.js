@@ -158,6 +158,21 @@ export async function apiBytes(method, path, file) {
   return data;
 }
 
+// takeFormDocuments removes from a task's variables the document references its file
+// fields hold, and answers them by key: form-js is handed the rest.
+function takeFormDocuments(schema, data) {
+  const docs = {};
+  if (!data || typeof data !== "object") return docs;
+  for (const key of fileFieldKeys(schema)) {
+    const v = data[key];
+    if (v && typeof v === "object" && typeof v.$document === "string") {
+      docs[key] = v;
+      delete data[key];
+    }
+  }
+  return docs;
+}
+
 // offerFormDocuments draws a download link under each file field whose variable names a
 // document, and takes the picker away where the field is read-only: such a field only
 // hands a file out (ADR-0548, S2). The server lets whoever holds the task read a
@@ -10423,16 +10438,8 @@ async function viewTasks(preselectKey) {
       // (ADR-0548, S2): the failures of a check to download, correct and upload again.
       // form-js knows a picked File, not a reference, so the reference stays out of the
       // data it is given and is drawn as a download link beside the field instead.
-      const docs = {};
-      const formData = { ...(data || {}) };
-      for (const key of fileFieldKeys(def.schema)) {
-        const v = formData[key];
-        if (v && typeof v === "object" && typeof v.$document === "string") {
-          docs[key] = v;
-          delete formData[key];
-        }
-      }
-      await form.importSchema(def.schema, withPeopleNamed(formData, state.approvals.get(t.key), names));
+      const docs = takeFormDocuments(def.schema, data);
+      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       offerFormDocuments(host, def.schema, docs);
       state.formDocs = docs;
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
