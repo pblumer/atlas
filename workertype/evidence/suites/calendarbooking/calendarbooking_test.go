@@ -216,3 +216,43 @@ func TestTheCatalogTakesExactlyTheContractsInput(t *testing.T) {
 		}
 	}
 }
+
+// TestAnOperationThatClaimsSuccessForEverythingFailsEveryRefusal: a reservation that
+// answers success without touching the calendar passes no case that asks for a refusal
+// or for a booking to exist.
+func TestAnOperationThatClaimsSuccessForEverythingFailsEveryRefusal(t *testing.T) {
+	got := misbehave(t, NameReserve, func(_ context.Context, j calendar.Job, _ *calendar.Registry, _ time.Time) (map[string]any, error) {
+		return map[string]any{j.ResultVariable: map[string]any{"bookingId": "x", "calendar": j.Calendar, "start": j.Start, "end": j.End}}, nil
+	})
+	for _, c := range []string{caseReserveFree, caseReserveTaken, caseReserveSequential, caseReserveLockstep, caseReserveUnknown, caseReserveReadOnly} {
+		if got[c].Outcome != evidence.OutcomeFailed {
+			t.Errorf("%q = %s, want failed", c, got[c].Outcome)
+		}
+	}
+	if !strings.Contains(got[caseReserveLockstep].Detail, "success") {
+		t.Errorf("lockstep detail %q does not say the reservation claimed success", got[caseReserveLockstep].Detail)
+	}
+}
+
+// TestASuiteInputTheContractRefusesStopsTheSuite: a case whose own input the contract
+// refuses is a defect of the suite, reported as an error, never as an outcome.
+func TestASuiteInputTheContractRefusesStopsTheSuite(t *testing.T) {
+	s := &session{ctx: context.Background(), operation: "get-booking"}
+	compiled, err := workertype.CompileTechnicalContract(loadContract(t, NameGet))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.contract = compiled
+	w := buildGraphWorld(map[string]calendar.MockCalendarSpec{"werkstatt": {}})
+	defer w.close()
+	_, err = s.operate(w, map[string]any{"calendar": "werkstatt"}, "")
+	if !isSuiteDefect(err) || suiteErr(err) == nil {
+		t.Fatalf("err = %v, want a suite defect", err)
+	}
+	if why, e := expectCode(err, "CALENDAR_NOT_FOUND", nil, "", 0); why != "" || e == nil {
+		t.Fatalf("expectCode passed a suite defect on as %q, %v", why, e)
+	}
+	if describeOrSuccess(nil) != "success" {
+		t.Fatal("no error is not described as success")
+	}
+}

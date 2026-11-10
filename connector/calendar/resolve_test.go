@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/calendar/catalog"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -135,5 +136,57 @@ func TestTheCompilerRefusesWhatTheOperationDoesNotTake(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want %q", name, err, tc.want)
 		}
+	}
+}
+
+func TestResolveReadsTheWorkerAndEveryVariableKind(t *testing.T) {
+	cp, d := compileTask(t, `connector="=konto" operation="find-free-slots" resultVariable="frei" `+input(`{
+		"calendars": ["=raum", "=string(processInstanceKey)"], "from": "=von", "to": "2030-03-27T00:00:00+01:00",
+		"durationMinutes": "=dauer", "timeZone": "Europe/Zurich", "openingHours": "=oeffnung",
+		"require": "=if alle then \"all\" else \"any\"", "maxResults": "=dauer / 2"}`))
+	store := fakeVarStore{vars: map[uint64][]model.VariableValue{10: {
+		{Name: "konto", Kind: model.VarString, Text: "filiale"},
+		{Name: "raum", Kind: model.VarString, Text: "raum1"},
+		{Name: "von", Kind: model.VarString, Text: "2030-03-25T00:00:00+01:00"},
+		{Name: "dauer", Kind: model.VarNumber, Text: "60"},
+		{Name: "alle", Kind: model.VarBool, Bool: true},
+		{Name: "oeffnung", Kind: model.VarJSON, Text: `{"mon":[{"from":"08:00","to":"12:00"}]}`},
+		{Name: "leer", Kind: model.VarNull},
+	}}}
+	j, err := Resolve(store, cp, d, 10, 1, "n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Connector != "filiale" || j.Require != "all" || j.DurationMinutes != 60 || j.MaxResults != 30 ||
+		len(j.Calendars) != 2 || j.Calendars[1] != "10" {
+		t.Fatalf("job %#v", j)
+	}
+}
+
+func TestResolveRefusesWhatCannotBecomeAJob(t *testing.T) {
+	for name, tc := range map[string]struct {
+		attrs string
+		vars  []model.VariableValue
+		want  string
+	}{
+		"an empty worker": {`connector="=konto" operation="get-booking" resultVariable="b" ` + input(`{"calendar":"c","bookingId":"x"}`),
+			nil, "empty name"},
+		"a fraction of a minute": {`connector="c" operation="find-free-slots" resultVariable="b" ` + input(`{"calendars":["c"],"from":"=a","to":"=a",`+
+			`"durationMinutes":"=d","timeZone":"Europe/Zurich","openingHours":{"mon":[]}}`),
+			[]model.VariableValue{{Name: "a", Kind: model.VarString, Text: "x"}, {Name: "d", Kind: model.VarNumber, Text: "7.5"}}, "whole number"},
+		"a value of the wrong type": {`connector="c" operation="get-booking" resultVariable="b" ` + input(`{"calendar":"=n","bookingId":"x"}`),
+			[]model.VariableValue{{Name: "n", Kind: model.VarNumber, Text: "3"}}, "wrong type"},
+	} {
+		cp, d := compileTask(t, tc.attrs)
+		_, err := Resolve(fakeVarStore{vars: map[uint64][]model.VariableValue{10: tc.vars}}, cp, d, 10, 1, "n")
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, tc.want)
+		}
+	}
+	if _, err := Resolve(fakeVarStore{}, nil, nil, 10, 1, "n"); err == nil {
+		t.Error("a task without detail resolved")
+	}
+	if _, err := decodeInput("get-booking", catalog.Ops["get-booking"], "[1]"); err == nil {
+		t.Error("an input that is no object was decoded")
 	}
 }
