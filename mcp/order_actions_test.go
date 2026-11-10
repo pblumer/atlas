@@ -11,7 +11,7 @@ import (
 
 // TestAnAgentAsksAnActionAsTheTriggerItNames: the action tool proxies to the action
 // act with the trigger it names — customer included, since the maintainers' decision
-// of 2026-11-10 (ADR-draft-mcp-shop-customer-side) — and refuses only a trigger no
+// of 2026-11-10 (ADR-0550) — and refuses only a trigger no
 // server knows, before any request leaves the adapter. Whether the caller may ask as
 // that trigger is the server's to decide.
 func TestAnAgentAsksAnActionAsTheTriggerItNames(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 )
 
 // The shop over the /mcp transport, signed in as a person
-// (ADR-draft-mcp-shop-customer-side): the agent orders, finds and withdraws the order
+// (ADR-0550): the agent orders, finds and withdraws the order
 // as that person, and a server started with --mcp-shop=false refuses exactly that to
 // the transport while the same person keeps ordering in the portal.
 

@@ -995,7 +995,7 @@ type Server struct {
 	// before Handler is mounted.
 	instancePurgeOff bool
 	// mcpShopOff refuses the shop's customer side to requests that came through MCP
-	// (--mcp-shop=false / WithoutMCPShop, ADR-draft-mcp-shop-customer-side). "off"
+	// (--mcp-shop=false / WithoutMCPShop, ADR-0550). "off"
 	// for cataloguePurgeOff's reason: offering it is the default. Set once before
 	// Handler is mounted.
 	mcpShopOff bool

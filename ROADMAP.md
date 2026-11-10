@@ -2693,7 +2693,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   approvals and asks a customer's action, with exactly that person's rights and under their
   name: sixteen tools, one route each. On by default for repeatable agent-driven catalogue
   tests; `--mcp-shop=false` refuses them to MCP requests while the portal keeps them
-  ([ADR-draft-mcp-shop-customer-side](docs/adr/draft-mcp-shop-customer-side.md), reversing
+  ([ADR-0550](docs/adr/0550-mcp-shop-customer-side.md), reversing
   ADR-0428's and ADR-0429 §2's exclusion).
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
   product by eligibility: levels read from the graph once ([ADR-0383](docs/adr/0383-portal-level-names.md)),
@@ -2808,7 +2808,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   the strand's live elements whether each action is possible now; MCP reads it
   (`atlas_order_line_actions`) and asks operator and system actions
   (`atlas_ask_order_line_action`) — since 2026-11-10 a customer's too, as the connected
-  person, unless `--mcp-shop=false` (ADR-draft-mcp-shop-customer-side); a shop button per offered customer action, with its form or a
+  person, unless `--mcp-shop=false` (ADR-0550); a shop button per offered customer action, with its form or a
   confirmation. `/change` is the act for the key `change`; the recipient may return and act
   (§10, decision 4); a directed delivery to a catch that lost an event-based gateway's race
   is now refused instead of reported delivered.

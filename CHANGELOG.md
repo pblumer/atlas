@@ -28,7 +28,7 @@ _Changed_ / _Removed_ for each version.
   routes, and a customer's action, to requests that come through MCP while the portal keeps
   working, and `GET /api/v1/info` says `mcpShop`. `atlas_catalog_releases` takes `limit`.
   This reverses the MCP exclusion of ADR-0428 and ADR-0429 §2
-  (ADR-draft-mcp-shop-customer-side).
+  (ADR-0550).
 - **The handbooks can be searched.** The handbook and the shop handbook carry a search field
   in their top bar: it lists the matching passages with chapter and heading, and choosing one
   scrolls there, opens a folded block around it and marks the words. Only the language on

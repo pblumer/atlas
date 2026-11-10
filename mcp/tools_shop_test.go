@@ -12,7 +12,7 @@ import (
 	"github.com/pblumer/atlas/mcp"
 )
 
-// The shop's customer side over MCP (ADR-draft-mcp-shop-customer-side): each tool is
+// The shop's customer side over MCP (ADR-0550): each tool is
 // the one HTTP operation the portal calls, and the server — not this adapter —
 // decides whether an agent may make it.
 

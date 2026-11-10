@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-// The shop's customer side (ADR-draft-mcp-shop-customer-side): what a person does in
+// The shop's customer side (ADR-0550): what a person does in
 // the portal — read the catalogues they may order from, order, follow their orders,
 // decide the approvals they hold, withdraw, correct, return and change what they
 // ordered.

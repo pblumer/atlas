@@ -44,7 +44,7 @@ type actionReq struct {
 	// must be one — an operator for the last two. An agent asks through MCP as the
 	// person it is connected as, with any of the three; a server started with
 	// --mcp-shop=false refuses `customer`, or none, over MCP
-	// (ADR-draft-mcp-shop-customer-side, reversing ADR-0429 §2's decision of
+	// (ADR-0550, reversing ADR-0429 §2's decision of
 	// 2026-10-01). Left out, the caller asks as whichever trigger they are.
 	Trigger string `json:"trigger"`
 }

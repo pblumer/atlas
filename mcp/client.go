@@ -59,7 +59,7 @@ const TransportHeader = "X-Atlas-Via-MCP"
 // AdapterHeader declares that a request is a tool call this adapter made. It is
 // sent on every request, by the adapter behind /mcp and by a stdio adapter alike,
 // so the server can hold the line its --mcp-shop switch draws: the shop's customer
-// side refused to agents while the portal keeps it (ADR-draft-mcp-shop-customer-side).
+// side refused to agents while the portal keeps it (ADR-0550).
 //
 // Unlike TransportHeader it proves nothing and is not meant to: a stdio adapter is a
 // separate process with an ordinary API token, and it says what it is because it is

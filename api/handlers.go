@@ -296,7 +296,7 @@ type infoResp struct {
 	Catalogue bool `json:"catalogue"`
 	// MCPShop reports whether the shop's customer side — ordering, following and
 	// changing orders, approving, a customer's actions — is offered to agents over
-	// MCP (the --mcp-shop switch, ADR-draft-mcp-shop-customer-side), so an adapter
+	// MCP (the --mcp-shop switch, ADR-0550), so an adapter
 	// or an agent can say so before a tool call is refused.
 	MCPShop bool `json:"mcpShop"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,

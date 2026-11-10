@@ -94,9 +94,9 @@ var mcpToolRoutes = map[string]string{
 	// Asking for one, as the caller: customer, operator or system. The server refuses an
 	// action that does not declare the trigger and a trigger the caller may not ask as,
 	// and — on a server started with --mcp-shop=false — a customer's action over MCP
-	// (ADR-draft-mcp-shop-customer-side, which reverses the decision of 2026-10-01).
+	// (ADR-0550, which reverses the decision of 2026-10-01).
 	"atlas_ask_order_line_action": "POST /api/v1/orders/{id}/lines/{item}/actions/{action}",
-	// The shop's customer side (ADR-draft-mcp-shop-customer-side): what a person does in
+	// The shop's customer side (ADR-0550): what a person does in
 	// the portal, as that person, refused over MCP by a server started with
 	// --mcp-shop=false.
 	"atlas_shop_catalogs":       "GET /api/v1/shop/catalogs",
@@ -369,7 +369,7 @@ var mcpOmittedRoutes = map[string]string{
 	// field, so it records whoever the caller writes there: an agent approving as the
 	// person it acts for does so through the person's own approvals
 	// (atlas_decide_approvals, atlas_complete_task), which record the caller
-	// (ADR-draft-mcp-shop-customer-side).
+	// (ADR-0550).
 	"POST /api/v1/orders/{id}/lines/{item}/decision": "records a decision under whatever name the body gives, which is the approval process's call; an agent approves as the person it acts for through atlas_decide_approvals or the approval task, which record the caller",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors

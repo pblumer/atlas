@@ -1,4 +1,4 @@
-# ADR-DRAFT: The shop's customer side is offered over MCP, as the connected person, unless the server switches it off
+# ADR-0550: The shop's customer side is offered over MCP, as the connected person, unless the server switches it off
 
 - **Status:** Accepted
 - **Implementation:** Landed

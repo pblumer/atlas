@@ -377,7 +377,7 @@ func runServe(args []string) error {
 		return err
 	}
 	cataloguePurge := fs.Bool("catalogue-purge", purgeDefault, "let an administrator delete a catalogue or a product for good, with its releases, its own products, the orders placed from it, the instances working them and the holds they granted (ADR-0469); on by default (opt-out), --catalogue-purge=false to refuse it. Switch it off on a production installation: there a product is withdrawn and a catalogue kept, because orders and held rights resolve through them. GET /api/v1/catalogs/{id}/deletion shows what a purge would remove either way (or ATLAS_CATALOGUE_PURGE=false)")
-	// The shop's customer side over MCP (ADR-draft-mcp-shop-customer-side): on by
+	// The shop's customer side over MCP (ADR-0550): on by
 	// default, so an agent connected as a person can order and follow orders as that
 	// person; an installation that wants the shop to stay a browser's switches it
 	// off. Read as strictly as the purge switches, for the same typo.
@@ -385,7 +385,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	mcpShop := fs.Bool("mcp-shop", mcpShopDefault, "offer the shop's customer side to agents over MCP: the catalogues a person may order from, ordering, following, withdrawing, correcting, returning and changing orders, deciding their approvals and asking a customer's action (ADR-draft-mcp-shop-customer-side). An agent always acts as the person whose credential its MCP connection carries, with that person's rights. On by default (opt-out), --mcp-shop=false to refuse those routes to requests that come through MCP while the portal keeps them (or ATLAS_MCP_SHOP=false)")
+	mcpShop := fs.Bool("mcp-shop", mcpShopDefault, "offer the shop's customer side to agents over MCP: the catalogues a person may order from, ordering, following, withdrawing, correcting, returning and changing orders, deciding their approvals and asking a customer's action (ADR-0550). An agent always acts as the person whose credential its MCP connection carries, with that person's rights. On by default (opt-out), --mcp-shop=false to refuse those routes to requests that come through MCP while the portal keeps them (or ATLAS_MCP_SHOP=false)")
 	// Deleting a version's finished instances for good on an administrator's request
 	// (ADR-0486): on by default for the catalogue
 	// purge's reason — a development server needs nothing — and read as strictly.

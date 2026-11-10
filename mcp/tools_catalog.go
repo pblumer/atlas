@@ -633,7 +633,7 @@ func catalogTools() []Tool {
 					return "", err
 				}
 				// Whether a customer's action may be asked over MCP is the server's
-				// decision (--mcp-shop, ADR-draft-mcp-shop-customer-side); the adapter
+				// decision (--mcp-shop, ADR-0550); the adapter
 				// only refuses what no server would understand.
 				switch trigger {
 				case "customer", "operator", "system":

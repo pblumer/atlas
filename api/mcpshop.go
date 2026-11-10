@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// The shop over MCP (ADR-draft-mcp-shop-customer-side).
+// The shop over MCP (ADR-0550).
 //
 // An agent connected as a person — over the /mcp transport with that person's
 // OAuth grant or session (ADR-0200), or through a stdio adapter holding that

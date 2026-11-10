@@ -156,7 +156,7 @@ lost an event-based gateway's race now answers "not waiting" (it answered "deliv
 `trigger` field is what the server checks, so a customer's action cannot be asked by an
 agent. **Reversed 2026-11-10:** an agent asks a customer's action too, as the person it is
 connected as, unless the server was started with `--mcp-shop=false`
-([ADR-draft-mcp-shop-customer-side](../adr/draft-mcp-shop-customer-side.md)).
+([ADR-0550](../adr/0550-mcp-shop-customer-side.md)).
 **Not in this slice:** the Console's surface for operator actions, because the Console has
 no order view to put it in — operators use the route (and, for reading, the MCP tool
 `atlas_order_line_actions`) until one exists.
