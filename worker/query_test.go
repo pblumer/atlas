@@ -283,3 +283,26 @@ func TestAWorkerAnswersAQueryItCannotRunWithACode(t *testing.T) {
 		}
 	}
 }
+
+// The SharePoint Server Worker Type answers an order form's site lookup wherever it
+// serves jobs (ADR-0519, amended 2026-11-10): the farm's worker is installed by an
+// operator, never supervised, and leases queries as it leases jobs.
+func TestTheSharePointServerWorkerServesLookups(t *testing.T) {
+	env := map[string]string{
+		"ATLAS_SHAREPOINTSERVER_CONNECTORS":                "ucc_sharepoint_onprem",
+		"ATLAS_SHAREPOINTSERVER_UCC_SHAREPOINT_ONPREM_URL": "http://sp01",
+	}
+	built, err := worker.BuiltinConnectors(func(k string) string { return env[k] }, "sharepointserver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask, ok := built.Queries[compiler.SharePointServerJobType]
+	if !ok {
+		t.Fatalf("queries = %v, want %s", built.Queries, compiler.SharePointServerJobType)
+	}
+	_, err = ask(context.Background(), "elsewhere", lookup.Query{Resource: "sites", Value: "alpha", Properties: []string{"name"}})
+	var le *lookup.Error
+	if !errors.As(err, &le) || le.Code != lookup.CodeUnconfigured {
+		t.Fatalf("err = %v, want %s", err, lookup.CodeUnconfigured)
+	}
+}

@@ -498,6 +498,15 @@ ein SharePoint Server gebaut ist.
 
 - **Bestellung:** Titel, URL (`/sites/<url>`, `M365Namensregel` mit `NAME_PREFIX`), Sprache, Kontingent,
   Besitzer und Stellvertretung als AD-Konto. Genehmigt wird wie bei der Online-Teamwebsite.
+- **Adresse frei?** Das Feld URL prüft beim Tippen, ob unter `/sites/<url>` schon eine Website liegt
+  (ADR-0519, Quelle `sharepointserver/sites`): `get-site` über `ucc_sharepoint_onprem`. Dafür braucht
+  der Worker in der Console den Schalter «Forms may search» (`formLookups`; in der M365-Testumgebung
+  setzt ihn `install-m365-dienste.py`). Jede Abfrage startet
+  PowerShell mit dem SharePoint-Snap-in; dauert das länger als die acht Sekunden, die das Formular wartet,
+  warnt es nur nicht vor, bestellt werden kann trotzdem. Wie das Online-Formular fragt es die URL ohne
+  `NAME_PREFIX`; ist ein Präfix gesetzt, sieht nur die Prüfung im Prozess die richtige Adresse. Der
+  Prozess fragt vor dem Anlegen noch einmal mit `get-site` und lehnt mit «Die Adresse ist bereits vergeben.» ab, wenn dort die Website einer anderen
+  Position liegt; die Website derselben Position (eine zweite Zustellung) geht weiter zu `create-site`.
 - **Aktionen:** Besitzer ändern (Personen), Mitglieder ändern (AD-Konten oder AD-Gruppen, Standardgruppen
   Besitzer, Mitglieder, Besucher), Speicherkontingent setzen, Website löschen (Papierkorb),
   Wiederherstellen, und die Rückgabe.

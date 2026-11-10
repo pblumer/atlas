@@ -47,10 +47,11 @@ Lizenzmanagement (Lizenzbestand und letzte Anmeldung).
   `ldaps://dc01.<ad_domain_name>:636`, Zugangsdaten aus dem Vault-Eintrag `m365-ucc_ad`).
 - **«Forms may search»** (`formLookups`, ADR-0473) schaltet der Bootstrap nur am Entra-Worker
   ein (Personensuche in den Bestellformularen). Die Personenfelder von `ad-dienste` suchen über
-  den AD-Worker (dort schaltet ihn `scripts/install-ad-dienste.py` ein), die Live-Prüfung der Site-URL im Bestellformular der SharePoint-Teamwebsite
-  fragt zusätzlich `ucc_sharepoint` und `ucc_exchange`. Bei diesen Workern den Schalter unter
-  *Console → Workers* beim Bearbeiten des Workers einschalten; beim Anlegen bietet die Console
-  ihn nicht an.
+  den AD-Worker (dort schaltet ihn `scripts/install-ad-dienste.py` ein). Die Live-Prüfung der
+  Site-URL in den Bestellformularen der Teamwebsites fragt `ucc_sharepoint` und `ucc_exchange`,
+  die der SharePoint-Server-Teamwebsite `ucc_sharepoint_onprem`; diese drei öffnet
+  `scripts/install-m365-dienste.py` (den Farm-Worker legt es dafür als konfigurierten Worker
+  ohne Zugangsdaten an).
 
 **Testobjekte im Tenant** (Präfix `atlas-test-<zufall>`): drei Testpersonen und eine
 vorgesetzte Person (als Manager eingetragen), eine Sicherheitsgruppe mit allen
@@ -356,8 +357,8 @@ Schluss den Wert für `--site-inventory` aus. Dazu gehören:
   «Speicherkontingent von Hand setzen». Diese Gruppe legt `install-m365-dienste.py` nicht an;
   sie ist in Atlas von Hand anzulegen, wenn jemand die Prüf- und Kontingentaufgaben der Site
   erhalten soll.
-- «Forms may search» an `ucc_sharepoint` und `ucc_exchange` für die Live-Prüfung der URL
-  (siehe «Inhalt»).
+- «Forms may search» an `ucc_sharepoint` und `ucc_exchange` für die Live-Prüfung der URL;
+  das Installationsskript schaltet es ein (siehe «Inhalt»).
 
 ### `scripts/install-lizenzmanagement.py`
 

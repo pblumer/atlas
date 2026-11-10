@@ -35,6 +35,7 @@ import (
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/sharepointserver"
 	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
@@ -110,6 +111,14 @@ var providers = []Provider{
 		Label: "Microsoft SharePoint — a site at https://<host>/<managed path>/<name>", Located: true,
 		ValueFormat: "letters, digits, '-' and '_', starting with a letter or a digit, at most 64",
 		valid:       sharepoint.ValidSiteName,
+	},
+	{
+		// The farm's Worker holds its web application and managed path, so the form
+		// names neither: a site is its leaf, as a task names it (ADR-0540).
+		WorkerType: "sharepointserver", Resource: sharepointserver.LookupSites, JobType: compiler.SharePointServerJobType, Property: "name",
+		Label:       "SharePoint Server — a site at <web application>/<managed path>/<name> of the Worker",
+		ValueFormat: "letters, digits, '-' and '_', starting with a letter or a digit, at most 128",
+		valid:       sharepointserver.ValidLookupValue,
 	},
 }
 
