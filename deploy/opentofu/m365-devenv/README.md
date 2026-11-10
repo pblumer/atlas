@@ -247,6 +247,29 @@ Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` 
 - Der Run Command `atlas-exchange-worker` auf `exch01` wird von `onprem/install-worker.sh`
   selbst wieder gelöscht; der Worker selbst geht mit der VM.
 
+## Reihenfolge für einen Neuaufbau
+
+Alles, was die Umgebung braucht, kommt aus `tofu apply` und den Skripten dieses Verzeichnisses; von Hand
+gesetzt wird nichts. Nach `tofu apply` (alle `enable_*` wie gewünscht):
+
+```bash
+./scripts/wait-atlas.sh
+./scripts/wait-ad.sh                          # mit enable_ad_dc
+./scripts/wait-exchange.sh                    # mit Exchange Server
+./onprem/install-worker.sh
+./scripts/wait-sharepoint.sh                  # mit enable_sharepoint_server
+./onprem/install-sharepoint-worker.sh
+python3 scripts/install-m365-dienste.py --site-inventory <host>:/sites/<test-site>
+python3 scripts/install-lizenzmanagement.py
+python3 scripts/install-ad-dienste.py         # mit enable_ad_dc
+python3 scripts/install-informationstransfer.py
+python3 scripts/testlauf-rollen.py            # nach jedem Installationsskript
+./scripts/mssql-testdb.sh                     # mit enable_sharepoint_server
+python3 -I onprem/run-mssql-smoke.py
+```
+
+Jedes Skript darf erneut laufen. Die Tokens der beiden On-Premises-Worker gelten 7 Tage.
+
 ## Testszenario
 
 Einen durchgehenden Test mit einer erfundenen Firma beschreibt
@@ -276,6 +299,8 @@ python3 scripts/install-m365-dienste.py --cafile out/caddy-root.crt
 | `--mail-domain` | Initial-Domain des Tenants | `MAIL_DOMAIN` und `PARTNER_UPN_DOMAIN` |
 | `--site-inventory` | – | `SITE_INVENTAR` (`<host>:/sites/<pfad>`), die Site mit der Liste «Site-Inventar»; ohne die Option fehlt die SharePoint-Teamwebsite im Katalog |
 | `--no-onprem` | – | lässt die Exchange-Server-Variante weg, auch wenn `exch01` gebaut ist |
+| `--no-sharepoint-server` | – | lässt die SharePoint-Server-Teamwebsite weg, auch wenn `enable_sharepoint_server` an ist |
+| `--ortsangaben` | – | setzt `ORTSANGABEN = true`; ohne die Option `false`, weil `Set-Place` im geteilten Tenant mit HTTP 500 antwortet |
 | `--tofu-dir`, `--example` | dieses Verzeichnis, `examples/m365-dienste` | woher die Ausgaben und das Paket kommen |
 
 Was es tut:
@@ -731,7 +756,8 @@ Baut die Variable `enable_sharepoint_server` eine Farm, startet `onprem/install-
 den Worker `ucc_sharepoint_onprem` (Typ `sharepointserver`, ADR-0540) auf dem Server
 selbst, mit einem Token für 7 Tage wie beim Exchange-Worker. Das Skript liest
 `tofu output -json sharepoint_server`; das Passwort des Dienstkontos (`runbook_account`) kommt aus der
-Ausgabe `sharepoint_runbook_password` oder aus `SHAREPOINT_WORKER_PASSWORD`. Danach:
+Ausgabe `sharepoint_runbook_password`, aus `SHAREPOINT_WORKER_PASSWORD` oder, bei einem State von vor dieser
+Ausgabe, aus dem State selbst (`tofu console`); angezeigt wird es nie. Danach:
 
 ```bash
 ./onprem/install-sharepoint-worker.sh
@@ -743,11 +769,21 @@ Das Installationsskript nimmt das Produkt «Teamwebsite» nur in den Katalog `ca
 der Katalog dann nur mit diesem Produkt. In Atlas braucht der Worker kein Zugangsdatum, weil die Cmdlets als
 Dienstkonto laufen.
 
-**Nicht geprüft:** Weder `install-sharepoint-worker.sh` noch `sharepoint-worker.ps1` noch das Produkt sind
-an einer Farm gelaufen. Die Cmdlets stammen aus der Dokumentation von Microsoft, die nur Versionen bis 2019
-nennt. Nicht an einem Server bestätigt sind `CreateDefaultAssociatedGroups`, `EnsureUser` für AD-Gruppen und
-das Laden der Befehle (`Add-PSSnapin` oder `Import-Module SharePointServer`) unter Subscription Edition. Eine
-Ausgabe `sharepoint_runbook_password` gibt es im Zweig `feat/devenv-sharepoint-server` noch nicht.
+**Erprobt am 2026-11-10** an der Farm dieser Umgebung (SharePoint Server SE 16.0.14326, SQL Server 2025):
+eine Bestellung `m365-spserver-site` bis zur gehaltenen Position. Was das am Worker geändert hat, steht in
+ADR-0540 (As built, 2026-11-10). Das Dienstkonto ist Shell-Admin und hält auf der Webanwendung eine
+Richtlinie mit der Rolle *Atlas Worker* (Benutzer auflösen, Gruppen anlegen und füllen, Website verwalten,
+keine Inhaltsrechte); `sharepoint-setup.ps1` setzt sie. Die drei Standardgruppen einer Website legt der
+Worker selbst an und ist ihr Gruppenbesitzer. Das Token des Workers gilt 7 Tage; danach
+`install-sharepoint-worker.sh` erneut ausführen.
+
+**Sprachen:** Das Bestellformular bietet Deutsch, Französisch, Italienisch und Englisch. `sharepoint-setup.ps1`
+installiert die drei Sprachpakete vor dem Anlegen der Farm. Für eine Farm, die ohne sie gebaut wurde:
+
+```bash
+./scripts/sharepoint-languages.sh     # Sprachpakete DE, FR, IT, PSConfig, Neustart (WAIT_MINUTES=120)
+```
+
 ## SharePoint Server (optional)
 
 Mit `enable_sharepoint_server = true` (braucht `enable_ad_dc`) entsteht eine SharePoint Server
@@ -930,6 +966,10 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 | `onprem/exchange-worker.ps1` | `install-worker.sh` über den Run Command | lädt `atlas.exe`, schreibt `C:\Atlas\worker.json`, Starttask als Dienstkonto |
 | `onprem/install-sharepoint-worker.sh` | von Hand nach dem Bau der Farm | startet `ucc_sharepoint_onprem` auf dem SharePoint-Server (Token 7 Tage) |
 | `onprem/sharepoint-worker.ps1` | `install-sharepoint-worker.sh` über den Run Command | wie der Exchange-Worker, Typ `sharepointserver` |
+| `scripts/sharepoint-languages.sh` | von Hand, nur für eine Farm ohne Sprachpakete | installiert DE, FR, IT mit `onprem/sharepoint-languages.ps1`, PSConfig, Neustart |
+| `scripts/mssql-testdb.sh` | von Hand nach `wait-sharepoint.sh` | Testdatenbank `AtlasTest_HR` auf `sp01` und Worker `hr-db` in Atlas |
+| `onprem/run-mssql-smoke.py` | von Hand nach `mssql-testdb.sh` | sieben Fälle des MS-SQL-Workers |
+| `scripts/testlauf-rollen.py` | von Hand nach jedem Installationsskript | trennt die Rollen der Testpersonen für den Testlauf |
 | `onprem/run-smoke.py` | von Hand | Rauchtest `exchange-onprem-smoke.bpmn` gegen `exch01` |
 | `scripts/shared-tenant-setup.ps1` | von Hand nach `tofu apply`, geteilter Tenant | Rechte in Exchange und SharePoint, Liste «Site-Inventar» (`-Part`) |
 | `scripts/install-m365-dienste.py` | von Hand | `examples/m365-dienste` und seine Exchange-Server-Variante einspielen |

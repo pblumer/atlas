@@ -93,7 +93,7 @@ Objekte entfernen die Aufräumskripte beim Abbau der Umgebung.
 
 - `Set-Place` über die Exchange-REST-Schnittstelle antwortet immer mit HTTP 500. Darum steht
   die Konstante `ORTSANGABEN` hier auf `false` (Typ `json`); `install-m365-dienste.py` setzt
-  alle Konstanten neu, sie muss danach wieder gesetzt werden. Ort und Stockwerk eines Raums
-  erscheinen deshalb nicht in Places.
+  sie so, ausser mit `--ortsangaben`. Ort und Stockwerk eines Raums erscheinen deshalb nicht
+  in Places.
 - Ein neuer Raum erscheint erst nach 24 bis 48 Stunden in der Raumsuche von Outlook.
 - Die VMs fahren täglich um 22:00 UTC herunter und müssen vor dem Test gestartet werden.

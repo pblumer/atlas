@@ -290,6 +290,12 @@ output "exchange_service_password" {
   sensitive   = true
 }
 
+output "sharepoint_runbook_password" {
+  description = "Password of the SharePoint Server worker's service account (runbook_account in sharepoint_server), for onprem/install-sharepoint-worker.sh. Sensitive: tofu output -raw sharepoint_runbook_password."
+  value       = local.sharepoint_count == 1 ? random_password.sharepoint["runbook"].result : null
+  sensitive   = true
+}
+
 output "sharepoint_server" {
   description = "The SharePoint server, for the SharePoint Server worker: whether it is built, its VM, its web application (inside the virtual network) and the runbook service account. No password."
   value = {
