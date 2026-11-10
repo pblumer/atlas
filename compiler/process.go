@@ -412,7 +412,41 @@ type BusinessRuleTaskDetail struct {
 	Binding       DecisionBinding        // how the decision model is resolved (ADR-0063)
 	Version       int32                  // the decision version a BindingVersion task names; 0 otherwise
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
+	// Rows, when set, makes the task evaluate its decision once per record of a file
+	// rather than once (ADR-0548); nil for an ordinary business rule task.
+	Rows *DecisionRows
 }
+
+// DecisionRows is a business rule task over a file (ADR-0548): the decision is
+// evaluated once per record of a document, in one job, and the task completes with a
+// summary and a result document instead of one decision's outputs. It is authored as
+// <atlas:rowsFrom> on the task and read only by the in-process DMN worker, never on
+// the run loop, so its fields are plain values rather than interned indices.
+type DecisionRows struct {
+	// Source is the process variable holding the reference to the document to read.
+	Source string
+	// Delimiter is the CSV field separator, one character; empty means ",".
+	Delimiter string
+	// HasHeader says the file's first record names its columns.
+	HasHeader bool
+	// Columns names the fields of a record, in file order when there is no header row,
+	// or picks and orders them by header name when there is one. Empty with a header
+	// row means every column, named by its header.
+	Columns []string
+	// ValidOutput is the decision output that says whether a record is valid; for a
+	// decision with a single boolean output it may be left empty.
+	ValidOutput string
+	// FailureSample is how many failing records the summary carries in its
+	// variable; the rest are in the result document.
+	FailureSample int32
+}
+
+// The defaults and the ceiling of a business rule task over a file (ADR-0548).
+const (
+	DefaultRowsValidOutput   = "valid"
+	DefaultRowsFailureSample = 200
+	MaxRowsFailureSample     = 10000
+)
 
 // DecisionBinding selects which DMN model version a local business rule task
 // evaluates against (ADR-0063). It mirrors Camunda's zeebe:calledDecision

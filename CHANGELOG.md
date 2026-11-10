@@ -22,6 +22,21 @@ _Changed_ / _Removed_ for each version.
   operation ends both with a plain failure, and one needs a live tenant. The contract is not yet
   published (ADR-0483): that waits for branch protection with the code owner's review. Entra's
   `create-channel` now claims the contract's version `1.0.0`.
+- **The handbooks can be searched.** The handbook and the shop handbook carry a search field
+  in their top bar: it lists the matching passages with chapter and heading, and choosing one
+  scrolls there, opens a folded block around it and marks the words. Only the language on
+  screen is searched, accents and ß need not be typed, `/` or Ctrl+K opens the field, and
+  `/handbuch.html?q=…` opens the page with a search. It runs in the browser on the page's own
+  text; nothing is sent to the server.
+- **A business rule task can check a file record by record.** With `<atlas:rowsFrom source="antrag"/>`
+  (panel: *Over a file → Once per record of a file*) a business rule task evaluates its decision once
+  for every record of an uploaded CSV document, in one job of the in-process DMN worker, instead of
+  once over the instance's variables. Input mappings read the record as `row`; without mappings the
+  columns enter the decision by name. The result variable receives a summary — total, valid,
+  invalid and failed records, the first failures with their line, the decision deployment used — and
+  a result document with every record, its `_row`, `_valid` and the decision's other outputs. One
+  decision evaluation is recorded for the run. 50,000 records take seconds, where one
+  multi-instance iteration per record takes hours (ADR-0548).
 - **Built-in Worker Type operations declare technical capabilities.** The operation rows of the
   Entra and Teams Phone Worker Types carry their capability claims (ADR-0480), and
   `GET /api/v1/worker-types` lists them per operation as `candidate`: Entra's Team operations
@@ -277,6 +292,16 @@ directory gains the document store. Four changes can break what worked against 0
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A multi-instance body's collection fills round by round in the replay.** The replay showed
+  the output collection as it was seeded — `[null, …]` — in every round and filled only once
+  the loop had finished, because a round records only its element (ADR-0296) and that element
+  was not retained. It is now retained, the size of one result, in a column family of its own
+  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
+  linear in the round count. The instance timeline applies each element to the collection as
+  it stands, so a round shows the list the rounds before it left and its own answer at
+  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
+  this keep the old reading, and only there does the Environment still explain it
+  ([ADR-0549](docs/adr/0549-collection-by-round.md)).
 - **A new built-in Worker Type declares what a second delivery does.** Every new built-in
   Worker Type ships a manifest stating each operation's idempotency and effect, as an
   installed one must; `go test ./api` refuses one without it, and the 31 kinds released

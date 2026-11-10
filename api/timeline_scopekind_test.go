@@ -20,6 +20,8 @@ type scopedVar struct {
 	Scope     string `json:"scope"`
 	ScopeKind string `json:"scopeKind"`
 	Constant  string `json:"constant"`
+	// ElementsRecorded: the body's per-round element writes are on record.
+	ElementsRecorded bool `json:"elementsRecorded"`
 }
 
 type scopedStep struct {

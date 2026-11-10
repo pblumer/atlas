@@ -251,6 +251,8 @@ Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` 
 
 Einen durchgehenden Test mit einer erfundenen Firma beschreibt
 [TESTSZENARIO.md](TESTSZENARIO.md).
+Den wiederholbaren Abnahmetest aller Kataloge, erzählt als Hochlauf eines KMU, den ein
+Agent über MCP in mehreren Rollen durchführt, beschreibt [TESTLAUF-KATALOG.md](TESTLAUF-KATALOG.md).
 
 ## Beispiele einspielen
 
@@ -759,8 +761,8 @@ Subscription Edition als Einzelserver-Farm:
   Downloads.
 - `scripts/sharepoint-setup.ps1` installiert unbeaufsichtigt in vier Phasen mit Neustarts:
   Domänenbeitritt; Prüfung des Images und AD-PowerShell; die Konten `svc-sp-farm-<zufall>`,
-  `svc-sp-app-<zufall>` und `svc-sp-run-<zufall>` in `OU=AtlasTest` und SQL Server 2022
-  Developer vom Download bei Microsoft; zuletzt die Farm (`New-SPConfigurationDatabase`,
+  `svc-sp-app-<zufall>` und `svc-sp-run-<zufall>` in `OU=AtlasTest` und SQL Server 2025
+  Standard Developer vom Download bei Microsoft (2022 bietet Microsoft nicht mehr an); zuletzt die Farm (`New-SPConfigurationDatabase`,
   Rolle `SingleServerFarm`), die Zentraladministration auf Port 9999, die Webanwendung
   `http://sp01.<ad_domain_name>` mit einer Websitesammlung an der Wurzel und die Rechte des
   Runbook-Kontos (lokaler Administrator, `Add-SPShellAdmin`, zweiter Besitzer der
@@ -804,6 +806,33 @@ startet die Erweiterung nicht erneut.
 Das Image verlangt nach allem, was öffentlich dazu zu finden ist, keinen Marketplace-Plan. Vor
 dem ersten Apply lässt sich das prüfen; `null` heisst, dass kein Plan nötig ist:
 `az vm image show --urn MicrosoftSharePoint:MicrosoftSharePointServer:spse:1.0.0 --query plan`.
+
+## MS SQL Worker (auf dem SQL Server der SharePoint-VM)
+
+Mit `enable_sharepoint_server` steht auf `sp01` ein SQL Server 2025 Standard Developer. Neben
+den Datenbanken der Farm trägt er die Testdatenbank des MS-SQL-Workers (ADR-0173, ADR-0188):
+
+```sh
+./scripts/mssql-testdb.sh              # Datenbank, Login, Connector hr-db, Verbindungsprüfung
+python3 -I onprem/run-mssql-smoke.py   # Beispiel und Fehlerfälle gegen die Datenbank
+```
+
+- `scripts/mssql-testdb.sh` führt `onprem/mssql-testdb.ps1` über den verwalteten Run Command
+  aus: gemischter Anmeldemodus (beim ersten Mal ein Neustart des SQL-Dienstes, SharePoint ist
+  dafür etwa eine halbe Minute ohne Datenbank), TCP 1433 in der Windows-Firewall nur aus dem
+  Subnetz `app`, die Datenbank `AtlasTest_HR` mit `dbo.personen` (sechs Personen der
+  Helvetia Werkstatt, bei jedem Lauf zurückgesetzt) und der SQL-Login `atlas_hr` mit Lesen und
+  Schreiben nur auf dieser Datenbank. Die Datenbanken der Farm bleiben unberührt.
+- Danach legt es in Atlas den konfigurierten Worker `hr-db` (Art `mssql`) an; die
+  Verbindungszeichenfolge liegt nur im Vault. Ein zweiter Lauf erzeugt ein neues Passwort für
+  den Login und ersetzt den Vault-Eintrag. Zum Schluss prüft es die Verbindung über Atlas und
+  dass ein falsches Passwort abgewiesen wird.
+- `onprem/run-mssql-smoke.py` spielt `examples/mssql-eintrittsmeldung.bpmn` und
+  `onprem/mssql-smoke.bpmn` ein und führt sieben Fälle aus: Eintritt vermerkt (`query-one`,
+  `execute`), Person nicht in HR, `query` mit `maxRows`, `query-one` ohne Treffer,
+  benannte Bindung, `query-one` mit zwei Treffern und `query` über `maxRows` (die letzten
+  beiden erwartet als Incident; die Instanzen werden danach abgebrochen).
+- Kein Passwort erscheint in einer Ausgabe. In Azure und im Tenant entsteht nichts.
 
 ## Lizenzen
 

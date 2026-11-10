@@ -86,6 +86,13 @@ type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDe
 // each result. [Handler] (local) and the temis worker (central, ADR-0050)
 // are both built on it.
 func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
+	return DecisionHandlerWithRows(store, lookup, bind, sink, RowsOptions{})
+}
+
+// DecisionHandlerWithRows is [DecisionHandler] for a worker that can also run a
+// business rule task over a file (ADR-0548): opts gives it the document store to read
+// the file from and store the result in.
+func DecisionHandlerWithRows(store state.Reader, lookup ProcessLookup, bind Bind, sink func(Result), opts RowsOptions) job.CompletingHandler {
 	return func(j job.Job) (job.Completion, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -104,6 +111,9 @@ func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink f
 		evaluate, err := bind(cp, detail)
 		if err != nil {
 			return job.Completion{}, err
+		}
+		if detail.Rows != nil {
+			return evaluateRows(context.Background(), store, j, ei, cp, detail, decisionId, evaluate, opts)
 		}
 		inputs, err := BuildInputs(store, j.ElementInstanceKey, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
 		if err != nil {
@@ -166,13 +176,25 @@ func JSONObject(m map[string]any) string {
 // [job.Runner] via HandleCompleting for the reserved DMN job type
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
-	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
+	return HandlerWithRows(store, lookup, reg, sink, RowsOptions{})
+}
+
+// HandlerWithRows is [Handler] with what a business rule task over a file needs: the
+// document store it reads the file from and stores the result in (ADR-0548).
+func HandlerWithRows(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result), opts RowsOptions) job.CompletingHandler {
+	return DecisionHandlerWithRows(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
 		// Which deployed model to evaluate depends on the binding and on the policy the
 		// definition was deployed under (decisionModelKey). Both paths request the
 		// trace so the evaluation is retained with its explanation (ADR-0066), and the
 		// first names the deployment that answered so the record can say which version
 		// ran.
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error) {
+			// A run over a file evaluates every record against the deployment its first
+			// record was answered by (ADR-0548).
+			if key, ok := pinnedKey(ctx); ok {
+				out, trace, err := reg.EvaluateTraced(ctx, key, decisionId, inputs)
+				return Evaluation{Outputs: out, Trace: trace, Key: key}, err
+			}
 			key, ok, err := decisionModelKey(reg, cp, detail, decisionId)
 			if err != nil {
 				return Evaluation{}, err
@@ -184,7 +206,21 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(
 			out, trace, err := reg.EvaluateLatestTraced(ctx, decisionId, inputs)
 			return Evaluation{Outputs: out, Trace: trace}, err
 		}, nil
-	}, sink)
+	}, sink, opts)
+}
+
+// pinnedKeyCtx carries the decision deployment a run over a file has settled on.
+type pinnedKeyCtx struct{}
+
+// withPinnedKey makes every evaluation under ctx use the deployment key.
+func withPinnedKey(ctx context.Context, key uint64) context.Context {
+	return context.WithValue(ctx, pinnedKeyCtx{}, key)
+}
+
+// pinnedKey is the deployment a run over a file has settled on, if any.
+func pinnedKey(ctx context.Context) (uint64, bool) {
+	key, ok := ctx.Value(pinnedKeyCtx{}).(uint64)
+	return key, ok && key != 0
 }
 
 // decisionModelKey answers which deployment's model a business rule task must

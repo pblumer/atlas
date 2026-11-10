@@ -25,10 +25,16 @@ func TestSettingAnElementToleratesACollectionThatIsNotThere(t *testing.T) {
 	defer func() { _ = tx.Close() }()
 
 	const scope = 42
+	// Each no-op also reports that it set nothing: the fold retains only an element it
+	// actually set, so the history never claims a write the state did not take.
 	set := func(name string, idx int32) error {
-		return setVariableElement(tx, &model.VariableValue{
+		applied, err := setVariableElement(tx, &model.VariableValue{
 			ScopeKey: scope, Name: name, Index: idx, Kind: model.VarString, Text: "v",
 		})
+		if err == nil && applied {
+			t.Errorf("setting element %d of %q reported applied, want a no-op", idx, name)
+		}
+		return err
 	}
 
 	if err := set("absent", 0); err != nil {
@@ -63,8 +69,10 @@ func TestSettingAnElementToleratesACollectionThatIsNotThere(t *testing.T) {
 	}
 
 	// And the case that does apply.
-	if err := set("list", 1); err != nil {
-		t.Fatalf("setting element 1: %v", err)
+	if applied, err := setVariableElement(tx, &model.VariableValue{
+		ScopeKey: scope, Name: "list", Index: 1, Kind: model.VarString, Text: "v",
+	}); err != nil || !applied {
+		t.Fatalf("setting element 1: applied=%v err=%v", applied, err)
 	}
 	if v, err := tx.GetVariable(scope, "list"); err != nil || v == nil || v.Text != `[null,"v"]` {
 		t.Errorf("list = %v, want the second element set", v)

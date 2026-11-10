@@ -498,8 +498,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   wrote — including its answer, kept in the round's own scope — a rewritten value saying
   what it was, a new one marked new) and a folded
   *Environment*, grouped body → subprocess → process → constants, without the variable of the
-  subprocess running beside it, and with the body's collection saying that it reads
-  unfilled until the loop is done. A round still running must say it has no output yet; a name
+  subprocess running beside it, and — on an instance recorded before each round's
+  element was kept — with the body's collection saying that it reads unfilled until the
+  loop is done; with `?recorded=1` the collection fills round by round and says nothing
+  ([ADR-0549](../docs/adr/0549-collection-by-round.md)). A round still running must say it has no output yet; a name
   the filter finds in the folded environment must show; sorting the table must keep every row
   in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
   nothing selected the tab must stay one list whose scope chip names the kind of scope.
@@ -836,6 +838,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   document leaves open, then creates the application, its ten forms and five processes,
   publishes them and imports the catalogue last, with every placeholder replaced; a refused
   import lists each problem by its catalogue or product.
+- **`handbook-search.spec.mjs`**: the **search field** in the top bar of both handbooks
+  (`api/web/handbook-search.js`). A passage folded away in a `<details>` is found, and
+  choosing it opens the fold and brings it on screen; only the language on screen is
+  searched; `/`, the arrow keys, Enter and Escape are enough, also Enter pressed before the
+  list caught up with the last keystroke; accents and ß need not be typed; `?q=` opens the
+  page with a search; on a phone the field takes a row of its own under the bar.
 - **`console-events.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the Console's **Events** page. A modeler reads every entry, with the shape and an
   experimental entry marked, and opens one to its payload, personal data marked. The

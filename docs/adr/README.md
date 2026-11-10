@@ -635,7 +635,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0545](0545-installed-worker-instances-hold-their-own-credential.md) | An installed Worker Type's instance holds its own credential, confined to the job types its manifest declares | Proposed | Partial |
 | [0546](0546-new-built-in-worker-types-ship-a-manifest.md) | Every new built-in Worker Type ships a manifest that declares its operations' idempotency and effect | Accepted | Landed |
 | [0547](0547-refuse-forbidden-sequence-flow-shapes.md) | Refuse the sequence-flow shapes BPMN forbids, and locate element-local compile errors | Accepted | Landed |
-| [0548](0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md) | Bulk validation evaluates a decision per row inside one job, not one token per row | Proposed | Not started |
+| [0548](0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md) | Bulk validation evaluates a decision per row inside one job, not one token per row | Proposed | Partial |
+| [0549](0549-collection-by-round.md) | A loop's collection is retained one element per round | Accepted | Landed |
 
 ## The two states of a record
 

@@ -2414,7 +2414,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.SetRetryBackoff(s.jobRetryBackoff)
 	s.breakers.onChange = s.logBreakerChange
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
-		return dmn.Handler(rd, s.processLookup, s.dmnRegistry, nil)
+		// A business rule task over a file reads it from, and stores its result in, the
+		// document store, for the job's own instance (ADR-0548). The summary is cut to
+		// the variable budget, because it is a variable.
+		return dmn.HandlerWithRows(rd, s.processLookup, s.dmnRegistry, nil, dmn.RowsOptions{
+			Docs:       dmnRowDocuments{s},
+			MaxSummary: int(s.budgets().Variable),
+		})
 	})
 	// Script-language workers (PowerShell, Python, JavaScript) each register under
 	// their reserved job type and resolve each job's script from the compiled

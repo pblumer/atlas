@@ -520,6 +520,20 @@ func (s *Server) readDocumentBytes(instance uint64, id string) ([]byte, error) {
 // jobDocuments is the document store as an in-process S3 task of one instance reaches
 // it: reads only what that instance was given; stores a new document, pending until the
 // job's completion binds it (drive, bindJobOutputs).
+// dmnRowDocuments is the document store as the in-process DMN worker reaches it for a
+// business rule task over a file (ADR-0548): the file read for the job's own instance,
+// as every in-process document read is, and the result stored as a new document that
+// the job's completion binds to that instance.
+type dmnRowDocuments struct{ s *Server }
+
+func (d dmnRowDocuments) ReadDocument(instance uint64, id string) ([]byte, error) {
+	return d.s.readDocumentBytes(instance, id)
+}
+
+func (d dmnRowDocuments) StoreDocument(ctx context.Context, name, contentType string, data []byte) (map[string]any, error) {
+	return jobDocuments{s: d.s}.StoreDocument(ctx, name, contentType, data)
+}
+
 type jobDocuments struct {
 	s        *Server
 	instance uint64

@@ -10,7 +10,7 @@
     and Administrators can read, joins the domain.
   Phase 2 (SYSTEM): checks the image carries SharePoint, Active Directory PowerShell.
   Phase 3 (the domain administrator): the farm, application pool and runbook accounts in
-    OU=AtlasTest; SQL Server 2022 Developer from Microsoft's download.
+    OU=AtlasTest; SQL Server 2025 Standard Developer from Microsoft's download.
   Phase 4 (the domain administrator): the farm, Central Administration, the web
     application with a root site collection, the runbook account's rights; removes the
     settings file and the tasks.
@@ -102,9 +102,18 @@ function Get-File([string] $Url, [string] $Path) {
 }
 
 # Never given a password: its arguments go to the log.
-function Invoke-Checked([string] $File, [string[]] $Arguments, [int[]] $Ok = @(0)) {
+# Bounded: an installer that fails into a dialog nobody sees never exits. SSEI 2022 did
+# that on 2026-11-09 and held phase 3 until the task's four-hour limit, without a word.
+function Invoke-Checked([string] $File, [string[]] $Arguments, [int[]] $Ok = @(0), [int] $TimeoutMinutes = 60) {
     Write-Output "> $File $($Arguments -join ' ')"
-    $p = Start-Process -FilePath $File -ArgumentList $Arguments -Wait -PassThru -NoNewWindow
+    $p = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru -NoNewWindow
+    # Without -Wait, Windows PowerShell 5.1 reports ExitCode only if the handle was taken
+    # while the process ran; otherwise it is empty and every exit reads as a failure.
+    $null = $p.Handle
+    if (-not $p.WaitForExit($TimeoutMinutes * 60 * 1000)) {
+        & taskkill.exe /PID $p.Id /T /F | Out-Null
+        throw "$File did not finish within $TimeoutMinutes minutes; see its log"
+    }
     if ($Ok -notcontains $p.ExitCode) { throw "$File exited with $($p.ExitCode)" }
 }
 
@@ -138,9 +147,12 @@ function Install-Sql($cfg) {
     New-Item -ItemType Directory -Force -Path $sqlMedia | Out-Null
     $iso = Get-ChildItem -Path $sqlMedia -Filter '*.iso' -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $iso) {
-        $bootstrap = Join-Path $root 'SQL2022-SSEI-Dev.exe'
-        Get-File 'https://aka.ms/sqlserver2022developer' $bootstrap
-        Invoke-Checked $bootstrap @('/ACTION=Download', "/MEDIAPATH=`"$sqlMedia`"", '/MEDIATYPE=ISO', '/ENU', '/QUIET')
+        # SQL Server 2025 Standard Developer: Microsoft offers no current 2022 bootstrapper
+        # (aka.ms/sqlserver2022developer serves one its own manifest refuses, 2026-11-09).
+        # SharePoint Server SE takes any SQL Server for Windows with compatibility level 150.
+        $bootstrap = Join-Path $root 'SQL2025-SSEI-StdDev.exe'
+        Get-File 'https://go.microsoft.com/fwlink/?linkid=2344626' $bootstrap
+        Invoke-Checked $bootstrap @('/ACTION=Download', "/MEDIAPATH=`"$sqlMedia`"", '/MEDIATYPE=ISO', '/ENU', '/QUIET') -TimeoutMinutes 45
         $iso = Get-ChildItem -Path $sqlMedia -Filter '*.iso' | Select-Object -First 1
         if (-not $iso) { throw "no SQL Server image in $sqlMedia after the download" }
     }
@@ -155,7 +167,7 @@ function Install-Sql($cfg) {
         "/SQLSYSADMINACCOUNTS=`"$($cfg.netbiosName)\$($cfg.domainAdmin)`"",
         '/SQLCOLLATION=Latin1_General_CI_AS_KS_WS', '/SQLMAXDOP=1', '/SQLMINMEMORY=0', '/SQLMAXMEMORY=6144',
         '/TCPENABLED=1', '/UPDATEENABLED=False'
-    ) @(0, 3010)
+    ) @(0, 3010) -TimeoutMinutes 90
     Dismount-DiskImage -ImagePath $iso.FullName -ErrorAction SilentlyContinue | Out-Null
 }
 
