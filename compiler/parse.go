@@ -3027,7 +3027,13 @@ type xmlCsvConnector struct {
 	// Operation the direction ("read" | "write"; blank is read) — ADR-0139, amended.
 	Format    string `xml:"format,attr"`
 	Operation string `xml:"operation,attr"`
-	Retries   string `xml:"retries,attr"`
+	// Corrections, Drop and DocumentName are apply-corrections' (ADR-0548, S2): the
+	// variable holding the corrected records (a list, or a document with a _row column),
+	// the variable holding the line numbers to drop, and the name of the file written.
+	Corrections  string `xml:"corrections,attr"`
+	Drop         string `xml:"drop,attr"`
+	DocumentName string `xml:"documentName,attr"`
+	Retries      string `xml:"retries,attr"`
 }
 
 // The file formats and directions a csvConnector can author. They are spelled here
@@ -3039,6 +3045,8 @@ const (
 	csvimportFormatAVP        = "avp"
 	csvimportOperationRead    = "read"
 	csvimportOperationWrite   = "write"
+	// csvimportOperationApply writes a corrected copy of an uploaded file (ADR-0548, S2).
+	csvimportOperationApply = "apply-corrections"
 )
 
 // csvFormatAndOperation reads the authored format and direction, applying the
@@ -3059,9 +3067,9 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 	if op == "" {
 		op = csvimportOperationRead
 	}
-	if op != csvimportOperationRead && op != csvimportOperationWrite {
-		return "", "", elementErrorf(taskID, "compiler: csv task %q has an unknown operation %q (want %s or %s)",
-			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
+	if op != csvimportOperationRead && op != csvimportOperationWrite && op != csvimportOperationApply {
+		return "", "", elementErrorf(taskID, "compiler: csv task %q has an unknown operation %q (want %s, %s, or %s)",
+			taskID, rawOp, csvimportOperationApply, csvimportOperationRead, csvimportOperationWrite)
 	}
 	return format, op, nil
 }

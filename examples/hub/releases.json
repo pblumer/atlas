@@ -267,6 +267,12 @@
       "version": "1.0.2",
       "digest": "sha256:eb342f72d4d1acdf18ab2188a3aecf757f115be3fd0c81a36db11a78b441fe6f",
       "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "datenqualitaet",
+      "version": "1.0.3",
+      "digest": "sha256:66b130e56c61a52ba2c77b82d3d33c21ba3fb4cd668f8a348814ac874f5dd893",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }

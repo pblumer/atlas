@@ -1,6 +1,7 @@
 package csvimport
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -71,6 +72,12 @@ type DocumentReader func(instance uint64, id string) ([]byte, error)
 // HandlerWithDocuments is [Handler] with a document reader, so a source variable that
 // names a document is parsed from the document's bytes.
 func HandlerWithDocuments(store VarStore, lookup ProcessLookup, docs DocumentReader) job.OutputHandler {
+	return HandlerWithStores(store, lookup, docs, nil)
+}
+
+// HandlerWithStores is [HandlerWithDocuments] with a document store per instance, for
+// apply-corrections, which writes the corrected file as a new document (ADR-0548, S2).
+func HandlerWithStores(store VarStore, lookup ProcessLookup, docs DocumentReader, stores func(instance uint64) DocumentStore) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -86,7 +93,15 @@ func HandlerWithDocuments(store VarStore, lookup ProcessLookup, docs DocumentRea
 		if lookup != nil {
 			if cp := lookup(ei.ProcessDefKey); cp != nil {
 				if node := cp.Node(ei.ElementId); node.Type == compiler.TypeConnectorTask {
-					return rowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey, forInstance(docs, j.ProcessInstanceKey))
+					detail := cp.ConnectorTask(node.Detail)
+					if detail != nil && cp.Intern(detail.CsvOperation) == OperationApplyCorrections {
+						var docStore DocumentStore
+						if stores != nil {
+							docStore = stores(j.ProcessInstanceKey)
+						}
+						return correctionsFromConnector(store, cp, detail, j.ElementInstanceKey, docStore)
+					}
+					return rowsFromConnector(store, cp, detail, j.ElementInstanceKey, forInstance(docs, j.ProcessInstanceKey))
 				}
 			}
 		}
@@ -131,6 +146,29 @@ func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *com
 		out,
 		{Name: csvRowCountVar, Kind: model.VarNumber, Text: strconv.Itoa(res.RowCount)},
 	}, nil
+}
+
+// correctionsFromConnector runs apply-corrections in process: the same Resolve and the
+// same ApplyCorrections a worker runs, with the server's document store for the job's
+// instance.
+func correctionsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs DocumentStore) ([]model.VariableValue, error) {
+	j, err := Resolve(store, cp, detail, elementInstanceKey)
+	if err != nil {
+		return nil, err
+	}
+	out, err := ApplyCorrections(context.Background(), j, docs)
+	if err != nil {
+		return nil, err
+	}
+	vars := make([]model.VariableValue, 0, len(out))
+	for name, v := range out {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		vars = append(vars, model.VariableValue{Name: name, Kind: model.VarJSON, Text: string(b)})
+	}
+	return vars, nil
 }
 
 // rowsFromVars is the legacy CSV-import worker's pure core (ADR-0087): given the

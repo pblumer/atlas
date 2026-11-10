@@ -368,7 +368,10 @@
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "format", "type": "String", "isAttr": true },
         { "name": "operation", "type": "String", "isAttr": true },
-        { "name": "retries", "type": "String", "isAttr": true }
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "corrections", "type": "String", "isAttr": true },
+        { "name": "drop", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true }
       ]
     },
     {

@@ -2525,7 +2525,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// A source variable may name an uploaded document rather than hold its text
 		// (ADR-0543).
-		return csvimport.HandlerWithDocuments(rd, s.processLookup, s.readDocumentBytes)
+		return csvimport.HandlerWithStores(rd, s.processLookup, s.readDocumentBytes, func(instance uint64) csvimport.DocumentStore {
+			return jobDocuments{s: s, instance: instance}
+		})
 	})
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
