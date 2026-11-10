@@ -198,6 +198,26 @@ slower server — Option 2 is built instead**: pages as iterations, each well in
 lease, so a restart resumes at a page rather than at row one. Extending a lease from
 inside a handler would be a change to ADR-0007's model and is not proposed here.
 
+### Scale-out readiness
+
+Assessed against [`docs/architecture/scale-out-readiness.md`](../architecture/scale-out-readiness.md):
+**requires follow-up**, with the boundaries below kept now.
+
+- **State owner:** the instance and its one job are partition-owned. The run itself
+  keeps no durable state of its own; the result document is in the document store and
+  the summary is an ordinary job completion. Nothing new is shared mutable state.
+- **Routing:** the job is leased like any other job of its instance. The decision is
+  resolved by deployment key, which is design-time metadata every node loads, not a
+  host-local choice.
+- **Failure and retry:** a restart or an elapsed lease repeats the run. Fencing by lease
+  epoch refuses a stale completion (ADR-0007), and the same source and deployment key
+  give the same result document, so a duplicate run is wasteful but not wrong.
+- **Remaining dependency:** with the document store's local backend, the result document
+  lives in one node's data directory (ADR-0543), and evaluation needs the decision model
+  on the node that runs the job. A multi-node deployment needs the S3 backend for
+  documents and, if validation is to run outside the server, decision models for Worker
+  Instances. Both are named follow-ups, not assumptions of this record.
+
 ### Slices
 
 - **S0 — measure.** A benchmark of temis evaluating a realistic quality rule per row, and
