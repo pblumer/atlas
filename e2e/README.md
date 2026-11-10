@@ -836,6 +836,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   document leaves open, then creates the application, its ten forms and five processes,
   publishes them and imports the catalogue last, with every placeholder replaced; a refused
   import lists each problem by its catalogue or product.
+- **`handbook-search.spec.mjs`**: the **search field** in the top bar of both handbooks
+  (`api/web/handbook-search.js`). A passage folded away in a `<details>` is found, and
+  choosing it opens the fold and brings it on screen; only the language on screen is
+  searched; `/`, the arrow keys, Enter and Escape are enough, also Enter pressed before the
+  list caught up with the last keystroke; accents and ß need not be typed; `?q=` opens the
+  page with a search; on a phone the field takes a row of its own under the bar.
 - **`console-events.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the Console's **Events** page. A modeler reads every entry, with the shape and an
   experimental entry marked, and opens one to its payload, personal data marked. The

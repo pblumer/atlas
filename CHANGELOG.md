@@ -13,6 +13,12 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The handbooks can be searched.** The handbook and the shop handbook carry a search field
+  in their top bar: it lists the matching passages with chapter and heading, and choosing one
+  scrolls there, opens a folded block around it and marks the words. Only the language on
+  screen is searched, accents and ß need not be typed, `/` or Ctrl+K opens the field, and
+  `/handbuch.html?q=…` opens the page with a search. It runs in the browser on the page's own
+  text; nothing is sent to the server.
 - **A business rule task can check a file record by record.** With `<atlas:rowsFrom source="antrag"/>`
   (panel: *Over a file → Once per record of a file*) a business rule task evaluates its decision once
   for every record of an uploaded CSV document, in one job of the in-process DMN worker, instead of
