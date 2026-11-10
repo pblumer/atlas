@@ -30,7 +30,7 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
      the map already has. A hub import through the Console asks the same in its dialog;
   6. sets the application constants: NAME_PREFIX (the environment's prefix, so everything
      the catalogue creates lies in the shared tenant's Exchange scope and is removed by
-     the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE;
+     the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE, ORTSANGABEN (false unless --ortsangaben);
   7. installs the on-premises variant: the Exchange products when exchange_onprem is built,
      the SharePoint Server team site when enable_sharepoint_server is on.
 
@@ -456,6 +456,8 @@ def main():
     ap.add_argument("--mail-domain", help="domain of the catalogue's addresses (default: the initial domain)")
     ap.add_argument("--no-onprem", action="store_true",
                     help="leave out the Exchange Server variant even when exchange_onprem is built")
+    ap.add_argument("--ortsangaben", action="store_true",
+                    help="set ORTSANGABEN = true: rooms get their place data through Set-Place (HTTP 500 in the shared tenant)")
     ap.add_argument("--no-sharepoint-server", action="store_true",
                     help="leave out the SharePoint Server team site even when enable_sharepoint_server is on")
     ap.add_argument("--site-inventory", help="SITE_INVENTAR, the site carrying the list «Site-Inventar» "
@@ -539,8 +541,12 @@ def main():
     ]
     if args.site_inventory:
         constants.append({"name": "SITE_INVENTAR", "type": "string", "value": args.site_inventory})
+    # Set-Place through Exchange Online's REST endpoint answered HTTP 500 for every room in
+    # this environment's shared tenant (2026-11), so a room's place data stays off unless
+    # asked for; the room list is kept either way.
+    constants.append({"name": "ORTSANGABEN", "type": "json", "value": "true" if args.ortsangaben else "false"})
     atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": constants})
-    log(f"constants set: NAME_PREFIX={prefix!r}, MAIL_DOMAIN={domain}")
+    log(f"constants set: NAME_PREFIX={prefix!r}, MAIL_DOMAIN={domain}, ORTSANGABEN={'true' if args.ortsangaben else 'false'}")
 
     if with_onprem:
         work = tempfile.mkdtemp(prefix="m365-dienste-onprem-")

@@ -10,8 +10,8 @@
 #
 # Reads `tofu output -json sharepoint_server` (vm, resource_group, fqdn,
 # web_application_url, runbook_account). The account's password comes from the output
-# sharepoint_runbook_password or the variable SHAREPOINT_WORKER_PASSWORD. Not run yet:
-# see the README, section SharePoint Server.
+# sharepoint_runbook_password, the variable SHAREPOINT_WORKER_PASSWORD, or the state itself.
+# See the README, section SharePoint Server (Worker).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -25,6 +25,12 @@ get() { python3 -I -c 'import json,sys; print(json.loads(sys.argv[1]).get(sys.ar
 rg="$(get resource_group)"; vm="$(get vm)"; account="$(get runbook_account)"; web="$(get web_application_url)"
 
 password="${SHAREPOINT_WORKER_PASSWORD:-$(tofu output -raw sharepoint_runbook_password 2>/dev/null || true)}"
+# A state written before the output existed still holds the password: read it from there
+# rather than ask for an apply that would only add an output.
+if [[ -z "$password" ]]; then
+  password="$(echo 'nonsensitive(random_password.sharepoint["runbook"].result)' | tofu console 2>/dev/null \
+    | python3 -I -c 'import json,sys; t=sys.stdin.read().strip(); print(json.loads(t) if t.startswith("\"") else "")' || true)"
+fi
 [[ -n "$password" ]] || { echo "install-sharepoint-worker: no password for $account: set SHAREPOINT_WORKER_PASSWORD or add the output sharepoint_runbook_password" >&2; exit 1; }
 
 url="$(tofu output -raw atlas_url)"

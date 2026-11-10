@@ -174,6 +174,36 @@ function Install-Sql($cfg) {
 # Version 24H2 and later refuse a database connection without TLS unless told otherwise,
 # and this SQL Server has only its self-signed certificate. Earlier builds, as an image
 # may carry, do not know the parameter.
+# German, French and Italian beside English, the languages the order form of the SharePoint
+# Server team site offers; without them create-site answers "The language is not supported
+# on the server." Installed before the farm exists, so the farm's creation in phase 4
+# (Install-SPFeature, Install-SPApplicationContent) takes them in and no PSConfig run is
+# needed. The same list, for a farm that exists already: onprem/sharepoint-languages.ps1.
+$languagePacks = @(
+    @{ Code = 'de-de'; Lcid = '1031'; Url = 'https://download.microsoft.com/download/f/9/c/f9cf4dd5-c7df-43b2-910a-ff1afa77d309/ServerLanguagePack.iso' },
+    @{ Code = 'fr-fr'; Lcid = '1036'; Url = 'https://download.microsoft.com/download/f/0/0/f0050ddc-6ece-495d-a8ee-90c2b44cc3ff/ServerLanguagePack.iso' },
+    @{ Code = 'it-it'; Lcid = '1040'; Url = 'https://download.microsoft.com/download/4/2/8/428b78cf-3cfd-4e4b-9105-dd9a96dca7c1/ServerLanguagePack.iso' }
+)
+
+function Install-LanguagePacks {
+    $key = 'HKLM:\SOFTWARE\Microsoft\Shared Tools\Web Server Extensions\16.0\InstalledLanguages'
+    foreach ($pack in $languagePacks) {
+        $installed = (Get-ItemProperty $key).PSObject.Properties | Where-Object { $_.Name -match '^\d+$' } | ForEach-Object Name
+        if ($installed -contains $pack.Lcid) { Write-Output "language pack $($pack.Code) installed already"; continue }
+        $dir = Join-Path $root "lp\$($pack.Code)"
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $iso = Join-Path $dir 'ServerLanguagePack.iso'
+        if (-not (Test-Path $iso)) { Get-File $pack.Url $iso }
+        $img = Get-DiskImage -ImagePath $iso
+        if (-not $img.Attached) { $img = Mount-DiskImage -ImagePath $iso -PassThru }
+        $drive = ($img | Get-Volume).DriveLetter + ':'
+        try {
+            Invoke-Checked "$drive\setup.exe" @('/config', "`"$drive\Files\SetupSilent\config.xml`"", '/IAcceptTheLicenseTerms') @(0, 3010) -TimeoutMinutes 45
+        }
+        finally { Dismount-DiskImage -ImagePath $iso -ErrorAction SilentlyContinue | Out-Null }
+    }
+}
+
 function Get-DatabaseEncryption([string] $Cmdlet) {
     if ((Get-Command $Cmdlet).Parameters.ContainsKey('DatabaseConnectionEncryption')) {
         return @{ DatabaseConnectionEncryption = 'Optional' }
@@ -348,6 +378,7 @@ try {
             New-SetupAccount $cfg.appAccount $cfg.appPassword 'SharePoint application pool (Atlas test environment)' $cfg
             New-SetupAccount $cfg.runbookAccount $cfg.runbookPassword 'SharePoint Server worker (Atlas test environment)' $cfg
             Install-Sql $cfg
+            Install-LanguagePacks
             Remove-Task '3'
             Register-Next '4' $cfg -AsDomainAdmin
             Complete-Phase '3'
