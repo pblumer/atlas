@@ -1281,7 +1281,7 @@ type ConnectorTaskDetail struct {
 	CardDAVContact    RestExpr
 	CardDAVContactVar int32
 	CardDAVMaxResults int32
-	// Calendar fields (JobType == CalendarJobType, ADR-draft-calendar-worker-type).
+	// Calendar fields (JobType == CalendarJobType, ADR-0552).
 	// Connector (above) names the configured calendar account, and CalendarConnector
 	// carries it as literal-or-FEEL. CalendarOp is the interned operation — a row of
 	// connector/calendar/catalog. CalendarInput is the authored input object, the

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Terminbuchung — ein öffentlicher Wizard, der freie Termine aus einem Kalender liest
-  und den gewählten Termin dort bucht (ADR-draft-calendar-worker-type, ADR-0449).
+  und den gewählten Termin dort bucht (ADR-0552, ADR-0449).
 
     Start "Termin anfragen"          (Startformular termin-dienstleistung; öffentlicher Link)
      → Subprozess "Buchungsassistent" (atlas:wizard="public")

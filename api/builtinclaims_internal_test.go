@@ -29,7 +29,7 @@ var reviewedBuiltInCapabilityClaims = map[string]map[string][]workertype.Capabil
 	},
 	// The calendar Worker's claims carry one provider-neutral profile instead of a
 	// provider's: one operation serves every backend, and ADR-0480 refuses two
-	// profiles of one contract version on one operation (ADR-draft-calendar-worker-type).
+	// profiles of one contract version on one operation (ADR-0552).
 	// The contracts are drafted at 1.0.0 and checked by suites that run every case
 	// against every backend.
 	connectorKindCalendar: {

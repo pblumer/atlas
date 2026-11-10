@@ -1,4 +1,4 @@
-// Package catalog is the calendar Worker's operation table (ADR-draft-calendar-worker-type):
+// Package catalog is the calendar Worker's operation table (ADR-0552):
 // which values each operation needs, what it returns, the bounds of its list, and the
 // technical capability it claims.
 //

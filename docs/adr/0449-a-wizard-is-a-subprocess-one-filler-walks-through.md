@@ -308,7 +308,7 @@ point 3). A choice field whose options are a variable — form-js's `valuesKey` 
 variable too: it is what the screen offers. Until this amendment the rule read only the
 fields' own keys, so a public step whose options a worker had found between two screens
 showed an empty list, though the variable sat in the wizard's scope. The appointment
-booking (`examples/terminbuchung`, ADR-draft-calendar-worker-type) is the case: the free
+booking (`examples/terminbuchung`, ADR-0552) is the case: the free
 slots of a calendar, read by a service task, offered by the next screen.
 
 - **Read, never written.** The public step's prefill adds the variables named by its

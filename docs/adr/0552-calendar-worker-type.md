@@ -1,4 +1,4 @@
-# ADR-DRAFT: A calendar Worker Type finds free slots and books them on Microsoft 365, Google, CalDAV and Exchange Server
+# ADR-0552: A calendar Worker Type finds free slots and books them on Microsoft 365, Google, CalDAV and Exchange Server
 
 - **Status:** Accepted
 - **Implementation:** Partial

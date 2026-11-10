@@ -481,7 +481,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// A calendar task finds free slots in one or more calendars, reserves one,
-		// confirms, cancels or reads a booking (ADR-draft-calendar-worker-type), in
+		// confirms, cancels or reads a booking (ADR-0552), in
 		// Microsoft 365 or the mock — the provider is the bundle's. Worker-only for
 		// CardDAV's reason: the credential reaches every calendar it may read and has no
 		// business on the engine's run loop.

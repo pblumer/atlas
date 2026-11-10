@@ -21,7 +21,7 @@ const (
 
 // calendarWorkerEnv renders the calendar accounts a supervised calendar worker needs out
 // of the vault, one set of variables per calendar Worker the store holds
-// (ADR-draft-calendar-worker-type).
+// (ADR-0552).
 //
 // It is CardDAV's arrangement. The endpoint is rendered as the record holds it, empty
 // for the provider's public API root. [calendar.CheckBundle] is the one reading of an

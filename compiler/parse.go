@@ -2471,7 +2471,7 @@ type xmlServiceTask struct {
 	// server a *worker* holds the credential for.
 	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
 	// Calendar, when present, marks this service task a calendar task
-	// (ADR-draft-calendar-worker-type): find free slots, reserve one, confirm, cancel or
+	// (ADR-0552): find free slots, reserve one, confirm, cancel or
 	// read a booking, in a calendar a *worker* holds the credential for.
 	Calendar *xmlCalendarConnector `xml:"extensionElements>calendarConnector"`
 	// Wiki, when present, marks this service task a wikiwikibangbang task
@@ -2836,7 +2836,7 @@ type xmlCardDAVConnector struct {
 }
 
 // xmlCalendarConnector is the <atlas:calendarConnector> extension on a service task
-// (ADR-draft-calendar-worker-type). connector names the calendar Worker
+// (ADR-0552). connector names the calendar Worker
 // (literal-or-FEEL), and there is no credential attribute, because none enters the
 // engine. operation is a row of connector/calendar/catalog, and input is one JSON
 // object — the operation's contract input — whose values may be =expressions.

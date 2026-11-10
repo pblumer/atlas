@@ -1,5 +1,5 @@
 // calendar-ops.js — what the Modeler knows about the calendar Worker's operations
-// (ADR-draft-calendar-worker-type): each operation's label, the keys its input object
+// (ADR-0552): each operation's label, the keys its input object
 // takes and needs, and whether it returns something.
 //
 // It is a copy of connector/calendar/catalog, the table the compiler and the worker

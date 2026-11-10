@@ -11,7 +11,7 @@ import (
 )
 
 // compileCalendarConnectorTask compiles an <atlas:calendarConnector> task: one operation
-// on a calendar through a Worker an operator configured (ADR-draft-calendar-worker-type).
+// on a calendar through a Worker an operator configured (ADR-0552).
 //
 // The task carries one input object instead of an attribute per value: the object is
 // the operation's technical capability contract input, so the model, the job and the

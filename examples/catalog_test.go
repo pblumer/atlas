@@ -153,7 +153,7 @@ var catalogSources = []catalogSource{
 	},
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
 	{ID: "reisebuchung", App: "Beispiel: Reisebuchung", Dir: "reisebuchung", Main: "reisebuchung/reisebuchung.bpmn"},
-	// The calendar Worker Type in a public wizard (ADR-draft-calendar-worker-type). No
+	// The calendar Worker Type in a public wizard (ADR-0552). No
 	// Start button: its tasks need a calendar Worker named filiale, the mock will do.
 	{ID: "terminbuchung", App: "Beispiel: Terminbuchung", Dir: "terminbuchung"},
 	// The internal counterpart of the trip booking's public wizard (ADR-0449). No Start

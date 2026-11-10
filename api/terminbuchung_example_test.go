@@ -19,7 +19,7 @@ import (
 )
 
 // The appointment booking example (examples/terminbuchung) is the walkthrough of the
-// calendar Worker Type (ADR-draft-calendar-worker-type) in a public wizard
+// calendar Worker Type (ADR-0552) in a public wizard
 // (ADR-0449): a visitor without an account picks a service, sees the free slots read
 // from the workshop's calendar, picks one, gives their details and books. These tests
 // run it against the files in the repository, as an anonymous visitor of the public

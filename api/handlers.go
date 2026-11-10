@@ -7583,7 +7583,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.CalendarJobTypeIndex:
 		// CardDAV's arm for a calendar: the evaluated input travels, and nothing that
-		// says which provider or as whom (ADR-draft-calendar-worker-type). The create key
+		// says which provider or as whom (ADR-0552). The create key
 		// does, so a reservation repeated after a lease elapsed finds the placeholder the
 		// first round made. The fields are the resolved job's own, marshalled rather than
 		// listed, so the arm cannot send a field the job lacks or drop one it carries.

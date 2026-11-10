@@ -1220,7 +1220,7 @@ const WORKER_TYPES = [
   {
     id: "calendar", name: "Calendar booking", kind: "Calendar",
     desc: "Finds free slots in, and books into, the calendars an organisation keeps its time in \u2014 Microsoft 365 / Exchange Online through Microsoft Graph, or an in-memory mock to try a process out: lays a grid over opening hours, offers the slots no appointment touches in one calendar, any of several or all of them together, reserves one so that two customers never get the same slot, confirms it with subject, body and attendees, cancels and reads it. It reads only the times and availability of other people\u0027s appointments, never their subjects.",
-    refs: "ADR-draft-calendar-worker-type", status: "active", statusLabel: "configured below",
+    refs: "ADR-0552", status: "active", statusLabel: "configured below",
   },
   {
     id: "wikiwikibangbang", name: "wikiwikibangbang", kind: "Wiki",

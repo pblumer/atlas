@@ -1,6 +1,6 @@
 // Package calendar finds free slots in, and books into, the calendars organisations
 // already keep their time in — Microsoft 365, Google, CalDAV and Exchange Server — on
-// behalf of a BPMN service task (ADR-draft-calendar-worker-type).
+// behalf of a BPMN service task (ADR-0552).
 //
 // # Worker-only
 //

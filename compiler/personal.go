@@ -231,7 +231,7 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.CardDAVGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
-	// The calendar Worker's (ADR-draft-calendar-worker-type).
+	// The calendar Worker's (ADR-0552).
 	"connectorTasks.CalendarConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CalendarInput.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 

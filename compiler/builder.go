@@ -558,7 +558,7 @@ const SharePointServerJobType = "io.atlas.sharepointserver"
 const SharePointServerJobTypeIndex int32 = 39
 
 // CalendarJobType is the reserved job type a calendar task carries
-// (ADR-draft-calendar-worker-type). One job type serves every operation on a calendar —
+// (ADR-0552). One job type serves every operation on a calendar —
 // find free slots, reserve one, confirm, cancel and read a booking — and every provider
 // behind it: which kind of calendar answers is the configured Worker's, so a booking
 // process runs unchanged against Microsoft 365 or the mock.
@@ -2658,7 +2658,7 @@ func (b *Builder) AddCardDAVConnectorTask(cfg CardDAVConfig) int32 {
 }
 
 // CalendarConfig is the deploy-time configuration of a calendar task
-// (ADR-draft-calendar-worker-type). Worker names the configured calendar account and
+// (ADR-0552). Worker names the configured calendar account and
 // WorkerExpr carries it as literal-or-FEEL; Op is a row of connector/calendar/catalog.
 // Input is the authored input object — the operation's contract input — compiled to
 // one FEEL context at deploy (I5).

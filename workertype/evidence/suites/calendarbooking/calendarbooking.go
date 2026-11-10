@@ -1,6 +1,6 @@
 // Package calendarbooking holds the conformance suites that check the calendar Worker
 // Type's five operations against the drafted technical capability contracts
-// io.atlas.calendar.*@1.0.0+free-busy-calendar (ADR-0483, ADR-draft-calendar-worker-type).
+// io.atlas.calendar.*@1.0.0+free-busy-calendar (ADR-0483, ADR-0552).
 //
 // # Every case against every backend
 //

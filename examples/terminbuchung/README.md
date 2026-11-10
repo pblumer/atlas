@@ -4,7 +4,7 @@ Eine Kundin ohne Konto bucht über einen **öffentlichen Link** einen Termin: Si
 eine Dienstleistung, sieht die freien Termine, gibt ihre Angaben ein und bucht. Die
 freien Termine kommen aus dem **Kalender der Werkstatt**, und der gebuchte Termin steht
 danach dort — gelesen und geschrieben vom Kalender-Worker
-([ADR-draft-calendar-worker-type](../../docs/adr/draft-calendar-worker-type.md)). Die
+([ADR-0552](../../docs/adr/0552-calendar-worker-type.md)). Die
 Masken sind ein öffentlicher Wizard
 ([ADR-0449](../../docs/adr/0449-a-wizard-is-a-subprocess-one-filler-walks-through.md)),
 wie in [`reisebuchung`](../reisebuchung/README.md).

@@ -101,7 +101,7 @@ const (
 	// client from it.
 	connectorKindCardDAV = "carddav"
 	// connectorKindCalendar is the calendar Worker Type
-	// (ADR-draft-calendar-worker-type). Worker-only like CardDAV: a record holds the
+	// (ADR-0552). Worker-only like CardDAV: a record holds the
 	// endpoint — the provider's API root, empty for its public one — and a credentialsRef
 	// naming the vault bundle that says which provider and as whom
 	// (connector/calendar.Bundle). The engine builds no client from it.

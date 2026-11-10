@@ -279,6 +279,12 @@
       "version": "1.0.0",
       "digest": "sha256:eb3467b4ada1c6cdee953ecfc5dd592f494a550a4a5515e746f63318b2882a40",
       "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "terminbuchung",
+      "version": "1.0.1",
+      "digest": "sha256:eced4b5f3841b67caf14661245fca503734cd3c0a80a8047b5898eefb297c5c0",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }

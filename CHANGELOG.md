@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **Processes find free slots in a calendar and book into it, never twice.** The new calendar
-  Worker Type (`atlas.calendar`, job type `io.atlas.calendar`, ADR-draft-calendar-worker-type) has
+  Worker Type (`atlas.calendar`, job type `io.atlas.calendar`, ADR-0552) has
   five operations: `find-free-slots` lays a grid over opening hours in local wall time and offers the
   slots no busy appointment touches, in one calendar, any of several or all of them together;
   `reserve-slot` enters a placeholder, reads the slot again and gives it up with the BPMN error

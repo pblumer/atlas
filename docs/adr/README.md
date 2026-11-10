@@ -639,6 +639,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0549](0549-collection-by-round.md) | A loop's collection is retained one element per round | Accepted | Landed |
 | [0550](0550-mcp-shop-customer-side.md) | The shop's customer side is offered over MCP, as the connected person, unless the server switches it off | Accepted | Landed |
 | [0551](0551-complex-gateway.md) | Run the Complex Gateway, on an inclusive join that re-checks when a token leaves | Proposed | Not started |
+| [0552](0552-calendar-worker-type.md) | A calendar Worker Type finds free slots and books them on Microsoft 365, Google, CalDAV and Exchange Server | Accepted | Partial |
 
 ## The two states of a record
 

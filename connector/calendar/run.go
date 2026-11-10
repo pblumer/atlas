@@ -232,7 +232,7 @@ func run(ctx context.Context, b Backend, j Job, op catalog.Op, loc *time.Locatio
 	return nil, fmt.Errorf("calendar: operation %q is in the table but not implemented", j.Operation)
 }
 
-// reserve is the conflict rule (ADR-draft-calendar-worker-type, *The conflict rule*):
+// reserve is the conflict rule (ADR-0552, *The conflict rule*):
 // create the placeholder, read the slot, and give the slot up when anything else
 // takes any of its time.
 //
