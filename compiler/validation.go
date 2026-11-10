@@ -667,7 +667,14 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 				ps = append(ps, ve.Problems...)
 				continue
 			}
-			ps = append(ps, Problem{Severity: SeverityError, Rule: RuleCompile, Message: cerr.Error()})
+			// An element-local fault carries its element when the compile site named one
+			// (ADR-0547); the rule stays RuleCompile and the message is unchanged.
+			p := Problem{Severity: SeverityError, Rule: RuleCompile, Message: cerr.Error()}
+			var ee *ElementError
+			if errors.As(cerr, &ee) {
+				p.Element = ee.Element
+			}
+			ps = append(ps, p)
 			continue
 		}
 		ps = append(ps, Validate(cp)...)

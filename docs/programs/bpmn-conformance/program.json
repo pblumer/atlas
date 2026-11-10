@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Merge ADR-0547 part 1 (CON6), then deliver part 2 (element locations) and start CON5 (generated public report and documentation reconciliation) as a provisional report. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
+  "next_action": "Merge ADR-0547 part 2 (element locations), then start CON5: a generated public conformance report and a guard that keeps hand-written counts in README and TCK docs in step with the sources. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
   "slices": [
     {
       "id": "CON0",
@@ -138,10 +138,11 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First slice: ADR-0547 (Accepted 2026-11-09, Partial). Part 1 delivered: stage-5 deploy refusal of start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow (including the silent cross-gateway mis-route), with stored definitions reloading and routing unchanged. Part 2 (element locations on element-local compile diagnostics) is next.",
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First slice ADR-0547 (Accepted, Landed): part 1 refuses start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow, with stored definitions reloading and routing unchanged; part 2 gives element-local compile diagnostics their element. Next CON6 candidates need their own ADRs: Complex Gateway, parallel/instantiating event gateways, cyclic inclusive joins, sequential ad-hoc, process-level conditional start, repeatable conditional triggers.",
       "evidence": [
         "../../adr/0547-refuse-forbidden-sequence-flow-shapes.md",
         "../../../compiler/forbidden_flow_shapes_test.go",
+        "../../../compiler/elementerror_test.go",
         "../../../api/forbiddenflowshapes_test.go",
         "../../../conformance/normative_diagnostics_test.go"
       ]
