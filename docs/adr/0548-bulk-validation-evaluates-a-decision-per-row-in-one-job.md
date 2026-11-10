@@ -1,7 +1,7 @@
 # ADR-0548: Bulk validation evaluates a decision per row inside one job, not one token per row
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-11-09
 - **Deciders:** Atlas maintainers
 
@@ -278,14 +278,83 @@ Assessed against [`docs/architecture/scale-out-readiness.md`](../architecture/sc
   documents and, if validation is to run outside the server, decision models for Worker
   Instances. Both are named follow-ups, not assumptions of this record.
 
+### As built (Slice 1)
+
+Slice 1 is built, with one change to where the operation lives. This record proposed
+`validate-rows` as an operation of the CSV Worker Type. It is a **business rule task over
+a file** instead: an ordinary business rule task carrying `<atlas:rowsFrom>`.
+
+```xml
+<bpmn:businessRuleTask id="check">
+  <bpmn:extensionElements>
+    <zeebe:calledDecision decisionId="QualityRow" resultVariable="pruefung"/>
+    <atlas:rowsFrom source="antrag" delimiter=";" columns="email,group,license"
+                    validOutput="valid" failureSample="200"/>
+    <zeebe:ioMapping>
+      <zeebe:input source="=lower case(row.email)" target="email"/>
+    </zeebe:ioMapping>
+  </bpmn:extensionElements>
+</bpmn:businessRuleTask>
+```
+
+Why the change: everything that makes a decision *bound* — the three bindings, the
+deploy gate that refuses a model whose decision does not exist, the pin of `latest` at
+deploy, the version pin, the impact analysis of a decision reference, the decision
+picker and input mapping in the Modeler — is written against the business rule task.
+A CSV operation would have had to re-implement all of it or widen every one of those
+places to a second element type. The file layout, by contrast, is four attributes.
+Putting the small thing on the large thing reuses the large thing whole; the CSV Worker
+Type keeps its own job of turning a file into rows.
+
+What it does, as built:
+
+- **Compiler** (`compiler/scope_compile.go`, `decisionRows`): reads `<atlas:rowsFrom>`
+  and refuses at deploy what a run would otherwise meet on its first record — no
+  source, a source that is not a variable name, a delimiter that is not one
+  character, a headerless file without columns, a column listed twice, a sample
+  outside 0–10,000, a missing `resultVariable`, and a temis worker on the same task
+  (one network call per record is what this exists to avoid).
+- **Reading** (`connector/csvimport/stream.go`, `EachRow`): one record at a time, with
+  the same column resolution as `ParseRows` (extracted, not copied), the record's line
+  in the file, and its cells as written.
+- **Evaluating** (`dmn/rows.go`): in the in-process DMN worker. Inputs are the input
+  mappings with the record bound as `row`, or, without mappings, the record's fields by
+  name; static inputs are the base either way. The first record's answer pins the
+  decision deployment for the rest of the file. A record the decision fails on, or
+  whose verdict is not a boolean, is counted as an error and written with its message;
+  it does not fail the run.
+- **Result document**: the file's own columns, then `_row`, `_valid`, one `_<output>`
+  column per other decision output, and `_error`, in the file's delimiter, stored as
+  `<name>.result.csv` and bound to the instance with the job's completion. It is written
+  as the records are checked, not held as rows.
+- **Summary** (the result variable): `total`, `valid`, `invalid`, `errors`, `decision`
+  (`id`, `deploymentKey`), `source`, `result`, `failures` (each with `_row` and the
+  reasons) and `truncated`. The sample is cut to `failureSample`, then further to the
+  variable budget.
+- **Audit**: one decision evaluation record for the run, inputs `{source, records}`,
+  outputs the counts and the result reference, no trace.
+- **Modeler**: the business rule task's panel has *Over a file* with the fields above;
+  the moddle descriptor knows `atlas:RowsFrom`, so the Modeler keeps it on save.
+
+Not yet:
+
+- **Cancellation between records.** The in-process job handler has no context to
+  cancel; an instance cancelled mid-run has its completion refused, and the run itself
+  finishes. With the measured 2.5 s for 50,000 records that is acceptable; it is not
+  for a run near the lease.
+- **Formats other than CSV.** The CSV Worker Type's fixed-width and attribute-value
+  formats are not read here.
+- **S2 and S3**, below.
+
 ### Slices
 
 - **S0 — measure (done).** A benchmark of temis evaluating a realistic quality rule per
   row, of one streamed file through the core of `validate-rows`, and of the ADR-0084
   process at 1,000 to 10,000 rows: events, log and state bytes, evaluation records,
   allocation, wall-clock time. Results under *Measured*; they confirm Option 3.
-- **S1 — the operation.** `validate-rows` in process: streaming evaluation, result
-  document, summary, one evaluation record. Modeler panel and handbook.
+- **S1 — the operation (done, as a business rule task over a file; see *As built*).**
+  In process: streaming evaluation, result document, summary, one evaluation record.
+  Modeler panel and handbook.
 - **S2 — the correction paths.** `apply-corrections`; an example model with both
   branches, from upload to corrected file; the file correction task with a filtered
   download and re-upload.

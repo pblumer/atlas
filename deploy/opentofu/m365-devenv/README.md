@@ -759,8 +759,8 @@ Subscription Edition als Einzelserver-Farm:
   Downloads.
 - `scripts/sharepoint-setup.ps1` installiert unbeaufsichtigt in vier Phasen mit Neustarts:
   Domänenbeitritt; Prüfung des Images und AD-PowerShell; die Konten `svc-sp-farm-<zufall>`,
-  `svc-sp-app-<zufall>` und `svc-sp-run-<zufall>` in `OU=AtlasTest` und SQL Server 2022
-  Developer vom Download bei Microsoft; zuletzt die Farm (`New-SPConfigurationDatabase`,
+  `svc-sp-app-<zufall>` und `svc-sp-run-<zufall>` in `OU=AtlasTest` und SQL Server 2025
+  Standard Developer vom Download bei Microsoft (2022 bietet Microsoft nicht mehr an); zuletzt die Farm (`New-SPConfigurationDatabase`,
   Rolle `SingleServerFarm`), die Zentraladministration auf Port 9999, die Webanwendung
   `http://sp01.<ad_domain_name>` mit einer Websitesammlung an der Wurzel und die Rechte des
   Runbook-Kontos (lokaler Administrator, `Add-SPShellAdmin`, zweiter Besitzer der

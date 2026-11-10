@@ -3933,6 +3933,26 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               <code>RowValid</code> (email, group, licence). A valid row collects its <code>verdict</code>; an invalid
               one parks on a <b>correction user task</b> and is re-checked after the fix – looping until it is
               valid.</p>
+            <p data-l="de"><b>Für grosse Dateien</b> – Tausende bis Hunderttausende Datensätze – trägt eine Zeile pro
+              Iteration nicht: Jede Iteration ist Arbeit der Engine, und die gesammelte Ausgabe wird mit jeder Zeile
+              teurer. Dafür prüft ein <b>Business-Rule-Task über eine Datei</b> (Panel: <i>Über eine Datei → Pro
+              Datensatz einer Datei</i>, im XML <code>&lt;atlas:rowsFrom source="antrag"/&gt;</code>) das hochgeladene
+              Dokument in <b>einem</b> Job: Die Entscheidung läuft für jeden Datensatz, die Eingaben lesen ihn als
+              <code>row</code>, und die Ergebnisvariable erhält eine Zusammenfassung – Anzahl gültig, ungültig und
+              fehlerhaft, die ersten fehlerhaften Datensätze mit Zeilennummer und ein <b>Ergebnisdokument</b>, das
+              jeden Datensatz mit <code>_row</code>, <code>_valid</code> und den übrigen Ausgaben der Entscheidung
+              enthält. 50&nbsp;000 Datensätze brauchen so Sekunden statt Stunden (ADR-0548). Die ersten fehlerhaften
+              Datensätze lassen sich anschliessend wie oben mit einem Korrektur-User-Task pro Datensatz bearbeiten.</p>
+            <p data-l="en"><b>For large files</b> – thousands to hundreds of thousands of records – one row per
+              iteration does not carry: every iteration is engine work, and the collected output gets dearer with
+              every row. For those, a <b>business rule task over a file</b> (panel: <i>Over a file → Once per record
+              of a file</i>, in the XML <code>&lt;atlas:rowsFrom source="antrag"/&gt;</code>) checks the uploaded
+              document in <b>one</b> job: the decision runs for every record, its inputs read the record as
+              <code>row</code>, and the result variable receives a summary – how many records were valid, invalid or
+              failed, the first failed records with their line, and a <b>result document</b> holding every record
+              with <code>_row</code>, <code>_valid</code> and the decision's other outputs. 50,000 records take
+              seconds rather than hours this way (ADR-0548). The first failed records can then be corrected as above,
+              one correction user task per record.</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -15789,5 +15809,7 @@ document.querySelectorAll("main section[id]").forEach(s => obs.observe(s));
 })();
 </script>
 
+<!-- Full-text search in the top bar, for readers who do not know Ctrl+F (handbook-search.js). -->
+<script type="module" src="handbook-search.js"></script>
 </body>
 </html>
