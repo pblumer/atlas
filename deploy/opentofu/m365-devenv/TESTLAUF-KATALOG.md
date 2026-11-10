@@ -50,6 +50,34 @@ ausdrücklicher Zustimmung:
    noch im Protokoll. Ein Fall, der ein Passwort erzeugt, prüft nur, dass es erzeugt wurde.
 7. **Aufräumen gehört dazu.** Was der Lauf bestellt, gibt er in der letzten Phase zurück,
    auch nach Fehlern. Was sich nicht zurückgeben lässt, steht im Protokoll.
+8. **Eine Bestellung nicht blind wiederholen.** `atlas_place_order` hat keinen
+   Idempotenzschlüssel: Nach einem Fehler erst `atlas_list_orders` lesen, ob die Bestellung
+   doch angekommen ist. Aktionen und Änderungen tragen `commandId` und `changeId`; eine
+   Wiederholung nimmt denselben Wert.
+
+## Werkzeuge
+
+Die Shop-Werkzeuge handeln immer als die Person der Verbindung, mit deren Rechten
+(ADR-Entwurf `docs/adr/draft-mcp-shop-customer-side.md`). Ein Server mit
+`--mcp-shop=false` lehnt sie mit 403 ab; dann bricht der Lauf in Phase 0 ab.
+
+| Schritt im Drehbuch | Werkzeug |
+|---|---|
+| Kataloge lesen | `atlas_shop_catalogs`, `atlas_shop_catalog` |
+| Person oder Wert in einem Formular suchen | `atlas_shop_form_query` |
+| bestellen, «Bestellen für» | `atlas_place_order` |
+| Bestellungen und Positionen lesen | `atlas_list_orders`, `atlas_get_order` |
+| Fortschritt einer Position | `atlas_order_line_progress` |
+| offene Aufgaben der eigenen Bestellungen | `atlas_shop_tasks` |
+| genehmigen und ablehnen | `atlas_list_approvals`, `atlas_decide_approvals` |
+| Aufgaben einer Fachstelle (Initialpasswort usw.) | `atlas_list_tasks`, `atlas_claim_task`, `atlas_complete_task` |
+| stornieren | `atlas_cancel_order`, `atlas_cancel_order_line` |
+| Angaben korrigieren | `atlas_amend_order_line` |
+| zurückgeben | `atlas_return_order_line` |
+| Aktion einer gehaltenen Position | `atlas_order_line_actions`, dann `atlas_ask_order_line_action` mit `trigger = customer` (Person) oder `operator` (Carla), Ergebnis mit `atlas_order_line_outcomes` |
+| HR-Ereignis | `atlas_trigger_start` (Eintritt), `atlas_publish_message` (Austritt) |
+| OE-Tabelle | `atlas_get_decision_model`, `atlas_upload_decision_model`, `atlas_deploy_decision`, `atlas_try_decision` |
+| Prüfungen | `atlas_info`, `atlas_workers`, `atlas_list_incidents`, `atlas_incident_summary`, `atlas_application_constants`, `atlas_instance_timeline` |
 
 ## Voraussetzungen
 
@@ -60,7 +88,7 @@ ausdrücklicher Zustimmung:
 | Applikationen installiert: M365-Dienste (mit Exchange-Server-Variante), AD-Dienste, Lizenzmanagement, Informationstransfer | `atlas_list_applications`, `atlas_list_catalogs` |
 | Konstante `ORTSANGABEN` = `false` in `beispiel-m365-dienste` | `atlas_application_constants` |
 | Freie Lizenzen: mindestens 13 (12 Eintritte, eine Reserve) | Lizenzmanagement, Bestand |
-| Shop über MCP nicht abgeschaltet | Server ohne Opt-out (siehe ADR-Entwurf «Shop über MCP») |
+| Shop über MCP nicht abgeschaltet | Server ohne Opt-out (`mcpShop` in `atlas_info`) |
 
 ### MCP-Verbindungen je Person
 
@@ -127,6 +155,7 @@ Fall abdeckt; die Abdeckungstabelle am Ende fasst sie zusammen.
 | Fall | Schritt | Erwartung |
 |---|---|---|
 | V1 | `atlas_info`, `atlas_workers` | Version notiert; alle fünf Worker verbunden |
+| V0 | `atlas_info` | `mcpShop` ist `true`; sonst Abbruch |
 | V2 | `atlas_list_incidents`, `atlas_incident_summary` | Ausgangsbestand notiert: nur neue Incidents zählen als Befund |
 | V3 | `atlas_list_tasks` | offene Aufgaben notiert; alte Aufgaben bleiben unberührt |
 | V4 | `atlas_application_constants` der vier Applikationen | `NAME_PREFIX`, `ORTSANGABEN = false`, `ENTRA_TRANSFER = aus` |
