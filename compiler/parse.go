@@ -3528,11 +3528,26 @@ type xmlBusinessRuleTask struct {
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
-	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
-	MultiInstance  *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
-	StandardLoop   *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
-	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
-	DataIn         []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	TemisConnector *xmlTemisConnector `xml:"extensionElements>temisConnector"`
+	// RowsFrom, when present, makes the task evaluate its decision once per record of
+	// a file (ADR-0548). nil for an ordinary business rule task.
+	RowsFrom      *xmlRowsFrom               `xml:"extensionElements>rowsFrom"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+}
+
+// xmlRowsFrom is <atlas:rowsFrom source="antrag" delimiter="," hasHeader="true"
+// columns="email,group" validOutput="valid" failureSample="200"/>: the file a business
+// rule task evaluates its decision over, record by record (ADR-0548).
+type xmlRowsFrom struct {
+	Source        string `xml:"source,attr"`
+	Delimiter     string `xml:"delimiter,attr"`
+	HasHeader     string `xml:"hasHeader,attr"`
+	Columns       string `xml:"columns,attr"`
+	ValidOutput   string `xml:"validOutput,attr"`
+	FailureSample string `xml:"failureSample,attr"`
 }
 
 // xmlTemisConnector is the <atlas:temisConnector connector="..."/> extension that

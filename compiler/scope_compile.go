@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -361,7 +362,20 @@ func registerScope(
 		// instead of the embedded library (ADR-0050). Authoring is otherwise
 		// identical.
 		var node int32
+		rows, err := decisionRows(brt.Id, brt.RowsFrom)
+		if err != nil {
+			return err
+		}
+		// A run over a file completes with a summary, and the summary needs a home.
+		if rows != nil && strings.TrimSpace(brt.CalledDecision.ResultVariable) == "" {
+			return fmt.Errorf("compiler: business rule task %q evaluates over a file (atlas:rowsFrom) and needs a resultVariable for its summary", brt.Id)
+		}
 		if tc := brt.TemisConnector; tc != nil {
+			// A decision over a file is evaluated in the engine, record by record; sent to
+			// a temis service it would be one network call per record (ADR-0548).
+			if rows != nil {
+				return fmt.Errorf("compiler: business rule task %q evaluates over a file (atlas:rowsFrom), which runs in the engine; it cannot also name a temis worker", brt.Id)
+			}
 			if tc.Connector == "" {
 				return fmt.Errorf("compiler: business rule task %q has a temisConnector with no worker name", brt.Id)
 			}
@@ -374,6 +388,9 @@ func registerScope(
 			node, err = b.addBusinessRuleTask("", brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, binding)
 			if err == nil && version > 0 {
 				b.businessRuleTasks[len(b.businessRuleTasks)-1].Version = version
+			}
+			if err == nil {
+				b.businessRuleTasks[len(b.businessRuleTasks)-1].Rows = rows
 			}
 		}
 		if err != nil {
@@ -1161,4 +1178,79 @@ func clioLimit(taskID, raw string) (int32, error) {
 		return 0, fmt.Errorf("compiler: clio read task %q has invalid limit %q", taskID, raw)
 	}
 	return int32(n), nil
+}
+
+// decisionRows compiles <atlas:rowsFrom>, the file a business rule task evaluates its
+// decision over record by record (ADR-0548). nil when the task has none.
+//
+// Everything a run would otherwise discover on the first record is refused here, at
+// deploy: a missing source, a delimiter that is not one character, a headerless file
+// that does not say what its columns are, a sample outside its bounds.
+func decisionRows(taskID string, x *xmlRowsFrom) (*DecisionRows, error) {
+	if x == nil {
+		return nil, nil
+	}
+	fail := func(format string, a ...any) error {
+		return fmt.Errorf("compiler: business rule task %q rowsFrom: "+format, append([]any{taskID}, a...)...)
+	}
+	source := strings.TrimSpace(x.Source)
+	if source == "" {
+		return nil, fail("names no source variable")
+	}
+	if !isPlainVariableName(source) {
+		return nil, fail("source %q is not a variable name; name the variable that holds the uploaded file", source)
+	}
+	r := &DecisionRows{
+		Source:        source,
+		Delimiter:     x.Delimiter,
+		HasHeader:     true,
+		ValidOutput:   strings.TrimSpace(x.ValidOutput),
+		FailureSample: DefaultRowsFailureSample,
+	}
+	if n := len([]rune(r.Delimiter)); n > 1 {
+		return nil, fail("delimiter %q is not one character", r.Delimiter)
+	}
+	switch strings.ToLower(strings.TrimSpace(x.HasHeader)) {
+	case "", "true":
+	case "false":
+		r.HasHeader = false
+	default:
+		return nil, fail("hasHeader %q is neither true nor false", x.HasHeader)
+	}
+	seen := map[string]bool{}
+	for _, c := range strings.Split(x.Columns, ",") {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if seen[c] {
+			return nil, fail("column %q is listed twice", c)
+		}
+		seen[c] = true
+		r.Columns = append(r.Columns, c)
+	}
+	if !r.HasHeader && len(r.Columns) == 0 {
+		return nil, fail("a file without a header row must name its columns")
+	}
+	if s := strings.TrimSpace(x.FailureSample); s != "" {
+		n, err := strconv.ParseInt(s, 10, 32)
+		if err != nil || n < 0 || n > MaxRowsFailureSample {
+			return nil, fail("failureSample %q is not a number from 0 to %d", s, MaxRowsFailureSample)
+		}
+		r.FailureSample = int32(n)
+	}
+	return r, nil
+}
+
+// isPlainVariableName reports whether s is a variable name a scope can hold: a
+// letter or underscore, then letters, digits or underscores. A FEEL expression is
+// not accepted where the file is named, because the reference is read as a variable.
+func isPlainVariableName(s string) bool {
+	for i, r := range s {
+		ok := r == '_' || unicode.IsLetter(r) || (i > 0 && unicode.IsDigit(r))
+		if !ok {
+			return false
+		}
+	}
+	return s != ""
 }
