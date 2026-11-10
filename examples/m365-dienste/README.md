@@ -498,6 +498,9 @@ ein SharePoint Server gebaut ist.
 
 - **Bestellung:** Titel, URL (`/sites/<url>`, `M365Namensregel` mit `NAME_PREFIX`), Sprache, Kontingent,
   Besitzer und Stellvertretung als AD-Konto. Genehmigt wird wie bei der Online-Teamwebsite.
+- **Adresse frei?** Der Prozess fragt vor dem Anlegen mit `get-site`, ob unter `/sites/<alias>` schon eine
+  Website liegt, und lehnt mit «Die Adresse ist bereits vergeben.» ab, wenn dort die Website einer anderen
+  Position liegt; die Website derselben Position (eine zweite Zustellung) geht weiter zu `create-site`.
 - **Aktionen:** Besitzer ändern (Personen), Mitglieder ändern (AD-Konten oder AD-Gruppen, Standardgruppen
   Besitzer, Mitglieder, Besucher), Speicherkontingent setzen, Website löschen (Papierkorb),
   Wiederherstellen, und die Rückgabe.
