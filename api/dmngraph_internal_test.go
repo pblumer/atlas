@@ -89,3 +89,56 @@ func TestDmnRefGraphResolveError(t *testing.T) {
 		t.Fatalf("graph with an unreadable model = %d, want 500", code)
 	}
 }
+
+// TestDmnRefLogicEndpoint covers the decision peek's logic read (ADR-draft-decision-peek): a
+// reference to a valid model returns each decision's logic as the engine's view, an
+// unknown reference is a 404, and a model source that cannot be read is a 500.
+func TestDmnRefLogicEndpoint(t *testing.T) {
+	srv, dir := newValidateServer(t) // seeds dmn-models/dish.dmn
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		var req *http.Request
+		if body != "" {
+			req = httptest.NewRequest(method, path, strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+		} else {
+			req = httptest.NewRequest(method, path, nil)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+
+	if code, _ := do(http.MethodGet, "/api/v1/dmnrefs/nope/logic", ""); code != http.StatusNotFound {
+		t.Fatalf("logic of unknown ref = %d, want 404", code)
+	}
+	_, b := do(http.MethodPost, "/api/v1/dmnrefs", `{"name":"Dish","modelRef":"dish"}`)
+	var ref struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &ref); err != nil || ref.ID == "" {
+		t.Fatalf("create ref: %v (%s)", err, b)
+	}
+	code, b := do(http.MethodGet, "/api/v1/dmnrefs/"+ref.ID+"/logic", "")
+	if code != http.StatusOK {
+		t.Fatalf("logic: %d %s", code, b)
+	}
+	var l dmn.ModelLogic
+	if err := json.Unmarshal(b, &l); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !l.Valid || len(l.Elements) == 0 || l.Elements[0].Kind == "" {
+		t.Fatalf("logic = %s, want a valid model whose decision has logic", b)
+	}
+
+	if err := os.MkdirAll(filepath.Join(dir, "dmn-models", "busy.dmn"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	_, b = do(http.MethodPost, "/api/v1/dmnrefs", `{"name":"Busy","modelRef":"busy"}`)
+	if err := json.Unmarshal(b, &ref); err != nil || ref.ID == "" {
+		t.Fatalf("create busy ref: %v (%s)", err, b)
+	}
+	if code, b := do(http.MethodGet, "/api/v1/dmnrefs/"+ref.ID+"/logic", ""); code != http.StatusInternalServerError {
+		t.Fatalf("logic of unreadable model = %d %s, want 500", code, b)
+	}
+}

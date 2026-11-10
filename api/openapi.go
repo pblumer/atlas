@@ -2234,6 +2234,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", role: RoleModeler, resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
 			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model graph", tObject())}},
+		{"GET", "/api/v1/dmnrefs/{id}/logic", s.handleDmnRefLogic, apiOp{
+			summary: "A DMN reference's logic, element by element: each decision's and business knowledge model's boxed expression (literal, decision table, context, list, relation, invocation, conditional, filter, iterator) as the engine's typed view, for the Modeler's read-only decision peek (ADR-draft-decision-peek)", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model logic", tObject())}},
 		{"POST", "/api/v1/dmn-layout", s.handleDmnLayout, apiOp{
 			summary: "Regenerate a DMN model's decision requirements diagram — discards any existing DMNDI and returns the model with a freshly laid-out graph, backing the decision editor's Auto-layout action. A pure transform: nothing is compiled, stored, or deployed (ADR-0325)", tag: "Decisions", role: RoleModeler,
 			req:  xmlBody("DMN XML"),

@@ -29,6 +29,7 @@
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
 import { fmtDateTime } from "./datefmt.js";
 import { t } from "./i18n.js";
+import { renderLogic, logicKindLabel } from "./decision-logic.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,18 +159,33 @@ function drgSvg(placed, inner) {
 // it, just the decisions, the input data and the requirements between them. It is
 // the Modeler's DMN view, and the plain half of the picture the evaluation view
 // annotates.
-export function renderDrgSvg(g) {
+//
+// `opts` makes the picture something to explore rather than only to look at — the
+// Modeler's decision peek (ADR-draft-decision-peek): `pick` makes every node a button carrying its
+// id in data-node, `called` names the node(s) the business rule task calls, and
+// `selected` the one whose logic is shown, and `kindOf(id)` may name a decision's
+// logic kind under its name where the caller knows it. Without them the picture is exactly what
+// it was, so the read-only DMN view is untouched.
+export function renderDrgSvg(g, opts = {}) {
   const placed = placeDrg(g);
   if (!placed.length) return `<p class="muted" style="padding:16px">${esc(t("drg.plain.empty"))}</p>`;
   const pos = {};
   placed.forEach((p) => { pos[p.n.id] = p; });
+  const called = new Set(opts.called || []);
+  const open = (n) => {
+    if (!opts.pick) return "<g>";
+    const cls = ["drg-node", "is-pick", called.has(n.id) ? "is-called" : "", opts.selected === n.id ? "is-selected" : ""]
+      .filter(Boolean).join(" ");
+    return `<g class="${cls}" data-node="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(n.name || n.id)}">`;
+  };
   const nodes = placed.map(({ n, x, y, w, h }) => {
     const input = n.type === "inputData";
     const bkm = n.type === "businessKnowledgeModel";
     const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
     const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
-    const sub = input ? (n.dataType || t("drg.kind.inputData")) : bkm ? t("drg.kind.bkm") : (n.hasTable ? t("drg.kind.table") : t("drg.kind.decision"));
-    return `<g>
+    const sub = input ? (n.dataType || t("drg.kind.inputData")) : bkm ? t("drg.kind.bkm")
+      : (opts.kindOf && opts.kindOf(n.id)) || (n.hasTable ? t("drg.kind.table") : t("drg.kind.decision"));
+    return `${open(n)}
       ${nodeShape(n.type, x, y, w, h, `fill="${fill}" stroke="${stroke}" stroke-width="1.5"`)}
       <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
       <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
@@ -413,6 +429,179 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
           title="${esc(t("drg.allCasesTitle"))}">${t("drg.allCases")}</a></p>
       </div>
     </section>`);
+  const close = el.querySelector(".drg-x");
+  if (close) close.focus();
+}
+
+// ---------- the decision a task calls, before it runs ----------
+
+// peekBindingText says which model the task would evaluate, in the panel's own terms
+// (ADR-0423), because the peek shows the stored model and that is not always it.
+function peekBindingText(binding, version) {
+  if (binding === "version") return t("peek.binding.version", { version: version || "?" });
+  if (binding === "deployment") return t("peek.binding.deployment");
+  return t("peek.binding.latest");
+}
+
+// resolveCalled finds the stored model behind a task's decision id: the catalog
+// entry that names it (by id, or by name — ADR-0385) and has a model handle, and the
+// reference pointing at that handle, preferring one filed under the diagram's own
+// application. Returns { dec, ref } or { dec } when the decision is known only as a
+// deployment, with no stored model to show, or {} when this server has no such
+// decision at all.
+async function resolveCalled(api, decisionId, projectId) {
+  const [catalog, refs] = await Promise.all([
+    api("GET", "/api/v1/decisions").then((x) => x || []),
+    api("GET", "/api/v1/dmnrefs").then((x) => x || []),
+  ]);
+  const named = catalog.filter((d) => d.id === decisionId || d.name === decisionId);
+  const stored = named.filter((d) => d.modelRef);
+  const fits = (r) => stored.some((d) => d.modelRef === r.modelRef);
+  const ref = refs.find((r) => fits(r) && (r.projectId || "") === (projectId || "")) || refs.find(fits) || null;
+  if (!ref) return named.length ? { dec: named[0] } : {};
+  return { dec: stored.find((d) => d.modelRef === ref.modelRef), ref };
+}
+
+// peekDetail draws the selected node: what kind of element it is, what it requires
+// and what requires it — each a button that walks the graph there — and its logic.
+function peekDetail(g, logic, id) {
+  const node = (g.nodes || []).find((n) => n.id === id);
+  if (!node) return "";
+  const name = (nid) => { const n = (g.nodes || []).find((x) => x.id === nid); return n ? (n.name || n.id) : nid; };
+  const chips = (ids) => ids.length
+    ? ids.map((nid) => `<button type="button" class="drg-chip" data-node="${esc(nid)}">${esc(name(nid))}</button>`).join(" ")
+    : `<span class="muted">${esc(t("peek.rel.none"))}</span>`;
+  const edges = g.edges || [];
+  const requires = edges.filter((e) => e.target === id).map((e) => e.source);
+  const requiredBy = edges.filter((e) => e.source === id).map((e) => e.target);
+  const el = (logic || []).find((x) => x.id === id);
+  const kindTag = node.type === "inputData" ? t("drg.kind.inputData")
+    : node.type === "businessKnowledgeModel" ? t("drg.kind.bkm")
+    : el && el.kind ? logicKindLabel(el.kind) : t("drg.kind.decision");
+  const body = node.type === "inputData"
+    ? `<p class="drg-params">${esc(t("peek.input.type"))} ${node.dataType ? `<span class="drg-type">${esc(node.dataType)}</span>` : esc(t("peek.input.untyped"))}</p>
+       <p class="muted drg-foot">${esc(t("peek.input.hint"))}</p>`
+    : renderLogic(el);
+  return `<h3>${esc(node.name || node.id)} <span class="drg-tag">${esc(kindTag)}</span>${node.dataType && node.type !== "inputData" ? ` <span class="drg-type">${esc(node.dataType)}</span>` : ""}</h3>
+    <dl class="drg-rel">
+      <dt>${esc(t("peek.rel.requires"))}</dt><dd>${chips(requires)}</dd>
+      <dt>${esc(t("peek.rel.requiredBy"))}</dt><dd>${chips(requiredBy)}</dd>
+    </dl>
+    <div class="drg-logic">${body}</div>`;
+}
+
+// openDecisionPeek opens the decision a business rule task calls, over the Modeler
+// (ADR-draft-decision-peek): its requirements graph with the called decision marked, and the logic
+// of whichever node the author picks — so a reader can walk the DRG from the task
+// without leaving the diagram. It edits nothing. `onEdit(ref)` is the door into the
+// decision editor; the caller owns it, because leaving the diagram means saving it
+// first (ADR-0320), and that is the Modeler's business, not this window's.
+//
+// What it shows is the model the decision's reference resolves today — the one the
+// editor would open. Which version a running task evaluates depends on the task's
+// binding, and the window says so rather than implying the two are the same.
+export async function openDecisionPeek({ api, decisionId, projectId = "", taskLabel = "", binding = "latest", version = "", onEdit = null, restoreFocusTo = null }) {
+  closeDecisionGraph();
+  const el = document.createElement("div");
+  el.className = "drg-ov drg-peek";
+  el.innerHTML = shell(decisionId || t("drg.title"), `<span class="muted">${esc(t("drg.loading"))}</span>`, `<p class="ops-empty">${esc(t("drg.loadingBody"))}</p>`);
+  document.body.appendChild(el);
+  openOverlay = { el, restore: restoreFocusTo || document.activeElement };
+  document.addEventListener("keydown", onKeydown, true);
+  window.addEventListener("hashchange", closeDecisionGraph);
+  el.addEventListener("click", (e) => {
+    if (e.target === el || e.target.closest("[data-drg-close]")) closeDecisionGraph();
+  });
+  const x0 = el.querySelector(".drg-x");
+  if (x0) x0.focus();
+  const still = () => openOverlay && openOverlay.el === el;
+  const fail = (sub, msg) => {
+    if (still()) el.innerHTML = shell(decisionId || t("drg.title"), sub, `<p class="ops-empty">${msg}</p>`);
+  };
+  const taskSub = taskLabel ? t("drg.sub.task", { task: esc(taskLabel) }) : "";
+
+  let found, g, logic;
+  try {
+    found = await resolveCalled(api, decisionId, projectId);
+    if (found.ref) {
+      const id = encodeURIComponent(found.ref.id);
+      [g, logic] = await Promise.all([
+        api("GET", `/api/v1/dmnrefs/${id}/graph`),
+        api("GET", `/api/v1/dmnrefs/${id}/logic`).catch(() => null),
+      ]);
+    }
+  } catch (err) {
+    fail(taskSub, esc(t("drg.loadFailed", { error: err.message })));
+    return;
+  }
+  if (!still()) return; // closed while it loaded
+  if (!found.ref) {
+    fail(taskSub, esc(t(found.dec ? "peek.deployedOnly" : "peek.unknown", { id: decisionId })));
+    return;
+  }
+  if (!g || !g.valid) {
+    fail(taskSub, esc(t("peek.invalid", { message: (g && g.message) || "" })));
+    return;
+  }
+
+  const dec = found.dec || {};
+  const nodes = g.nodes || [];
+  // A decision service is not a node of the graph: it is drawn as what it is made
+  // of, so the decisions it consists of are what is marked.
+  const called = dec.service
+    ? (dec.members || []).filter((m) => nodes.some((n) => n.id === m))
+    : nodes.filter((n) => n.id === dec.id || n.id === decisionId || (n.name && n.name === decisionId)).map((n) => n.id);
+  let selected = called[0] || (nodes[0] && nodes[0].id) || "";
+  const elements = (logic && logic.elements) || [];
+
+  const sub = [
+    g.modelName ? t("drg.sub.model", { name: esc(g.modelName) }) : "",
+    dec.service ? `<span class="drg-tag">${esc(t("drg.sub.service"))}</span>` : "",
+    taskSub,
+    esc(peekBindingText(binding, version)),
+  ].filter(Boolean).join(" · ");
+  const editBtn = onEdit
+    ? `<button type="button" class="btn" data-peek-edit title="${esc(t("peek.editTitle"))}">${esc(t("peek.edit"))}</button>` : "";
+  const kindOf = (id) => { const x = elements.find((e) => e.id === id); return x && x.kind ? logicKindLabel(x.kind) : ""; };
+  const draw = () => renderDrgSvg(g, { pick: true, called, selected, kindOf });
+  el.innerHTML = shell(dec.name || decisionId, sub, `
+    <section class="drg-canvas">${draw()}</section>
+    <p class="drg-legend">
+      <span class="drg-key"><i class="sw called"></i>${esc(t(dec.service ? "peek.legend.service" : "peek.legend.called"))}</span>
+      <span class="drg-key"><i class="sw selected"></i>${esc(t("peek.legend.selected"))}</span>
+      <span class="drg-key">${esc(t("peek.legend.hint"))}</span>
+    </p>
+    <section class="drg-peek-detail" aria-live="polite">${peekDetail(g, elements, selected)}</section>
+    ${logic ? "" : `<p class="muted drg-foot">${esc(t("peek.logicFailed"))}</p>`}
+    <footer class="drg-peek-foot">
+      <p class="muted drg-foot">${esc(t("peek.foot"))}</p>
+      <div class="row">${editBtn}</div>
+    </footer>`);
+
+  const pick = (id) => {
+    if (!id || id === selected) return;
+    selected = id;
+    for (const n of el.querySelectorAll(".drg-canvas .drg-node")) n.classList.toggle("is-selected", n.dataset.node === id);
+    const detail = el.querySelector(".drg-peek-detail");
+    if (detail) detail.innerHTML = peekDetail(g, elements, selected);
+  };
+  el.addEventListener("click", (e) => {
+    const n = e.target.closest("[data-node]");
+    if (n && el.contains(n)) pick(n.dataset.node);
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const n = e.target.closest && e.target.closest(".drg-node[data-node]");
+    if (!n) return;
+    e.preventDefault();
+    pick(n.dataset.node);
+  });
+  const edit = el.querySelector("[data-peek-edit]");
+  if (edit) edit.addEventListener("click", () => {
+    const ref = found.ref;
+    closeDecisionGraph();
+    onEdit(ref);
+  });
   const close = el.querySelector(".drg-x");
   if (close) close.focus();
 }

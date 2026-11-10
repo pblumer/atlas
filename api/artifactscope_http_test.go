@@ -243,6 +243,12 @@ func TestArtifactScopeFormsAndRefs(t *testing.T) {
 	if code, _ := cReq(t, bob, ts, "GET", "/api/v1/dmnrefs/"+refID+"/graph", ""); code != http.StatusNotFound {
 		t.Fatalf("non-member ref graph = %d, want 404", code)
 	}
+	if code, _ := cReq(t, alice, ts, "GET", "/api/v1/dmnrefs/"+refID+"/logic", ""); code != http.StatusOK {
+		t.Fatalf("owner ref logic = %d, want 200", code)
+	}
+	if code, _ := cReq(t, bob, ts, "GET", "/api/v1/dmnrefs/"+refID+"/logic", ""); code != http.StatusNotFound {
+		t.Fatalf("non-member ref logic = %d, want 404", code)
+	}
 	if code, _ := cReq(t, bob, ts, "POST", "/api/v1/dmnrefs/"+refID+"/validate", ""); code != http.StatusNotFound {
 		t.Fatalf("non-member ref validate = %d, want 404", code)
 	}

@@ -3378,6 +3378,15 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .form-badge:hover { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .form-badge svg { display: block; width: 13px; height: 13px; }
+/* The decision mark on a business rule task (ADR-draft-decision-peek, drawDecisionBadges): the form
+   mark's look, as a button — a click opens the decision over the diagram. */
+.decision-badge {
+  display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0;
+  background: var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--border-strong);
+  color: var(--accent-text); cursor: pointer;
+}
+.decision-badge:hover, .decision-badge:focus-visible { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); outline: none; }
+.decision-badge svg { display: block; width: 13px; height: 13px; }
 /* The context pad's "Open form", as a stencil like the class canvas's marks, so it takes
    the entry's colour. */
 .djs-context-pad .entry.atlas-cp-form::before {
@@ -7942,6 +7951,47 @@ button.im-problem:hover { background: var(--accent-soft); }
    a size somebody can actually read it at. */
 .drg-rules .mgrid { font-size: 12px; }
 .drg-rules .mgrid th, .drg-rules .mgrid td { padding: 3px 8px; }
+
+/* The decision peek (ADR-draft-decision-peek): the same window, opened from a business rule task in
+   the Modeler. Every node is a button; the called decision is ringed in amber and the
+   one whose logic is shown below in the accent, so both read at once when they differ. */
+.drg-node.is-pick { cursor: pointer; }
+.drg-node.is-pick:hover > :first-child { stroke: var(--accent); }
+.drg-node.is-pick:focus { outline: none; }
+.drg-node.is-pick:focus-visible > :first-child { stroke: var(--accent); stroke-dasharray: 4 3; }
+.drg-node.is-called > :first-child { stroke: #d97706; stroke-width: 3px; }
+.drg-node.is-selected > :first-child { stroke: var(--accent); stroke-width: 3px; }
+.drg-node.is-called.is-selected > :first-child { stroke: #d97706; filter: drop-shadow(0 0 3px var(--accent)); }
+.drg-key .sw.called { background: #ffffff; border-color: #d97706; border-width: 3px; }
+.drg-key .sw.selected { background: #ffffff; border-color: var(--accent); border-width: 3px; }
+.drg-peek-detail { margin-top: 16px; min-width: 0; overflow-x: auto; }
+.drg-peek-detail h3 { margin: 0 0 8px; font: 600 15px/1.4 system-ui, sans-serif; color: var(--text); }
+.drg-rel { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0 0 12px; font-size: 12.5px; }
+.drg-rel dt { color: var(--muted); }
+.drg-rel dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.drg-chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--accent-text);
+  border-radius: 999px; padding: 1px 9px; font: 12px/1.6 system-ui, sans-serif; cursor: pointer;
+}
+.drg-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.drg-logic .mgrid { font-size: 12px; }
+.drg-logic .mgrid th, .drg-logic .mgrid td { padding: 3px 8px; vertical-align: top; }
+.drg-logic .mgrid .mout { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.drg-pairs th { white-space: nowrap; }
+.drg-pairs td { white-space: normal; }
+.drg-code {
+  margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; color: var(--text);
+}
+.drg-feel { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.drg-type {
+  display: inline-block; font: 11px/1.5 ui-monospace, monospace; color: var(--muted);
+  background: var(--bg); border-radius: 5px; padding: 0 5px;
+}
+.drg-params { margin: 0 0 8px; font-size: 12.5px; color: var(--text); }
+.drg-list { margin: 0; padding-left: 22px; font-size: 12.5px; }
+.drg-peek-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 14px; }
+.drg-peek-foot .drg-foot { margin: 0; max-width: 70ch; }
 
 @media (max-width: 900px) {
   .drg-split { grid-template-columns: minmax(0, 1fr); }

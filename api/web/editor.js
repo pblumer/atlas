@@ -52,7 +52,7 @@ import { attachShownVersion } from "./shown-version.js";
 // canvas — the bar menu's "XML source", shared with the decision editor.
 import { openXmlSource, closeXmlSource } from "./xml-source.js";
 import { renderTraceTable, placeTracePop, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
-import { openDecisionGraph } from "./decision-graph.js";
+import { openDecisionGraph, openDecisionPeek } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
 // things depending on which surface a reader is standing in front of.
@@ -1159,7 +1159,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // The form mark is a door out of this diagram (ADR-0465),
   // and so is the context pad's "Open form": both walk through leaveForForm, published
   // further down this mount, which is what saves the diagram before it is left.
-  const refreshBadges = makeImplementBadges(root, modeler, api, (el) => openLinkedForm(api, toast, el));
+  // The decision mark on a business rule task is the same kind of door, one step
+  // removed (ADR-draft-decision-peek): it opens the decision over the diagram first, and only the peek's
+  // "Open in the decision editor" leaves — through leaveForDecision, as the panel's
+  // Edit does.
+  const refreshBadges = makeImplementBadges(root, modeler, api, (el) => openLinkedForm(api, toast, el),
+    (el) => peekCalledDecision(api, projectId, el));
   registerFormContextPad(modeler, api, toast);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
@@ -2123,7 +2128,7 @@ function watchShopBadges(viewer, api) {
 // (ADR-0429 §6). It is asked for the first time the Implement tab shows, not before — the
 // Design view draws no badge, so it has no question to ask — and once for the diagram;
 // its answer redraws through this same refresh, so it too is gated on the tab.
-function makeImplementBadges(root, modeler, api, openForm) {
+function makeImplementBadges(root, modeler, api, openForm, openDecision) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
@@ -2137,7 +2142,9 @@ function makeImplementBadges(root, modeler, api, openForm) {
     clear();
     if (activeTab(root) !== "implement") return;
     loadShopOwners(modeler, api, refresh);
-    ids = drawImplBadges(modeler).concat(openForm ? drawFormBadges(modeler, openForm) : []);
+    ids = drawImplBadges(modeler)
+      .concat(openForm ? drawFormBadges(modeler, openForm) : [])
+      .concat(openDecision ? drawDecisionBadges(modeler, openDecision) : []);
   };
 
   // Keep badges in step with edits (language switched, task added/removed) while the
@@ -2963,6 +2970,94 @@ function drawFormBadges(modeler, open) {
     });
     try {
       ids.push(overlays.add(el.id, "form-badge", { position: spot, html: a }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// walkDecisionDoor is what every door into the decision editor does (ADR-0320): this
+// diagram is saved first (or the author is asked), and the editor opens with the way
+// back to this task on its address. Without a draft to come back to — a deployed
+// version opened read-only — the decision is opened plainly. The panel's "＋ New
+// decision" and "Edit" walk it, and so does the decision peek's editor button
+// (ADR-draft-decision-peek).
+async function walkDecisionDoor(element, suffix) {
+  const left = await leaveForDecision();
+  if (!left.ok) return;
+  const home = left.processId
+    ? "/for/" + encodeURIComponent(left.processId) + "/" + encodeURIComponent(element.id)
+    : "";
+  location.hash = "#/modeler/dmn/" + suffix + home;
+}
+
+// calledDecisionOf is the decision a business rule task calls *on this server*, or
+// "": the id it names, when it evaluates in the engine. A task bound to an external
+// temis Worker (atlas:TemisConnector) evaluates a decision that lives elsewhere, and
+// a local model that happened to share its id would be the wrong one to show.
+function calledDecisionOf(element) {
+  const bo = element && element.businessObject;
+  if (!bo || bo.$type !== "bpmn:BusinessRuleTask" || element.labelTarget) return "";
+  if (findExt(bo, "atlas:TemisConnector")) return "";
+  const cd = findExt(bo, "zeebe:CalledDecision");
+  return (cd && (cd.decisionId || "").trim()) || "";
+}
+
+// peekCalledDecision opens the decision a business rule task calls over the diagram
+// (ADR-draft-decision-peek): its requirements graph with the called decision marked, and the logic
+// of whatever node the author picks. Nothing is saved or left to look; the peek's
+// editor button is the door out, and it is walkDecisionDoor's.
+function peekCalledDecision(api, projectId, element) {
+  const decisionId = calledDecisionOf(element);
+  if (!decisionId) return;
+  const cd = findExt(element.businessObject, "zeebe:CalledDecision") || {};
+  const version = calledDecisionVersion(cd);
+  openDecisionPeek({
+    api,
+    decisionId,
+    projectId: projectId || "",
+    taskLabel: element.businessObject.name || element.id,
+    binding: version ? "version" : cd.bindingType === "deployment" ? "deployment" : "latest",
+    version,
+    onEdit: (ref) => walkDecisionDoor(element, "e/" + encodeURIComponent(ref.id)),
+  });
+}
+
+// DECISION_GLYPH is a decision table: a header row over a grid, drawn in the badge's
+// colour — the shape bpmn-js draws in the task's corner, small enough to read as the
+// mark's own rather than a second copy of it.
+const DECISION_GLYPH = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 6h13M6 6v7.5M1.5 9.75h13" stroke="currentColor" stroke-width="1.2"/></svg>`;
+
+// DECISION_BADGE_SPOT is the business rule task's top-right corner, opposite the table
+// bpmn-js draws at its top-left — where a user task carries its form mark.
+const DECISION_BADGE_SPOT = { top: 4, right: 24 };
+
+// drawDecisionBadges marks, in the Implement view, every business rule task that calls
+// a decision on this server, and returns the overlay ids it added (ADR-draft-decision-peek). The mark
+// is a button: a click opens the decision over the diagram (open), where its graph can
+// be walked. It is not a link, because the decision's own page is one step further —
+// the peek's editor button — and a middle click on a mark that saved and left the
+// diagram would be the surprise the form mark's modified click avoids.
+function drawDecisionBadges(modeler, open) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const decisionId = calledDecisionOf(el);
+    if (!decisionId) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "decision-badge";
+    b.title = tr("bpmn.decision.badge", { id: decisionId });
+    b.setAttribute("aria-label", b.title);
+    b.innerHTML = DECISION_GLYPH;
+    b.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      open(el);
+    });
+    try {
+      ids.push(overlays.add(el.id, "decision-badge", { position: DECISION_BADGE_SPOT, html: b }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
   return ids;
@@ -11247,14 +11342,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // round trip has to come back to. Without one — a deployed definition opened
       // read-only — the decision is still authored, just without a way home, so it is
       // opened plainly and the author picks it afterwards.
-      const openDecisionPage = async (suffix) => {
-        const left = await leaveForDecision();
-        if (!left.ok) return;
-        const home = left.processId
-          ? "/for/" + encodeURIComponent(left.processId) + "/" + encodeURIComponent(element.id)
-          : "";
-        location.hash = "#/modeler/dmn/" + suffix + home;
-      };
+      const openDecisionPage = (suffix) => walkDecisionDoor(element, suffix);
       const fnew = body.querySelector("#f-dmn-new");
       if (fnew) {
         fnew.addEventListener("click", () => {

@@ -866,6 +866,25 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_dmnref_logic",
+			Description: "Read a rule's (decision reference's) logic, element by element: each decision's and business " +
+				"knowledge model's boxed expression (literal, decision table, context, list, relation, invocation, " +
+				"conditional, filter, iterator) as the engine's typed view — what atlas_dmnref_graph's nodes compute. " +
+				"Refused with a not-found error if no reference has that id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The rule (decision reference) id (from atlas_register_decision or atlas_list_projects artifacts).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/dmnrefs/" + url.PathEscape(id) + "/logic"))
+			},
+		},
+		{
 			Name: "atlas_get_decision_model",
 			Description: "Get the raw DMN XML stored under a model handle — the handle used with " +
 				"atlas_upload_decision_model, i.e. a rule's (decision reference's) modelRef. Refused with a not-found error " +

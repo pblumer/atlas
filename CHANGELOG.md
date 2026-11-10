@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A business rule task's decision is one click from the task.** In the Modeler's Implement
+  view a business rule task that calls a decision carries a small decision mark, as a user task
+  carries its form mark. A click opens the decision over the diagram, without saving or leaving
+  it: the requirements graph with the called decision marked, and below it whatever node is
+  picked — what it requires, what requires it, and its logic, so the graph can be walked from
+  the task. The logic comes from the engine's own reading of the model, for every DMN 1.5 boxed
+  expression it supports (decision table, literal expression, context, list, relation,
+  invocation, conditional, filter, iterator), through the new read
+  `GET /api/v1/dmnrefs/{id}/logic` and the MCP tool `atlas_dmnref_logic`. "Open in the decision
+  editor" leaves the way the panel's Edit does, with the way back (ADR-draft-decision-peek).
 - **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
   names `"provider": "google-calendar"` uses a service account the booking calendars are shared
   with; the model stays the same. Recurring and all-day appointments block their time, and a

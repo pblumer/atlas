@@ -27,6 +27,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`decision-peek.spec.mjs`** ([ADR-draft-decision-peek](../docs/adr/draft-decision-peek.md)):
+  the Implement view marks a business rule task that calls a decision, and only there; the mark
+  opens the decision over the diagram without saving or leaving it, with the called decision
+  ringed and its logic shown; a requirement chip, a click on a node and Enter on a focused node
+  walk the graph, all from one logic read; a decision the server does not hold is said, not
+  drawn; and "Open in the decision editor" leaves through the panel's door, with the way back.
 - **`mi-history.spec.mjs`** ([OHS1](../docs/planning/operations-history-at-scale-program.md)):
   Operations instance replay groups the iterations of one multi-instance body by
   default, expands them on demand and still selects an exact iteration. The grouping
