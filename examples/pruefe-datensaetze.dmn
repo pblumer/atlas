@@ -17,19 +17,34 @@
   Ausgaben — der DMN-Worker legt einen Mehr-Ausgaben-Verdict als JSON-Kontext
   ab, sodass ein Datensatz feldweise korrigiert werden kann.
 
+  Datentypen: die drei Eingabedaten sind als string typisiert, und das Urteil hat
+  einen eigenen strukturierten Typ tVerdict mit vier booleschen Feldern. Die
+  Eingaben sind bewusst NICHT auf erlaubte Werte eingeschränkt: eine Lizenz "NONE"
+  soll als ungültig gemeldet werden, nicht die Auswertung abbrechen.
+
+  Jede Eingabe ist über ein informationRequirement mit eigener id mit der
+  Entscheidung verbunden; so zeichnet der Editor die Pfeile im DRD.
+
   Der Business-Rule-Task ruft die Entscheidung als decisionId="RowValid" auf.
   Die Geschäftsregeln (welche Gruppe, welche Lizenz) leben hier — sie ändern
   sich ohne ein Redeploy der Engine.
 -->
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
              id="defs_rowvalid" name="rowvalid" namespace="http://atlas/dmn">
-  <inputData id="id_email" name="email"/>
-  <inputData id="id_group" name="group"/>
-  <inputData id="id_license" name="license"/>
+  <itemDefinition id="tVerdict" name="tVerdict">
+    <itemComponent id="tVerdict_emailOk" name="emailOk"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tVerdict_groupOk" name="groupOk"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tVerdict_licenseOk" name="licenseOk"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tVerdict_valid" name="valid"><typeRef>boolean</typeRef></itemComponent>
+  </itemDefinition>
+  <inputData id="id_email" name="email"><variable id="var_email" name="email" typeRef="string"/></inputData>
+  <inputData id="id_group" name="group"><variable id="var_group" name="group" typeRef="string"/></inputData>
+  <inputData id="id_license" name="license"><variable id="var_license" name="license" typeRef="string"/></inputData>
   <decision id="RowValid" name="RowValid">
-    <informationRequirement><requiredInput href="#id_email"/></informationRequirement>
-    <informationRequirement><requiredInput href="#id_group"/></informationRequirement>
-    <informationRequirement><requiredInput href="#id_license"/></informationRequirement>
+    <variable id="var_RowValid" name="RowValid" typeRef="tVerdict"/>
+    <informationRequirement id="ir_email"><requiredInput href="#id_email"/></informationRequirement>
+    <informationRequirement id="ir_group"><requiredInput href="#id_group"/></informationRequirement>
+    <informationRequirement id="ir_license"><requiredInput href="#id_license"/></informationRequirement>
     <decisionTable id="dt" hitPolicy="UNIQUE">
       <input id="in_e" label="email"><inputExpression id="ie_e" typeRef="string"><text>email</text></inputExpression></input>
       <input id="in_g" label="group"><inputExpression id="ie_g" typeRef="string"><text>group</text></inputExpression></input>

@@ -704,6 +704,7 @@ type Builder struct {
 	startVars          []StartVariable             // declared start variables (atlas:startForm), nil = none
 	constants          []Constant                  // process constants (atlas:constants), nil = none
 	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
+	defaultDecls       []defaultDeclaration        // which gateway declared which flow its default (RuleGatewayDefaultNotOutgoing)
 	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
 	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
 	invalidAnsweredBy  []int32                     // user task nodes whose atlas:answeredBy named no way (RuleAnswerValue)
@@ -806,16 +807,16 @@ func (b *Builder) compileAgentParams(ownerBpmnID string) ([]AgentParam, error) {
 	for _, sp := range specs {
 		name := strings.TrimSpace(sp.Name)
 		if name == "" {
-			return nil, fmt.Errorf("compiler: tool %q declares an agentParam without a name — "+
+			return nil, elementErrorf(ownerBpmnID, "compiler: tool %q declares an agentParam without a name — "+
 				"a tool's parameter is named for the model that has to fill it", ownerBpmnID)
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("compiler: tool %q declares the parameter %q twice", ownerBpmnID, name)
+			return nil, elementErrorf(ownerBpmnID, "compiler: tool %q declares the parameter %q twice", ownerBpmnID, name)
 		}
 		seen[name] = true
 		typ := strings.TrimSpace(sp.Type)
 		if !slices.Contains(agentParamTypes, typ) {
-			return nil, fmt.Errorf("compiler: tool %q parameter %q has type %q, which is not one of %s",
+			return nil, elementErrorf(ownerBpmnID, "compiler: tool %q parameter %q has type %q, which is not one of %s",
 				ownerBpmnID, name, typ, strings.Join(agentParamTypes, ", "))
 		}
 		p := AgentParam{Name: b.intern(name), Type: b.intern(typ), Description: -1, Required: sp.Required}
@@ -1040,6 +1041,15 @@ func (b *Builder) SetStartVariables(vs []StartVariable) { b.startVars = vs }
 // brings a stored definition back unchanged (RuleConditionalStart, ADR-0177).
 func (b *Builder) markConditionalStart(id int32) {
 	b.conditionalStarts = append(b.conditionalStarts, id)
+}
+
+// markDefaultDeclaration records that gateway node gateway declared flow as its
+// default. The flow is marked a default by [Builder.SetFlowDefault] exactly as before;
+// the record is read by stage 5 only, to refuse a default that is not the gateway's own
+// outgoing flow while a reload brings a stored definition back unchanged
+// (RuleGatewayDefaultNotOutgoing, ADR-0547).
+func (b *Builder) markDefaultDeclaration(gateway, flow int32) {
+	b.defaultDecls = append(b.defaultDecls, defaultDeclaration{Gateway: gateway, Flow: flow})
 }
 
 // markEventGatewayKind records that the event-based gateway node id was marked as a
@@ -2877,11 +2887,11 @@ func assign(g *feelGate, taskID, what, raw string) (Assignment, error) {
 	}
 	text := strings.TrimSpace(trimmed[1:])
 	if text == "" {
-		return Assignment{}, fmt.Errorf("compiler: user task %q has an empty FEEL expression for %s", taskID, what)
+		return Assignment{}, elementErrorf(taskID, "compiler: user task %q has an empty FEEL expression for %s", taskID, what)
 	}
 	e, err := g.compileFEEL(text)
 	if err != nil {
-		return Assignment{}, fmt.Errorf("compiler: user task %q: %s: %w", taskID, what, err)
+		return Assignment{}, elementErrorf(taskID, "compiler: user task %q: %s: %w", taskID, what, err)
 	}
 	return Assignment{Expr: e}, nil
 }
@@ -3624,7 +3634,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		container := b.bpmnIdOf(n.ElementId)
 		entries := scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
 		if len(entries) == 0 {
-			return nil, fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q has no entry activity, "+
+			return nil, elementErrorf(container, "compiler: agent-driven ad-hoc subprocess %q has no entry activity, "+
 				"so its agent has no tool to call — give it at least one contained activity nothing "+
 				"sequences into, or model a tool-less agent as a service task (ADR-0117) instead", container)
 		}
@@ -3757,77 +3767,78 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		func(fid int32) int32 { return b.flows[fid].Target })
 
 	p := &CompiledProcess{
-		Key:                b.key,
-		BpmnProcessId:      b.intern(b.bpmnProcessId),
-		Version:            b.version,
-		hasConditional:     hasConditional,
-		nodes:              b.nodes,
-		flows:              b.flows,
-		joinReach:          joinReach,
-		outgoingFlows:      outgoing,
-		boundaryEvents:     boundary,
-		scopeStarts:        scopeStarts,
-		serviceTasks:       b.serviceTasks,
-		scriptTasks:        b.scriptTasks,
-		callActivities:     b.callActivities,
-		multiInstances:     b.multiInstances,
-		scriptJobTasks:     b.scriptJobTasks,
-		businessRuleTasks:  b.businessRuleTasks,
-		timerCatches:       b.timerCatches,
-		connectorTasks:     b.connectorTasks,
-		mockupTasks:        b.mockupTasks,
-		userTasks:          b.userTasks,
-		boundaryEventDets:  b.boundaryEventDets,
-		eventSubProcesses:  b.eventSubProcesses,
-		caughtErrorCodes:   caughtErrorCodes(b.boundaryEventDets, b.eventSubProcesses),
-		eventSubs:          eventSubs,
-		rootEventSubs:      rootEventSubs,
-		messageCatches:     b.messageCatches,
-		receiveTasks:       b.receiveTasks,
-		messageThrows:      b.messageThrows,
-		messageStarts:      b.messageStarts,
-		signalCatches:      b.signalCatches,
-		signalThrows:       b.signalThrows,
-		signalStarts:       b.signalStarts,
-		errorEnds:          b.errorEnds,
-		escalations:        b.escalations,
-		conditionals:       b.conditionals,
-		adHocs:             b.adHocs,
-		compensationThrows: b.compensationThrows,
-		timerStarts:        b.timerStarts,
-		dataObjects:        b.dataObjects,
-		dataStores:         b.dataStores,
-		dataOutAssocs:      dataOut,
-		dataInAssocs:       dataIn,
-		ioInputs:           ioIn,
-		ioOutputs:          ioOut,
-		startEvents:        startEvents,
-		elementIds:         b.elementIds,
-		flowIds:            b.flowIds,
-		elementDocs:        b.elementDocs,
-		repairForms:        b.repairForms,
-		lanes:              b.lanes,
-		documentation:      b.documentation,
-		startFormId:        b.startFormId,
-		startVars:          b.startVars,
-		constants:          b.constants,
-		constantSet:        constantSetOf(b.constants),
-		conditionalStarts:  b.conditionalStarts,
-		eventGatewayKinds:  b.eventGatewayKinds,
-		invalidWizards:     b.invalidWizards,
-		invalidAnsweredBy:  b.invalidAnsweredBy,
-		answerTasks:        b.answerTasks,
-		passwordFor:        b.passwordFor,
-		versionTag:         b.versionTag,
-		instanceTtlNanos:   b.instanceTtlNanos,
-		historyTtlNanos:    b.historyTtlNanos,
-		searchableVars:     b.searchableVars,
-		searchableSet:      searchableSet(b.searchableVars),
-		personalVars:       b.personalVars,
-		personalSet:        searchableSet(b.personalVars),
-		dataSubjectVar:     b.dataSubjectVar,
-		isExecutable:       b.isExecutable,
-		strings:            b.strings,
+		Key:                 b.key,
+		BpmnProcessId:       b.intern(b.bpmnProcessId),
+		Version:             b.version,
+		hasConditional:      hasConditional,
+		nodes:               b.nodes,
+		flows:               b.flows,
+		joinReach:           joinReach,
+		outgoingFlows:       outgoing,
+		boundaryEvents:      boundary,
+		scopeStarts:         scopeStarts,
+		serviceTasks:        b.serviceTasks,
+		scriptTasks:         b.scriptTasks,
+		callActivities:      b.callActivities,
+		multiInstances:      b.multiInstances,
+		scriptJobTasks:      b.scriptJobTasks,
+		businessRuleTasks:   b.businessRuleTasks,
+		timerCatches:        b.timerCatches,
+		connectorTasks:      b.connectorTasks,
+		mockupTasks:         b.mockupTasks,
+		userTasks:           b.userTasks,
+		boundaryEventDets:   b.boundaryEventDets,
+		eventSubProcesses:   b.eventSubProcesses,
+		caughtErrorCodes:    caughtErrorCodes(b.boundaryEventDets, b.eventSubProcesses),
+		eventSubs:           eventSubs,
+		rootEventSubs:       rootEventSubs,
+		messageCatches:      b.messageCatches,
+		receiveTasks:        b.receiveTasks,
+		messageThrows:       b.messageThrows,
+		messageStarts:       b.messageStarts,
+		signalCatches:       b.signalCatches,
+		signalThrows:        b.signalThrows,
+		signalStarts:        b.signalStarts,
+		errorEnds:           b.errorEnds,
+		escalations:         b.escalations,
+		conditionals:        b.conditionals,
+		adHocs:              b.adHocs,
+		compensationThrows:  b.compensationThrows,
+		timerStarts:         b.timerStarts,
+		dataObjects:         b.dataObjects,
+		dataStores:          b.dataStores,
+		dataOutAssocs:       dataOut,
+		dataInAssocs:        dataIn,
+		ioInputs:            ioIn,
+		ioOutputs:           ioOut,
+		startEvents:         startEvents,
+		elementIds:          b.elementIds,
+		flowIds:             b.flowIds,
+		elementDocs:         b.elementDocs,
+		repairForms:         b.repairForms,
+		lanes:               b.lanes,
+		documentation:       b.documentation,
+		startFormId:         b.startFormId,
+		startVars:           b.startVars,
+		constants:           b.constants,
+		constantSet:         constantSetOf(b.constants),
+		conditionalStarts:   b.conditionalStarts,
+		defaultDeclarations: b.defaultDecls,
+		eventGatewayKinds:   b.eventGatewayKinds,
+		invalidWizards:      b.invalidWizards,
+		invalidAnsweredBy:   b.invalidAnsweredBy,
+		answerTasks:         b.answerTasks,
+		passwordFor:         b.passwordFor,
+		versionTag:          b.versionTag,
+		instanceTtlNanos:    b.instanceTtlNanos,
+		historyTtlNanos:     b.historyTtlNanos,
+		searchableVars:      b.searchableVars,
+		searchableSet:       searchableSet(b.searchableVars),
+		personalVars:        b.personalVars,
+		personalSet:         searchableSet(b.personalVars),
+		dataSubjectVar:      b.dataSubjectVar,
+		isExecutable:        b.isExecutable,
+		strings:             b.strings,
 	}
 	// ADR-0314's rule, last because it reads the assembled expressions: a process that
 	// computes on a variable it declared personal does not deploy. Placed here rather

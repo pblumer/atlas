@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +17,9 @@ import (
 )
 
 // onePNG is the smallest PNG the picture store accepts.
+// previewURL matches a JSON "url" field, whose value carries the fake wiki's random port.
+var previewURL = regexp.MustCompile(`"url":"[^"]*"`)
+
 var onePNG = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89" +
 	"\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
 
@@ -709,8 +713,12 @@ func TestARichDescriptionTakesTheLayoutAndNeverAProtectedWord(t *testing.T) {
 		t.Fatalf("embeds taken = %+v", l.Embeds)
 	}
 	all, _ := json.Marshal(l)
+	// The fake wiki listens on a random port, and its address is in every page URL;
+	// a port such as 34711 would put "4711" in the preview without any content
+	// leaking. Check the preview with the URLs taken out.
+	content := previewURL.ReplaceAllString(string(all), `"url":""`)
 	for _, never := range []string{"4711", "Interne Kosten", "Betriebsinterna"} {
-		if strings.Contains(string(all), never) {
+		if strings.Contains(content, never) {
 			t.Errorf("%q reached the preview: %s", never, all)
 		}
 	}

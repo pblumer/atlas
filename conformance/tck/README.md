@@ -97,11 +97,11 @@ example of this contract for the control-flow subset.
 
 ## Status and honest scope
 
-The portable format covers all 34 registered positive scenarios and 4 negative models. What it
+The portable format covers all <!-- con:scenarios -->34<!-- /con --> registered positive scenarios and <!-- con:negatives -->4<!-- /con --> negative models. What it
 does *not* yet solve — and what a real, adopted TCK needs — is the
 executable-extension portability problem (each vendor's scripts/task-types differ) and
 governance (a single vendor's kit becomes a TCK only when others adopt it). See the
 suite [README](../README.md) and the differential oracle for how far the cross-engine
 checking currently reaches. The dedicated `differential · independent BPMN`
-CI job checks five of these cases against a separate pinned engine; the remaining
-29 positive cases are **not** independently verified.
+CI job checks <!-- con:differential -->5<!-- /con --> of these cases against a separate pinned engine; the remaining
+<!-- con:tck-not-independent -->29<!-- /con --> positive cases are **not** independently verified.

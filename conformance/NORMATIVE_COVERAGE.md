@@ -10,7 +10,7 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 
 ## Provisional inventory
 
-- Candidate requirements: **105**; implementation provisionally **43** implemented, **21** partial, **5** unsupported, **36** unknown.
+- Candidate requirements: **105**; implementation provisionally **44** implemented, **20** partial, **5** unsupported, **36** unknown.
 - Evidence levels: **39** scenario samples, **27** package tests, **39** unverified; **0 independently specification-reviewed passes**.
 - Event-position cells: **63 legal**, **41 spec-illegal**, not a normative support denominator.
 - Workflow Control-Flow Patterns: **43** inventoried; **9** registered; **0 independently verified WCP semantics**. WCP is not OMG conformance.
@@ -32,7 +32,7 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 | FLOW-11 | Multiple incoming/outgoing flows without gateways | 13.3.1 | process-execution | required | unknown | package-tested |
 | FLOW-12 | Unstructured cycles and process completion | 13.2 | process-execution | required | unknown | unverified |
 | FLOW-13 | Gateway default-flow and no-match failure | 13.4 | process-execution | required | unknown | package-tested |
-| FLOW-14 | Model validation: reachability/scope/refs | 13.4 | process-execution | required | partial | package-tested |
+| FLOW-14 | Model validation: reachability/scope/refs | 13.4 | process-execution | required | implemented | package-tested |
 | FLOW-15 | Uncontrolled flow: one activity arrival per token, multiple outgoing flow, mixed conditional/unconditional | 13.3.1 | process-execution | required | unknown | package-tested |
 | FLOW-16 | Process completion: no tokens and no active activities, including boundary/event subprocess/MI | 13.2 | process-execution | required | unknown | unverified |
 | ACT-01 | Generic task and manual task | 13.3 | process-execution | non-operational | implemented | package-tested |
@@ -127,11 +127,11 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 
 ## Known unsupported candidates
 
-- **FLOW-08** Parallel event-based gateway — `compiler/validation.go`
-- **FLOW-09** Instantiating event-based gateway — `compiler/eventgateway_instantiate_test.go`
-- **FLOW-10** Complex Gateway — `compiler/scope_compile.go`
-- **ACT-12** Ad-hoc Subprocess, sequential ordering — `compiler/adhoc_test.go`
-- **EVT-05** Process-root Conditional Start — `compiler/validation.go`
+- **FLOW-08** Parallel event-based gateway — Refused at deploy with rule `event-gateway.kind` on the gateway (`eventGatewayType="Parallel"`); a stored definition reloads as the exclusive choice it compiled to (ADR-0177). No parallel event-gateway semantics run. CON6 candidate.
+- **FLOW-09** Instantiating event-based gateway — Refused at deploy with rule `event-gateway.kind` on the gateway (`instantiate="true"`); no instantiating event gateway runs. CON6 candidate.
+- **FLOW-10** Complex Gateway — Refused at deploy by name as `<complexGateway>`, anchored on the gateway element (ADR-0547); never interpreted as another gateway kind. CON6 candidate.
+- **ACT-12** Ad-hoc Subprocess, sequential ordering — An ad-hoc subprocess with `ordering="Sequential"` is refused at compile (ADR-0138); only parallel ordering runs. CON6 candidate.
+- **EVT-05** Process-root Conditional Start — A process-level conditional start is refused with rule `start.conditional`; conditions run only inside an instance (intermediate catch, boundary, event subprocess, ADR-0137). CON6 candidate.
 
 A negative compile/test case proves a diagnostic only, not execution support.
 

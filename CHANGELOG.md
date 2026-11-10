@@ -29,6 +29,23 @@ _Changed_ / _Removed_ for each version.
   profile keeps it to the one provider. Tests pin the reviewed claims, hold every row to the
   manifest's rule and refuse one contract identity on two operations.
 
+### Changed
+- **The Problems panel points at the element behind a compile error.** A fault the compiler
+  meets while building a process — a duplicate id, an unknown error, message, signal or
+  escalation reference, a link throw without its catch, a condition that does not parse, a
+  dangling flow, a boundary on an unknown host, a loop without a bound, an element atlas does
+  not run — now names its element in the problem's `element` field, so the modeler can select
+  it. The rule stays `compile` and the message is unchanged (ADR-0547).
+- **A deploy refuses the sequence-flow shapes BPMN forbids.** A start event that is the
+  target of a sequence flow (`start.incoming-flow`), an end event that is the source of one
+  (`end.outgoing-flow`), and an exclusive or inclusive gateway whose `default` names a flow
+  that does not leave it (`gateway.default-not-outgoing`) are now errors at deploy and in the
+  modeler's Problems panel. The last one matters most: a default naming *another* gateway's
+  flow made that flow the other gateway's default, which then routed there although the
+  flow's condition was false. A definition already stored keeps loading and running exactly
+  as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
+  refuses only the next deploy of an affected model (ADR-0547).
+
 ## [0.25.0] — 2026-11-09
 
 **Every process, decision and form belongs to an application** (ADR-0544). Nothing new is
@@ -344,6 +361,19 @@ directory gains the document store. Four changes can break what worked against 0
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A decision model opens with its graph in view.** The decision editor left a model's graph
+  where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
+  to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
+  the canvas those two boxes leave free, centred and scaled down only as far as the window needs —
+  never enlarged past its own size.
+- **A decision's input data are drawn connected to it.** A DMN model whose requirements carry no
+  `id` (DMN allows that, and models written by hand, by an agent or by temis often omit it) was
+  drawn with its input data beside the decision and no arrow between them, because a diagram
+  edge points at its requirement by id. When Atlas draws such a model's diagram — on opening it
+  without one, or on Auto-layout — it now gives each unnamed requirement a stable id, so every
+  arrow is drawn. A model whose diagram already places every node is left as it is. The example
+  `pruefe-datensaetze.dmn` names its requirements, types its input data as `string` and gives
+  its verdict a structured type `tVerdict`.
 - **A round of a multi-instance names what it produced.** The replay's Output of one round —
   and the diagram's in/out card — now lists what the round wrote into its own scope, such as a
   script's result variable or a person's answer on the form, where it said "wrote nothing" for
