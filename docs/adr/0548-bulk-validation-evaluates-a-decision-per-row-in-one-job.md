@@ -1,4 +1,4 @@
-# ADR-DRAFT: Bulk validation evaluates a decision per row inside one job, not one token per row
+# ADR-0548: Bulk validation evaluates a decision per row inside one job, not one token per row
 
 - **Status:** Proposed
 - **Implementation:** Not started
