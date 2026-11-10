@@ -31,7 +31,18 @@ _Changed_ / _Removed_ for each version.
   without an account picks a service, chooses one of the free slots read from the workshop's
   calendar, gives their details and books; a slot taken meanwhile leads back to the choice with a
   fresh list. It ships as its own atlas hub bundle and runs against the calendar mock.
-
+- **Corrections can be written back into the checked file.** The CSV Worker Type gains
+  `operation="apply-corrections"`. It writes a corrected copy of an uploaded file: every
+  record a correction names by its `_row` is replaced or, with `_drop`, left out; every
+  other record, the header, the delimiter and the byte-order mark stay as they were; the
+  uploaded file is never changed. The corrections are a list (from a correction task per
+  finding) or a file (the check's new failures document, `failuresDocument`, after a
+  person corrected it). A `_row` the file does not have, a line named twice or a field
+  without a column fails the task. A task form's file field whose variable already holds
+  a document now offers it for download, and `readonly` takes no file. The example
+  *Mitarbeitende prüfen und korrigieren* goes from upload to corrected file: up to 20
+  findings as a task each with an immediate re-check, more as a file, or the rest
+  accepted with a reason, then a last check of the corrected copy (ADR-0548, Slice 2).
 - **The first technical capability contract is drafted, with its conformance suite.**
   `io.atlas.collaboration.channel.create@1.0.0` (profile `microsoft-teams`) says what creating a
   standard channel in a collaboration space takes, answers and refuses: an unknown space is

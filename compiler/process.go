@@ -689,6 +689,12 @@ type ConnectorTaskDetail struct {
 	CsvFormat    int32
 	CsvOperation int32
 	CsvWidths    []int32
+	// CsvCorrections and CsvDrop are the interned names of apply-corrections' input
+	// variables (the corrected records; the line numbers to drop, -1/"" for none), and
+	// CsvDocumentName the interned name of the file it writes (ADR-0548, S2).
+	CsvCorrections  int32
+	CsvDrop         int32
+	CsvDocumentName int32
 	// SharePoint worker fields (JobType == SharePointJobType or SharePointOpsJobType,
 	// ADR-0141, amended). Worker (above) names the server-registered SharePoint
 	// provider (its Graph base and OAuth credential live server-side). SharePointOp is

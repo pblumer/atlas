@@ -965,6 +965,11 @@ func runCSV(ctx context.Context, j Job) (map[string]any, error) {
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("csv: cannot read the resolved detail: %w", err)
 	}
+	// apply-corrections reads the source and any corrected file, and stores the
+	// corrected copy, through the job's lease (ADR-0548, S2).
+	if task.Correcting() {
+		return csvimport.ApplyCorrections(ctx, task, sdkDocuments{})
+	}
 	// The source is an uploaded document the engine did not read: read it here, under
 	// this job's lease (ADR-0543).
 	if task.SourceDocument != "" && task.Source == "" {

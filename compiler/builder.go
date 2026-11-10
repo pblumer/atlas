@@ -2141,6 +2141,11 @@ type CsvConfig struct {
 	Format    string
 	Operation string
 	Widths    []int32
+	// Corrections and Drop name apply-corrections' input variables, DocumentName the
+	// file it writes (empty → the source's name with .corrected.csv).
+	Corrections  string
+	Drop         string
+	DocumentName string
 }
 
 // AddCsvConnectorTask adds a CSV-to-JSON task and returns its element
@@ -2158,24 +2163,27 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 		cols = append(cols, b.intern(c))
 	}
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:      b.intern(CsvImportJobType),
-		Connector:    -1, // CSV carries its layout in the model, not a registry name
-		Subject:      -1,
-		EventType:    -1,
-		ClioQuery:    -1,
-		ReduceSpec:   -1,
-		Method:       -1,
-		ResultVar:    -1, // CSV uses its own CsvResult field, not the REST/clio one
-		Auth:         -1,
-		CsvSource:    b.intern(cfg.Source),
-		CsvResult:    b.intern(cfg.Result),
-		CsvFormat:    b.intern(cfg.Format),
-		CsvOperation: b.intern(cfg.Operation),
-		CsvWidths:    cfg.Widths,
-		CsvDelimiter: b.intern(cfg.Delimiter),
-		CsvHasHeader: cfg.HasHeader,
-		CsvColumns:   cols,
-		Retries:      cfg.Retries,
+		JobType:         b.intern(CsvImportJobType),
+		Connector:       -1, // CSV carries its layout in the model, not a registry name
+		Subject:         -1,
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1,
+		ResultVar:       -1, // CSV uses its own CsvResult field, not the REST/clio one
+		Auth:            -1,
+		CsvSource:       b.intern(cfg.Source),
+		CsvResult:       b.intern(cfg.Result),
+		CsvFormat:       b.intern(cfg.Format),
+		CsvOperation:    b.intern(cfg.Operation),
+		CsvWidths:       cfg.Widths,
+		CsvDelimiter:    b.intern(cfg.Delimiter),
+		CsvHasHeader:    cfg.HasHeader,
+		CsvColumns:      cols,
+		Retries:         cfg.Retries,
+		CsvCorrections:  b.intern(cfg.Corrections),
+		CsvDrop:         b.intern(cfg.Drop),
+		CsvDocumentName: b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

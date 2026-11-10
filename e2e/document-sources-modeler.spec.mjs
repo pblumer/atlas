@@ -75,3 +75,32 @@ test("a SQL query writes its rows as a document, and another operation drops the
   expect(task).not.toContain("documentName=");
   expect(page.__errors).toEqual([]);
 });
+
+test("a CSV task applies corrections: its fields appear, and the read-only layout goes", async ({ page }) => {
+  await page.evaluate(() => window.__selectApply());
+  await openGroup(page);
+  await page.locator("#f-st-operation").selectOption("apply-corrections");
+  await openGroup(page);
+  await expect(page.locator("#f-st-format")).toHaveCount(0);
+  await expect(page.locator("#f-st-hasHeader")).toHaveCount(0);
+  await expect(page.locator("#f-st-columns")).toHaveCount(0);
+  await page.locator("#f-st-corrections").fill("korrekturen");
+  await page.locator("#f-st-corrections").blur();
+  await page.locator("#f-st-drop").fill("verworfen");
+  await page.locator("#f-st-drop").blur();
+  await page.locator("#f-st-documentName").fill("korrigiert.csv");
+  await page.locator("#f-st-documentName").blur();
+
+  let task = taskXml(await page.evaluate(() => window.__xml()), "Activity_apply");
+  expect(task).toContain('operation="apply-corrections"');
+  expect(task).toContain('corrections="korrekturen"');
+  expect(task).toContain('drop="verworfen"');
+  expect(task).toContain('documentName="korrigiert.csv"');
+
+  await openGroup(page);
+  await page.locator("#f-st-operation").selectOption("");
+  task = taskXml(await page.evaluate(() => window.__xml()), "Activity_apply");
+  expect(task).not.toContain("corrections=");
+  expect(task).not.toContain("documentName=");
+  expect(page.__errors).toEqual([]);
+});

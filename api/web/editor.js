@@ -5034,6 +5034,7 @@ const SERVICE_TASK_KINDS = [
       { group: "File" },
       {
         key: "format", label: "Format", type: "select", reRender: true,
+        showIf: (v) => v.operation !== "apply-corrections",
         options: [
           { v: "", l: "Delimited (CSV)" },
           { v: "fixed-width", l: "Fixed-width" },
@@ -5043,35 +5044,60 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "operation", label: "Direction", type: "select", reRender: true,
-        options: [{ v: "", l: "Read — file to rows" }, { v: "write", l: "Write — rows to file" }],
+        options: [
+          { v: "", l: "Read — file to rows" },
+          { v: "write", l: "Write — rows to file" },
+          // ADR-0548, S2: the corrected copy of an uploaded file.
+          { v: "apply-corrections", l: "Apply corrections — corrected copy of an uploaded file" },
+        ],
       },
       {
-        key: "source", label: "Source variable", placeholder: "csvText",
-        hint: "Reading: the variable holding the raw file text. Writing: the variable holding the rows, as a JSON array of objects.",
+        key: "source", label: "Source variable", placeholder: (v) => (v.operation === "apply-corrections" ? "datei" : "csvText"),
+        hint: (v) => (v.operation === "apply-corrections"
+          ? "The variable holding the uploaded file to correct — a document. It is never changed: the corrected copy is a new document, so the two can be compared."
+          : "Reading: the variable holding the raw file text. Writing: the variable holding the rows, as a JSON array of objects."),
+      },
+      {
+        key: "corrections", label: "Corrections variable", placeholder: "korrekturen",
+        showIf: (v) => v.operation === "apply-corrections",
+        hint: "The corrected records. Either a list — the output collection of a correction task per failure, each record carrying the _row it replaces — or a corrected file, the failures document of the check after a person changed it. A record replaces the fields it names on the line its _row names and keeps the others; _drop marks it to be dropped; other fields starting with _ are the check's own and are ignored. A line the file does not have, a line named twice or a field the file has no column for fails the task.",
+      },
+      {
+        key: "drop", label: "Lines to drop", placeholder: "verworfen",
+        showIf: (v) => v.operation === "apply-corrections",
+        hint: "Optional. A variable holding a list of _row numbers: records a person rejected rather than corrected. They are left out of the corrected file.",
+      },
+      {
+        key: "documentName", label: "File name", placeholder: "datei.corrected.csv",
+        showIf: (v) => v.operation === "apply-corrections",
+        hint: "The name the corrected file is stored under, without a path. Empty uses the source's name with .corrected.csv. The file keeps the source's header, delimiter and byte-order mark.",
       },
       { group: "Layout" },
       {
-        key: "delimiter", label: "Delimiter", type: "select", showIf: (v) => !v.format,
+        key: "delimiter", label: "Delimiter", type: "select", showIf: (v) => !v.format || v.operation === "apply-corrections",
         options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }],
       },
       {
-        key: "hasHeader", label: "Header row", type: "select", showIf: (v) => v.format !== "avp",
+        key: "hasHeader", label: "Header row", type: "select", showIf: (v) => v.format !== "avp" && v.operation !== "apply-corrections",
         options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }],
       },
       {
         key: "columns", label: "Columns", placeholder: "email, group, license",
         hint: "Comma-separated field names. For a delimited file leave empty to derive them from the header row (required when there is none); an attribute-value file names its own fields, so a layout only narrows what is picked out.",
-        showIf: (v) => v.format !== "fixed-width",
+        showIf: (v) => v.format !== "fixed-width" && v.operation !== "apply-corrections",
       },
       {
         key: "columns", label: "Columns and widths", placeholder: "personalnr:8, name:30, abteilung:10",
         hint: "Comma-separated name:width entries. A fixed-width field is found by position, so every column needs its character count — and a value wider than its column is cut on write, because the format has no way to hold it.",
-        showIf: (v) => v.format === "fixed-width",
+        showIf: (v) => v.format === "fixed-width" && v.operation !== "apply-corrections",
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "write" ? "string" : "array"), placeholder: "rows",
-        hint: "Reading: the parsed rows land here as a JSON array. Writing: the rendered file lands here as text. Either way rowCount is also set.",
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "write" ? "string" : v.operation === "apply-corrections" ? "object" : "array"),
+        placeholder: (v) => (v.operation === "apply-corrections" ? "korrigiert" : "rows"),
+        hint: (v) => (v.operation === "apply-corrections"
+          ? "Receives {document, source, total, replaced, dropped, records}: the corrected file, the file it was made from, and how many records it held, were replaced and were dropped. Check the corrected file once more with a business rule task over it (Source variable korrigiert.document). Required."
+          : "Reading: the parsed rows land here as a JSON array. Writing: the rendered file lands here as text. Either way rowCount is also set."),
       },
     ],
   },

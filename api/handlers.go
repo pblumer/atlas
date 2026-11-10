@@ -7223,6 +7223,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"source": j.Source, "sourceDocument": j.SourceDocument, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
+			// apply-corrections (ADR-0548, S2): the corrected records or the file they are
+			// in, the lines to drop, the file's name and this server's document budget.
+			"corrections": j.Corrections, "correctionsDocument": j.CorrectionsDocument,
+			"drop": j.Drop, "documentName": j.DocumentName,
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.LdifJobTypeIndex:
 		// A pure transform: what travels is the file text (or the entries) and the

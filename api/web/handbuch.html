@@ -4017,6 +4017,31 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Tabelle eines SQL Servers (<a href="#bsp-mitarbeitende-pruefen">Mitarbeitende prüfen</a>), ein Active
               Directory (<a href="#bsp-ad-benutzer-pruefen">AD-Benutzer prüfen</a>) und ein LDAP-Verzeichnis
               (<a href="#bsp-ldap-personen-pruefen">LDAP-Personen prüfen</a>).</p>
+            <p data-l="de"><b>Korrigieren bis zur Datei.</b> Neben dem Ergebnisdokument legt die Prüfung eine
+              <b>Befunddatei</b> ab (<code>failuresDocument</code>): nur die fehlerhaften Datensätze, mit
+              <code>_row</code>, den verletzten Regeln und einer leeren Spalte <code>_drop</code>. Danach entscheidet
+              das Modell nach Menge: Wenige Befunde werden je ein Korrektur-Task über <code>failures</code>, mit
+              sofortiger Nachprüfung; viele werden als Datei korrigiert – ein User-Task bietet die Befunddatei zum
+              Herunterladen an (ein Dateifeld, dessen Variable schon ein Dokument hält, zeigt einen Download-Link) und
+              nimmt die korrigierte Datei wieder an. Beide Wege enden im CSV-Worker mit
+              <code>operation="apply-corrections"</code>: Er schreibt eine korrigierte Kopie der Datei, ersetzt jeden
+              Datensatz, den eine Korrektur über ihre <code>_row</code> nennt, verwirft die mit <code>_drop</code>
+              markierten und lässt alle anderen unverändert. Die hochgeladene Datei bleibt, wie sie war. Eine
+              <code>_row</code>, die die Datei nicht hat, oder ein Feld ohne Spalte lässt den Task scheitern, statt
+              die Datei unbemerkt umzubauen. Die Kopie wird noch einmal geprüft. Das ganze Muster zeigt
+              <a href="#bsp-mitarbeitende-pruefen">Mitarbeitende prüfen und korrigieren</a>.</p>
+            <p data-l="en"><b>Correcting all the way to the file.</b> Beside the result document the check stores a
+              <b>failures document</b> (<code>failuresDocument</code>): only the records that failed, with
+              <code>_row</code>, the rules they break and an empty <code>_drop</code> column. The model then decides by
+              volume: a few findings become one correction task each over <code>failures</code>, re-checked at once;
+              many are corrected as a file – a user task offers the failures document for download (a file field whose
+              variable already holds a document shows a download link) and takes the corrected file back. Both paths
+              end in the CSV worker with <code>operation="apply-corrections"</code>: it writes a corrected copy of the
+              file, replaces each record a correction names by its <code>_row</code>, drops those marked in
+              <code>_drop</code> and leaves every other record as it was. The uploaded file stays as it was. A
+              <code>_row</code> the file does not have, or a field with no column, fails the task rather than
+              reshaping the file unnoticed. The copy is checked once more. The whole pattern is in
+              <a href="#bsp-mitarbeitende-pruefen">Check and correct employees</a>.</p>
             <p data-l="en"><b>For large files</b> – thousands to hundreds of thousands of records – one row per
               iteration does not carry: every iteration is engine work, and the collected output gets dearer with
               every row. For those, a <b>business rule task over a file</b> (panel: <i>Over a file → Once per record
@@ -5008,7 +5033,7 @@ carla@example.org,admins,GOLD</code></pre></li>
 
       <div class="bsp" id="bsp-mitarbeitende-pruefen">
         <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
-          <span data-l="de">Mitarbeitende prüfen: Datei oder SQL Server</span><span data-l="en">Check employees: a file or SQL Server</span></h4>
+          <span data-l="de">Mitarbeitende prüfen und korrigieren: Datei oder SQL Server</span><span data-l="en">Check and correct employees: a file or SQL Server</span></h4>
         <p class="bsp-tags">
           <span class="tag" data-l="de">Upload</span><span class="tag" data-l="en">upload</span>
           <span class="tag err">MS&nbsp;SQL</span>
@@ -5024,11 +5049,15 @@ carla@example.org,admins,GOLD</code></pre></li>
             <p data-l="de">„Stimmt der Personalstamm?“ – jede Adresse in der eigenen Domain, jede Abteilung bekannt, jedes
               Pensum zwischen 10 und 100, kein Austritt vor dem Eintritt. Dieselben Regeln, zwei Quellen: ein Export,
               den die Qualitätsverantwortliche als Datei hochlädt, oder die Tabelle im SQL Server, aus der der Export
-              stammt. <b>Eine</b> DMN-Entscheidung prüft beide, und jeder Befund nennt die Regel, die er verletzt.</p>
+              stammt. <b>Eine</b> DMN-Entscheidung prüft beide, und jeder Befund nennt die Regel, die er verletzt.
+              Der dritte Prozess geht bis zum Ende: Er lässt die Befunde korrigieren – wenige je in einem Task,
+              viele in einer Datei – und liefert die korrigierte Datei, die zurück ins Personalsystem geht.</p>
             <p data-l="en">"Are the HR master records right?" – every address in the organisation's domain, every
               department known, every work percentage between 10 and 100, no exit before the entry. The same rules,
               two sources: an export the quality manager uploads as a file, or the SQL Server table the export comes
-              from. <b>One</b> DMN decision checks both, and each finding names the rule it breaks.</p>
+              from. <b>One</b> DMN decision checks both, and each finding names the rule it breaks. The third process
+              goes all the way: it has the findings corrected – a few in a task each, many in a file – and delivers the
+              corrected file that goes back into the HR system.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
@@ -5040,7 +5069,11 @@ carla@example.org,admins,GOLD</code></pre></li>
               Zelle. In beiden Fällen prüft ein Business-Rule-Task über die Datei mit
               <code>MitarbeitendeGueltig</code> – <code>source="mitarbeitende"</code> bzw.
               <code>source="mitarbeitende.document"</code>. Die Anweisung bleibt wörtlich; ein Wert aus dem Prozess
-              erreicht sie nur als Parameter.</p>
+              erreicht sie nur als Parameter.
+              <code>mitarbeitende-korrigieren.bpmn</code> verzweigt nach der Zahl der Befunde: bis 20 wird jeder ein
+              Korrektur-Task im Multi-Instance-Subprozess, mit derselben Entscheidung nachgeprüft; mehr gehen als
+              Befunddatei hinaus und kommen als korrigierter Upload zurück. In beiden Fällen schreibt
+              <code>apply-corrections</code> die korrigierte Kopie, die noch einmal geprüft wird.</p>
             <p data-l="en"><code>mitarbeitende-datei-pruefen.bpmn</code> parks on a user task whose form uploads the
               file as a <b>document</b>; <code>mitarbeitende</code> holds the reference.
               <code>mitarbeitende-sql-pruefen.bpmn</code> reads <code>dbo.Mitarbeitende</code> instead, with an
@@ -5048,7 +5081,11 @@ carla@example.org,admins,GOLD</code></pre></li>
               one CSV row per row of the table, the statement's columns in their order, NULL as an empty cell. Either
               way a business rule task over the file checks with <code>MitarbeitendeGueltig</code> –
               <code>source="mitarbeitende"</code> or <code>source="mitarbeitende.document"</code>. The statement stays
-              literal; a value from the process reaches it only as a parameter.</p>
+              literal; a value from the process reaches it only as a parameter.
+              <code>mitarbeitende-korrigieren.bpmn</code> branches on the number of findings: up to 20 become a
+              multi-instance correction task each, re-checked with the same decision; more go out as the failures
+              document and come back as a corrected upload. Either way <code>apply-corrections</code> writes the
+              corrected copy, which is checked once more.</p>
           </div>
         </div>
         <div class="rz-actions"></div>

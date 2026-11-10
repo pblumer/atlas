@@ -269,6 +269,12 @@
       "minAtlas": "0.25.0-0"
     },
     {
+      "bundle": "datenqualitaet",
+      "version": "1.0.3",
+      "digest": "sha256:66b130e56c61a52ba2c77b82d3d33c21ba3fb4cd668f8a348814ac874f5dd893",
+      "minAtlas": "0.25.0-0"
+    },
+    {
       "bundle": "terminbuchung",
       "version": "1.0.0",
       "digest": "sha256:303dcafb91d4d5a9441f3d302990fc20c06ac50af585ed8f30d59ae7797cf54b",
