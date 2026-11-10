@@ -125,7 +125,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "First increment: generated provisional report conformance/CONFORMANCE_REPORT.md (classes as separate denominators, evidence strength incl. mid-flight restart and independent reference rows, unsupported/partial/unverified/unknown lists, four ADR-backed deviations, suite assets) and generated count markers in README, ROADMAP, conformance, TCK and differential docs; scripts/conformance_report.py --check and its tests run in CI. No percentage is printed while the denominator is unapproved. Acceptance needs CON1-CON4 acceptance and the CON0 denominator; the optional UI gallery is not yet aligned.",
+      "note": "First increment: generated provisional report conformance/CONFORMANCE_REPORT.md (classes as separate denominators, evidence strength incl. mid-flight restart and independent reference rows, unsupported/partial/unverified/unknown lists, four ADR-backed deviations, suite assets) and generated count markers in README, ROADMAP, conformance, TCK and differential docs; scripts/conformance_report.py --check and its tests run in CI. No percentage is printed while the denominator is unapproved. Gallery aligned: the Differential badge follows the real subset again (linear-independent had been missing since PR #1622), the mirror is checked by conformance_report.py --check, and the page states that it shows registered scenarios only, lists the refused constructs from the register and links the report. Acceptance needs CON1-CON4 acceptance and the CON0 denominator.",
       "evidence": [
         "../../../conformance/CONFORMANCE_REPORT.md",
         "../../../scripts/conformance_report.py",

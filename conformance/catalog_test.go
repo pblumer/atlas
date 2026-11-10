@@ -191,9 +191,12 @@ func catalogPage(sc Scenario, res RunResult, desc string) string {
 }
 
 // differentialSubset lists the scenarios also checked against the independent
-// reference engine (mirrors conformance/differential/differential_test.go).
+// reference engine. It mirrors the subset in conformance/differential/differential_test.go,
+// which this package cannot import; scripts/conformance_report.py --check fails when the
+// two drift apart (CON5).
 var differentialSubset = map[string]bool{
 	"sequence":             true,
+	"linear-independent":   true,
 	"exclusive-gateway":    true,
 	"parallel-independent": true,
 	"inclusive-gateway":    true,

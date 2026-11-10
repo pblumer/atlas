@@ -39,6 +39,9 @@ independent oracles that must all agree, so a wrong result cannot slip through:
   honor the engine's six state invariants (see `docs/architecture/invariants.md`).
 - **Metamorphic equivalence** — this scenario is in the `independent-effects` group; it must
   produce the same observable effect as `parallel-independent`, even though the models differ.
+- **Differential oracle** — the same case is run against an independent BPMN
+  engine (Node's `bpmn-engine`) and both must agree on the outcome
+  (opt-in: `go test -tags differential ./conformance/differential`).
 
 ## Run it yourself
 

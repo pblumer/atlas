@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import tempfile
 from pathlib import Path
 import sys
 import unittest
@@ -18,6 +19,11 @@ class ConformanceReportTests(unittest.TestCase):
         cls.data = json.loads(registry.REGISTRY.read_text(encoding="utf-8"))
         cls.manifest = json.loads(report.MANIFEST.read_text(encoding="utf-8"))
         cls.facts = report.suite_facts()
+        cls.tmp = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
 
     def test_report_has_not_drifted(self):
         self.assertEqual(report.REPORT.read_text(encoding="utf-8"),
@@ -68,6 +74,19 @@ class ConformanceReportTests(unittest.TestCase):
         altered["deviations"][1]["id"] = altered["deviations"][0]["id"]
         with self.assertRaisesRegex(report.ReportError, "duplicate"):
             report.deviation_check(altered)
+
+    def test_catalog_mirror_of_the_differential_subset_is_checked(self):
+        original = report.CATALOG_MIRROR
+        stale = Path(self.tmp.name) / "catalog_test.go"
+        text = original.read_text(encoding="utf-8").replace('\t"linear-independent":   true,\n', "", 1)
+        self.assertNotEqual(text, original.read_text(encoding="utf-8"), "fixture no longer finds the entry")
+        stale.write_text(text, encoding="utf-8")
+        report.CATALOG_MIRROR = stale
+        try:
+            with self.assertRaisesRegex(report.ReportError, "differentialSubset differs"):
+                report.suite_facts()
+        finally:
+            report.CATALOG_MIRROR = original
 
     def test_unsupported_rows_are_listed(self):
         text = report.render(self.data, self.manifest, self.facts)

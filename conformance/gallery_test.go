@@ -2,6 +2,9 @@ package conformance
 
 import (
 	"encoding/json"
+	"fmt"
+	"html"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -100,11 +103,53 @@ func TestGalleryUpToDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal models: %v", err)
 	}
-	html := galleryTemplate
-	html = strings.Replace(html, "__SCENARIOS__", string(scnJSON), 1)
-	html = strings.Replace(html, "__MODELS__", string(modelJSON), 1)
+	page := galleryTemplate
+	page = strings.Replace(page, "__SCENARIOS__", string(scnJSON), 1)
+	page = strings.Replace(page, "__MODELS__", string(modelJSON), 1)
+	page = strings.Replace(page, "__SCOPE__", galleryScope(t, len(Scenarios)), 1)
 
-	checkTCKFile(t, filepath.Join("..", "api", "web", "conformance-gallery.html"), []byte(html))
+	checkTCKFile(t, filepath.Join("..", "api", "web", "conformance-gallery.html"), []byte(page))
+}
+
+// conformanceReportURL is where the generated conformance report (CON5) is read. The
+// gallery is served by an atlas instance, which does not serve the repository's
+// Markdown, so it links to the published source.
+const conformanceReportURL = "https://github.com/pblumer/atlas/blob/main/conformance/CONFORMANCE_REPORT.md"
+
+// galleryScope says what the gallery is and is not: the registered scenarios, not the
+// conformance state. The unsupported candidates are read from the register, so the
+// page cannot list a refusal the register no longer has, or miss a new one.
+func galleryScope(t *testing.T, scenarios int) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("registry", "registry.json"))
+	if err != nil {
+		t.Fatalf("read register: %v", err)
+	}
+	var reg struct {
+		DenominatorApproved bool `json:"denominatorApproved"`
+		Requirements        []struct {
+			ID             string `json:"id"`
+			Title          string `json:"title"`
+			Implementation string `json:"implementation"`
+		} `json:"requirements"`
+	}
+	if err := json.Unmarshal(raw, &reg); err != nil {
+		t.Fatalf("decode register: %v", err)
+	}
+	var refused []string
+	for _, r := range reg.Requirements {
+		if r.Implementation == "unsupported" {
+			refused = append(refused, html.EscapeString(r.Title))
+		}
+	}
+	approved := "nicht abgenommen"
+	if reg.DenominatorApproved {
+		approved = "abgenommen"
+	}
+	return fmt.Sprintf("Diese Galerie zeigt die %d registrierten Szenarien, nicht den BPMN-Konformitätsstand von atlas "+
+		"und keine OMG-Zertifizierung. Den Stand je Kandidat, mit Einschränkungen, Neustart- und Referenz-Evidenz, "+
+		"zeigt der <a href=\"%s\">Konformitätsbericht</a> (Nenner %s). Beim Deploy abgelehnt, weil atlas sie nicht "+
+		"ausführt: %s.", scenarios, conformanceReportURL, approved, strings.Join(refused, "; "))
 }
 
 // titleOf prefers the process name over the scenario key for display.
@@ -207,6 +252,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-appl
 header{padding:24px clamp(16px,4vw,48px);border-bottom:1px solid var(--border);background:var(--card)}
 header h1{margin:0 0 6px;font-size:22px}
 header p{margin:0;color:var(--muted);max-width:70ch}
+header p.scope{margin-top:10px;font-size:13.5px}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
 .bar input{flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
 button{cursor:pointer;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font:inherit;background:var(--card);color:var(--fg)}
@@ -245,6 +291,7 @@ a{color:var(--accent)}
   <p>Jedes Szenario der Conformance-Suite: Diagramm, Beschreibung, erwartetes Ergebnis und ein Knopf, der es
      gegen diese atlas-Instanz deployt und ausführt. Die Aufrufe gehen an die REST-API derselben Origin —
      öffne diese Seite von deiner Instanz aus (<code>/conformance-gallery.html</code>), dann ist kein CORS nötig.</p>
+  <p class="scope">__SCOPE__</p>
   <div class="bar">
     <input id="base" placeholder="API-Basis-URL (leer = gleiche Origin, z. B. https://deine-instanz)">
     <button id="deployAllBtn" class="primary">⤓ Alle in ein neues Projekt deployen</button>
