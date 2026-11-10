@@ -88,17 +88,17 @@
 
   <bpmndi:BPMNDiagram id="Diagram_ad_benutzer_pruefen">
     <bpmndi:BPMNPlane id="Plane_ad_benutzer_pruefen" bpmnElement="ad-benutzer-pruefen">
-      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="152" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="152" y="122" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="125" y="165" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="konten_lesen_di" bpmnElement="konten_lesen"><dc:Bounds x="240" y="100" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="konten_pruefen_di" bpmnElement="konten_pruefen"><dc:Bounds x="400" y="100" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="befunde_di" bpmnElement="befunde" isMarkerVisible="true"><dc:Bounds x="565" y="115" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ende_befunde_di" bpmnElement="ende_befunde"><dc:Bounds x="682" y="122" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ende_ok_di" bpmnElement="ende_ok"><dc:Bounds x="682" y="232" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="befunde_di" bpmnElement="befunde" isMarkerVisible="true"><dc:Bounds x="565" y="115" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="550" y="92" width="80" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_befunde_di" bpmnElement="ende_befunde"><dc:Bounds x="682" y="122" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="655" y="165" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_ok_di" bpmnElement="ende_ok"><dc:Bounds x="682" y="232" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="655" y="275" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start"><di:waypoint x="188" y="140"/><di:waypoint x="240" y="140"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_lesen_di" bpmnElement="f_lesen"><di:waypoint x="340" y="140"/><di:waypoint x="400" y="140"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_pruefen_di" bpmnElement="f_pruefen"><di:waypoint x="500" y="140"/><di:waypoint x="565" y="140"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_befunde_di" bpmnElement="f_befunde"><di:waypoint x="615" y="140"/><di:waypoint x="682" y="140"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_keine_di" bpmnElement="f_keine"><di:waypoint x="590" y="165"/><di:waypoint x="590" y="250"/><di:waypoint x="682" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_befunde_di" bpmnElement="f_befunde"><di:waypoint x="615" y="140"/><di:waypoint x="682" y="140"/><bpmndi:BPMNLabel><dc:Bounds x="638" y="122" width="16" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_keine_di" bpmnElement="f_keine"><di:waypoint x="590" y="165"/><di:waypoint x="590" y="250"/><di:waypoint x="682" y="250"/><bpmndi:BPMNLabel><dc:Bounds x="596" y="201" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>
