@@ -8,8 +8,15 @@ package sharepointserver
 //
 // Steps a reader would otherwise have to rediscover:
 //   - New-SPSite makes no default groups; a site without them has no Members group to
-//     add anyone to, so create-site asks for them itself. A site that exists but has
-//     none is one this Worker created and could not finish, and is resumed.
+//     add anyone to, so create-site makes them itself: Owners with Full Control, Members
+//     with Edit, Visitors with Read, named from SharePoint's resources in the site's
+//     language, and associated with the site. It does not call
+//     CreateDefaultAssociatedGroups, which also sets permissions on the site's system
+//     libraries and needs a site collection administrator (E_ACCESSDENIED on
+//     2026-11-10). The Worker's own account owns the three groups: in SharePoint a
+//     group's members are changed by its owner, and owning a group gives no right to
+//     the site's content. A site that exists but has no Owners group is one this Worker
+//     created and could not finish, and is resumed; a group made before is reused.
 //   - Accounts are checked through the directory (NTAccount.Translate) before a change,
 //     because the cmdlets' own message is in the farm's language and a process needs a
 //     code it can catch.
@@ -18,6 +25,10 @@ package sharepointserver
 //   - Removing an account from a group it is not in, deleting a site already in the
 //     recycle bin and restoring one already back all succeed: a job is delivered at
 //     least once.
+//   - Shell admin reaches the content databases, not the sites: EnsureUser and the
+//     default groups need rights on the site, which the account holds through a web
+//     application policy with a narrow role (see the M365 test environment's
+//     sharepoint-setup.ps1, Grant-RunbookRights).
 const bootstrap = `$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $WarningPreference = 'SilentlyContinue'
@@ -48,9 +59,10 @@ function Test-AtlasAccount($name) {
     }
 }
 
-function Get-AtlasLogins($users) {
+function Get-AtlasLogins($users, $what) {
     $out = @()
-    foreach ($u in $users) { $out += [string]$u.LoginName }
+    try { foreach ($u in $users) { $out += [string]$u.LoginName } }
+    catch { throw ('reading ' + $what + ': ' + $_.Exception.Message) }
     return ,$out
 }
 
@@ -62,9 +74,9 @@ function ConvertTo-AtlasSite($s) {
             if ([string]$k -like 'atlas.*') { $properties[[string]$k] = [string]$web.AllProperties[$k] }
         }
         $owners = @(); $members = @(); $visitors = @()
-        if ($null -ne $web.AssociatedOwnerGroup) { $owners = Get-AtlasLogins $web.AssociatedOwnerGroup.Users }
-        if ($null -ne $web.AssociatedMemberGroup) { $members = Get-AtlasLogins $web.AssociatedMemberGroup.Users }
-        if ($null -ne $web.AssociatedVisitorGroup) { $visitors = Get-AtlasLogins $web.AssociatedVisitorGroup.Users }
+        if ($null -ne $web.AssociatedOwnerGroup) { $owners = Get-AtlasLogins $web.AssociatedOwnerGroup.Users 'the owners group' }
+        if ($null -ne $web.AssociatedMemberGroup) { $members = Get-AtlasLogins $web.AssociatedMemberGroup.Users 'the members group' }
+        if ($null -ne $web.AssociatedVisitorGroup) { $visitors = Get-AtlasLogins $web.AssociatedVisitorGroup.Users 'the visitors group' }
         $secondary = $null
         if ($null -ne $s.SecondaryContact) { $secondary = [string]$s.SecondaryContact.LoginName }
         return [ordered]@{
@@ -81,7 +93,7 @@ function ConvertTo-AtlasSite($s) {
             WarningSize = [long]$s.Quota.StorageWarningLevel
             QuotaTemplateId = [long]$s.Quota.QuotaID
             StorageUsed = [long]$s.Usage.Storage
-            SiteCollectionAdmins = Get-AtlasLogins $web.SiteAdministrators
+            SiteCollectionAdmins = Get-AtlasLogins $web.SiteAdministrators 'the site collection administrators'
             OwnerGroup = $owners
             MemberGroup = $members
             VisitorGroup = $visitors
@@ -95,6 +107,54 @@ function Read-AtlasSite($url) {
     try { return ,@(ConvertTo-AtlasSite $s) } finally { $s.Dispose() }
 }
 
+function Get-AtlasGroupName($web, $key, $fallback) {
+    $n = $null
+    try { $n = [Microsoft.SharePoint.Utilities.SPUtility]::GetLocalizedString('$Resources:core,' + $key + ';', 'core', [uint32]$web.Language) } catch { }
+    if (-not $n -or $n.StartsWith('$Resources') -or -not $n.Contains('{0}')) { $n = $fallback }
+    return ($n -f $web.Title)
+}
+
+function New-AtlasDefaultGroups($web, $ownerLogin, $secondLogin) {
+    $owner = $web.EnsureUser($ownerLogin)
+    $me = $web.EnsureUser([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
+    $second = $null
+    if ($secondLogin) { $second = $web.EnsureUser($secondLogin) }
+    $sets = @(
+        @{ Key = 'DefaultOwnerGroupName'; Fallback = '{0} Owners'; Role = 'Administrator' },
+        @{ Key = 'DefaultMemberGroupName'; Fallback = '{0} Members'; Role = 'Editor' },
+        @{ Key = 'DefaultVisitorGroupName'; Fallback = '{0} Visitors'; Role = 'Reader' })
+    $made = @()
+    foreach ($x in $sets) {
+        $name = Get-AtlasGroupName $web $x.Key $x.Fallback
+        $g = $null
+        try { $g = $web.SiteGroups.GetByName($name) } catch { }
+        if ($null -eq $g) {
+            [void]$web.SiteGroups.Add($name, $me, $null, '')
+            $g = $web.SiteGroups.GetByName($name)
+            # As the default groups of a team site have it: everyone may see who is in them.
+            $g.OnlyAllowMembersViewMembership = $false
+            $g.Update()
+        }
+        elseif ($g.Owner.LoginName -ne $me.LoginName) {
+            Stop-Atlas 'SHAREPOINT_SERVER_GROUP_NOT_OWNED' "The group $name exists and is not owned by this Worker's account; it cannot change its members."
+        }
+        $assigned = $null
+        try { $assigned = $web.RoleAssignments.GetAssignmentByPrincipal($g) } catch { }
+        if ($null -eq $assigned) {
+            $ra = New-Object Microsoft.SharePoint.SPRoleAssignment($g)
+            [void]$ra.RoleDefinitionBindings.Add($web.RoleDefinitions.GetByType([Microsoft.SharePoint.SPRoleType]$x.Role))
+            [void]$web.RoleAssignments.Add($ra)
+        }
+        $made += $g
+    }
+    [void]$made[0].AddUser($owner)
+    if ($null -ne $second) { [void]$made[0].AddUser($second) }
+    $web.AssociatedOwnerGroup = $made[0]
+    $web.AssociatedMemberGroup = $made[1]
+    $web.AssociatedVisitorGroup = $made[2]
+    $web.Update()
+}
+
 function Invoke-AtlasCreate($req, $a) {
     Test-AtlasAccount $a.OwnerAlias
     if ($a.SecondaryOwnerAlias) { Test-AtlasAccount $a.SecondaryOwnerAlias }
@@ -102,8 +162,18 @@ function Invoke-AtlasCreate($req, $a) {
     if ($null -ne $s) {
         $web = $s.RootWeb
         $unfinished = ($null -eq $web.AssociatedOwnerGroup)
+        # A second delivery of a create that finished: the site carries this position, so
+        # it is the answer, not a refusal. The first delivery's answer may have been lost.
+        $mine = $false
+        $position = $null
+        if ($null -ne $a.Properties) { $position = $a.Properties.'atlas.position' }
+        if ($position) { $mine = ([string]$web.AllProperties['atlas.position'] -eq [string]$position) }
         $web.Dispose()
-        if (-not $unfinished) { $s.Dispose(); Stop-Atlas 'SHAREPOINT_SERVER_SITE_EXISTS' "A site already lives at $($req.siteUrl)." }
+        if (-not $unfinished) {
+            $s.Dispose()
+            if ($mine) { return Read-AtlasSite $req.siteUrl }
+            Stop-Atlas 'SHAREPOINT_SERVER_SITE_EXISTS' "A site already lives at $($req.siteUrl)."
+        }
     } else {
         $p = @{ Url = $req.siteUrl; Name = [string]$a.Name; OwnerAlias = [string]$a.OwnerAlias; Template = [string]$a.Template; ErrorAction = 'Stop' }
         foreach ($k in 'SecondaryOwnerAlias', 'OwnerEmail', 'Description', 'ContentDatabase', 'QuotaTemplate') {
@@ -116,9 +186,9 @@ function Invoke-AtlasCreate($req, $a) {
         $web = $s.RootWeb
         try {
             if ($null -eq $web.AssociatedOwnerGroup) {
-                $second = $null
-                if ($a.SecondaryOwnerAlias) { $second = [string]$a.SecondaryOwnerAlias }
-                $web.CreateDefaultAssociatedGroups([string]$a.OwnerAlias, $second, '')
+                # New-SPSite takes DOMAIN\name; in a claims web application the site knows a user
+                # by i:0#.w|domain\name, and EnsureUser gives that for either form.
+                New-AtlasDefaultGroups $web ([string]$a.OwnerAlias) ([string]$a.SecondaryOwnerAlias)
             }
             if ($null -ne $a.Properties) {
                 foreach ($p in $a.Properties.PSObject.Properties) { $web.AllProperties[$p.Name] = [string]$p.Value }
@@ -267,7 +337,13 @@ try {
     }
     $result = @{ ok = $true; value = @($value) }
 } catch {
-    $result = @{ ok = $false; error = @{ code = [string]$script:AtlasCode; message = [string]$_.Exception.Message } }
+    $message = [string]$_.Exception.Message
+    # A failure the bootstrap did not name says where it happened: the farm's own message
+    # rarely does ("Access is denied." from somewhere inside an operation).
+    if (-not $script:AtlasCode -and $_.InvocationInfo -and $_.InvocationInfo.ScriptLineNumber) {
+        $message += ' (bootstrap line ' + $_.InvocationInfo.ScriptLineNumber + ': ' + $_.InvocationInfo.Line.Trim() + ')'
+    }
+    $result = @{ ok = $false; error = @{ code = [string]$script:AtlasCode; message = $message } }
 }
 $json = ConvertTo-Json -InputObject $result -Depth 8 -Compress
 $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($json + [Environment]::NewLine)

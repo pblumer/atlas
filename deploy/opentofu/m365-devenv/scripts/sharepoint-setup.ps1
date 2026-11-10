@@ -243,6 +243,34 @@ function Grant-RunbookRights($cfg) {
     }
     Add-SPShellAdmin -UserName $runbook
     Add-SPShellAdmin -UserName $runbook -Database (Get-SPContentDatabase -WebApplication $cfg.webAppUrl)
+    Grant-RunbookPolicy $cfg.webAppUrl $runbook
+}
+
+# Shell admin reaches the content databases, not the sites: EnsureUser on a site the
+# worker had just created answered "Attempted to perform an unauthorized operation."
+# (2026-11-10). The account gets a web application policy with a role of its own that
+# holds what the worker's operations need on a site (resolve users, create and fill the
+# default groups, set the site's properties) and nothing to read or write content.
+function Grant-RunbookPolicy([string] $WebAppUrl, [string] $Account) {
+    $wa = Get-SPWebApplication $WebAppUrl
+    $rights = [Microsoft.SharePoint.SPBasePermissions]'Open, ViewPages, BrowseUserInfo, EnumeratePermissions, ManagePermissions, CreateGroups, ManageWeb'
+    $role = $wa.PolicyRoles | Where-Object { $_.Name -eq 'Atlas Worker' }
+    if ($null -eq $role) {
+        $role = $wa.PolicyRoles.Add('Atlas Worker', 'What the Atlas SharePoint Server worker needs on a site; no content.', $rights, [Microsoft.SharePoint.SPBasePermissions]::EmptyMask)
+        $wa.Update()
+    }
+    elseif ($role.GrantRightsMask -ne $rights) {
+        $role.GrantRightsMask = $rights
+        $wa.Update()
+    }
+    $claim = (New-SPClaimsPrincipal -Identity $Account -IdentityType WindowsSamAccountName).ToEncodedString()
+    $policy = $wa.Policies[$claim]
+    if ($null -eq $policy) { $policy = $wa.Policies.Add($claim, 'Atlas SharePoint Server worker') }
+    if (-not ($policy.PolicyRoleBindings | Where-Object { $_.Name -eq 'Atlas Worker' })) {
+        $policy.PolicyRoleBindings.Add($wa.PolicyRoles['Atlas Worker'])
+        $wa.Update()
+    }
+    Write-Output "policy Atlas Worker for $Account on $WebAppUrl"
 }
 
 # The server asks itself for the site under its own name; without this Windows answers

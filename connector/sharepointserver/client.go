@@ -82,8 +82,8 @@ func (c *Client) Invoke(ctx context.Context, inv catalog.Invocation) ([]any, err
 	if err != nil {
 		return nil, fmt.Errorf("sharepointserver: encode %s: %w", inv.Op, err)
 	}
-	env := append(childEnv(c.environ()), "ATLAS_SHAREPOINTSERVER_REQUEST="+string(raw))
-	args := []string{"-NoProfile", "-NonInteractive", "-NoLogo", "-EncodedCommand", encodeCommand(bootstrap)}
+	env := append(childEnv(c.environ()), "ATLAS_SHAREPOINTSERVER_REQUEST="+string(raw), bootstrapEnv+"="+bootstrap)
+	args := []string{"-NoProfile", "-NonInteractive", "-NoLogo", "-EncodedCommand", encodeCommand(starter)}
 	runCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	stdout, stderr, runErr := c.run.Run(runCtx, c.powershell, args, env)
@@ -148,6 +148,18 @@ func childEnv(parent []string) []string {
 	}
 	return out
 }
+
+// The bootstrap travels in the child's environment, and the command line carries only
+// starter, which runs it. As -EncodedCommand the bootstrap itself outgrew what Windows
+// lets a command line hold (32,767 characters; base64 of UTF-16 is 2.7 times the
+// program), and CreateProcess refused it with "The filename or extension is too long."
+// on 2026-11-10. An environment variable holds 32,767 characters too, but of the plain
+// program, which TestTheBootstrapFitsWhereItTravels keeps below that. Both are fixed
+// text this package ships; the request's values still arrive as data beside them.
+const (
+	bootstrapEnv = "ATLAS_SHAREPOINTSERVER_BOOTSTRAP"
+	starter      = "& ([scriptblock]::Create($env:" + bootstrapEnv + "))"
+)
 
 // encodeCommand is the form -EncodedCommand takes: base64 of UTF-16LE.
 func encodeCommand(script string) string {
