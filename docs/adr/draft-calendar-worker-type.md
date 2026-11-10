@@ -100,6 +100,18 @@ decision. Until one exists, portability needs one job type. The Exchange Worker 
 precedent for this shape: one operation table over two backends (`connector/exchange/backend.go`),
 "which is what lets one model run against either".
 
+**Is option 1 not the "universal directory Worker Type" ADR-0480 rejected?** That is the
+strongest objection to it. ADR-0480 refused one directory type because a person, an
+account and a contact are different resources, and a common surface would hide that and
+invite unsafe substitution. The four calendar families do not differ in the resource:
+each stores events with a start, an end, a transparency and recurrence on a calendar —
+the RFC 5545 model Graph, Google, CalDAV and EWS all map onto. They differ in
+constraints (which states count as busy, how consistent a read is, whether a service
+account may invite). Constraints are what a contract pins and evidence checks, so the
+answer is not to trust the common surface but to define it as technical capability
+contracts and require evidence for every backend (below). Where a backend cannot meet a
+contract, its claim stays unverified and the Console says so.
+
 **Option 3** needs no new code in atlas and is what an integrator would try first. It
 fails on the parts that are hard: recurring events, time zones and daylight-saving
 transitions, the slot grid, and a conflict check that has to read, compare and delete in
@@ -225,14 +237,75 @@ known condition with a plain failure instead of a code a process can catch.)
 
 All of it lives on the Worker (ADR-0545). The engine receives slots and an event id.
 
+### Technical capability contracts, one profile, evidence for every backend
+
+The operations above are written first as technical capability contracts
+([ADR-0485](0485-technical-capability-semantics.md) envelope), then implemented:
+
+| Contract | `resourceKind` | `idempotency` | `consistency` | Errors |
+|---|---|---|---|---|
+| `io.atlas.calendar.slot.find` | `calendar-slot` | `read-only` | `provider-defined` | `CALENDAR_NOT_FOUND`, `CALENDAR_NOT_READABLE` |
+| `io.atlas.calendar.booking.reserve` | `calendar-booking` | `conditional` | `strong` | `SLOT_TAKEN`, `CALENDAR_NOT_FOUND`, `CALENDAR_NOT_WRITABLE` |
+| `io.atlas.calendar.booking.confirm` | `calendar-booking` | `idempotent` | `provider-defined` | `BOOKING_NOT_FOUND`, `ATTENDEES_NOT_ALLOWED` |
+| `io.atlas.calendar.booking.cancel` | `calendar-booking` | `idempotent` | `provider-defined` | — (an event already gone is success) |
+| `io.atlas.calendar.booking.get` | `calendar-booking` | `read-only` | `provider-defined` | — (absence is an output, `exists: false`) |
+
+`identityScope` is `calendar` throughout. The contracts also pin what the backends would
+otherwise answer differently: **busy** is every event that is not marked transparent or
+free, tentative and out-of-office included, so that a backend never offers a slot another
+would refuse; the slot list is bounded by `maxItems` in the output schema; and
+`reserve`'s `strong` is the property the conflict rule needs (the open question at the
+head of this record), stated as a requirement a backend must prove, not as a description
+of every provider.
+
+**One profile, not one per provider.** ADR-0480 refuses two claims of the same
+`id@version` on one operation even with different profiles, because that would claim two
+constraint sets at once. A single `reserve-slot` operation serving four backends can
+therefore not claim `+microsoft-graph`, `+google-calendar`, `+caldav` and
+`+exchange-ews` side by side. The contracts take one provider-neutral profile,
+`free-busy-calendar`, which is what one job type for four backends means: every backend
+meets the same constraint set. Relaxing ADR-0480's duplicate rule instead was considered
+and not chosen — it would make "which profile does this job meet" depend on the
+configured Worker, a runtime question ADR-0480 §5 leaves to a separate decision.
+
+**Evidence covers every backend.** An evidence record (ADR-0483) binds a contract, one
+operation and one suite, and its implementation digest covers every runtime path of the
+Worker Type. The calendar suites therefore run each case against each backend's fake, and
+a case counts as passed only if it passes on all of them. A backend added later reopens
+every record. Until a record exists for a contract, the claims are `candidate`, as
+ADR-0480's as-built claims are.
+
+Two limits are stated, not hidden:
+
+- The suites run against fakes. They prove that the Worker applies the conflict rule
+  correctly *given* a provider that behaves as the fake does; they cannot prove that
+  Graph or Google behave that way. That is answered by a live run per provider, recorded
+  beside the evidence, not by it.
+- ADR-0483's first contract is drafted but not published, because publication waits for
+  the code owner's branch protection. The calendar contracts start the same way, in
+  `workertype/evidence/testdata/contracts/`, and move to `workertype/contracts/`
+  unchanged once publication is possible.
+
+### Business capabilities
+
+The booking application also states, in its bundle's architecture file
+([ADR-0528](0528-application-bundle-architecture.md), source-tree format 4), which
+**business** capability its process realizes ([ADR-0305](0305-business-capabilities-and-value-streams.md)),
+for example `kundentermine-vereinbaren`, realized by the booking process (kind
+`process`). On import, a key the organisation's map already has is linked; a missing one
+arrives as a proposal, never as a silent write. The chain from strategy to provider is
+then the one ADR-0480 §4 sketches: value stream → stage → business capability →
+realized by the booking process → uses `reserve-slot` → claims
+`io.atlas.calendar.booking.reserve`. The business capability is never inferred from the
+operation, and the calendar Worker realizes no business capability itself: a calendar is
+a means, not something the organisation can do.
+
 ### What travels where
 
 - **The Worker Type** is a signed artifact atlas hub distributes
   ([ADR-0535](0535-worker-types-as-distributed-artifacts.md)). Its manifest declares each
-  operation's idempotency and effect, and the technical capabilities it claims (ADR-0480),
-  e.g. `io.atlas.calendar.slots.find` and `io.atlas.calendar.booking.reserve`, with one
-  profile per provider (`microsoft-graph`, `google-calendar`, `caldav`, `exchange-ews`).
-  Claiming them makes no conformance statement until evidence exists (ADR-0483).
+  operation's idempotency and effect and its claims on the contracts above, profile
+  `free-busy-calendar`.
 - **The booking application** is a Blueprint that requires the Worker Type. Opening
   hours, grid, durations, the booking calendars and the shop's address are application
   values, so one release serves every installation.
@@ -243,6 +316,8 @@ All of it lives on the Worker (ADR-0545). The engine receives slots and an event
 
 ### Phasing
 
+0. The five contracts as drafts, and the conformance suites against the mock, before any
+   provider backend: the contract is the specification the backends are written to.
 1. Microsoft Graph and the mock, the operations above, and `examples/terminbuchung` with a
    test that books as an anonymous visitor of the public link.
 2. Google Calendar.
@@ -303,6 +378,7 @@ Each phase also answers this record's open question for its provider, by test.
 - builds on ADR-0203 (Worker Type, Worker, Worker Instance), ADR-0535 (distributed Worker
   Types), ADR-0538 (idempotency and effect), ADR-0545 (Worker credentials)
 - serves ADR-0029 (public start links) and ADR-0449 (public wizard)
-- capability claims per ADR-0480 and ADR-0483
+- technical capability contracts per ADR-0480, ADR-0483 and ADR-0485; business
+  capabilities per ADR-0305 and ADR-0528
 - packaged per ADR-0499 (atlas hub) and ADR-0453 (application values)
 - alternatives: ADR-0173 (SQL Worker), the Exchange Worker's calendar processing
