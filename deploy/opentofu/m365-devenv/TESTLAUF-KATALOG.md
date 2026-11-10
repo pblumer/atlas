@@ -77,19 +77,19 @@ lokaler Administrator, die anderen mit «Sign in with Microsoft» als die jeweil
 ### Rollen
 
 Die Installationsskripte nehmen jede angemeldete Testperson in alle Gruppen auf. Für einen
-Test der Genehmigungswege braucht es getrennte Rollen. Vor dem ersten Lauf setzt
-`atlas-admin` die Mitgliedschaften so:
+Test der Genehmigungswege braucht es getrennte Rollen. Das setzt
+`scripts/testlauf-rollen.py` (Atlas-Gruppen, nichts in Azure oder im Tenant); nach jedem Lauf
+eines Installationsskripts erneut ausführen. `--dry-run` zeigt nur, was sich ändern würde.
 
 | Verbindung | Person | Rolle im Test | Atlas-Gruppen |
 |---|---|---|---|
-| `atlas-anna` | Anna Muster | Mitarbeiterin, bestellt fast alles | Zielgruppen: `M365-Mitarbeitende`, `M365-UCC` |
-| `atlas-beat` | Beat Beispiel | Mitarbeiter, Empfänger von «Bestellen für» und Gast | Zielgruppen |
-| `atlas-carla` | Carla Probe | Fachstellen | `M365-Facility`, `M365-Administration`, `Informationssicherheit`, `AD-Administration`, `Lizenzmanagement` |
-| `atlas-max` | Max Vorgesetzt | Vorgesetzter von Anna, Beat und Carla (Entra `manager`) | Zielgruppen |
-| `atlas-admin` | lokaler Administrator | Betrieb: Vorprüfung, HR-Ereignis, Prüfungen, Aufräumen | admin |
+| `atlas-anna` | Anna Muster | Mitarbeiterin, bestellt fast alles | `M365-Mitarbeitende`, `M365-UCC`, `Identity Management`, `Lizenz-Integrations-Manager` (Zielgruppen) |
+| `atlas-beat` | Beat Beispiel | Mitarbeiter, Empfänger von «Bestellen für» | `M365-Mitarbeitende`, `M365-UCC` |
+| `atlas-carla` | Carla Probe | alle Fachstellen | M365-Zielgruppen und `M365-Facility`, `M365-Telefonie`, `M365-Administration`, `Informationssicherheit`, `AD-Administration`, `Identity Management`, `Mainframe`, `Lizenzmanagement`, `Lizenz-Tenantverantwortung`, `Lizenz-Finanzen`, `Lizenz-Integrations-Manager` |
+| `atlas-max` | Max Vorgesetzt | Vorgesetzter von Anna, Beat und Carla (Entra `manager`) | `M365-Mitarbeitende`, `M365-UCC`, `Lizenz-Chef` |
+| `atlas-admin` | lokaler Administrator | Betrieb: Vorprüfung, HR-Ereignis, Prüfungen, Aufräumen | admin, Mitgliedschaften unverändert |
 
-Kennt eine Gruppe ihre Mitglieder nicht über MCP, setzt sie ein Mensch in der Console. Das
-Protokoll nennt dann den Stand.
+Phase 0 prüft die Trennung mit `testlauf-rollen.py --dry-run` (erwartet: 0 Änderungen).
 
 ## Ablauf
 
@@ -105,6 +105,7 @@ fehlt (Grund ins Protokoll).
 | V2 | `atlas_list_incidents`, `atlas_incident_summary` | Ausgangsbestand notiert: nur neue Incidents zählen als Befund |
 | V3 | `atlas_list_tasks` | offene Aufgaben notiert; alte Aufgaben bleiben unberührt |
 | V4 | `atlas_application_constants` für die vier Applikationen | `NAME_PREFIX`, `ORTSANGABEN = false`, `ENTRA_TRANSFER = aus` |
+| V5 | `scripts/testlauf-rollen.py --dry-run` | 0 Änderungen; sonst ohne `--dry-run` ausführen und notieren |
 
 ### Phase 1: Sichtbarkeit (jede Rolle)
 
@@ -113,6 +114,7 @@ fehlt (Grund ins Protokoll).
 | S1 | Anna | Kataloge lesen | sieht M365 für Mitarbeitende, Kommunikation (UCC), Exchange und SharePoint Server (OnPrem), Active Directory, Lizenzmanagement: Verträge, Informationstransfer |
 | S2 | Anna | Katalog HR-Eintritte | nicht sichtbar oder nicht bestellbar (`orderableBy` = Applikation) |
 | S3 | Anna | Katalog Lizenzmanagement: Betrieb | nicht sichtbar (Gruppe Tenant-Verantwortung) |
+| S5 | Beat | Kataloge lesen | nur die M365-Kataloge; Informationstransfer und Lizenzverträge nicht |
 | S4 | Max | Kataloge lesen | dieselben Zielgruppen-Kataloge wie Anna |
 
 ### Phase 2: Bestellen mit allen Genehmigungswegen
