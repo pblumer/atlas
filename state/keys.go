@@ -83,7 +83,7 @@ const (
 	cfScopeTrigger           columnFamily = 0x47 // scopeTrig:<scopeKey>:<triggerElKey> → nil; an armed event-subprocess trigger of a scope (ADR-0082, #1494)
 	// One element of a multi-instance body's output collection, as a round set it: the
 	// element alone, so the history stays linear in the round count (ADR-0296,
-	// ADR-draft-collection-by-round). Keyed under the instance so a purge reaches it.
+	// ADR-0549). Keyed under the instance so a purge reaches it.
 	cfVariableElementSnapshot columnFamily = 0x48 // varElemSnap:<piKey>:<scopeKey>:<ts>:<pos> → VariableValue (element; Index set)
 	cfJobTake                 columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )

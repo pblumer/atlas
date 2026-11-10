@@ -53,7 +53,7 @@
 </bpmn:definitions>`;
 
       // ?recorded=1 is an instance whose rounds' elements are on record
-      // (ADR-draft-collection-by-round): the body's collection fills round by round. Without
+      // (ADR-0549): the body's collection fills round by round. Without
       // it, the instance predates that, and the collection reads as seeded until the loop
       // has finished (ADR-0296).
       const recorded = new URLSearchParams(location.search).has("recorded");

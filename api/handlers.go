@@ -2429,7 +2429,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			// elem is set on one element of a list being set — a multi-instance round's
 			// result joining its body's collection (ADR-0296) — rather than a whole
 			// value: the fold applies it to the list as it stands
-			// (ADR-draft-collection-by-round).
+			// (ADR-0549).
 			elem *model.VariableValue
 		}
 		var (
@@ -3202,7 +3202,7 @@ type variableView struct {
 	Constant string `json:"constant,omitempty"`
 	// ElementsRecorded marks a multi-instance body's variable whose per-round element
 	// writes are on record, so the timeline shows the output collection as each round
-	// left it (ADR-draft-collection-by-round). Absent on an instance recorded before
+	// left it (ADR-0549). Absent on an instance recorded before
 	// those writes were retained: its collection reads as seeded until the loop is done.
 	ElementsRecorded bool `json:"elementsRecorded,omitempty"`
 	// Actor names the operator who last set this value via an external override

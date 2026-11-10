@@ -501,7 +501,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   subprocess running beside it, and — on an instance recorded before each round's
   element was kept — with the body's collection saying that it reads unfilled until the
   loop is done; with `?recorded=1` the collection fills round by round and says nothing
-  ([ADR-draft-collection-by-round](../docs/adr/draft-collection-by-round.md)). A round still running must say it has no output yet; a name
+  ([ADR-0549](../docs/adr/0549-collection-by-round.md)). A round still running must say it has no output yet; a name
   the filter finds in the folded environment must show; sorting the table must keep every row
   in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
   nothing selected the tab must stay one list whose scope chip names the kind of scope.

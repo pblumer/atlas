@@ -1,4 +1,4 @@
-# ADR-DRAFT: A loop's collection is retained one element per round
+# ADR-0549: A loop's collection is retained one element per round
 
 - **Status:** Accepted
 - **Implementation:** Landed

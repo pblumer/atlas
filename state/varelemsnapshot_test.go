@@ -11,7 +11,7 @@ import (
 // A multi-instance body fills its output collection one element per round, and the
 // log records only the element (ADR-0296). The element is retained too, the size of
 // one result, so the replay can show the collection as each round left it
-// (ADR-draft-collection-by-round). It is history about one instance: read back per
+// (ADR-0549). It is history about one instance: read back per
 // body scope in change order, and purged with the instance.
 func TestVariableElementHistory(t *testing.T) {
 	s := openStore(t)

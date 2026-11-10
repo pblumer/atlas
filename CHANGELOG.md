@@ -292,7 +292,7 @@ directory gains the document store. Four changes can break what worked against 0
   it stands, so a round shows the list the rounds before it left and its own answer at
   completion, and marks such a body's values `elementsRecorded`. Instances recorded before
   this keep the old reading, and only there does the Environment still explain it
-  ([ADR-draft-collection-by-round](docs/adr/draft-collection-by-round.md)).
+  ([ADR-0549](docs/adr/0549-collection-by-round.md)).
 - **A new built-in Worker Type declares what a second delivery does.** Every new built-in
   Worker Type ships a manifest stating each operation's idempotency and effect, as an
   installed one must; `go test ./api` refuses one without it, and the 31 kinds released

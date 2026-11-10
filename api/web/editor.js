@@ -16539,7 +16539,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         chips: v.lateOnly ? ` <span class="c-late" title="${esc(tr("ops.vars.lateOnlyTitle"))}">${esc(tr("ops.vars.lateOnly"))}</span>` : "",
         note: (v.atEnd ? `<div class="v-was">${esc(tr("ops.vars.atEnd", { value: briefValue(v.atEnd) }))}</div>` : "")
           // On an instance recorded before each round's element was retained, a body's
-          // collection reads unfilled until the loop completes (ADR-0296, ADR-draft-collection-by-round).
+          // collection reads unfilled until the loop completes (ADR-0296, ADR-0549).
           // Said where it is read, so an empty list is not taken for rounds that produced
           // nothing — each round's result is in its own Output.
           + (v.unrecorded ? `<div class="v-was v-coll">${esc(tr("ops.vars.collectionNote"))}</div>` : ""),

@@ -207,7 +207,7 @@ func elementTrail(t *testing.T, s *state.Store, pi uint64) []string {
 
 // TestEachRoundsElementIsRetainedAndRecovers: a round's result joins the body's
 // collection as one element (ADR-0296), and the element is retained so the replay can
-// show the collection as each round left it (ADR-draft-collection-by-round). One row
+// show the collection as each round left it (ADR-0549). One row
 // per round, the element alone — and replaying the log into an empty store rebuilds
 // the identical rows, because the fold writes them from the event and the batch's own
 // state (I4).

@@ -433,7 +433,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// made the timeline grow with the square of the count. The element alone is
 			// retained instead, the size of one result, so the replay can show the
 			// collection as each round left it and the history stays linear
-			// (ADR-draft-collection-by-round). Only an element the fold actually set is
+			// (ADR-0549). Only an element the fold actually set is
 			// retained, so the history never claims a write the state did not take.
 			applied, err := setVariableElement(tx, &v.variable)
 			if err != nil || !applied {

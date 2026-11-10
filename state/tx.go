@@ -1389,7 +1389,7 @@ func (t *Tx) RecordVariableSnapshot(ts int64, pos uint64, v *model.VariableValue
 // from applyToState, from the event and the batch's own state, so replay rebuilds it
 // identically (I4). Each key is unique (position is monotonic): a plain Set, never
 // overwritten, deleted only by the instance's purge
-// (ADR-draft-collection-by-round).
+// (ADR-0549).
 func (t *Tx) RecordVariableElementSnapshot(piKey uint64, ts int64, pos uint64, v *model.VariableValue) error {
 	return t.b.Set(keyVariableElementSnapshot(piKey, v.ScopeKey, ts, pos), t.encodeValue(v), nil)
 }
