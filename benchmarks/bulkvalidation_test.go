@@ -40,7 +40,8 @@ import (
 )
 
 // qualityDMN is a rule closer to what a quality check holds than the example's single
-// rule: an e-mail pattern, twenty groups, and a licence allowed per group. Hit policy
+// rule: an e-mail pattern, twenty groups, and a licence allowed per group. Its inputs
+// are typed and connected to the decision, and the verdict has its own type. Hit policy
 // FIRST, so a row is matched by scanning the rules in order, and the valid rows spread
 // over all twenty groups make the scan length realistic rather than one rule deep.
 var qualityDMN = func() string {
@@ -59,13 +60,18 @@ var qualityDMN = func() string {
         <outputEntry><text>false</text></outputEntry><outputEntry><text>"group or licence"</text></outputEntry></rule>`)
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_quality" name="quality" namespace="http://atlas/bench">
-  <inputData id="id_email" name="email"/>
-  <inputData id="id_group" name="group"/>
-  <inputData id="id_license" name="license"/>
+  <itemDefinition id="tQualityVerdict" name="tQualityVerdict">
+    <itemComponent id="tQualityVerdict_valid" name="valid"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tQualityVerdict_reason" name="reason"><typeRef>string</typeRef></itemComponent>
+  </itemDefinition>
+  <inputData id="id_email" name="email"><variable id="var_email" name="email" typeRef="string"/></inputData>
+  <inputData id="id_group" name="group"><variable id="var_group" name="group" typeRef="string"/></inputData>
+  <inputData id="id_license" name="license"><variable id="var_license" name="license" typeRef="string"/></inputData>
   <decision id="QualityRow" name="QualityRow">
-    <informationRequirement><requiredInput href="#id_email"/></informationRequirement>
-    <informationRequirement><requiredInput href="#id_group"/></informationRequirement>
-    <informationRequirement><requiredInput href="#id_license"/></informationRequirement>
+    <variable id="var_QualityRow" name="QualityRow" typeRef="tQualityVerdict"/>
+    <informationRequirement id="ir_email"><requiredInput href="#id_email"/></informationRequirement>
+    <informationRequirement id="ir_group"><requiredInput href="#id_group"/></informationRequirement>
+    <informationRequirement id="ir_license"><requiredInput href="#id_license"/></informationRequirement>
     <decisionTable id="dt" hitPolicy="FIRST">
       <input id="in_e" label="emailOk"><inputExpression typeRef="boolean"><text>matches(email, "^[^@ ]+@[^@ ]+\.[a-z]{2,}$")</text></inputExpression></input>
       <input id="in_g" label="group"><inputExpression typeRef="string"><text>group</text></inputExpression></input>

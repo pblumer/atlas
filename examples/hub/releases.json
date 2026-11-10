@@ -243,6 +243,12 @@
       "version": "1.0.17",
       "digest": "sha256:f0eec88635ad021adb8994b6edd89a0f6e28ec8cfaea82fd7c93568e1ca3a6f7",
       "minAtlas": "0.24.0-0"
+    },
+    {
+      "bundle": "auftrag-finanzen",
+      "version": "1.0.2",
+      "digest": "sha256:170f0e9b2e57b8fa9cb4461717ab48897a10992f4c76ab93d4dd5928c74dc089",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }

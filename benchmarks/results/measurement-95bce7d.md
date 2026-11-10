@@ -54,6 +54,9 @@ a correction task. The ADR-0084 process is therefore measured at its cheapest.
 | `RowValid` (example) | 12–13 µs | 7.4 KB, 83 allocations | 420 B |
 | `QualityRow` (22 rules) | 46–56 µs | 39 KB, 238 allocations | 4.6 KB |
 
+- **Typing the model does not change this.** After the measurement, both decisions were
+  given typed input data and a structured result type (`itemDefinition`). Re-measured,
+  one evaluation allocates one object more and takes the same time within the spread.
 - **Asking for the trace costs nothing extra.** `dmn.Registry.Evaluate` calls
   `EvaluateTraced` and discards the trace, so "plain" and "traced" are the same work.
   An evaluation that does not build a trace would be cheaper; how much is not measured.
