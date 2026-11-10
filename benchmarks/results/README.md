@@ -4,8 +4,10 @@
 one-off capture taken to answer a specific design question, kept because the question
 was answered by measurement and the evidence should outlive the conversation. The
 first is [`measurement-381825f.md`](measurement-381825f.md): whether a business
-capability's KPIs are computable without the OpenSearch exporter. It is read for its
-shapes, not tracked over time.
+capability's KPIs are computable without the OpenSearch exporter. The second is
+[`measurement-95bce7d.md`](measurement-95bce7d.md): what a file of tens of thousands of
+records costs to validate in one job against one multi-instance iteration per row
+(ADR-0548). Both are read for their shapes, not tracked over time.
 
 This directory holds Atlas's first **published, reproducible** benchmark baseline
 (work programme B of the v0.2.0 *Proof of Reliability & Performance* initiative).

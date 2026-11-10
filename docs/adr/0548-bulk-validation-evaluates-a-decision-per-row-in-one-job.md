@@ -4,11 +4,6 @@
 - **Implementation:** Not started
 - **Date:** 2026-11-09
 - **Deciders:** Atlas maintainers
-- **Open question:** How long one decision evaluation takes in temis for a realistic
-  quality rule, and what one multi-instance iteration of the ADR-0084 shape costs in log
-  events, bytes and wall-clock time. Both are unmeasured. The choice below rests on the
-  arithmetic in *Context*, not on a benchmark, and Slice 0 exists to replace it with one.
-- **Question checked:** 2026-11
 
 ## Context and problem statement
 
@@ -30,23 +25,25 @@ does not carry it. The reasons are structural, not tuning:
    [ADR-0543](0543-a-file-is-a-document-not-a-variable.md), the *file* is a document and
    no longer needs to fit, but the parsed `rows` the CSV import writes still do
    (ADR-0543 lists "parsed CSV results larger than one variable" as out of scope).
-2. **The output collection grows quadratically in what it writes.** A multi-instance
-   activity's `outputCollection` is re-serialised once per iteration. `limits.Collection`
-   (16 MiB) bounds the peak in memory and, as the field's own comment in `limits/limits.go`
-   says, deliberately does *not* bound the bytes written, because those grow with the
-   square of the iteration count. Arithmetic, under the assumption that one verdict is
-   about 100 bytes: the collection is written in sizes 100 B, 200 B, … 5 MB, so the sum
-   is n(n+1)/2 × 100 B. For n = 50,000 that is roughly 1.25 × 10⁹ × 100 B, about
-   **125 GB** written to the log for one file. Even if the assumption is off by a factor
-   of ten, the result is unusable.
+2. **The output collection makes every iteration cost more than the one before.** A
+   multi-instance activity's `outputCollection` is rebuilt whole once per iteration: on
+   each, `applyToState` parses the stored collection and serialises it again to set one
+   element (`engine.setListElement`, measured in *Measured* below). The work per file
+   therefore grows with the square of the row count. It is done on the run loop, the one
+   writer of the partition, so every other instance on it waits. `limits.Collection`
+   (16 MiB) bounds the peak in memory and, as its comment in `limits/limits.go` says,
+   deliberately not this cost. An earlier version of this record estimated 125 GB
+   *written to the log* for 50,000 rows; Slice 0 showed that wrong. The event carries
+   the one element, so the log grows almost linearly (about 4 KB a row); the square
+   shows in time and allocation instead.
 3. **Every row is several steps of engine state.** Each iteration activates a subprocess,
    a business rule task, a job, a gateway and an end event, and each of those is an event
    in the log, a record in the state and a step in the per-step history. With
    [ADR-0066](0066-decision-evaluation-records.md), each evaluation also retains its
    inputs, outputs and temis trace. 50,000 rows are therefore hundreds of thousands of
    events and 50,000 retained traces, all written through the single writer of one
-   partition ([ADR-0005](0005-group-commit-and-fsync-strategy.md)). The exact count per
-   iteration is not measured (see *Open question*).
+   partition ([ADR-0005](0005-group-commit-and-fsync-strategy.md)). Slice 0 counted 22
+   events and one evaluation record per row.
 4. **The iteration budget admits it, so nothing stops it early.** `limits.Iterations` is
    100,000 ([ADR-0276](0276-iteration-budget.md)), and `limits.TokenSteps`
    ([ADR-0272](0272-execution-budget.md)) is a rate budget per token that a wide fan-out is
@@ -93,7 +90,41 @@ auditable result, without one token per row?**
 
 Chosen option: **Option 3, one bulk-validation job**, with the correction path chosen by
 the number of failures and with Option 2 kept as the planned extension if Slice 0 shows a
-single job to be too long.
+single job to be too long. Slice 0 did not: see *Measured*.
+
+### Measured (Slice 0)
+
+`benchmarks/bulkvalidation_test.go`, written up with the raw output in
+[`benchmarks/results/measurement-95bce7d.md`](../../benchmarks/results/measurement-95bce7d.md).
+One shared cloud VM (Xeon 2.10 GHz, 4 cores, Go 1.26.0); the absolute numbers are that
+machine's, the shapes are the finding. Repetitions varied by 5 to 10 %.
+
+| | 1,000 rows | 10,000 rows | 50,000 rows |
+|---|---:|---:|---:|
+| ADR-0084 multi-instance, start to completion | 2.9–3.4 s | 184 s | cannot start; projected about 70 min |
+| ADR-0084: log written | 4.5 MB | 80 MB | projected about 1.2 GB |
+| ADR-0084: events / evaluation records | 22,012 / 1,000 | 220,012 / 10,000 | — |
+| ADR-0084: heap allocated | 1.4 GB | 142 GB | projected about 3.5 TB |
+| One job, streamed file (22-rule table) | — | 0.5 s | 2.3–2.6 s |
+
+- **The multi-instance cost is quadratic, and the profile says where.** Time fits
+  1.15 ms × n + 1.72 µs × n² to within 3 % at 2,000 and 5,000 rows. At 2,000 rows, 70 %
+  of CPU time is the run loop, and 57 % is one call chain: finishing an iteration sets
+  one element of the output collection by parsing and re-serialising all of it
+  (`finishMultiInstanceIteration` → `setListElement` → `expr.ParseJSON` and
+  `encoding/json.Marshal`). The 50,000-row figures are an extrapolation of that fit, not a
+  run: 50,000 rows of the example are about 3.2 MB of JSON and are refused as a start
+  variable by `limits.Variable` before anything runs.
+- **One decision costs 12 µs for the example rule and 52 µs for a 22-rule FIRST table
+  with an e-mail pattern.** Asking for the trace costs nothing extra, because
+  `dmn.Registry.Evaluate` computes it and discards it. temis also scans every rule of a
+  FIRST table rather than stopping at the first match.
+- **One job per file is far inside the lease.** 50,000 rows through the core of
+  `validate-rows` (parse, evaluate, write the result row) take 2.3–2.6 s and 18 MB of heap,
+  200,000 rows 8–9 s. The one-minute threshold of *Long runs* is reached near 1.2 million
+  rows of this rule, which is about where `limits.Document` (35 MiB of CSV at 30 bytes a
+  row) stops the file anyway. A rule several times heavier than the 22-rule table would
+  reach the threshold first; that, not the row count, is what to watch.
 
 ### What the job does
 
@@ -220,10 +251,11 @@ the work is done twice. The operation therefore:
 - repeats from the first row after a server restart, because it keeps no progress;
 - has to finish well inside the lease.
 
-That is acceptable only while a whole run is short. Slice 0 measures it, and **if a
-50,000-row run takes more than about a minute — a fifth of the lease, leaving room for a
-slower server — Option 2 is built instead**: pages as iterations, each well inside the
-lease, so a restart resumes at a page rather than at row one. Extending a lease from
+That is acceptable only while a whole run is short. The threshold is about a minute, a
+fifth of the lease, leaving room for a slower server: **a run that would take longer
+needs Option 2**, pages as iterations, each well inside the lease, so a restart resumes
+at a page rather than at row one. Slice 0 measured 2.3–2.6 s for 50,000 rows, so
+Option 2 is not needed for the files this record is about. Extending a lease from
 inside a handler would be a change to ADR-0007's model and is not proposed here.
 
 ### Scale-out readiness
@@ -248,11 +280,10 @@ Assessed against [`docs/architecture/scale-out-readiness.md`](../architecture/sc
 
 ### Slices
 
-- **S0 — measure.** A benchmark of temis evaluating a realistic quality rule per row, and
-  of the ADR-0084 process at 1,000, 5,000 and 10,000 rows: events, bytes written, history
-  records, wall-clock time. This replaces the arithmetic in *Context* with numbers and
-  settles the *Open question*. If the per-row evaluation is far slower than assumed, the
-  choice between Option 2 and 3 is revisited before S1.
+- **S0 — measure (done).** A benchmark of temis evaluating a realistic quality rule per
+  row, of one streamed file through the core of `validate-rows`, and of the ADR-0084
+  process at 1,000 to 10,000 rows: events, log and state bytes, evaluation records,
+  allocation, wall-clock time. Results under *Measured*; they confirm Option 3.
 - **S1 — the operation.** `validate-rows` in process: streaming evaluation, result
   document, summary, one evaluation record. Modeler panel and handbook.
 - **S2 — the correction paths.** `apply-corrections`; an example model with both
@@ -280,7 +311,11 @@ Assessed against [`docs/architecture/scale-out-readiness.md`](../architecture/sc
     a summary that names bytes that are gone (ADR-0543 answers 410 for those).
 - **Follow-ups / risks to watch:**
   - The quadratic re-serialisation of `outputCollection` remains a defect for every other
-    wide multi-instance loop. It needs its own fix and is not addressed here.
+    wide multi-instance loop, and Slice 0 located it (`engine.setListElement`). It runs
+    in `applyToState`, so a fix changes how state is stored and must replay identically
+    (invariant 4); it needs its own record and is not addressed here.
+  - `dmn.Registry.Evaluate` builds the trace it throws away. An evaluation without one
+    would be cheaper for `validate-rows`; how much is not measured.
   - Decision models for Worker Instances, if validation has to run outside the server.
   - Per-row traces on request.
   - Formats other than CSV (XLSX is what most quality managers actually receive).

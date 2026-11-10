@@ -376,6 +376,34 @@ test("an existing decision is reachable by deep link and loads its stored model"
   expect(pageErrors).toEqual([]);
 });
 
+test("an opened graph is brought into view at its own size, clear of the palette and the name box", async ({ page }) => {
+  // A window of a common size, with room for the graph: in the suite's small default
+  // one it is scaled down to fit, which is right there but not what this pins.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+  // Fitted on the next frame, once the warnings strip has taken its height.
+  await page.waitForTimeout(200);
+
+  // The stored decision sits at (160, 100). Left at dmn-js's viewport it is drawn from
+  // the top-left corner, under the palette and the model's name box; brought into view,
+  // it is clear of both. It is a single small node, so it is not enlarged either.
+  const drawn = await page.locator('.dmn-canvas [data-element-id="Decision_stored"] .djs-visual > rect').first().boundingBox();
+  // Its own size, give or take the stroke drawn around it.
+  expect(Math.abs(drawn.width - 180)).toBeLessThanOrEqual(3);
+  expect(Math.abs(drawn.height - 80)).toBeLessThanOrEqual(3);
+  const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  for (const sel of [".dmn-canvas .djs-palette", ".dmn-canvas .dmn-definitions"]) {
+    const box = await page.locator(sel).first().boundingBox();
+    expect(box, sel).not.toBeNull();
+    expect(overlaps(drawn, box), `the decision is under ${sel}`).toBe(false);
+  }
+  const canvas = await page.locator(".dmn-canvas .djs-container").first().boundingBox();
+  expect(drawn.x + drawn.width).toBeLessThanOrEqual(canvas.x + canvas.width);
+  expect(drawn.y + drawn.height).toBeLessThanOrEqual(canvas.y + canvas.height);
+});
+
 test("a model save names the artifact after the model, not after whichever decision comes first", async ({ page }) => {
   // The stored model calls itself "Eligibility" and its one decision "eligibility",
   // and the reference carries the model's name — which is what every other path in

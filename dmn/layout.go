@@ -1,8 +1,10 @@
 package dmn
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"math"
 	"regexp"
 	"sort"
@@ -105,6 +107,13 @@ func EnsureDiagramReport(src []byte) ([]byte, bool) {
 	if g.fullyDrawn() {
 		return src, false
 	}
+	// The diagram is drawn afresh, so it may as well draw every requirement: name the
+	// ones that have no id, and parse again to pick the names up.
+	if named, changed := nameRequirements(src); changed {
+		if ng, ok := parseDRG(named); ok {
+			src, g = named, ng
+		}
+	}
 	di, ok := generateDMNDI(g)
 	if !ok {
 		return src, false
@@ -116,6 +125,7 @@ func EnsureDiagramReport(src []byte) ([]byte, bool) {
 // graph out afresh. It backs the editor's Auto-layout action: the author asking for
 // it, which is the one thing that moves a diagram somebody placed.
 func RegenerateDiagram(src []byte) []byte {
+	src, _ = nameRequirements(src)
 	g, ok := parseDRG(src)
 	if !ok {
 		return src
@@ -125,6 +135,102 @@ func RegenerateDiagram(src []byte) []byte {
 		return src
 	}
 	return injectBeforeDefinitionsClose(stripDMNDI(src), di)
+}
+
+// nameRequirements gives every requirement element that has no id one, and reports
+// whether it named any.
+//
+// A diagram draws a requirement as a DMNEdge, and a DMNEdge points at its
+// requirement by id (dmnElementRef). DMN does not require the id, and a model written
+// by hand, by an agent or by temis often leaves it out — so its input data were drawn
+// beside the decision with no arrow to it, as if the decision read nothing
+// (examples/pruefe-datensaetze.dmn was one). Naming them is a change to the model, but
+// the same kind of change as the diagram this file writes: it adds what drawing needs
+// and alters nothing a decision evaluates.
+//
+// The names are deterministic — the kind, the element that holds the requirement and
+// its position there — so opening the same model twice names it the same way, and a
+// name already in the document is never reused. The id is spliced into the start tag
+// as text, as the diagram is, so the rest of the document keeps its bytes.
+func nameRequirements(src []byte) ([]byte, bool) {
+	// unnamed is one requirement start tag without an id: where its name ends, which
+	// kind it is, the element holding it and its position there.
+	type unnamed struct {
+		at          int
+		kind, owner string
+		n           int
+	}
+	taken := map[string]bool{}
+	var found []unnamed
+	var owners []string // the nearest id around each open element, innermost last
+	counts := map[string]int{}
+	dec := xml.NewDecoder(bytes.NewReader(src))
+	for {
+		start := int(dec.InputOffset())
+		tok, err := dec.RawToken()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return src, false
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			id := ""
+			for _, a := range t.Attr {
+				if a.Name.Local == "id" && a.Name.Space == "" {
+					id = a.Value
+				}
+			}
+			if id != "" {
+				taken[id] = true
+			}
+			owner := ""
+			if len(owners) > 0 {
+				owner = owners[len(owners)-1]
+			}
+			switch t.Name.Local {
+			case "informationRequirement", "knowledgeRequirement", "authorityRequirement":
+				name := t.Name.Local
+				if t.Name.Space != "" {
+					name = t.Name.Space + ":" + name
+				}
+				// The id goes right after the tag name. RawToken leaves the prefix as
+				// written, so the name is exactly the bytes after the '<'.
+				if id == "" && owner != "" && bytes.HasPrefix(src[start:], []byte("<"+name)) {
+					counts[t.Name.Local+"/"+owner]++
+					found = append(found, unnamed{start + 1 + len(name), t.Name.Local, owner, counts[t.Name.Local+"/"+owner]})
+				}
+			}
+			if id == "" {
+				id = owner
+			}
+			owners = append(owners, id)
+		case xml.EndElement:
+			if len(owners) > 0 {
+				owners = owners[:len(owners)-1]
+			}
+		}
+	}
+	if len(found) == 0 {
+		return src, false
+	}
+	var b bytes.Buffer
+	b.Grow(len(src) + 48*len(found))
+	last := 0
+	for _, u := range found {
+		base := fmt.Sprintf("%s_%s_%d", u.kind, u.owner, u.n)
+		id := base
+		for i := 2; taken[id]; i++ {
+			id = fmt.Sprintf("%s_%d", base, i)
+		}
+		taken[id] = true
+		b.Write(src[last:u.at])
+		b.WriteString(` id="` + xmlAttr(id) + `"`)
+		last = u.at
+	}
+	b.Write(src[last:])
+	return b.Bytes(), true
 }
 
 // --- parsing (its own structs, independent of temis) ---
