@@ -34,7 +34,7 @@ import (
 // address this same server is about to serve on — the loopback arrangement
 // cmd/atlas builds, which is what makes the adapter a pure proxy over the public
 // API rather than a second way into the engine.
-func newMCPServer(t *testing.T) *httptest.Server {
+func newMCPServer(t *testing.T, opts ...api.Option) *httptest.Server {
 	t.Helper()
 	t.Setenv("ATLAS_ADMIN_USERNAME", "root")
 	t.Setenv("ATLAS_ADMIN_PASSWORD", "rootpassword")
@@ -55,10 +55,10 @@ func newMCPServer(t *testing.T) *httptest.Server {
 
 	ts := httptest.NewUnstartedServer(nil)
 	loopback := "http://" + ts.Listener.Addr().String()
-	srv, err := api.New(proc, store, dir,
+	srv, err := api.New(proc, store, dir, append([]api.Option{
 		api.WithAuth(),
 		api.WithMCP(mcp.NewServer(mcp.NewClient(loopback))),
-	)
+	}, opts...)...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}

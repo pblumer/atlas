@@ -1,6 +1,6 @@
 # ADR-0428: A product lifecycle may run as one instance per position, and its later operations are delivered to that instance
 
-- **Status:** Accepted (amended 2026-10-01 — an operator's or a system's action may be asked through MCP; see "Landed in a second step")
+- **Status:** Accepted (amended 2026-10-01 — an operator's or a system's action may be asked through MCP; see "Landed in a second step"; amended 2026-11-10 — the change, and every customer action, is an MCP tool as the connected person unless the server switches it off, [ADR-draft-mcp-shop-customer-side](draft-mcp-shop-customer-side.md))
 - **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
@@ -300,6 +300,12 @@ Landed in a second step:
   MCP stands for what a customer asks; an action whose triggers include `operator` or
   `system` may be asked by an agent through `atlas_ask_order_line_action`, which names that
   trigger and is refused by the server for any action that does not declare it (ADR-0429 §2).
+  *Amended 2026-11-10:* the exclusion is lifted. The change is the MCP tool
+  `atlas_change_order_line`, and a customer's action is asked through
+  `atlas_ask_order_line_action` with `trigger: customer`, both as the person whose
+  credential the MCP connection carries and with that person's rights; a server started
+  with `--mcp-shop=false` refuses them to requests that come through MCP
+  ([ADR-draft-mcp-shop-customer-side](draft-mcp-shop-customer-side.md)).
 - **Progress.** Position progress (ADR-0390) answers `held` for a held per-position line
   whose strand only waits — at catch events, an event-based gateway, a receive task or a
   timer — and `active` while a change runs.
