@@ -349,6 +349,11 @@ directory gains the document store. Four changes can break what worked against 0
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A decision model opens with its graph in view.** The decision editor left a model's graph
+  where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
+  to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
+  the canvas those two boxes leave free, centred and scaled down only as far as the window needs —
+  never enlarged past its own size.
 - **A decision's input data are drawn connected to it.** A DMN model whose requirements carry no
   `id` (DMN allows that, and models written by hand, by an agent or by temis often omit it) was
   drawn with its input data beside the decision and no arrow between them, because a diagram

@@ -1338,6 +1338,13 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     if (gen !== generation) return;
     renderViews();
     dropWarnings = attachDmnWarnings(modeler, warnEl, toast);
+    // Opened on the graph, the graph is brought into view — as the BPMN editor does
+    // with every diagram it imports. Left at dmn-js's own viewport, it starts at the
+    // origin, under the palette and the model's name box, and has to be dragged out
+    // before anything can be read. It is fitted once the warnings strip is drawn,
+    // because the strip takes its height from the canvas: fitted before, the graph is
+    // placed for a canvas taller than the one that is left.
+    requestAnimationFrame(() => { if (gen === generation) fitDrd(modeler); });
     dropColumns = attachColumnSync(modeler, toast);
     patchCaretFields();
     // The status line says what a *save* just did, so it starts empty and is cleared
@@ -1854,10 +1861,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         // model that does not read is put back, and the re-flowed graph is unsaved work
         // the live session must not pull a peer's draft over.
         await importLocal(relaid);
-        const view = modeler.getActiveView();
-        if (view && view.type === "drd") {
-          try { modeler.getActiveViewer().get("canvas").zoom("fit-viewport"); } catch { /* nothing to fit */ }
-        }
+        fitDrd(modeler);
         toast && toast(tr("dmn.toast.laidOut"), "ok");
       } catch (e) {
         toast && toast(tr("dmn.toast.layoutFailed", { error: e.message }), "err");
@@ -2040,4 +2044,63 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // follows a decision renamed while it is open.
   refreshDeployed(true);
   modeler.on("views.changed", () => { refreshDeployed(false); });
+}
+
+// fitDrd brings the decision requirements graph into view when it is the open view.
+// The graph is placed in the part of the canvas nothing covers — right of the palette,
+// below the model's name box — centred there, and scaled down only as far as it must
+// be to fit: never enlarged past its own size, which would blow a graph of three
+// nodes up into a different, cruder picture. Fitted to the whole canvas instead, it
+// lands under those two boxes in any window that is not large, which is the corner it
+// was supposed to be brought out of. A table open instead of the graph, or nothing to
+// fit, leaves the view as it is.
+export function fitDrd(modeler) {
+  try {
+    const view = modeler.getActiveView();
+    if (!view || view.type !== "drd") return;
+    const viewer = modeler.getActiveViewer();
+    const canvas = viewer.get("canvas");
+    // The canvas caches its viewbox, size included, and nothing tells it when the
+    // page around it changes height — the warnings strip, a chip in the bar. Read from
+    // the cache, the size is the old one, and the graph is placed for a canvas that is
+    // no longer there.
+    canvas.resized();
+    const { inner, outer } = canvas.viewbox();
+    if (!inner || !(inner.width > 0) || !(inner.height > 0) || !(outer.width > 0) || !(outer.height > 0)) return;
+    const box = canvas.getContainer().getBoundingClientRect();
+    const margin = 24;
+    const edge = (sel, side) => {
+      const el = canvas.getContainer().querySelector(sel);
+      return el ? el.getBoundingClientRect()[side] - box[side === "right" ? "left" : "top"] : 0;
+    };
+    const paletteRight = edge(".djs-palette", "right");
+    const namesRight = edge(".dmn-definitions", "right");
+    const namesBottom = edge(".dmn-definitions", "bottom");
+    // Two areas are clear of both boxes: below the name box, right of the palette; and
+    // right of the name box, from the top. A short canvas fits better into the second,
+    // a narrow one into the first; the one that shows the graph larger is taken.
+    const areas = [
+      { left: Math.max(paletteRight, 0) + margin, top: Math.max(namesBottom, 0) + margin },
+      { left: Math.max(paletteRight, namesRight, 0) + margin, top: margin },
+    ].map((a) => {
+      const w = outer.width - a.left - margin;
+      const h = outer.height - a.top - margin;
+      return { ...a, w, h, scale: Math.min(1, w / inner.width, h / inner.height) };
+    }).filter((a) => a.w >= 80 && a.h >= 60);
+    // A canvas too small to keep anything clear shows the whole graph at least.
+    const area = areas.sort((a, b) => b.scale - a.scale)[0]
+      || { left: 0, top: 0, w: outer.width, h: outer.height, scale: Math.min(1, outer.width / inner.width, outer.height / inner.height) };
+    const { left, top, scale } = area;
+    const free = { w: area.w, h: area.h };
+    // Screen point = (diagram point - viewbox origin) × scale. The graph's centre goes
+    // to the centre of the free area.
+    const cx = inner.x + inner.width / 2;
+    const cy = inner.y + inner.height / 2;
+    canvas.viewbox({
+      x: cx - (left + free.w / 2) / scale,
+      y: cy - (top + free.h / 2) / scale,
+      width: outer.width / scale,
+      height: outer.height / scale,
+    });
+  } catch { /* nothing to fit */ }
 }
