@@ -220,6 +220,9 @@
     <bpmndi:BPMNPlane id="plane" bpmnElement="proc_terminbuchung">
       <bpmndi:BPMNShape id="start_di" bpmnElement="start">
         <dc:Bounds x="92" y="302" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="60" y="344" width="100" height="27"/>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="assistent_di" bpmnElement="assistent" isExpanded="true">
         <dc:Bounds x="180" y="160" width="1700" height="400"/>
@@ -244,6 +247,9 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_slot_di" bpmnElement="gw_slot">
         <dc:Bounds x="1085" y="295" width="50" height="50"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1060" y="351" width="100" height="27"/>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="angaben_di" bpmnElement="angaben">
         <dc:Bounds x="1180" y="280" width="120" height="80"/>
@@ -265,18 +271,30 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="err_vergeben_di" bpmnElement="err_vergeben">
         <dc:Bounds x="1382" y="342" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1424" y="382" width="100" height="27"/>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="vorbereiten_di" bpmnElement="vorbereiten">
         <dc:Bounds x="1930" y="280" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="end_di" bpmnElement="end">
         <dc:Bounds x="2112" y="302" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2080" y="344" width="100" height="27"/>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="verfallen_di" bpmnElement="verfallen">
         <dc:Bounds x="242" y="542" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="284" y="582" width="100" height="27"/>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="end_verfallen_di" bpmnElement="end_verfallen">
         <dc:Bounds x="242" y="642" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="210" y="684" width="100" height="27"/>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start">
         <di:waypoint x="128" y="320"/>

@@ -277,7 +277,7 @@
     {
       "bundle": "terminbuchung",
       "version": "1.0.0",
-      "digest": "sha256:303dcafb91d4d5a9441f3d302990fc20c06ac50af585ed8f30d59ae7797cf54b",
+      "digest": "sha256:eb3467b4ada1c6cdee953ecfc5dd592f494a550a4a5515e746f63318b2882a40",
       "minAtlas": "0.25.0-0"
     }
   ]
