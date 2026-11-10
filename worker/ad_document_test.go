@@ -125,7 +125,7 @@ func TestAWorkerHoldsADirectorySearchToTheServersDocumentLimit(t *testing.T) {
 	// the worker, before any upload, is what "after … entries" and the absence of the
 	// store's error show.
 	if handlerErr == nil || !strings.Contains(handlerErr.Error(), "4000 bytes a document may be (ATLAS_LIMIT_DOCUMENT) after") ||
-		strings.Contains(handlerErr.Error(), "store the search result") {
+		strings.Contains(handlerErr.Error(), "store the result as a document") {
 		t.Fatalf("the worker's handler = %v; want the search stopped at the server's limit of 4000 bytes, before any upload", handlerErr)
 	}
 	if running := runningInstances(t, ts); running != 1 {

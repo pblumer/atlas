@@ -13,6 +13,11 @@
       "examples": ["mahnwesen", "preisaenderung", "produkt-erfassung", "order-to-cash", "pruefe-datensaetze"]
     },
     {
+      "id": "datenqualitaet",
+      "tags": ["datenqualitaet", "dmn"],
+      "examples": ["ad-benutzer-pruefen"]
+    },
+    {
       "id": "personal",
       "name": "Beispiele: Personal & Mitarbeitende",
       "tags": ["personal"],

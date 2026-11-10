@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">48</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">49</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">48</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">49</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2868,6 +2868,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">Benutzer in eine Gruppe aufnehmen, Gruppe notfalls anlegen</td><td data-l="en">Put a user in a group, creating the group if need be</td>
             <td><span class="tag err">AD</span></td>
             <td data-l="de">Suchen, um den DN zu erfahren; nichts gefunden ist eine Antwort</td><td data-l="en">Searching to learn the DN; found nothing is an answer</td></tr>
+          <tr><td><a href="#bsp-ad-benutzer-pruefen" data-l="de">AD-Benutzer prüfen</a><a href="#bsp-ad-benutzer-pruefen" data-l="en">Check AD users</a></td>
+            <td data-l="de">Jedes Konto des Verzeichnisses an DMN-Regeln messen</td><td data-l="en">Measure every account of the directory against DMN rules</td>
+            <td><span class="tag err">AD</span></td>
+            <td data-l="de">Suche als Dokument, dann ein Business-Rule-Task über die Datei</td><td data-l="en">Search as a document, then a business rule task over the file</td></tr>
           <tr><td><a href="#bsp-galsync">GALSync</a></td>
             <td data-l="de">Adressbuch zweier getrennter Welten synchron halten</td><td data-l="en">Keep the address book of two separate worlds in step</td>
             <td><span class="tag err">AD ×2</span></td>
@@ -3942,7 +3946,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               fehlerhaft, die ersten fehlerhaften Datensätze mit Zeilennummer und ein <b>Ergebnisdokument</b>, das
               jeden Datensatz mit <code>_row</code>, <code>_valid</code> und den übrigen Ausgaben der Entscheidung
               enthält. 50&nbsp;000 Datensätze brauchen so Sekunden statt Stunden (ADR-0548). Die ersten fehlerhaften
-              Datensätze lassen sich anschliessend wie oben mit einem Korrektur-User-Task pro Datensatz bearbeiten.</p>
+              Datensätze lassen sich anschliessend wie oben mit einem Korrektur-User-Task pro Datensatz bearbeiten.
+              Die Quelle darf auch ein Feld in einer Variable sein: <code>source="benutzer.document"</code> liest die
+              Datei, die eine <a href="#bsp-ad-benutzer-pruefen">AD-Suche als Dokument</a> geschrieben hat.</p>
             <p data-l="en"><b>For large files</b> – thousands to hundreds of thousands of records – one row per
               iteration does not carry: every iteration is engine work, and the collected output gets dearer with
               every row. For those, a <b>business rule task over a file</b> (panel: <i>Over a file → Once per record
@@ -3952,7 +3958,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               failed, the first failed records with their line, and a <b>result document</b> holding every record
               with <code>_row</code>, <code>_valid</code> and the decision's other outputs. 50,000 records take
               seconds rather than hours this way (ADR-0548). The first failed records can then be corrected as above,
-              one correction user task per record.</p>
+              one correction user task per record. The source may also be a field inside a variable:
+              <code>source="benutzer.document"</code> reads the file an <a href="#bsp-ad-benutzer-pruefen">AD search
+              written as a document</a> stored.</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -4844,6 +4852,86 @@ carla@example.org,admins,GOLD</code></pre></li>
             service account, no network. How to switch it on and what the report shows afterwards is under
             <a href="#testen">Test &amp; simulate</a> ("Trying Active Directory without an Active Directory"). <b>For
             real</b>: the <a href="#runbook-ad">Active Directory runbook</a>.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-ad-benutzer-pruefen">
+        <h4><span class="rz-emoji" aria-hidden="true">🔎</span>
+          <span data-l="de">AD-Benutzer prüfen: jedes Konto gegen die Regeln</span><span data-l="en">Check AD users: every account against the rules</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Active Directory</span>
+          <span class="tag" data-l="de">Mockup-Modus</span><span class="tag" data-l="en">mockup mode</span>
+          <span class="tag" data-l="de">Ergebnis als Dokument</span><span class="tag" data-l="en">result as a document</span>
+          <span class="tag">DMN</span>
+          <span class="tag">examples/ad-benutzer-pruefen/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">„Hat jedes Konto eine E-Mail-Adresse, eine bekannte Abteilung und genau eine Lizenz?“
+              Eine Frage an das ganze Verzeichnis, nicht an ein Konto – bei zehntausenden Benutzern eine Frage,
+              die niemand von Hand beantwortet. Der Prozess liest alle Konten, misst jedes an Regeln, die in einer
+              <b>DMN-Entscheidung</b> stehen, und legt das Ergebnis als Datei ab: welche Konten in Ordnung sind,
+              welche nicht, und <b>welche Regel</b> jedes verletzt. Die Regeln ändert die Fachseite in der
+              Entscheidung, ohne den Prozess anzufassen.</p>
+            <p data-l="en">"Does every account have an e-mail address, a known department and exactly one licence?"
+              A question to the whole directory rather than to one account – with tens of thousands of users, a
+              question nobody answers by hand. The process reads every account, measures each against rules held in a
+              <b>DMN decision</b>, and files the result as a document: which accounts are in order, which are not,
+              and <b>which rule</b> each one breaks. The business side changes the rules in the decision without
+              touching the process.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein <code>atlas:adConnector</code> mit <code>operation="search"</code> und
+              <code>resultAs="document"</code> liest das Verzeichnis seitenweise in <code>benutzer.csv</code>: eine
+              Zeile pro Konto, zuerst <code>dn</code>, dann die Spalten aus <code>select</code>. In
+              <code>benutzer</code> stehen <code>found</code>, <code>count</code> und der kleinste DN wie bei jeder
+              Suche, dazu der Verweis <code>document</code> statt der Einträge. Der Business-Rule-Task liest die
+              Datei über diesen Pfad, <code>&lt;atlas:rowsFrom source="benutzer.document"/&gt;</code>, und wertet
+              <code>AdBenutzerGueltig</code> in <b>einem</b> Job für jede Zeile aus. Ein mehrwertiges Attribut wie
+              <code>memberOf</code> steht in einer Zelle, durch <code>|</code> getrennt; die Regel teilt sie mit
+              <code>split(memberOf, "[|]")</code>. Die Bitmaske <code>userAccountControl</code> liest
+              <code>modulo(floor(number(userAccountControl) / 2), 2)</code>, denn FEEL kennt keine
+              Bitoperationen. Mehr als <code>maxEntries</code> Konten (Vorgabe 100&nbsp;000) oder eine Datei über
+              der Dokumentgrenze lassen die Suche scheitern, statt eine abgeschnittene Datei abzulegen.</p>
+            <p data-l="en">An <code>atlas:adConnector</code> with <code>operation="search"</code> and
+              <code>resultAs="document"</code> reads the directory a page at a time into <code>benutzer.csv</code>:
+              one row per account, <code>dn</code> first, then the columns from <code>select</code>.
+              <code>benutzer</code> holds <code>found</code>, <code>count</code> and the smallest DN as every search
+              does, with the reference <code>document</code> in place of the entries. The business rule task reads the
+              file at that path, <code>&lt;atlas:rowsFrom source="benutzer.document"/&gt;</code>, and evaluates
+              <code>AdBenutzerGueltig</code> for every row in <b>one</b> job. A multi-valued attribute such as
+              <code>memberOf</code> is one cell, its values separated by <code>|</code>; the rule splits it with
+              <code>split(memberOf, "[|]")</code>. The bitmask <code>userAccountControl</code> is read with
+              <code>modulo(floor(number(userAccountControl) / 2), 2)</code>, because FEEL has no bit operations.
+              More than <code>maxEntries</code> accounts (100,000 by default) or a file past the document limit fail
+              the search rather than storing a cut file.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Ohne Domain Controller ausprobieren</span><span data-l="en">Try it with no domain controller</span></summary>
+          <p data-l="de">Im <b>Mockup-Modus</b> des AD-Workers (<a href="/#/console/workers">Workers</a> → Karte
+            <b>Active Directory</b>) den Inhalt von <code>examples/ad-benutzer-pruefen/benutzer.ldif</code> als
+            Startbestand einfügen und unter <a href="/#/console/secrets">Secrets</a> ein <code>AD_BIND</code> mit
+            beliebigem Wert anlegen. Eine Instanz ohne Variablen liest 24 erfundene Konten und endet mit sechs
+            Befunden in <i>Befunde abgelegt</i>; das README des Beispiels nennt jedes Konto und die Regel, die es
+            verletzt. Gegen ein echtes Verzeichnis ändern sich nur Server-URL, Bind-DN und Base-DN. Ein Attribut,
+            das das Dienstkonto nicht lesen darf, kommt dann als leere Zelle an – die Regel meldet einen
+            Datenmangel, wo ein Rechteproblem vorliegt. Wie der Mockup-Modus funktioniert, steht unter
+            <a href="#testen">Testen &amp; Simulieren</a>.</p>
+          <p data-l="en">In the AD worker's <b>mockup mode</b> (<a href="/#/console/workers">Workers</a> →
+            <b>Active Directory</b> card) paste the content of <code>examples/ad-benutzer-pruefen/benutzer.ldif</code>
+            as the starting entries, and add an <code>AD_BIND</code> with any value under
+            <a href="/#/console/secrets">Secrets</a>. An instance with no variables reads 24 made-up accounts and ends
+            with six findings in <i>Befunde abgelegt</i>; the example's README names each account and the rule it
+            breaks. Against a real directory only the server URL, bind DN and base DN change. An attribute the
+            service account may not read then arrives as an empty cell – the rule reports missing data where the
+            problem is a missing right. How mockup mode works is under <a href="#testen">Test &amp;
+            simulate</a>.</p>
         </details>
       </div>
 
@@ -8620,11 +8708,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="de"><b>Erst üben, dann anschliessen:</b> Der AD-Worker hat einen <b>Mockup-Modus</b>, der gegen ein
           Verzeichnis im Arbeitsspeicher läuft – Konten anlegen, suchen, Gruppen setzen, alles, ohne Domain
           Controller. Siehe <a href="#testen">Testen &amp; Simulieren</a>. Beispiele:
-          <a href="#bsp-ad-gruppenzuweisung">AD-Gruppenzuweisung</a>, <a href="#bsp-galsync">GALSync</a>.</p>
+          <a href="#bsp-ad-gruppenzuweisung">AD-Gruppenzuweisung</a>, <a href="#bsp-ad-benutzer-pruefen">AD-Benutzer
+          prüfen</a>, <a href="#bsp-galsync">GALSync</a>.</p>
         <p data-l="en"><b>Practise first, connect second:</b> the AD worker has a <b>mockup mode</b> that runs against
           a directory in memory – creating accounts, searching, setting groups, all of it, with no domain controller.
           See <a href="#testen">Test &amp; simulate</a>. Examples:
-          <a href="#bsp-ad-gruppenzuweisung">AD group assignment</a>, <a href="#bsp-galsync">GALSync</a>.</p>
+          <a href="#bsp-ad-gruppenzuweisung">AD group assignment</a>, <a href="#bsp-ad-benutzer-pruefen">Check AD
+          users</a>, <a href="#bsp-galsync">GALSync</a>.</p>
         <p data-l="de"><b>Der DN ist keine Fachinformation.</b> Rechne damit, dass jede Zuweisung eine Suche
           voraussetzt – das ist keine Umständlichkeit, sondern die Struktur von LDAP.</p>
         <p data-l="en"><b>A DN is not business data.</b> Expect every assignment to require a search first – that is
@@ -8640,6 +8730,33 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <code>objectGUID</code> that is exactly the account's <code>onPremisesImmutableId</code> in Entra ID, the
           anchor Entra Connect matches an account by (hard match), so a process variable can compare or pass the value
           on as it is.</p>
+        <p data-l="de"><b>Ein ganzes Verzeichnis als Datei.</b> Eine Suche schreibt ihre Einträge normalerweise in die
+          Ergebnisvariable, und deren Budget reicht für einige tausend. Mit <i>Ergebnis als → Dokument</i>
+          (<code>resultAs="document"</code>) liest sie das Verzeichnis seitenweise in eine CSV-Datei: eine Zeile pro
+          Eintrag, zuerst <code>dn</code>, dann die Spalten aus <i>Gelieferte Attribute</i>, die hier Pflicht sind.
+          Ein Attribut mit mehreren Werten steht in einer Zelle, durch <code>|</code> getrennt; ein <code>|</code>
+          oder <code>\</code> in einem Wert wird mit <code>\</code> maskiert. Die Ergebnisvariable erhält
+          <code>{found, count, dn, document}</code>, und ein Business-Rule-Task über eine Datei liest das Dokument
+          direkt (<code>source="benutzer.document"</code>). <code>maxEntries</code> ist in dieser Form
+          standardmässig 100&nbsp;000, und die Dokumentgrenze des Servers (<code>ATLAS_LIMIT_DOCUMENT</code>) gilt
+          immer, auch auf einer Worker-Instanz: Eine Suche darüber scheitert beim Schreiben, statt eine
+          abgeschnittene Datei abzulegen. <b>Zwei Punkte vor dem ersten echten Lauf:</b> Ein Attribut, das das
+          Dienstkonto nicht lesen darf, kommt als leere Zelle an, nicht als Fehler – prüfe die Leserechte für jede
+          Spalte. Und die Datei nennt jede Person des Verzeichnisses; sie ist so geschützt wie die Instanz, zu der
+          sie gehört, und wird mit ihr entfernt.</p>
+        <p data-l="en"><b>A whole directory as a file.</b> A search normally writes its entries into the result
+          variable, whose budget holds a few thousand. With <i>Result as → Document</i>
+          (<code>resultAs="document"</code>) it reads the directory a page at a time into a CSV file: one row per
+          entry, <code>dn</code> first, then the columns from <i>Attributes returned</i>, which are required here. An
+          attribute with several values is one cell, its values separated by <code>|</code>; a <code>|</code> or
+          <code>\</code> inside a value is escaped with <code>\</code>. The result variable receives
+          <code>{found, count, dn, document}</code>, and a business rule task over a file reads the document directly
+          (<code>source="benutzer.document"</code>). <code>maxEntries</code> defaults to 100,000 in this form, and
+          the server's document limit (<code>ATLAS_LIMIT_DOCUMENT</code>) always applies, on a Worker Instance too: a
+          search past either fails while writing rather than storing a cut file. <b>Two points before the first real
+          run:</b> an attribute the service account may not read arrives as an empty cell, not as an error – check the
+          read rights for every column. And the file names every person in the directory; it is as protected as the
+          instance it belongs to, and is removed with it.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
@@ -14452,7 +14569,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">48</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">48</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">49</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">49</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

@@ -1,0 +1,398 @@
+# Startbestand für den Mockup-Modus des AD-Workers (examples/ad-benutzer-pruefen).
+#
+# 24 Konten unter ou=Benutzer, davon sechs mit einem Befund, den die Entscheidung
+# AdBenutzerGueltig meldet:
+#   ebaumann     deaktiviert (userAccountControl 514)
+#   iweber       keine E-Mail-Adresse
+#   lsteiner     Abteilung Marketing ist nicht bekannt
+#   obucher      in keiner Lizenzgruppe
+#   sroth        in zwei Lizenzgruppen
+#   vlehmann     deaktiviert und keine E-Mail-Adresse (546 = 512 + 32 + 2)
+#
+# Alle Personen sind erfunden.
+
+dn: ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: organizationalUnit
+ou: Benutzer
+
+dn: ou=Gruppen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: organizationalUnit
+ou: Gruppen
+
+dn: cn=Alle Mitarbeitenden,ou=Gruppen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: group
+cn: Alle Mitarbeitenden
+sAMAccountName: Alle-Mitarbeitenden
+
+dn: cn=Lizenz-E3,ou=Gruppen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: group
+cn: Lizenz-E3
+sAMAccountName: Lizenz-E3
+
+dn: cn=Lizenz-F3,ou=Gruppen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: group
+cn: Lizenz-F3
+sAMAccountName: Lizenz-F3
+
+dn: cn=Anna Maier,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Anna Maier
+givenName: Anna
+sn: Maier
+sAMAccountName: amaier
+department: Buchhaltung
+userAccountControl: 512
+mail: amaier@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Beat Keller,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Beat Keller
+givenName: Beat
+sn: Keller
+sAMAccountName: bkeller
+department: Informatik
+userAccountControl: 512
+mail: bkeller@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Claudia Brunner,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Claudia Brunner
+givenName: Claudia
+sn: Brunner
+sAMAccountName: cbrunner
+department: Personal
+userAccountControl: 512
+mail: cbrunner@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Daniel Frei,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Daniel Frei
+givenName: Daniel
+sn: Frei
+sAMAccountName: dfrei
+department: Vertrieb
+userAccountControl: 66048
+mail: dfrei@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Elena Baumann,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Elena Baumann
+givenName: Elena
+sn: Baumann
+sAMAccountName: ebaumann
+department: Vertrieb
+userAccountControl: 514
+mail: ebaumann@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Fabian Huber,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Fabian Huber
+givenName: Fabian
+sn: Huber
+sAMAccountName: fhuber
+department: Informatik
+userAccountControl: 512
+mail: fhuber@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Gabriela Schmid,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Gabriela Schmid
+givenName: Gabriela
+sn: Schmid
+sAMAccountName: gschmid
+department: Buchhaltung
+userAccountControl: 512
+mail: gschmid@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Hans Meier,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Hans Meier
+givenName: Hans
+sn: Meier
+sAMAccountName: hmeier
+department: Personal
+userAccountControl: 512
+mail: hmeier@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Ines Weber,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Ines Weber
+givenName: Ines
+sn: Weber
+sAMAccountName: iweber
+department: Vertrieb
+userAccountControl: 512
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Jonas Moser,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Jonas Moser
+givenName: Jonas
+sn: Moser
+sAMAccountName: jmoser
+department: Informatik
+userAccountControl: 512
+mail: jmoser@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Karin Graf,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Karin Graf
+givenName: Karin
+sn: Graf
+sAMAccountName: kgraf
+department: Buchhaltung
+userAccountControl: 512
+mail: kgraf@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Lukas Steiner,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Lukas Steiner
+givenName: Lukas
+sn: Steiner
+sAMAccountName: lsteiner
+department: Marketing
+userAccountControl: 512
+mail: lsteiner@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Monika Wyss,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Monika Wyss
+givenName: Monika
+sn: Wyss
+sAMAccountName: mwyss
+department: Personal
+userAccountControl: 512
+mail: mwyss@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Nico Fischer,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Nico Fischer
+givenName: Nico
+sn: Fischer
+sAMAccountName: nfischer
+department: Vertrieb
+userAccountControl: 512
+mail: nfischer@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Olivia Bucher,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Olivia Bucher
+givenName: Olivia
+sn: Bucher
+sAMAccountName: obucher
+department: Informatik
+userAccountControl: 512
+mail: obucher@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Patrick Gerber,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Patrick Gerber
+givenName: Patrick
+sn: Gerber
+sAMAccountName: pgerber
+department: Buchhaltung
+userAccountControl: 512
+mail: pgerber@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn:: Y249Uml0YSBNw7xsbGVyLG91PUJlbnV0emVyLGRjPWJlaXNwaWVsLGRjPWNo
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn:: Uml0YSBNw7xsbGVy
+givenName: Rita
+sn:: TcO8bGxlcg==
+sAMAccountName: rmueller
+department: Vertrieb
+userAccountControl: 512
+mail: rmueller@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Simon Roth,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Simon Roth
+givenName: Simon
+sn: Roth
+sAMAccountName: sroth
+department: Informatik
+userAccountControl: 512
+mail: sroth@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Tanja Zimmermann,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Tanja Zimmermann
+givenName: Tanja
+sn: Zimmermann
+sAMAccountName: tzimmermann
+department: Personal
+userAccountControl: 512
+mail: tzimmermann@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Urs Brun,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Urs Brun
+givenName: Urs
+sn: Brun
+sAMAccountName: ubrun
+department: Vertrieb
+userAccountControl: 512
+mail: ubrun@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Vera Lehmann,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Vera Lehmann
+givenName: Vera
+sn: Lehmann
+sAMAccountName: vlehmann
+department: Buchhaltung
+userAccountControl: 546
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Walter Suter,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Walter Suter
+givenName: Walter
+sn: Suter
+sAMAccountName: wsuter
+department: Informatik
+userAccountControl: 512
+mail: wsuter@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-F3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Xenia Kunz,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Xenia Kunz
+givenName: Xenia
+sn: Kunz
+sAMAccountName: xkunz
+department: Personal
+userAccountControl: 512
+mail: xkunz@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch
+
+dn: cn=Yves Hofmann,ou=Benutzer,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Yves Hofmann
+givenName: Yves
+sn: Hofmann
+sAMAccountName: yhofmann
+department: Vertrieb
+userAccountControl: 512
+mail: yhofmann@beispiel.ch
+memberOf: CN=Alle Mitarbeitenden,OU=Gruppen,DC=beispiel,DC=ch
+memberOf: CN=Lizenz-E3,OU=Gruppen,DC=beispiel,DC=ch

@@ -4189,7 +4189,9 @@ const SERVICE_TASK_KINDS = [
       {
         key: "select", label: "Attributes returned", placeholder: "cn,mail,sAMAccountName",
         showIf: (v) => v.operation === "search",
-        hint: "The attributes the search returns, comma-separated — an LDAP attribute selection such as cn,mail. Empty returns the directory's default set: every attribute the account may read. Ask only for what the process needs, because whatever the search returns lands in the result variable.",
+        hint: (v) => v.resultAs === "document"
+          ? "The columns of the file, comma-separated, in the order written — e.g. sAMAccountName,mail,memberOf. Required here: a rule that checks the file names its columns, so the columns cannot depend on what the server returns by default. The first column is always dn; do not list it, nor * or +."
+          : "The attributes the search returns, comma-separated — an LDAP attribute selection such as cn,mail. Empty returns the directory's default set: every attribute the account may read. Ask only for what the process needs, because whatever the search returns lands in the result variable.",
       },
       {
         key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
@@ -4197,9 +4199,12 @@ const SERVICE_TASK_KINDS = [
         hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
       },
       {
-        key: "maxEntries", label: "Maximum entries", placeholder: "1000",
+        key: "maxEntries", label: "Maximum entries",
         showIf: (v) => v.operation === "sync" || v.operation === "search",
-        hint: (v) => v.operation === "search"
+        placeholder: (v) => (v.operation === "search" && v.resultAs === "document" ? "100000" : "1000"),
+        hint: (v) => v.operation === "search" && v.resultAs === "document"
+          ? "Caps what the search may write. Exceeding it fails the task rather than storing a cut file that looks complete. Empty uses 100000; 0 leaves only the document limit of the server (ATLAS_LIMIT_DOCUMENT), which always applies."
+          : v.operation === "search"
           ? "Caps what the search may return. Exceeding it fails the task rather than shortening the answer — a truncated result is a wrong answer, not a partial one, and a process branching on \"did I find it?\" would branch on it confidently. Empty uses 1000; 0 is unbounded."
           : "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
       },
@@ -4246,10 +4251,31 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output", showIf: (v) => v.operation === "sync" || v.operation === "search" },
       {
+        key: "resultAs", label: "Result as", type: "select", reRender: true,
+        showIf: (v) => v.operation === "search",
+        options: [
+          { v: "", l: "Variable — the entries in the result variable" },
+          { v: "document", l: "Document — a CSV file the result variable names" },
+        ],
+        hint: (v) => v.resultAs === "document"
+          // The FEEL example stays outside the translated text: a catalogue key holds
+          // no quotes, and an example is code, the same in every language.
+          ? kindText("One row per entry: dn, then the attributes in the order of 'Attributes returned'. An attribute with several values — memberOf, proxyAddresses — is one cell, its values joined by |; a | or a backslash inside a value is escaped with a backslash. A business rule task over a file reads the result directly (Source variable benutzer.document) and tests membership on the split cell, e.g.:") +
+            ' list contains(split(row.memberOf, "[|]"), "CN=Vertrieb,OU=Gruppen,DC=x")'
+          : "The variable form suits a question about a few entries — is this group there, and what is its DN? A whole directory (thousands of users to check) belongs in a document: the variable budget would refuse it, and a document keeps it out of the log and the history.",
+      },
+      {
+        key: "documentName", label: "File name", placeholder: "ad-search.csv",
+        showIf: (v) => v.operation === "search" && v.resultAs === "document",
+        hint: "The name the file is stored under, without a path — e.g. benutzer.csv. Empty uses ad-search.csv. The file belongs to the instance, and whoever may read the instance may read it.",
+      },
+      {
         key: "resultVariable", label: "Result variable", resultType: "object",
-        placeholder: (v) => (v.operation === "search" ? "gruppe" : "aenderungen"),
+        placeholder: (v) => (v.operation === "search" ? (v.resultAs === "document" ? "benutzer" : "gruppe") : "aenderungen"),
         showIf: (v) => v.operation === "sync" || v.operation === "search",
-        hint: (v) => v.operation === "search"
+        hint: (v) => v.operation === "search" && v.resultAs === "document"
+          ? "Receives {found, count, dn, document}: found, count and the smallest DN as in the variable form, so a gateway reads the same; 'document' is the reference to the file. Required in the document form."
+          : v.operation === "search"
           ? "Receives {found, count, dn, entries}. 'found' is what a gateway branches on — =gruppe.found — and 'dn' is the distinguished name of the first entry found, ready to hand straight to a following task's Target DN as =gruppe.dn. The entries are DN-sorted, so 'dn' is the same one every time. Nothing found is an answer, not a failure: the task completes with found=false."
           : "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
       },

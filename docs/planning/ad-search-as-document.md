@@ -1,7 +1,7 @@
 # AD search as a document — delivery plan
 
-**Status of this plan:** S0 and S1 done (2026-11-10). D1–D4 were confirmed as proposed;
-D5 was answered with option 1. S2 and S3 are open.
+**Status of this plan:** S0, S1 and S2 done (2026-11-10). D1–D4 were confirmed as proposed;
+D5 was answered with option 1. S3 is open and optional.
 
 **Builds on:** [ADR-0543](../adr/0543-a-file-is-a-document-not-a-variable.md) (documents),
 [ADR-0548](../adr/0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md)
@@ -61,13 +61,17 @@ checked by a rule that names them.
 `memberOf`, `proxyAddresses` and similar hold several values. They are written into one
 cell, joined by `|`; a `|` or `\` inside a value is escaped as `\|` and `\\`. A rule tests
 membership with FEEL on the split value, e.g.
-`list contains(split(row.memberOf, "\|"), "CN=Vertrieb,OU=Gruppen,DC=x")`.
+`list contains(split(row.memberOf, "[|]"), "CN=Vertrieb,OU=Gruppen,DC=x")`.
 
 The alternative — one column per value, or one row per value — makes the column set or
 the row count depend on the data, which a decision table cannot be written against.
 
-**To verify in S1:** whether FEEL's `split` with that pattern behaves as written in temis,
-and whether a helper is needed in the Modeler hint.
+**Verified in S2:** Atlas's FEEL engine splits on `"\|"`, `"\\|"` and `"[|]"` alike. The
+Modeler hint, the example and the handbook use `"[|]"`: a bracket expression needs no escape in a
+FEEL string, so it means the same in an engine that reads `\|` as an invalid string escape. Not
+verified against temis. A plain split ignores the escaping: a value that itself contains `|`
+splits into two. In a DN that is rare; a rule that must be exact for such values has to undo the
+escaping itself, and no helper exists for that.
 
 ### D4 — Limits (taken)
 
@@ -173,7 +177,32 @@ Planned, for reference:
 - Measured: time and peak heap for 50,000 entries against the mock, written up beside
   `benchmarks/results/measurement-95bce7d.md`.
 
-### S2 — Modeler, example, handbook
+### S2 — Modeler, example, handbook (done)
+
+As built:
+
+- **Panel** (`api/web/editor.js`, AD kind): *Result as* (variable | document) for a search, and
+  *File name* in the document form. The hints of *Attributes returned*, *Maximum entries* and
+  *Result variable* follow the form: columns required, 100,000 as the cap's default, `{found, count,
+  dn, document}`. The document form's hint gives the file layout and the FEEL test of a multi-valued
+  cell. Switching to the variable form or to another operation drops `documentName`, which the
+  compiler refuses without the form (`e2e/ad-search-modeler.spec.mjs`). German and English texts in
+  the locale catalogue.
+- **Example** `examples/ad-benutzer-pruefen/`: the search as a document, a business rule task over
+  `benutzer.document`, the decision `AdBenutzerGueltig` (account enabled from bit 2 of
+  `userAccountControl`, e-mail set, department known, exactly one licence group), and a seed
+  `benutzer.ldif` of 24 made-up accounts, six of them defective. Installable from the handbook and
+  the hub bundle `datenqualitaet`, which the examples for the other sources will join. `worker/ad_benutzer_pruefen_test.go` runs it as shipped:
+  the search on a Worker Instance against the mock seeded from the file, the check in the in-process
+  DMN worker, and the six findings with the rules each breaks.
+- **Handbook** (de/en): the example's card, the AD runbook's section on the document form (read
+  rights per column, personal data), and the source path in the section on business rule tasks over
+  a file. CHANGELOG entry extended.
+- **Limit on a Worker Instance** (found while answering a question on S1, fixed before S2): the
+  server sends its document budget with the job (`documentLimit`), so a Worker Instance checks against
+  the limit the upload will meet instead of the 35 MiB default.
+
+Planned, for reference:
 
 - AD panel: *Result as: variable / document*, the file name, a hint on multi-valued
   attributes.

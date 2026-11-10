@@ -209,6 +209,11 @@ var catalogSources = []catalogSource{
 		ID: "ad-gruppenzuweisung", App: "Beispiel: AD-Gruppenzuweisung",
 		Files: []string{"ad-gruppenzuweisung.bpmn"},
 	},
+	// An AD search written as a document, then a business rule task over the file
+	// (docs/planning/ad-search-as-document.md, S2). No Start button: the search parks
+	// for an AD worker, which a bare start would leave hanging.
+	{ID: "ad-benutzer-pruefen", App: "Beispiel: AD-Benutzer prüfen", Dir: "ad-benutzer-pruefen",
+		Main: "ad-benutzer-pruefen/ad-benutzer-pruefen.bpmn"},
 	{ID: "galsync", App: "Beispiel: GALSync", Files: []string{"galsync.bpmn"}},
 	{
 		ID: "entra-team-onboarding", App: "Beispiel: Team-Onboarding (Entra)",
