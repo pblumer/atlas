@@ -2687,6 +2687,14 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   the removed holds is kept; erasing it would need an engine event of its own.
 
 **The shop & ordering**
+- ✅ **The shop over MCP, as the connected person.** An agent connected as a person — OAuth
+  over `/mcp` or that person's API token over stdio — browses the catalogues they may order
+  from, orders, follows, withdraws, corrects, returns and changes orders, decides their own
+  approvals and asks a customer's action, with exactly that person's rights and under their
+  name: sixteen tools, one route each. On by default for repeatable agent-driven catalogue
+  tests; `--mcp-shop=false` refuses them to MCP requests while the portal keeps them
+  ([ADR-draft-mcp-shop-customer-side](docs/adr/draft-mcp-shop-customer-side.md), reversing
+  ADR-0428's and ADR-0429 §2's exclusion).
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
   product by eligibility: levels read from the graph once ([ADR-0383](docs/adr/0383-portal-level-names.md)),
   keyword search ([ADR-0355](docs/adr/0355-catalogue-search.md)), favourites
@@ -2799,7 +2807,8 @@ actions with closed effects, each a command whose outcome is a fact published be
   delivered to the strand or started at the action's start event; `GET …/actions` reads from
   the strand's live elements whether each action is possible now; MCP reads it
   (`atlas_order_line_actions`) and asks operator and system actions
-  (`atlas_ask_order_line_action`), never a customer's; a shop button per offered customer action, with its form or a
+  (`atlas_ask_order_line_action`) — since 2026-11-10 a customer's too, as the connected
+  person, unless `--mcp-shop=false` (ADR-draft-mcp-shop-customer-side); a shop button per offered customer action, with its form or a
   confirmation. `/change` is the act for the key `change`; the recipient may return and act
   (§10, decision 4); a directed delivery to a catch that lost an event-based gateway's race
   is now refused instead of reported delivered.

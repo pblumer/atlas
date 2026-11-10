@@ -13,6 +13,22 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The shop over MCP, as the connected person.** An agent connected as a person — with
+  their OAuth grant or session on `/mcp`, or their API token over `atlas mcp` — can now act
+  as that person in the shop: `atlas_shop_catalogs` and `atlas_shop_catalog`,
+  `atlas_shop_form_query` for an order form's person and value pickers, `atlas_place_order`,
+  `atlas_list_orders`, `atlas_get_order`, `atlas_order_ready_lines`, `atlas_shop_tasks`,
+  `atlas_order_line_progress`, `atlas_cancel_order`, `atlas_cancel_order_line`,
+  `atlas_amend_order_line`, `atlas_return_order_line`, `atlas_change_order_line`,
+  `atlas_list_approvals` and `atlas_decide_approvals`, and `atlas_ask_order_line_action`
+  takes `trigger: customer`. Each tool is the route the portal calls, decided by the same
+  handler with that person's rights, and what it does is recorded under their name — so a
+  catalogue can be tested end to end by an agent holding one connection per test person.
+  On by default; `--mcp-shop=false` (`ATLAS_MCP_SHOP=false`) makes the server refuse those
+  routes, and a customer's action, to requests that come through MCP while the portal keeps
+  working, and `GET /api/v1/info` says `mcpShop`. `atlas_catalog_releases` takes `limit`.
+  This reverses the MCP exclusion of ADR-0428 and ADR-0429 §2
+  (ADR-draft-mcp-shop-customer-side).
 - **The handbooks can be searched.** The handbook and the shop handbook carry a search field
   in their top bar: it lists the matching passages with chapter and heading, and choosing one
   scrolls there, opens a folded block around it and marks the words. Only the language on
