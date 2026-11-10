@@ -17,7 +17,7 @@ import (
 // must fire and the instance reach "end". Atlas re-checks a join only when a token
 // arrives at it, so the parked token stays there and the instance stays active.
 //
-// ADR-draft-complex-gateway depends on fixing this, because the complex
+// ADR-0551 depends on fixing this, because the complex
 // gateway's reset uses the same rule. When the engine re-checks a parked join after
 // a token leaves its upstream, this test fails by design: turn it into an execution
 // oracle that expects completion and update FLOW-05.

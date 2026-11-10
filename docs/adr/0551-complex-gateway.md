@@ -1,4 +1,4 @@
-# ADR-DRAFT: Run the Complex Gateway, on an inclusive join that re-checks when a token leaves
+# ADR-0551: Run the Complex Gateway, on an inclusive join that re-checks when a token leaves
 
 - **Status:** Proposed
 - **Implementation:** Not started
