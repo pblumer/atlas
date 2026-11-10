@@ -351,6 +351,9 @@ Not yet:
 The correction paths, from upload to corrected file, as *Correction, chosen by size* and
 *Writing the corrections back* decided, with these choices made in the building:
 
+- **Byte-order mark** (`dmn/rows.go`): the result and the failures document open with a
+  UTF-8 byte-order mark. Without it Excel reads them in the system's code page and shows
+  every umlaut garbled; every reader in Atlas skips it.
 - **Failures document** (`dmn/rows.go`): beside the result document the check stores
   `<name>.failures.csv`, the result's layout filtered to the records that failed, with
   an empty `_drop` column at the end. The summary names it as `failuresDocument`;
@@ -380,7 +383,11 @@ The correction paths, from upload to corrected file, as *Correction, chosen by s
   - **The file it writes** keeps the source's header, delimiter and byte-order mark
     (Excel needs the mark to read UTF-8), is named `<name>.corrected.csv` unless the
     model names it, and is held to the document budget the activating server sends with
-    the job. The source is never changed. The result is `{document, source, total,
+    the job.
+  - **A corrected file's separator is read off its header** (the candidate among `,`
+    `;` tab `|` that occurs most often outside quotes on the first line), not taken from
+    the task: the file has been through a spreadsheet, and German and Swiss Excel save
+    CSV with a semicolon whatever it had. A line with none of them keeps the task's. The source is never changed. The result is `{document, source, total,
     replaced, dropped, records}`.
   - It runs in process (`HandlerWithStores`, the server's store for the job's instance)
     and on a Worker Instance (`runCSV`, under the job's lease), through the same

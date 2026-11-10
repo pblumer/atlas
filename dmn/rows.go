@@ -46,6 +46,9 @@ type RowsOptions struct {
 	MaxSummary int
 }
 
+// utf8BOM opens every document a check writes (newResultWriter).
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // The columns a result document adds after the record's own.
 const (
 	rowColumn   = "_row"
@@ -379,6 +382,10 @@ func newResultWriter(delimiter string) *resultWriter {
 	if r := []rune(delimiter); len(r) == 1 {
 		w.delim = r[0]
 	}
+	// A UTF-8 byte-order mark first: without it Excel reads the file in the system's
+	// code page and shows every umlaut garbled, and the result and failures documents
+	// are opened in Excel more than anywhere else. Every reader in Atlas skips it.
+	w.buf.Write(utf8BOM)
 	w.cw = csv.NewWriter(&w.buf)
 	w.cw.Comma = w.delim
 	return w

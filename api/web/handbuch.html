@@ -3963,12 +3963,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               (<a href="#bsp-ldap-personen-pruefen">LDAP-Personen prüfen</a>).</p>
             <p data-l="de"><b>Korrigieren bis zur Datei.</b> Neben dem Ergebnisdokument legt die Prüfung eine
               <b>Befunddatei</b> ab (<code>failuresDocument</code>): nur die fehlerhaften Datensätze, mit
-              <code>_row</code>, den verletzten Regeln und einer leeren Spalte <code>_drop</code>. Danach entscheidet
+              <code>_row</code>, den verletzten Regeln und einer leeren Spalte <code>_drop</code>; sie beginnt mit
+              einem Byte-Order-Mark, damit Excel die Umlaute richtig zeigt. Danach entscheidet
               das Modell nach Menge: Wenige Befunde werden je ein Korrektur-Task über <code>failures</code>, mit
               sofortiger Nachprüfung; viele werden als Datei korrigiert – ein User-Task bietet die Befunddatei zum
               Herunterladen an (ein Dateifeld, dessen Variable schon ein Dokument hält, zeigt einen Download-Link) und
               nimmt die korrigierte Datei wieder an. Beide Wege enden im CSV-Worker mit
-              <code>operation="apply-corrections"</code>: Er schreibt eine korrigierte Kopie der Datei, ersetzt jeden
+              <code>operation="apply-corrections"</code> (das Trennzeichen einer hochgeladenen Korrekturdatei liest er
+              aus ihrer Kopfzeile, denn Excel speichert in der Schweiz mit Semikolon): Er schreibt eine korrigierte
+              Kopie der Datei, ersetzt jeden
               Datensatz, den eine Korrektur über ihre <code>_row</code> nennt, verwirft die mit <code>_drop</code>
               markierten und lässt alle anderen unverändert. Die hochgeladene Datei bleibt, wie sie war. Eine
               <code>_row</code>, die die Datei nicht hat, oder ein Feld ohne Spalte lässt den Task scheitern, statt
@@ -3976,11 +3979,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               <a href="#bsp-mitarbeitende-pruefen">Mitarbeitende prüfen und korrigieren</a>.</p>
             <p data-l="en"><b>Correcting all the way to the file.</b> Beside the result document the check stores a
               <b>failures document</b> (<code>failuresDocument</code>): only the records that failed, with
-              <code>_row</code>, the rules they break and an empty <code>_drop</code> column. The model then decides by
+              <code>_row</code>, the rules they break and an empty <code>_drop</code> column; it opens with a
+              byte-order mark so Excel shows the umlauts right. The model then decides by
               volume: a few findings become one correction task each over <code>failures</code>, re-checked at once;
               many are corrected as a file – a user task offers the failures document for download (a file field whose
               variable already holds a document shows a download link) and takes the corrected file back. Both paths
-              end in the CSV worker with <code>operation="apply-corrections"</code>: it writes a corrected copy of the
+              end in the CSV worker with <code>operation="apply-corrections"</code> (it reads an uploaded corrections
+              file's separator off its header, because Excel saves with a semicolon in many locales): it writes a
+              corrected copy of the
               file, replaces each record a correction names by its <code>_row</code>, drops those marked in
               <code>_drop</code> and leaves every other record as it was. The uploaded file stays as it was. A
               <code>_row</code> the file does not have, or a field with no column, fails the task rather than
