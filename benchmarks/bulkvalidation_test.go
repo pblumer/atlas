@@ -1,15 +1,18 @@
 package benchmarks
 
-// Slice 0 of ADR-draft-bulk-validation-evaluates-a-decision-per-row-in-one-job: the
+// Slice 0 of ADR-0548: the
 // measurements that decide between one validation job per file and one multi-instance
 // iteration per row (ADR-0084). Nothing here is a feature; it answers the record's open
 // question with numbers instead of arithmetic. The write-up of a run is
 // results/bulk-validation-*.md.
 //
-//	go test -run=^$ -bench=BulkValidation -benchmem -benchtime=1x -count=3 ./benchmarks/
+//	ATLAS_BENCH_BULK=full go test -run=^$ -bench=BulkValidation -benchmem -benchtime=1x -count=3 -timeout=120m ./benchmarks/
 //
 // The decision benchmarks take a normal -benchtime; the file and multi-instance ones do
-// one whole file per op, so give them -benchtime=1x (or 3x).
+// one whole file per op, so give them -benchtime=1x (or 3x). Without ATLAS_BENCH_BULK=full
+// each runs one size only (a 50,000-row file, a 1,000-row instance): CI smoke-runs every
+// benchmark in this package once, and the full multi-instance series takes minutes.
+// ATLAS_BENCH_ROWS picks the multi-instance sizes by hand.
 
 import (
 	"bytes"
@@ -227,7 +230,11 @@ func BenchmarkBulkValidationStreamedFile(b *testing.B) {
 	if err := reg.Deploy(1, []byte(qualityDMN)); err != nil {
 		b.Fatal(err)
 	}
-	for _, n := range []int{10_000, 50_000, 200_000} {
+	sizes := []int{50_000}
+	if os.Getenv("ATLAS_BENCH_BULK") == "full" {
+		sizes = []int{10_000, 50_000, 200_000}
+	}
+	for _, n := range sizes {
 		src := benchCSV(n)
 		b.Run(fmt.Sprintf("rows=%d", n), func(b *testing.B) {
 			b.ReportAllocs()
@@ -329,7 +336,11 @@ func do(h http.Handler, method, path, body string) (int, []byte) {
 // durable profile. It reports what the log, the state and the evaluation records grow
 // by for one file, and how long the file takes from start to completion.
 func BenchmarkBulkValidationMultiInstance(b *testing.B) {
-	for _, n := range benchRowCounts([]int{1_000, 2_000, 5_000, 10_000}) {
+	sizes := []int{1_000}
+	if os.Getenv("ATLAS_BENCH_BULK") == "full" {
+		sizes = []int{1_000, 2_000, 5_000, 10_000}
+	}
+	for _, n := range benchRowCounts(sizes) {
 		b.Run(fmt.Sprintf("rows=%d", n), func(b *testing.B) {
 			dir := b.TempDir()
 			walDir := filepath.Join(dir, "wal")
