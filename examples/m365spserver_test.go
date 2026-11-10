@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/api/formavailability"
 	"github.com/pblumer/atlas/expr"
 )
 
@@ -282,3 +283,27 @@ func TestSharePointServerTeamSiteChecksTheAddressFirst(t *testing.T) {
 	}
 }
 
+// TestSharePointServerOrderFormChecksTheURLLive: the order form asks the farm's Worker
+// whether the URL is free while the person types, as the online form asks SharePoint
+// Online (ADR-0519). The installer copies this form into the on-premises variant as it
+// is, so it names the variant's worker itself.
+func TestSharePointServerOrderFormChecksTheURLLive(t *testing.T) {
+	raw, err := os.ReadFile("m365-dienste/sharepoint-server/m365-spserver-site-bestellung.form.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	form, err := formavailability.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := form.Field("url")
+	if !ok {
+		t.Fatal("the url field has no availability check")
+	}
+	if len(f.Source.Checks) != 1 {
+		t.Fatalf("checks = %+v", f.Source.Checks)
+	}
+	if ck := f.Source.Checks[0]; ck.WorkerType != "sharepointserver" || ck.Worker != "ucc_sharepoint_onprem" || ck.Resource != "sites" {
+		t.Errorf("check = %+v, want sharepointserver/sites on ucc_sharepoint_onprem", ck)
+	}
+}

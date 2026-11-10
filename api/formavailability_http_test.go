@@ -198,3 +198,22 @@ func TestANameFieldSaysWhetherTheNameIsFree(t *testing.T) {
 		t.Errorf("a closed Worker: %d %v", code, out)
 	}
 }
+
+// A SharePoint Server Worker may be opened to forms: its site lookup is a source of the
+// name check (ADR-0519, amended 2026-11-10), and the switch is its editors' as for every
+// other source. A kind no form can ask through is still refused.
+func TestASharePointServerWorkerCanBeOpenedToForms(t *testing.T) {
+	st := openLookupStack(t, t.TempDir())
+	admin := newClient(t)
+	if login(t, admin, st.ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	if code, b := cReq(t, admin, st.ts, "POST", "/api/v1/connectors",
+		`{"name":"ucc_sharepoint_onprem","kind":"sharepointserver","endpoint":"http://sp01.contoso.local","formLookups":true}`); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create a SharePoint Server Worker open to forms: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, st.ts, "POST", "/api/v1/connectors",
+		`{"name":"farm_jira","kind":"jira","endpoint":"https://jira.example.com","credentialsRef":"j","formLookups":true}`); code != http.StatusBadRequest || !strings.Contains(string(b), "sharepointserver") {
+		t.Fatalf("a Jira Worker open to forms: %d (%s), want 400 naming the kinds that can", code, b)
+	}
+}

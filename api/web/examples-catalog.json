@@ -8659,6 +8659,17 @@
                   "required": true,
                   "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
                 },
+                "atlasAvailability": {
+                  "version": 1,
+                  "minLength": 3,
+                  "checks": [
+                    {
+                      "workerType": "sharepointserver",
+                      "worker": "ucc_sharepoint_onprem",
+                      "resource": "sites"
+                    }
+                  ]
+                },
                 "properties": {
                   "personal": "false"
                 }

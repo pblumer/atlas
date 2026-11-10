@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/workerquery"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/sharepointserver"
 	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
@@ -225,7 +227,7 @@ func TestProviders(t *testing.T) {
 		}
 		kinds[p.WorkerType] = true
 	}
-	for _, k := range []string{"entra", "exchange", "sharepoint"} {
+	for _, k := range []string{"entra", "exchange", "sharepoint", "sharepointserver"} {
 		if !kinds[k] {
 			t.Errorf("no source of Worker Type %s", k)
 		}
@@ -330,5 +332,38 @@ func TestWriteCheckEdges(t *testing.T) {
 	newService(b, openWorkers).WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"dev-huda"}`)).WithContext(ctx), []byte(siteForm), "url")
 	if rec.Body.Len() != 0 {
 		t.Errorf("a withdrawn check answered %q", rec.Body.String())
+	}
+}
+
+// A SharePoint Server site is asked of the farm's own Worker by its name alone: the
+// Worker holds its web application and managed path, so a form names neither, and the
+// query carries no filter the Worker would refuse.
+func TestASharePointServerSiteIsAskedByItsNameAlone(t *testing.T) {
+	schema := `{"components":[{"type":"textfield","key":"url","atlasAvailability":{"version":1,
+	  "checks":[{"workerType":"sharepointserver","worker":"ucc_sharepoint_onprem","resource":"sites"}]}}]}`
+	if err := CheckSchema([]byte(schema)); err != nil {
+		t.Fatal(err)
+	}
+	located := `{"components":[{"type":"textfield","key":"url","atlasAvailability":{"version":1,
+	  "checks":[{"workerType":"sharepointserver","worker":"w","resource":"sites","host":"sp01.contoso.local"}]}}]}`
+	if err := CheckSchema([]byte(located)); err == nil {
+		t.Error("a host on a SharePoint Server check was accepted; the Worker holds its web application")
+	}
+	for _, taken := range []bool{false, true} {
+		b := &fakeBroker{taken: map[string]bool{"sites": taken}}
+		s := New(Config{Worker: func(string) (Worker, bool, error) {
+			return Worker{WorkerType: "sharepointserver", Enabled: true, FormLookups: true}, true, nil
+		}, Ask: b.Ask})
+		rec := httptest.NewRecorder()
+		s.WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"Projekt-Alpha"}`)), []byte(schema), "url")
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		if rec.Code != http.StatusOK || out["available"] != !taken {
+			t.Errorf("taken=%v: %d %v", taken, rec.Code, out)
+		}
+		if len(b.asked) != 1 || b.types[0] != compiler.SharePointServerJobType || b.asked[0].Value != "projekt-alpha" ||
+			len(b.asked[0].Filters) != 0 || sharepointserver.CheckLookup(b.asked[0]) != nil {
+			t.Errorf("asked %v on %v", b.asked, b.types)
+		}
 	}
 }
