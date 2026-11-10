@@ -4,10 +4,10 @@
   "summary": "Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-11-09",
+  "last_reviewed": "2026-11-10",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Merge ADR-0547 part 2 (element locations), then start CON5: a generated public conformance report and a guard that keeps hand-written counts in README and TCK docs in step with the sources. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
+  "next_action": "Merge the first CON5 increment (generated public report and count markers). Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles; the next CON6 slices (Complex Gateway, parallel/instantiating event gateways, cyclic inclusive joins) each need their own ADR and an owner priority.",
   "slices": [
     {
       "id": "CON0",
@@ -115,7 +115,7 @@
     {
       "id": "CON5",
       "title": "Public normative conformance report and documentation reconciliation",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON1",
@@ -125,7 +125,12 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Render denominator-specific report; align README, roadmap, TCK docs and conformance gallery with evidence-backed claims."
+      "note": "First increment: generated provisional report conformance/CONFORMANCE_REPORT.md (classes as separate denominators, evidence strength incl. mid-flight restart and independent reference rows, unsupported/partial/unverified/unknown lists, four ADR-backed deviations, suite assets) and generated count markers in README, ROADMAP, conformance, TCK and differential docs; scripts/conformance_report.py --check and its tests run in CI. No percentage is printed while the denominator is unapproved. Acceptance needs CON1-CON4 acceptance and the CON0 denominator; the optional UI gallery is not yet aligned.",
+      "evidence": [
+        "../../../conformance/CONFORMANCE_REPORT.md",
+        "../../../scripts/conformance_report.py",
+        "../../../scripts/test_conformance_report.py"
+      ]
     },
     {
       "id": "CON6",

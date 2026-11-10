@@ -127,11 +127,11 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 
 ## Known unsupported candidates
 
-- **FLOW-08** Parallel event-based gateway — `compiler/validation.go`
-- **FLOW-09** Instantiating event-based gateway — `compiler/eventgateway_instantiate_test.go`
-- **FLOW-10** Complex Gateway — `compiler/scope_compile.go`
-- **ACT-12** Ad-hoc Subprocess, sequential ordering — `compiler/adhoc_test.go`
-- **EVT-05** Process-root Conditional Start — `compiler/validation.go`
+- **FLOW-08** Parallel event-based gateway — Refused at deploy with rule `event-gateway.kind` on the gateway (`eventGatewayType="Parallel"`); a stored definition reloads as the exclusive choice it compiled to (ADR-0177). No parallel event-gateway semantics run. CON6 candidate.
+- **FLOW-09** Instantiating event-based gateway — Refused at deploy with rule `event-gateway.kind` on the gateway (`instantiate="true"`); no instantiating event gateway runs. CON6 candidate.
+- **FLOW-10** Complex Gateway — Refused at deploy by name as `<complexGateway>`, anchored on the gateway element (ADR-0547); never interpreted as another gateway kind. CON6 candidate.
+- **ACT-12** Ad-hoc Subprocess, sequential ordering — An ad-hoc subprocess with `ordering="Sequential"` is refused at compile (ADR-0138); only parallel ordering runs. CON6 candidate.
+- **EVT-05** Process-root Conditional Start — A process-level conditional start is refused with rule `start.conditional`; conditions run only inside an instance (intermediate catch, boundary, event subprocess, ADR-0137). CON6 candidate.
 
 A negative compile/test case proves a diagnostic only, not execution support.
 

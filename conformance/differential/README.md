@@ -61,7 +61,7 @@ CI installs the pinned `bpmn-engine` dependency and runs the tagged test with
 `ATLAS_DIFFERENTIAL_REQUIRED=1`; missing Node/npm dependencies then **fail**
 instead of skipping. Each outcome is compared with both atlas and the
 checked-in portable `conformance/tck/cases/<scenario>/expected.json` projection.
-The five translated cases cover a **small control-flow subset only**, not
+The <!-- con:differential -->5<!-- /con --> translated cases cover a **small control-flow subset only**, not
 independent conformance of the other task/event families.
 
 Without the tag, `go test ./conformance/differential/` runs only the pure

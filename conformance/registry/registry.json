@@ -166,7 +166,7 @@
         "conformance/normative_oracles_test.go:TestCON2UnsupportedVariantsHaveExactDiagnostics"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/validation.go`",
+      "limitations": "Refused at deploy with rule `event-gateway.kind` on the gateway (`eventGatewayType=\"Parallel\"`); a stored definition reloads as the exclusive choice it compiled to (ADR-0177). No parallel event-gateway semantics run. CON6 candidate.",
       "reviewState": "provisional"
     },
     {
@@ -186,7 +186,7 @@
         "conformance/normative_oracles_test.go:TestCON2UnsupportedVariantsHaveExactDiagnostics"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/eventgateway_instantiate_test.go`",
+      "limitations": "Refused at deploy with rule `event-gateway.kind` on the gateway (`instantiate=\"true\"`); no instantiating event gateway runs. CON6 candidate.",
       "reviewState": "provisional"
     },
     {
@@ -206,7 +206,7 @@
         "conformance/normative_oracles_test.go:TestCON2ComplexGatewayIsNotAFalsePositive"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/scope_compile.go`",
+      "limitations": "Refused at deploy by name as `<complexGateway>`, anchored on the gateway element (ADR-0547); never interpreted as another gateway kind. CON6 candidate.",
       "reviewState": "provisional"
     },
     {
@@ -552,7 +552,7 @@
         "compiler/adhoc_test.go:TestParseAdHocSequentialRejected"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/adhoc_test.go`",
+      "limitations": "An ad-hoc subprocess with `ordering=\"Sequential\"` is refused at compile (ADR-0138); only parallel ordering runs. CON6 candidate.",
       "reviewState": "provisional"
     },
     {
@@ -832,7 +832,7 @@
         "conformance/normative_oracles_test.go:TestCON2UnsupportedVariantsHaveExactDiagnostics"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/validation.go`",
+      "limitations": "A process-level conditional start is refused with rule `start.conditional`; conditions run only inside an instance (intermediate catch, boundary, event subprocess, ADR-0137). CON6 candidate.",
       "reviewState": "provisional"
     },
     {
@@ -3475,6 +3475,41 @@
       "implementation": "unknown",
       "verification": "unverified",
       "reviewState": "provisional"
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-01",
+      "requirement": "EVT-38",
+      "statement": "A terminate end event at the process root ends every other token and then completes the instance: its state is completed, not a separate terminated state.",
+      "adr": [
+        "docs/adr/0116-terminate-end-events.md"
+      ]
+    },
+    {
+      "id": "DEV-02",
+      "requirement": "FLOW-13",
+      "statement": "An exclusive gateway whose conditions are all false and which has no default raises an incident and keeps its token parked, where the specification speaks of an exception; resolving the incident retries the decision.",
+      "adr": [
+        "docs/adr/0273-gateway-routing-incident.md"
+      ]
+    },
+    {
+      "id": "DEV-03",
+      "requirement": "EVT-35",
+      "statement": "An error no handler catches raises an incident on the throwing element and parks it, instead of ending the process abnormally.",
+      "adr": [
+        "docs/adr/0089-error-events.md"
+      ]
+    },
+    {
+      "id": "DEV-04",
+      "requirement": "FLOW-14",
+      "statement": "A definition stored before ADR-0547 that contains a refused sequence-flow shape still loads and routes as it was compiled, including a gateway default that names another gateway's flow; only its next deploy is refused.",
+      "adr": [
+        "docs/adr/0547-refuse-forbidden-sequence-flow-shapes.md",
+        "docs/adr/0177-reload-skips-the-deploy-gate.md"
+      ]
     }
   ]
 }
