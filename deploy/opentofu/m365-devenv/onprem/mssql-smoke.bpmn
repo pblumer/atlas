@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Smoke test of the MS SQL worker against AtlasTest_HR (scripts/mssql-testdb.sh), run by
+  onprem/run-mssql-smoke.py beside examples/mssql-eintrittsmeldung.bpmn. One instance per
+  case, chosen by the start variable fall:
+    liste    query, maxRows 10, WHERE abteilung = @p1 (PROJ)  -> rows: three rows
+    keiner   query-one for a kuerzel nobody has              -> person: null
+    doppelt  query-one WHERE abteilung = @p1 (GL), two rows  -> the job fails: an incident
+    zuviele  query without WHERE, maxRows 3 over six rows     -> the job fails: an incident
+    benannt  query-one with named binding {k: "mhu"}          -> person: Martina's row
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_mssql_smoke"
+                  targetNamespace="http://atlas/m365-devenv">
+  <bpmn:process id="proc_mssql_smoke" name="MS SQL worker: smoke test" isExecutable="true">
+    <bpmn:documentation>Smoke test of the MS SQL worker in the M365 test environment. Start variable fall: liste, keiner, doppelt, zuviele or benannt.</bpmn:documentation>
+    <bpmn:startEvent id="start"/>
+    <bpmn:sequenceFlow id="f_start" sourceRef="start" targetRef="welcher_fall"/>
+    <bpmn:exclusiveGateway id="welcher_fall" name="Fall?"/>
+
+    <bpmn:sequenceFlow id="f_liste" sourceRef="welcher_fall" targetRef="p_liste">
+      <bpmn:conditionExpression>= fall = "liste"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:scriptTask id="p_liste" name="Parameter PROJ">
+      <bpmn:extensionElements><zeebe:script expression="= [&quot;PROJ&quot;]" resultVariable="params"/></bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_liste2" sourceRef="p_liste" targetRef="q_liste"/>
+    <bpmn:serviceTask id="q_liste" name="Personen einer Abteilung">
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="query" maxRows="10"
+                              statement="SELECT kuerzel, abteilung FROM personen WHERE abteilung = @p1 ORDER BY kuerzel"
+                              parametersVariable="params" resultVariable="rows"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_liste3" sourceRef="q_liste" targetRef="ende"/>
+
+    <bpmn:sequenceFlow id="f_keiner" sourceRef="welcher_fall" targetRef="p_keiner">
+      <bpmn:conditionExpression>= fall = "keiner"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:scriptTask id="p_keiner" name="Parameter unbekannt">
+      <bpmn:extensionElements><zeebe:script expression="= [&quot;zzz&quot;]" resultVariable="params"/></bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_keiner2" sourceRef="p_keiner" targetRef="q_keiner"/>
+    <bpmn:serviceTask id="q_keiner" name="Unbekanntes Kuerzel">
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="query-one"
+                              statement="SELECT id FROM personen WHERE kuerzel = @p1"
+                              parametersVariable="params" resultVariable="person"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_keiner3" sourceRef="q_keiner" targetRef="ende"/>
+
+    <bpmn:sequenceFlow id="f_doppelt" sourceRef="welcher_fall" targetRef="p_doppelt">
+      <bpmn:conditionExpression>= fall = "doppelt"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:scriptTask id="p_doppelt" name="Parameter GL">
+      <bpmn:extensionElements><zeebe:script expression="= [&quot;GL&quot;]" resultVariable="params"/></bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_doppelt2" sourceRef="p_doppelt" targetRef="q_doppelt"/>
+    <bpmn:serviceTask id="q_doppelt" name="Eine Zeile, die zweimal passt">
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="query-one"
+                              statement="SELECT id FROM personen WHERE abteilung = @p1"
+                              parametersVariable="params" resultVariable="person"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_doppelt3" sourceRef="q_doppelt" targetRef="ende"/>
+
+    <bpmn:sequenceFlow id="f_zuviele" sourceRef="welcher_fall" targetRef="q_zuviele">
+      <bpmn:conditionExpression>= fall = "zuviele"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:serviceTask id="q_zuviele" name="Alle Personen, hoechstens drei">
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="query" maxRows="3"
+                              statement="SELECT kuerzel FROM personen"
+                              resultVariable="rows"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_zuviele2" sourceRef="q_zuviele" targetRef="ende"/>
+
+    <bpmn:sequenceFlow id="f_benannt" sourceRef="welcher_fall" targetRef="p_benannt">
+      <bpmn:conditionExpression>= fall = "benannt"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:scriptTask id="p_benannt" name="Parameter mit Namen">
+      <bpmn:extensionElements><zeebe:script expression="= {k: &quot;mhu&quot;}" resultVariable="params"/></bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_benannt2" sourceRef="p_benannt" targetRef="q_benannt"/>
+    <bpmn:serviceTask id="q_benannt" name="Benannte Bindung">
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="query-one"
+                              statement="SELECT kuerzel, abteilung FROM personen WHERE kuerzel = @k"
+                              parametersVariable="params" resultVariable="person"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_benannt3" sourceRef="q_benannt" targetRef="ende"/>
+
+    <bpmn:endEvent id="ende"/>
+  </bpmn:process>
+</bpmn:definitions>
