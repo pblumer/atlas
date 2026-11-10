@@ -41,7 +41,7 @@ func bareAtlas(t *testing.T, model string, opts ...api.Option) *httptest.Server 
 	}
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() { ts.Close(); srv.Close(); _ = store.Close(); _ = log.Close() })
-	post(t, ts, "/api/v1/deployments", model, "application/xml")
+	deployInApp(t, ts, model)
 	return ts
 }
 

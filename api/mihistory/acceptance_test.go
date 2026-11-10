@@ -95,7 +95,16 @@ func (a *acceptanceServer) shutdown() {
 
 func (a *acceptanceServer) deploy(xml string) uint64 {
 	a.t.Helper()
-	code, body, _ := a.do(http.MethodPost, "/api/v1/deployments", xml)
+	// Every process belongs to an application
+	// (ADR-0544).
+	code, body, _ := a.do(http.MethodPost, "/api/v1/applications", `{"name":"Acceptance"}`)
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil || app.ID == "" {
+		a.t.Fatalf("create application: %d %s", code, body)
+	}
+	code, body, _ = a.do(http.MethodPost, "/api/v1/deployments?projectId="+app.ID, xml)
 	if code != http.StatusOK {
 		a.t.Fatalf("deploy: %d %s", code, body)
 	}

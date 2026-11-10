@@ -52,7 +52,7 @@ func reportLatencyPercentiles(b *testing.B, samples []time.Duration) {
 // tail a client would see is visible, not just the mean.
 func BenchmarkLatencyHTTPLinearCreate(b *testing.B) {
 	h, _, _ := durableServer(b)
-	serveOK(b, h, http.MethodPost, "/api/v1/deployments", linearBPMN, "application/xml")
+	deployInApp(b, h, linearBPMN)
 
 	samples := make([]time.Duration, 0, b.N)
 	b.ReportAllocs()

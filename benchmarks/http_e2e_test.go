@@ -1,6 +1,7 @@
 package benchmarks
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -109,12 +110,28 @@ func serveOK(b *testing.B, h http.Handler, method, path, body, contentType strin
 	}
 }
 
+// deployInApp files the model under a fresh application and deploys it there: every
+// process belongs to an application (ADR-0544).
+func deployInApp(b *testing.B, h http.Handler, model string) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"name":"Bench"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &app); err != nil || app.ID == "" {
+		b.Fatalf("create application = %d: %s", rec.Code, rec.Body.String())
+	}
+	serveOK(b, h, http.MethodPost, "/api/v1/deployments?projectId="+app.ID, model, "application/xml")
+}
+
 // BenchmarkHTTPLinearCreate is workload #1 over the HTTP path: deploy once, then
 // POST-create a self-completing instance per iteration. Compare its ns/op to
 // BenchmarkLinearSelfCompleting to read off the API-layer overhead.
 func BenchmarkHTTPLinearCreate(b *testing.B) {
 	h, store, walDir := durableServer(b)
-	serveOK(b, h, http.MethodPost, "/api/v1/deployments", linearBPMN, "application/xml")
+	deployInApp(b, h, linearBPMN)
 	startPos := appliedPosition(b, store)
 
 	b.ReportAllocs()
@@ -131,7 +148,7 @@ func BenchmarkHTTPLinearCreate(b *testing.B) {
 // completion.
 func BenchmarkHTTPVariableGatewayCreate(b *testing.B) {
 	h, store, walDir := durableServer(b)
-	serveOK(b, h, http.MethodPost, "/api/v1/deployments", routerBPMN, "application/xml")
+	deployInApp(b, h, routerBPMN)
 	startPos := appliedPosition(b, store)
 
 	b.ReportAllocs()

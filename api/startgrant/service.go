@@ -62,6 +62,24 @@ const (
 	BlockConstantsMissing     = "constants-missing"
 )
 
+// AllBlockers is every blocker code, in the order a person reads them. The Console
+// says each one in words and its tests hold every code to the catalogue, so a code
+// added here without a message fails the build rather than showing as an id.
+var AllBlockers = []string{
+	BlockApplicationMissing, BlockApplicationProtected, BlockNotDeployed, BlockOtherApplication,
+	BlockNotExecutable, BlockInactive, BlockTriggerOnly, BlockConstantsMissing,
+}
+
+// Account issue codes the preview answers for an account that holds a grant but
+// would still not be offered the process.
+const (
+	IssueDisabled        = "disabled"
+	IssueMissingUserRole = "missing-user-role"
+)
+
+// AllAccountIssues is every account issue code, for the same reason as AllBlockers.
+var AllAccountIssues = []string{IssueDisabled, IssueMissingUserRole}
+
 // Target is what the server knows, now, about one application/process pair.
 type Target struct {
 	ApplicationFound     bool
@@ -119,6 +137,25 @@ type GrantView struct {
 	GroupIDs  []string `json:"groupIds"`
 	ChangedAt int64    `json:"changedAt,omitempty"`
 	ChangedBy string   `json:"changedBy,omitempty"`
+}
+
+// GrantStatus is a grant as the two read routes answer it: the scope's state and,
+// beside it, whether its process would be offered now. Blockers are the codes of the
+// rule the preview and the self-service routes share (selfServiceBlockers on the
+// server), for the process's newest version; empty means a person holding the grant
+// would be offered it. The write routes answer GrantView without them: what a write
+// changed is the audience, and its answer is not the administrator's table (MFE1A).
+type GrantStatus struct {
+	GrantView
+	Blockers []string `json:"blockers"`
+	// DefinitionKey and Version name the newest deployed version of the process id,
+	// absent when none is deployed.
+	DefinitionKey uint64 `json:"definitionKey,omitempty"`
+	Version       int32  `json:"version,omitempty"`
+}
+
+func statusOf(v GrantView, t Target) GrantStatus {
+	return GrantStatus{GrantView: v, Blockers: nonNil(t.Blockers), DefinitionKey: t.DefinitionKey, Version: t.Version}
 }
 
 // ChangeView is one audited change as the history route answers it.
@@ -228,7 +265,9 @@ func (s *Service) unavailable(w http.ResponseWriter) {
 }
 
 // HandleList answers every scope of one application that was ever granted,
-// revoked ones included, ordered by process id.
+// revoked ones included, ordered by process id, each with whether its process would
+// be offered now. Each scope is resolved in the same loop turn; the cost is bounded
+// by the application's grant records.
 func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.gate(w, r); !ok {
 		return
@@ -239,7 +278,7 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		items     []GrantView
+		items     []GrantStatus
 		found     bool
 		uncertain bool
 		err       error
@@ -254,9 +293,16 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = t.ApplicationFound || len(changes) > 0
-		items = make([]GrantView, 0, len(changes))
+		items = make([]GrantStatus, 0, len(changes))
 		for _, c := range changes {
-			items = append(items, viewOf(app, c.Grant.ProcessID, c, true))
+			// A process that cannot be resolved fails the list: a row without its
+			// blockers would read as offered.
+			pt, perr := s.resolve(app, c.Grant.ProcessID)
+			if perr != nil {
+				err = perr
+				return
+			}
+			items = append(items, statusOf(viewOf(app, c.Grant.ProcessID, c, true), pt))
 		}
 	})
 	switch {
@@ -287,8 +333,9 @@ func (s *Service) read(applicationID, processID string) (c Change, ok bool, t Ta
 	return
 }
 
-// HandleGet answers one scope's current grant. A scope never granted answers
-// revision 0 and an empty audience: deny is the default, not a missing record.
+// HandleGet answers one scope's current grant and whether its process would be
+// offered now. A scope never granted answers revision 0 and an empty audience: deny
+// is the default, not a missing record.
 func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.gate(w, r); !ok {
 		return
@@ -299,10 +346,11 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		c                     Change
+		t                     Target
 		has, found, uncertain bool
 		err                   error
 	)
-	s.loop.Do(func() { c, has, _, found, uncertain, err = s.read(app, proc) })
+	s.loop.Do(func() { c, has, t, found, uncertain, err = s.read(app, proc) })
 	switch {
 	case uncertain:
 		s.unavailable(w)
@@ -311,7 +359,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no application with that id")
 	default:
-		httpapi.JSON(w, http.StatusOK, viewOf(app, proc, c, has))
+		httpapi.JSON(w, http.StatusOK, statusOf(viewOf(app, proc, c, has), t))
 	}
 }
 
@@ -721,10 +769,10 @@ func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if acct.Disabled {
-				res.AccountIssues = append(res.AccountIssues, "disabled")
+				res.AccountIssues = append(res.AccountIssues, IssueDisabled)
 			}
 			if !acct.SelfService {
-				res.AccountIssues = append(res.AccountIssues, "missing-user-role")
+				res.AccountIssues = append(res.AccountIssues, IssueMissingUserRole)
 			}
 			if granted {
 				if contains(c.Grant.UserIDs, subject) {

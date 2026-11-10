@@ -24,7 +24,7 @@ const deletableBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524
 func TestDeleteDraftRemovesItAndIsIdempotent(t *testing.T) {
 	atlas := newAtlas(t)
 
-	if saved := callOne(t, atlas, "atlas_save_draft", map[string]any{"xml": deletableBPMN}); !strings.Contains(saved, "mcp-throwaway-proc") {
+	if saved := callOne(t, atlas, "atlas_save_draft", map[string]any{"projectId": testApp(t, atlas), "xml": deletableBPMN}); !strings.Contains(saved, "mcp-throwaway-proc") {
 		t.Fatalf("save draft = %s, want the process id", saved)
 	}
 	if listed := callOne(t, atlas, "atlas_list_drafts", map[string]any{}); !strings.Contains(listed, "mcp-throwaway-proc") {
@@ -65,8 +65,8 @@ func TestDeleteDraftRemovesItAndIsIdempotent(t *testing.T) {
 func TestDeleteDraftLeavesDeploymentsAlone(t *testing.T) {
 	atlas := newAtlas(t)
 
-	callOne(t, atlas, "atlas_save_draft", map[string]any{"xml": deletableBPMN})
-	if deployed := callOne(t, atlas, "atlas_deploy", map[string]any{"xml": deletableBPMN}); !strings.Contains(deployed, "mcp-throwaway-proc") {
+	callOne(t, atlas, "atlas_save_draft", map[string]any{"projectId": testApp(t, atlas), "xml": deletableBPMN})
+	if deployed := callOne(t, atlas, "atlas_deploy", map[string]any{"projectId": testApp(t, atlas), "xml": deletableBPMN}); !strings.Contains(deployed, "mcp-throwaway-proc") {
 		t.Fatalf("deploy = %s, want the deployed definition", deployed)
 	}
 

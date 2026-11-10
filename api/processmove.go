@@ -103,6 +103,12 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Out of every application is no longer a destination
+	// (ADR-0544).
+	if code, msg := s.unfileRefusal(payload.ProjectID); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	if payload.ProjectID != "" {
 		if code, msg := s.authorizeTargetProject(r, payload.ProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
@@ -133,49 +139,13 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Second loop turn: the write. Durable before visible (I2, ADR-0019) per record —
-	// the display copy is swapped only after its own record is on disk, so a persist
-	// that fails halfway leaves the store and the registry agreeing on what happened.
+	// Second loop turn: the write.
 	var (
 		loadErr    error
 		persistErr error
 		moved      []uint64
 	)
-	s.do(func() {
-		for _, k := range keys {
-			d, ok := s.deployments[k]
-			if !ok {
-				// Deleted between the two turns. Skipping is the honest answer: there is
-				// nothing left to file, and inventing a record for it would be worse.
-				continue
-			}
-			if d.ProjectID == payload.ProjectID {
-				continue // Already there. An idempotent move rewrites nothing.
-			}
-			// The full record, so the rewrite preserves the XML and the DMN models the
-			// in-memory deployment does not hold.
-			rec, ok, err := s.deploys.load(k)
-			if err != nil {
-				loadErr = err
-				return
-			}
-			if !ok {
-				// The registry and the sidecar have diverged (should not happen). Skip
-				// rather than write a record this server invented.
-				continue
-			}
-			rec.ProjectID = payload.ProjectID
-			if err := s.deploys.Save(rec); err != nil {
-				persistErr = err
-				return
-			}
-			d.ProjectID = payload.ProjectID
-			// Its constants bound to an application now read the new one's values
-			// (ADR-0453).
-			s.proc.SetDefinitionApplication(k, payload.ProjectID)
-			moved = append(moved, k)
-		}
-	})
+	s.do(func() { moved, loadErr, persistErr = s.refileDeploymentsOnLoop(keys, payload.ProjectID) })
 	switch {
 	case loadErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
@@ -191,4 +161,44 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 			"moved": moved,
 		})
 	}
+}
+
+// refileDeploymentsOnLoop files the deployed versions keys under projectID and
+// returns the keys whose record changed. Durable before visible (I2, ADR-0019) per
+// record: the display copy is swapped only after its own record is on disk, so a
+// persist that fails halfway leaves the store and the registry agreeing on what
+// happened. Must be called on the run loop.
+func (s *Server) refileDeploymentsOnLoop(keys []uint64, projectID string) (moved []uint64, loadErr, persistErr error) {
+	for _, k := range keys {
+		d, ok := s.deployments[k]
+		if !ok {
+			// Deleted between the two turns. Skipping is the honest answer: there is
+			// nothing left to file, and inventing a record for it would be worse.
+			continue
+		}
+		if d.ProjectID == projectID {
+			continue // Already there. An idempotent move rewrites nothing.
+		}
+		// The full record, so the rewrite preserves the XML and the DMN models the
+		// in-memory deployment does not hold.
+		rec, ok, err := s.deploys.load(k)
+		if err != nil {
+			return moved, err, nil
+		}
+		if !ok {
+			// The registry and the sidecar have diverged (should not happen). Skip
+			// rather than write a record this server invented.
+			continue
+		}
+		rec.ProjectID = projectID
+		if err := s.deploys.Save(rec); err != nil {
+			return moved, nil, err
+		}
+		d.ProjectID = projectID
+		// Its constants bound to an application now read the new one's values
+		// (ADR-0453).
+		s.proc.SetDefinitionApplication(k, projectID)
+		moved = append(moved, k)
+	}
+	return moved, nil, nil
 }

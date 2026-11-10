@@ -120,6 +120,61 @@ func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 	}
 }
 
+// TestWorkerTypesProjectOperationCapabilityClaims pins CDA3's read-only projection: a
+// built-in Worker Type lists the operations whose table rows declare a technical
+// capability, each claim marked candidate because no evidence is published
+// (ADR-0480, ADR-0483), and a Worker Type that declares none carries no operations.
+func TestWorkerTypesProjectOperationCapabilityClaims(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("worker types status=%d body=%s", code, body)
+	}
+	type claim struct {
+		ID      string `json:"id"`
+		Version string `json:"version"`
+		Profile string `json:"profile"`
+		State   string `json:"state"`
+	}
+	var catalog struct {
+		Kinds []struct {
+			ID         string `json:"id"`
+			Operations []struct {
+				ID           string  `json:"id"`
+				Capabilities []claim `json:"capabilities"`
+			} `json:"operations"`
+		} `json:"kinds"`
+	}
+	if err := json.Unmarshal(body, &catalog); err != nil {
+		t.Fatalf("decode worker types: %v (%s)", err, body)
+	}
+	want := map[string]claim{
+		"entra/create-channel":         {ID: "io.atlas.collaboration.channel.create", Version: "0.1.0", Profile: "microsoft-teams", State: "candidate"},
+		"teamsphone/ensure-call-queue": {ID: "io.atlas.telephony.call-queue.ensure", Version: "0.1.0", Profile: "microsoft-teams-phone", State: "candidate"},
+	}
+	for _, kind := range catalog.Kinds {
+		if kind.ID == "jira" && kind.Operations != nil {
+			t.Fatalf("jira declares no claims but lists operations: %+v", kind.Operations)
+		}
+		for _, op := range kind.Operations {
+			w, ok := want[kind.ID+"/"+op.ID]
+			if !ok {
+				continue
+			}
+			if len(op.Capabilities) != 1 || op.Capabilities[0] != w {
+				t.Fatalf("%s %s capabilities=%+v, want [%+v]", kind.ID, op.ID, op.Capabilities, w)
+			}
+			delete(want, kind.ID+"/"+op.ID)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("worker-types does not project %v: %s", want, body)
+	}
+	if strings.Contains(string(body), `"verified"`) {
+		t.Fatalf("a claim reads as verified although no evidence is published: %s", body)
+	}
+}
+
 func TestWorkerTypeRuntimeModeDoesNotFollowManualPlacement(t *testing.T) {
 	ts := newTestServerWith(t, api.WithOffloadedConnectorKinds([]string{"jira"}))
 	code, body := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")

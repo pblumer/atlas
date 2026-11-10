@@ -79,7 +79,9 @@
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles"
+      ],
       "scenarioIds": [
         "parallel-independent"
       ],
@@ -98,7 +100,9 @@
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles"
+      ],
       "scenarioIds": [
         "inclusive-gateway"
       ],
@@ -134,7 +138,10 @@
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles",
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [
         "event-gateway-message",
         "event-gateway-timer"
@@ -155,7 +162,8 @@
         "compiler/process.go"
       ],
       "testRefs": [
-        "compiler/eventgateway_instantiate_test.go:TestParseRefusesAnEventGatewayAtlasDoesNotRun"
+        "compiler/eventgateway_instantiate_test.go:TestParseRefusesAnEventGatewayAtlasDoesNotRun",
+        "conformance/normative_oracles_test.go:TestCON2UnsupportedVariantsHaveExactDiagnostics"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/validation.go`",
@@ -174,7 +182,8 @@
         "compiler/process.go"
       ],
       "testRefs": [
-        "compiler/eventgateway_instantiate_test.go:TestParseRefusesAnEventGatewayAtlasDoesNotRun"
+        "compiler/eventgateway_instantiate_test.go:TestParseRefusesAnEventGatewayAtlasDoesNotRun",
+        "conformance/normative_oracles_test.go:TestCON2UnsupportedVariantsHaveExactDiagnostics"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/eventgateway_instantiate_test.go`",
@@ -193,7 +202,8 @@
         "compiler/process.go"
       ],
       "testRefs": [
-        "compiler/parse_test.go:TestParseUnsupportedElementMessage"
+        "compiler/parse_test.go:TestParseUnsupportedElementMessage",
+        "conformance/normative_oracles_test.go:TestCON2ComplexGatewayIsNotAFalsePositive"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/scope_compile.go`",
@@ -206,14 +216,16 @@
       "clause": "13.3.1",
       "applicability": "required",
       "implementation": "unknown",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2UncontrolledFlowWithoutGateways"
+      ],
       "scenarioIds": [],
-      "limitations": "inspect normative token semantics",
+      "limitations": "CON2 oracle covers an unconditional implicit split from an activity only; conditional flows leaving an activity are not covered. Implementation status left for reviewer.",
       "reviewState": "provisional"
     },
     {
@@ -240,14 +252,16 @@
       "clause": "13.4",
       "applicability": "required",
       "implementation": "unknown",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2ExclusiveGatewayDefaultAndNoRoute"
+      ],
       "scenarioIds": [],
-      "limitations": "explicit variant oracles",
+      "limitations": "CON2 oracle covers exclusive gateway default flow and the no-route incident (ADR-0273); inclusive-gateway default/no-match not covered. Implementation status left for reviewer.",
       "reviewState": "provisional"
     },
     {
@@ -256,15 +270,20 @@
       "conformanceClass": "process-execution",
       "clause": "13.4",
       "applicability": "required",
-      "implementation": "implemented",
-      "verification": "unverified",
+      "implementation": "partial",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveLocatedDiagnostics",
+        "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveCoarseDiagnostics",
+        "conformance/normative_diagnostics_test.go:TestCON2ModelingSmellsAreWarningsNotRefusals",
+        "conformance/normative_diagnostics_test.go:TestCON2KnownAcceptedSpecViolations"
+      ],
       "scenarioIds": [],
-      "limitations": "`compiler/validation.go`; diagnostic matrix incomplete",
+      "limitations": "`compiler/validation.go`. CON2 pins 8 located diagnostics (rule + element + severity), 10 element-local refusals that carry only rule \"compile\" and no element field (id in message text only), and 2 non-blocking warnings. Known accepted violations: start event with incoming flow, end event with outgoing flow (silently never taken), gateway default naming a non-outgoing flow (ignored; only the generic missing-default warning), and a default naming another gateway's flow (silently becomes that gateway's default and mis-routes it). Closing them changes deploy acceptance: proposed in ADR-0547; reload of existing definitions is protected by ADR-0177/ADR-0393.",
       "reviewState": "provisional"
     },
     {
@@ -274,14 +293,16 @@
       "clause": "13.3.1",
       "applicability": "required",
       "implementation": "unknown",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/validation.go",
         "compiler/process.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2UncontrolledFlowWithoutGateways"
+      ],
       "scenarioIds": [],
-      "limitations": "OMG §13.3.1; distinct from AND/OR gateways; review `engine/behavior.go`",
+      "limitations": "CON2 oracle: activity with two incoming flows and no gateway runs once per token, no synchronization. Implementation status left for reviewer.",
       "reviewState": "provisional"
     },
     {
@@ -463,7 +484,9 @@
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [
         "event-subprocess-concurrent-runs"
       ],
@@ -482,7 +505,9 @@
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [
         "transaction-cancel"
       ],
@@ -613,7 +638,9 @@
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [
         "multi-instance-sequential"
       ],
@@ -666,7 +693,9 @@
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [
         "compensation"
       ],
@@ -796,7 +825,8 @@
         "engine/behavior.go"
       ],
       "testRefs": [
-        "compiler/conditional_test.go:TestParseRefusesAProcessLevelConditionalStart"
+        "compiler/conditional_test.go:TestParseRefusesAProcessLevelConditionalStart",
+        "conformance/normative_oracles_test.go:TestCON2UnsupportedVariantsHaveExactDiagnostics"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/validation.go`",
@@ -921,14 +951,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2LinkEventsTransferControlWithinScope"
+      ],
       "scenarioIds": [],
-      "limitations": "ADR-0132",
+      "limitations": "ADR-0132; CON2 oracle covers one throw/one catch in the root scope only",
       "reviewState": "provisional"
     },
     {
@@ -972,14 +1004,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2SignalAndMessageThrowingEndsReachCatchers"
+      ],
       "scenarioIds": [],
-      "limitations": "`ROADMAP.md` Milestone 2",
+      "limitations": "`ROADMAP.md` Milestone 2; CON2 oracle covers same-instance correlation with a constant key only",
       "reviewState": "provisional"
     },
     {
@@ -1014,7 +1048,8 @@
         "engine/behavior.go"
       ],
       "testRefs": [
-        "compiler/escalation_test.go:TestParseEscalationThrowInterrupting"
+        "compiler/escalation_test.go:TestParseEscalationThrowInterrupting",
+        "conformance/normative_events_oracles_test.go:TestCON2EscalationReachesEnclosingBoundary"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/escalation_test.go`",
@@ -1046,14 +1081,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2LinkEventsTransferControlWithinScope"
+      ],
       "scenarioIds": [],
-      "limitations": "ADR-0132",
+      "limitations": "ADR-0132; CON2 oracle covers one throw/one catch in the root scope only",
       "reviewState": "provisional"
     },
     {
@@ -1121,7 +1158,10 @@
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles",
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [
         "boundary-message-noninterrupting"
       ],
@@ -1159,7 +1199,9 @@
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles"
+      ],
       "scenarioIds": [
         "boundary-error"
       ],
@@ -1179,7 +1221,8 @@
         "engine/behavior.go"
       ],
       "testRefs": [
-        "compiler/escalation_test.go:TestParseEscalationEndAndBoundary"
+        "compiler/escalation_test.go:TestParseEscalationEndAndBoundary",
+        "conformance/normative_events_oracles_test.go:TestCON2EscalationReachesEnclosingBoundary"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/escalation_test.go`",
@@ -1323,14 +1366,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2SignalAndMessageThrowingEndsReachCatchers"
+      ],
       "scenarioIds": [],
-      "limitations": "`ROADMAP.md`",
+      "limitations": "`ROADMAP.md`; CON2 oracle covers same-instance correlation with a constant key only",
       "reviewState": "provisional"
     },
     {
@@ -1340,14 +1385,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2ErrorEndInterruptsEnclosingScope"
+      ],
       "scenarioIds": [],
-      "limitations": "`ROADMAP.md`",
+      "limitations": "`ROADMAP.md`; CON2 oracle covers an error end in an embedded subprocess with a concurrent sibling, caught by an interrupting boundary; call-activity and uncaught propagation not covered",
       "reviewState": "provisional"
     },
     {
@@ -1363,7 +1410,8 @@
         "engine/behavior.go"
       ],
       "testRefs": [
-        "compiler/escalation_test.go:TestParseEscalationEndAndBoundary"
+        "compiler/escalation_test.go:TestParseEscalationEndAndBoundary",
+        "conformance/normative_events_oracles_test.go:TestCON2EscalationReachesEnclosingBoundary"
       ],
       "scenarioIds": [],
       "limitations": "`compiler/escalation_test.go`",
@@ -1376,14 +1424,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/normative_events_oracles_test.go:TestCON2SignalAndMessageThrowingEndsReachCatchers"
+      ],
       "scenarioIds": [],
-      "limitations": "`ROADMAP.md`",
+      "limitations": "`ROADMAP.md`; CON2 oracle covers a broadcast to a concurrent catch in the same instance only",
       "reviewState": "provisional"
     },
     {
@@ -1399,10 +1449,11 @@
         "engine/behavior.go"
       ],
       "testRefs": [
-        "compiler/parse_test.go:TestParseTerminateEndCompiles"
+        "compiler/parse_test.go:TestParseTerminateEndCompiles",
+        "conformance/normative_events_oracles_test.go:TestCON2TerminateEndConsumesEveryTokenOfItsScope"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/parse_test.go`",
+      "limitations": "`compiler/parse_test.go`; CON2 oracle covers root and embedded-subprocess scope; multi-instance and call-activity scopes not covered; completed (not terminated) root state is the ADR-0116 choice",
       "reviewState": "provisional"
     },
     {
@@ -1501,14 +1552,16 @@
       "clause": "13.5",
       "applicability": "required",
       "implementation": "unknown",
-      "verification": "unverified",
+      "verification": "package-tested",
       "sourceRefs": [
         "compiler/scope_compile.go",
         "engine/behavior.go"
       ],
-      "testRefs": [],
+      "testRefs": [
+        "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
+      ],
       "scenarioIds": [],
-      "limitations": "mid-flight recovery required",
+      "limitations": "CON3 restarts at a pending timer and at an armed timer/message race; repeating timers and cancelled losing waits after restart not separately asserted. Implementation status left for reviewer.",
       "reviewState": "provisional"
     },
     {

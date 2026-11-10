@@ -1062,6 +1062,29 @@ node render-diagram.mjs ../conformance/models/standard-loop.bpmn \
 
 The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
 
+## Waiting for a mount: poll, do not await
+
+Do not write `await page.evaluate(() => window.__mountX())` for a mount that loads an
+editor. Playwright then awaits the mount's promise over the DevTools protocol for as long
+as the editor takes to load, and on the CI runner that promise was garbage-collected
+before it settled. The protocol answered "Promise was collected", and Playwright reported
+it as "Execution context was destroyed, most likely because of a navigation", although
+nothing navigated and the editor finished mounting. It never happened on a workstation,
+and it failed `formgen-editor-open` and `shown-version` in most CI runs.
+
+Start the mount and poll for it instead. `form-editor-harness.html` and
+`shown-version-harness.html` offer `window.__start(name, ...args)`, which begins a
+`__mount*` call and records its outcome in `window.__mountState`. The `mount(page, name,
+...args)` helper in `formgen-editor-open.spec.mjs` and `shown-version.spec.mjs` waits for
+that state with `waitForFunction` and rethrows a failed mount.
+
+Two diagnostics help when a test fails only on the runner. The e2e job uploads
+`e2e/test-results` as the `e2e-test-results` artifact whenever a test failed, including a
+first attempt that passed on retry: it holds the Playwright trace. And Playwright's
+`rewriteError` (`playwright-core/lib/server/chromium/crExecutionContext.js`) turns every
+protocol error that is not a page exception into "Execution context was destroyed".
+Logging `error.message` there names the real one.
+
 ## CI
 
 The `e2e` job in `.github/workflows/ci.yml` runs this suite on every push and PR, in
@@ -1173,6 +1196,16 @@ sends one start, and a broken connection whose outcome is unknown. It runs at 32
 768px and on desktop, and checks that an operator keeps the operator Start view. What the
 server allows is the Go tests' (`api/selfstart_http_test.go`); this is not device
 acceptance either.
+
+`mfe1a-start-grants.spec.mjs` ([MFE1A](../docs/planning/mfe1a-start-grant-administration.md))
+holds the administrator's Start grants page against a mocked server with revisions,
+conflicts and blockers: grants by name with the PUT body checked (ids and the revision
+read), offered or not with the reason in words, a lost race (409) shown with nothing sent
+twice, revocation only after a confirmation, the check of a person or group, the history,
+grants whose process left the application and removed accounts, untrusted grants after a
+failed save, nothing for non-administrators or an open server, 768px without sideways
+scrolling, and the read-only mark in an application's Deployments tab for administrators
+alone.
 
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom

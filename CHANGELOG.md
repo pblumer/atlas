@@ -13,6 +13,102 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Built-in Worker Type operations declare technical capabilities.** The operation rows of the
+  Entra and Teams Phone Worker Types carry their capability claims (ADR-0480), and
+  `GET /api/v1/worker-types` lists them per operation as `candidate`: Entra's Team operations
+  under the provider-neutral `io.atlas.collaboration.*` identifiers (for example
+  `io.atlas.collaboration.channel.create`) with the profile `microsoft-teams`, the Teams Phone
+  operations under `io.atlas.telephony.*` with `microsoft-teams-phone`. A claim describes; it
+  is not verified, authorizes nothing and does not make two providers interchangeable — the
+  profile keeps it to the one provider. Tests pin the reviewed claims, hold every row to the
+  manifest's rule and refuse one contract identity on two operations.
+
+## [0.25.0] — 2026-11-09
+
+**Every process, decision and form belongs to an application** (ADR-0544). Nothing new is
+created, deployed or moved outside one, and what belongs to none yet keeps running and is
+listed under "Not assigned", from where many can be assigned to an application at once.
+
+**A file a process receives is a document, not a variable** (ADR-0543). A file picked in a task
+form is stored once, outside the log and the state, and the instance holds a reference to it;
+access follows the instance, a personal document becomes unreadable with an erasure, and the
+store lives in the data directory or an S3 bucket. The CSV import, the S3 and mail tasks, the
+Worker SDK and the MCP tools read and write documents.
+
+**A process can publish an interface, not its model** (ADR-0373). A deployed definition's
+message entry points, ends and error codes are published as a small, versioned contract under
+names of its own, which a newer definition can take over without breaking a consumer. View and
+send are granted apart; a consumer can read a contract now, while sending through it waits for
+the peer endpoint of ADR-0372.
+
+**Worker Types become artifacts that are installed, configured and checked.** An administrator
+uploads a Worker Type's manifest and executable; the server verifies the executable against
+the manifest's digest, keeps it content-addressed, checks it again before every start and
+configures its Workers from the type's own JSON Schema, with secrets named as vault entries
+only. Its instance works with a credential of its own that reaches only the job types its
+manifest declares (ADR-0545). Every operation declares what a repeated delivery does, and every job carries an
+idempotency key a target can filter duplicates by (ADR-0538). Worker Instances report their
+protocol version and Worker Type identity, the Worker protocol is written down for other
+languages, the Worker SDK depends on nothing of atlas, and the release ships `atlas-workers`,
+the worker-only executable, beside `atlas`.
+
+**A SharePoint Server Worker administers team sites on an on-premises farm** (ADR-0540), and
+the M365 test environment can build a SharePoint Server Subscription Edition farm to run it
+against. The `m365-dienste` example gains an additional calendar, a visibility change for
+Teams and SharePoint team sites, and the on-premises product «Teamwebsite».
+
+**The atlas hub shows where the way to the registry ends and what a release contains.** The
+hub dialog draws the load station by station — name, TCP, TLS, index, signature — and names
+the cause where it stops; a preview, package or import that cannot reach the registry says the
+same, and the server logs it. Before a release is installed, its preview shows the
+application's architecture sketch derived from the verified package and draws its process
+models read-only (ADR-0539).
+
+**The Console arranges deployed processes by application.** The Modeler home is one table of
+applications, and each application's Deployments tab lists one row per process with its
+versions folded under it and its pause and delete actions (ADR-0541). The Instances overview
+can group its processes by application. The replay's Variables tab sorts an element's
+variables into Input, Output and Environment (ADR-0542), and a round of a multi-instance names
+what it wrote. A DMN reference is called a rule throughout, the replay names a multi-instance
+activity once, and an opened entry of "My services" is laid out in sections.
+
+Nothing in the log or the state changed; 0.25.0 replaces 0.24.0 in place, and the data
+directory gains the document store. Four changes can break what worked against 0.24.0:
+
+- **A script or agent has to name an application.** Saving a draft, form, decision draft or
+  decision reference, deploying a decision and importing a MIM model without a `projectId` are
+  refused with 400, and so is a move with an empty one; `POST /api/v1/deployments` refuses a
+  model whose draft and earlier versions name no application. The MCP tools `atlas_save_draft`,
+  `atlas_save_form`, `atlas_register_decision` and `atlas_deploy_decision` require `projectId`.
+  Deleting an application that still holds anything is refused with 409 unless `?purge=true`.
+- **A file field no longer lands in `csvText`.** A file picked in a task form is a reference
+  under the field's own key. A model whose file field has another key and whose CSV import reads
+  `csvText` stops working; rename the field to `csvText` or point the import at the field. The
+  shipped examples are not affected, and `csvText` still accepts a text.
+- **A full snapshot leaves the documents out** unless it is taken with `?documents=true`; a
+  backup that is to restore uploaded files has to ask for them.
+- **Supervised workers run `atlas-workers`** when it sits beside the server's binary, as it does
+  in the release archives and the image; `ATLAS_WORKERS_BINARY=self` keeps the earlier
+  behaviour. Workers from before this release name no protocol version and are served as
+  version 1.
+
+### Added
+- **Administrators manage start grants in the Console.** Console → Administration → Start
+  grants shows, per application, every process with who may start it themselves, whether it is
+  offered and if not why, and the last change; an administrator grants or revokes by name,
+  checks one person or group, and reads the history, without typing an id or a revision
+  (ADR-0516, MFE1A). A competing change is shown and nothing is sent twice. The grant reads
+  answer `blockers` for this, and an application's Deployments tab marks a granted process for
+  administrators, read-only.
+- **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
+  lists the deployed processes, diagrams, forms, decisions, decision drafts and deployed decisions
+  that belong to no application — no tag, or an application that no longer exists — and
+  `POST /api/v1/applications/{id}/adopt` files a chosen set of them under one application in one
+  request: every version of a process moves, and a decision's unfiled drafts move with it. Nothing
+  moves unless everything named can, and what already belongs to an application is refused rather
+  than taken from it. The Modeler's "Not assigned" page offers it as "Assign to an application…";
+  the MCP tools are `atlas_list_unassigned` and `atlas_adopt_artifacts`
+  (ADR-0544).
 - **A file a process receives is a document, not a variable.** A file picked in a task form is
   uploaded to a document store and the task is completed with a reference under the field's own
   key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
@@ -155,6 +251,36 @@ _Changed_ / _Removed_ for each version.
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A new built-in Worker Type declares what a second delivery does.** Every new built-in
+  Worker Type ships a manifest stating each operation's idempotency and effect, as an
+  installed one must; `go test ./api` refuses one without it, and the 31 kinds released
+  before are listed and owe theirs. SharePoint Server has one: its operations are safe to
+  deliver twice, with one caveat now recorded — a second `create-site` after a first that
+  finished ends in `SHAREPOINT_SERVER_SITE_EXISTS`, not in success
+  (ADR-0546).
+- **An installed Worker Type works only its own job types.** An artifact installed with
+  `POST /api/v1/worker-types/installed` used to be launched with the server's internal
+  worker credential, which reaches every job type. Its instance now gets a credential of
+  its own, held in memory, that leases, completes, fails, throws on and answers queries
+  only for the job types its manifest declares and only as its own Worker Instance id;
+  anything else is refused with 403 and the reason, and the outbox and mock-system routes
+  of the built-in Worker Types are out of its reach. The credential ends when the release
+  is removed and is replaced at every server start. Built-in supervised workers and
+  external workers with API tokens are unchanged
+  (ADR-0545).
+- **Every process, decision and form belongs to an application.** Nothing new is created,
+  deployed or moved outside one (ADR-0544): a draft, form,
+  decision draft or decision reference without a `projectId`, a decision deployment without one,
+  and a MIM import without one are refused with 400. `POST /api/v1/deployments` files a model
+  under the application of its draft, else of the process's earlier versions, and refuses one with
+  neither. An empty `projectId` on a move — a draft, a deployed process, a decision reference — is
+  refused, a form saved without one keeps the application it is in, and deleting an application
+  that still holds anything is refused with 409 until it is moved or deleted with `?purge=true`.
+  What already belongs to no application keeps running and can still be edited; it is listed
+  under "Not assigned" until it is assigned. In the Modeler, "Create new" asks which application
+  a new process, form, decision or import goes into. MCP: `atlas_save_draft`, `atlas_save_form`,
+  `atlas_register_decision` and `atlas_deploy_decision` require `projectId`, and `atlas_deploy`
+  takes one. A script that deploys or saves without naming an application has to name one now.
 - **The replay's Variables tab sorts a selected element's variables by how it came by them.**
   Instead of one list with an Input/Output switch that meant before/after, the tab shows three
   sections: *Input* (the element's own scope — input mappings, a round's loop counter and item),
@@ -18502,7 +18628,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/pblumer/atlas/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0

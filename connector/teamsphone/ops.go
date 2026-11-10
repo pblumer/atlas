@@ -25,6 +25,33 @@ type Op struct {
 	Settings    []string
 	Reconciled  []string
 	NeedsResult bool
+	// Capabilities are the technical capabilities the operation declares (ADR-0480),
+	// under the provider-neutral telephony vocabulary with the microsoft-teams-phone
+	// profile: what kind of step it is, and that only Teams Phone's behaviour is
+	// stated. The row is where the claim lives, so no second operation list can
+	// drift from this one; the server projects it as a candidate until evidence
+	// verifies it (ADR-0483). An operation without claims is unknown — resolve-users
+	// declares none, because mapping people to Teams identities is this provider's
+	// own preparatory step rather than a telephony capability.
+	Capabilities []CapabilityClaim
+}
+
+// CapabilityClaim is one technical capability an operation declares: the contract's
+// identifier, its exact version and the provider profile. It mirrors
+// workertype.CapabilityClaim field for field rather than importing it, so the worker
+// binary does not take on the contract validator's dependencies; the server's tests
+// hold every row to workertype's rule.
+type CapabilityClaim struct {
+	ID      string
+	Version string
+	Profile string
+}
+
+// phoneClaim is a claim about Teams Phone's behaviour under the neutral telephony
+// vocabulary. No contract with these identifiers is published yet, which the 0.x
+// version says.
+func phoneClaim(id string) []CapabilityClaim {
+	return []CapabilityClaim{{ID: id, Version: "0.1.0", Profile: "microsoft-teams-phone"}}
 }
 
 // Ops is the operation table: what a process needs to make a queue reachable, and to
@@ -38,10 +65,11 @@ var Ops = map[string]Op{
 		NeedsResult: true,
 	},
 	"ensure-resource-account": {
-		Label:       "ensure a resource account",
-		Required:    []string{"userPrincipalName", "displayName"},
-		Settings:    []string{"accountType"},
-		NeedsResult: true,
+		Label:        "ensure a resource account",
+		Required:     []string{"userPrincipalName", "displayName"},
+		Settings:     []string{"accountType"},
+		NeedsResult:  true,
+		Capabilities: phoneClaim("io.atlas.telephony.service-account.ensure"),
 	},
 	"ensure-call-queue": {
 		Label:    "ensure a call queue",
@@ -53,69 +81,78 @@ var Ops = map[string]Op{
 		// while the task reported success would be the failure nobody sees (ADR-0463,
 		// amendments 2026-10-19 and 2026-10-20). The language is not reconciled: it only
 		// changes what the queue's announcements say.
-		Reconciled:  []string{"agents", "authorizedUsers", "routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
-		NeedsResult: true,
+		Reconciled:   []string{"agents", "authorizedUsers", "routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
+		NeedsResult:  true,
+		Capabilities: phoneClaim("io.atlas.telephony.call-queue.ensure"),
 	},
 	"ensure-auto-attendant": {
 		Label: "ensure an auto attendant",
 		// Teams refuses an auto attendant without a language and a time zone, and any
 		// default here would be one organization's; so a model names both.
-		Required:    []string{"name", "resourceAccountId", "transferTarget", "languageId", "timeZone"},
-		Optional:    []string{"authorizedUsers", "holidays"},
-		NeedsResult: true,
+		Required:     []string{"name", "resourceAccountId", "transferTarget", "languageId", "timeZone"},
+		Optional:     []string{"authorizedUsers", "holidays"},
+		NeedsResult:  true,
+		Capabilities: phoneClaim("io.atlas.telephony.auto-attendant.ensure"),
 	},
 	// The removes take the voice app's name as an optional fallback: a previous run that
 	// removed the association and then failed leaves a voice app no account points at,
 	// and only its name finds it again.
 	"remove-auto-attendant": {
-		Label:    "remove an auto attendant",
-		Required: []string{"resourceAccountId"},
-		Optional: []string{"name"},
+		Label:        "remove an auto attendant",
+		Required:     []string{"resourceAccountId"},
+		Optional:     []string{"name"},
+		Capabilities: phoneClaim("io.atlas.telephony.auto-attendant.remove"),
 	},
 	"remove-call-queue": {
-		Label:    "remove a call queue",
-		Required: []string{"resourceAccountId"},
-		Optional: []string{"name"},
+		Label:        "remove a call queue",
+		Required:     []string{"resourceAccountId"},
+		Optional:     []string{"name"},
+		Capabilities: phoneClaim("io.atlas.telephony.call-queue.remove"),
 	},
 	"remove-resource-account": {
-		Label:    "remove a resource account",
-		Required: []string{"resourceAccountId"},
+		Label:        "remove a resource account",
+		Required:     []string{"resourceAccountId"},
+		Capabilities: phoneClaim("io.atlas.telephony.service-account.remove"),
 	},
 	// A phone number is given to a user or a resource account alike: a queue's hotline
 	// and a person's direct line are the same assignment to Teams. identity is either's
 	// user principal name or object id. The number type is the tenant's way of reaching
 	// the telephone network and decides what Teams checks, so it is fixed in the model.
 	"ensure-phone-number": {
-		Label:       "ensure a phone number",
-		Required:    []string{"identity", "phoneNumber"},
-		Optional:    []string{"locationId"},
-		Settings:    []string{"numberType"},
-		NeedsResult: true,
+		Label:        "ensure a phone number",
+		Required:     []string{"identity", "phoneNumber"},
+		Optional:     []string{"locationId"},
+		Settings:     []string{"numberType"},
+		NeedsResult:  true,
+		Capabilities: phoneClaim("io.atlas.telephony.number-assignment.ensure"),
 	},
 	// Without a phoneNumber, every number the identity holds is removed: a leaver path
 	// should not have to know them.
 	"remove-phone-number": {
-		Label:    "remove a phone number",
-		Required: []string{"identity"},
-		Optional: []string{"phoneNumber"},
+		Label:        "remove a phone number",
+		Required:     []string{"identity"},
+		Optional:     []string{"phoneNumber"},
+		Capabilities: phoneClaim("io.atlas.telephony.number-assignment.remove"),
 	},
 	// A whole hotline in one task, in the one order that never leaves a caller ringing
 	// into nothing: auto attendants, then queues, then each account's numbers and the
 	// account. names finds a voice app an earlier run left without its account.
 	"remove-hotline": {
-		Label:    "remove a hotline",
-		Required: []string{"resourceAccountIds"},
-		Optional: []string{"names"},
+		Label:        "remove a hotline",
+		Required:     []string{"resourceAccountIds"},
+		Optional:     []string{"names"},
+		Capabilities: phoneClaim("io.atlas.telephony.hotline.remove"),
 	},
 	// The numbers in the tenant's inventory nobody holds, that Teams would give to the
 	// kind of holder named — what a person choosing a number for ensure-phone-number
 	// picks from. The type is the one that ensure-phone-number will assign under, so it
 	// is fixed in the model like there.
 	"list-free-phone-numbers": {
-		Label:       "list free phone numbers",
-		Optional:    []string{"numberPrefix", "max"},
-		Settings:    []string{"numberType", "assignableTo"},
-		NeedsResult: true,
+		Label:        "list free phone numbers",
+		Optional:     []string{"numberPrefix", "max"},
+		Settings:     []string{"numberType", "assignableTo"},
+		NeedsResult:  true,
+		Capabilities: phoneClaim("io.atlas.telephony.phone-number.list-unassigned"),
 	},
 }
 

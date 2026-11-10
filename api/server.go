@@ -161,11 +161,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.24.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.25.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.24.0-dev"
+var Version = "0.25.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -371,9 +371,12 @@ type Server struct {
 	// them. It answers the question the journal beside it cannot — not "is this
 	// record true" but "is this right still needed", which only a person can say.
 	recertifications *recertifyStore
-	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
-	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
+	apiTokens        *apiTokenIndex // in-memory hash->token index, same discipline as the deploy one
+	// instanceCreds are the secrets installed Worker Types' instances are launched
+	// with, in memory only (instancecredential.go).
+	instanceCreds *instanceCredentials
+	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions   map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -964,6 +967,12 @@ type Server struct {
 	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
 	// mounted; read-only thereafter.
 	docsEnabled bool
+
+	// applicationRequired refuses a process, decision or form that would be created,
+	// deployed or moved outside an application
+	// (ADR-0544). Copied from
+	// applicationRequiredByDefault when the server is built; read-only thereafter.
+	applicationRequired bool
 
 	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
 	// off with --catalogue=false / WithoutCatalogue
@@ -1882,6 +1891,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
 		apiTokens:         newAPITokenIndex(),
+		instanceCreds:     newInstanceCredentials(),
 		oauthClientStore:  oauthClientStore,
 		oauthClients:      newOAuthClientIndex(),
 		oauthGrantStore:   oauthGrantStore,
@@ -1935,6 +1945,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
 		readyTimeout:      readyTimeoutDefault,
+
+		applicationRequired: applicationRequiredByDefault,
 	}
 	// The retention sweep reads its eligibility cutoff from the system clock by
 	// default; the options below may replace it (withClock) for a deterministic

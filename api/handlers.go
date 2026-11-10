@@ -1122,6 +1122,20 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 			}
 		}
 	}
+	// Without a draft to inherit from, a new version files where the process's
+	// earlier versions are: redeploying a definition through the API must not need
+	// to be told an application its history already names
+	// (ADR-0544).
+	if !hasProjectParam && projectID == "" {
+		var readErr error
+		s.do(func() { projectID, readErr = s.deployedApplicationOf(pid) })
+		if readErr != nil {
+			return deployResp{}, refusedWith(http.StatusInternalServerError, "read project: "+readErr.Error())
+		}
+	}
+	if code, msg := s.unfiledRefusal(projectID, "a deployed process"); code != 0 {
+		return deployResp{}, refusedWith(code, msg)
+	}
 	// Filing a definition into a project is a write on that project, so it needs
 	// editor there — the check the project deploy path has always made, and the
 	// axis a role-per-route table cannot express (ADR-0071,
@@ -5340,9 +5354,11 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
+	principal := httpapi.PrincipalFrom(r.Context())
 	var (
 		found     bool
 		notHolder bool
+		refused   string
 		runErr    error
 	)
 	s.do(func() {
@@ -5352,6 +5368,9 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		worker := strings.TrimSpace(req.Worker)
+		if refused = s.instanceRefusesJob(principal, worker, jv); refused != "" {
+			return
+		}
 		if worker != "" && !holdsLease(jv, worker, req.LeaseToken) {
 			notHolder = true
 			return
@@ -5384,6 +5403,8 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case refused != "":
+		refuseInstance(w, r, refused)
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(strings.TrimSpace(req.Worker))+" does not hold this job's current lease; it may have elapsed and been taken by another worker")
@@ -5446,13 +5467,15 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	message := strings.TrimSpace(req.ErrorMessage)
+	principal := httpapi.PrincipalFrom(r.Context())
 	actor := ""
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		actor = p.Username
+	if principal != nil {
+		actor = principal.Username
 	}
 	var (
 		found     bool
 		notHolder bool
+		refused   string
 		runErr    error
 	)
 	s.do(func() {
@@ -5461,6 +5484,9 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		if refused = s.instanceRefusesJob(principal, worker, jv); refused != "" {
+			return
+		}
 		if worker == "" {
 			s.proc.ThrowJobErrorManually(key, code, message, actor, reason)
 			return
@@ -5489,6 +5515,8 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "throw job error: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case refused != "":
+		refuseInstance(w, r, refused)
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or throw as an operator with a reason")
@@ -5750,14 +5778,16 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// principal's username, or "" when auth is off (single-user) or the caller is
 	// unidentified. Read off the request before the run loop, like every other
 	// principal read.
+	principal := httpapi.PrincipalFrom(r.Context())
 	actor := ""
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		actor = p.Username
+	if principal != nil {
+		actor = principal.Username
 	}
 	var (
 		found        bool
 		notHolder    bool
 		unauthorized bool
+		refused      string
 		badReport    error
 		runErr       error
 		jobInstance  uint64
@@ -5768,6 +5798,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		if refused = s.instanceRefusesJob(principal, worker, jv); refused != "" {
+			return
+		}
 		jobInstance = jv.ProcessInstanceKey
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
@@ -5830,7 +5863,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.driveThen(func() {
-			if found && !notHolder && !unauthorized && badReport == nil {
+			if found && refused == "" && !notHolder && !unauthorized && badReport == nil {
 				s.bindDocuments(docIDs, jobInstance)
 			}
 		})
@@ -5840,6 +5873,8 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case refused != "":
+		refuseInstance(w, r, refused)
 	case badReport != nil:
 		httpapi.Error(w, http.StatusBadRequest, badReport.Error())
 	case notHolder:
@@ -6403,6 +6438,20 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if hasProjectParam {
 		destProjectID = projectID
 	}
+	// A new draft is filed under an application, and a filed one stays in one
+	// (ADR-0544). A draft written before the rule
+	// may still be saved where it is, so its author can finish it and adopt it.
+	if !continuing {
+		if code, msg := s.unfiledRefusal(destProjectID, "a draft"); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	} else if base.ProjectID != "" {
+		if code, msg := s.unfileRefusal(destProjectID); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	if destProjectID != "" && (hasProjectParam || !continuing) {
 		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
@@ -6574,6 +6623,10 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	// Moving a draft needs editor on both ends (ADR-0071): the project it leaves
 	// and, when non-empty, the project it joins (which must exist).
 	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if code, msg := s.unfileRefusal(payload.ProjectID); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}
@@ -6817,6 +6870,12 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	body.Type = strings.TrimSpace(body.Type)
 	if body.Type == "" {
 		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
+		return
+	}
+	// An installed Worker Type's instance leases only the types its manifest declares,
+	// as itself (ADR-0545).
+	if why := httpapi.InstanceRefusal(httpapi.PrincipalFrom(r.Context()), body.Worker, body.Type); why != "" {
+		refuseInstance(w, r, why)
 		return
 	}
 	lease := defaultJobLease

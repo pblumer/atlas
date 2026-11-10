@@ -35,7 +35,7 @@ const migrateToolsV2 = `<definitions xmlns="http://www.omg.org/spec/BPMN/2010052
 // deployVersion deploys one XML through the tools and returns its definition key.
 func deployVersion(t *testing.T, atlas *httptest.Server, id int, xml string) uint64 {
 	t.Helper()
-	text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_deploy", map[string]any{"xml": xml}))[0]))
+	text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_deploy", map[string]any{"xml": xml, "projectId": testApp(t, atlas)}))[0]))
 	if isErr {
 		t.Fatalf("deploy: %s", text)
 	}

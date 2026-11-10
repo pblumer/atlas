@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -83,7 +84,20 @@ func TestServeStreamsOverHTTP2(t *testing.T) {
 	client := tlsClient(pool, true)
 	waitHealthy(t, client, "https://"+addr+"/healthz")
 
-	resp, err := client.Post("https://"+addr+"/api/v1/drafts", "application/xml", strings.NewReader(draftBPMN))
+	// Every draft belongs to an application (ADR-0544).
+	appResp, err := client.Post("https://"+addr+"/api/v1/applications", "application/json", strings.NewReader(`{"name":"TLS"}`))
+	if err != nil {
+		t.Fatalf("create application: %v", err)
+	}
+	var app struct {
+		ID string `json:"id"`
+	}
+	err = json.NewDecoder(appResp.Body).Decode(&app)
+	appResp.Body.Close()
+	if err != nil || app.ID == "" {
+		t.Fatalf("create application: %s (%v)", appResp.Status, err)
+	}
+	resp, err := client.Post("https://"+addr+"/api/v1/drafts?projectId="+app.ID, "application/xml", strings.NewReader(draftBPMN))
 	if err != nil {
 		t.Fatalf("save draft: %v", err)
 	}

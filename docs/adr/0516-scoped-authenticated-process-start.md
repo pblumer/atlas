@@ -307,6 +307,12 @@ into another application, deleted application, anonymous 401, machine token 403,
 account without the user role 403, logout and disabled account 401, open server
 404), `api/selfservicestart_internal_test.go`, `api/startgrant/store_test.go`.
 
+- **Reads say whether the process would be offered (MFE1A, 2026-11-09):** the
+  list and the single read answer `blockers` beside each scope — the codes above,
+  for the newest version, empty when a granted person would be offered it — with
+  that version's `definitionKey` and `version`. The write answers do not carry them.
+  A process that cannot be resolved fails the list rather than reading as offered.
+
 Tests: `api/startgrant/service_test.go` (deny by default, open server, delegated
 credential, malformed and forged bodies, unknown identities and scopes, competing
 administrators, idempotent and always-possible revocation, persistence failure and
@@ -406,6 +412,27 @@ revocation while the form is open, replaced version, expired session, double tap
 broken connection, operator view unchanged, desktop top bar and keyboard). Thirteen
 of its fourteen tests fail against the previous `app.js`; the operator regression
 passes on both. Chromium viewport geometry is not device acceptance.
+
+### Admin Console checkpoint (MFE1A, 2026-11-09)
+
+The administration routes have a Console page, `#/console/start-grants`
+(`api/web/startgrants.js`), under Administration and admin-only like the routes.
+An administrator chooses an application and sees each current process — and each
+grant whose process is no longer deployed there — with its audience by name,
+whether it would be offered (the `blockers` of the reads, in words) and the last
+change; grants or replaces an audience picked by name (ids are sent, names shown,
+the revision read is sent as `expectedRevision`); revokes after a confirmation;
+checks one person or group through the preview; and reads the history. A 409
+reloads and asks again, never retries; a 503 says the grants are untrusted until a
+restart. The page adds no authority: it asks the server nothing for a caller who is
+not an administrator, and on a server without authentication it says start grants
+need sign-in. The application's Deployments tab shows administrators alone a
+read-only mark per granted process, linking to the page; owners and editors work in
+that view and see nothing, and nothing there changes a grant.
+
+Tests: `e2e/mfe1a-start-grants.spec.mjs`, `api/startgrants_page_test.go` (every key
+and every blocker and account-issue code in every locale; one PUT, one DELETE, ids
+with the revision, 409 handled).
 
 ## Consequences
 

@@ -1,0 +1,40 @@
+{
+  "apiVersion": "atlas.io/v1alpha1",
+  "kind": "WorkerType",
+  "metadata": {
+    "id": "atlas.sharepointserver",
+    "version": "1.0.0",
+    "name": "SharePoint Server"
+  },
+  "spec": {
+    "atlasCompatibility": ">0.24.0",
+    "workerProtocol": "v1",
+    "runtime": {
+      "mode": "bundled"
+    },
+    "jobTypes": [
+      "io.atlas.sharepointserver"
+    ],
+    "operations": [
+      {"id": "create-site", "jobType": "io.atlas.sharepointserver", "idempotency": "check", "effect": "reversible"},
+      {"id": "get-site", "jobType": "io.atlas.sharepointserver", "idempotency": "natural", "effect": "reversible"},
+      {"id": "list-sites", "jobType": "io.atlas.sharepointserver", "idempotency": "natural", "effect": "reversible"},
+      {"id": "delete-site", "jobType": "io.atlas.sharepointserver", "idempotency": "check", "effect": "reversible"},
+      {"id": "restore-site", "jobType": "io.atlas.sharepointserver", "idempotency": "check", "effect": "reversible"},
+      {"id": "set-site-owners", "jobType": "io.atlas.sharepointserver", "idempotency": "natural", "effect": "reversible"},
+      {"id": "update-site-admins", "jobType": "io.atlas.sharepointserver", "idempotency": "natural", "effect": "reversible"},
+      {"id": "update-group-members", "jobType": "io.atlas.sharepointserver", "idempotency": "natural", "effect": "reversible"},
+      {"id": "set-site-quota", "jobType": "io.atlas.sharepointserver", "idempotency": "natural", "effect": "reversible"}
+    ],
+    "configurationSchema": "#/spec/configuration",
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "managedPath": {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"},
+        "timeoutSeconds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "modelerTemplate": "api/repository_catalog/sharepoint-server.json"
+  }
+}

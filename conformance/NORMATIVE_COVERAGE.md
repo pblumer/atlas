@@ -10,8 +10,8 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 
 ## Provisional inventory
 
-- Candidate requirements: **105**; implementation provisionally **44** implemented, **20** partial, **5** unsupported, **36** unknown.
-- Evidence levels: **39** scenario samples, **16** package tests, **50** unverified; **0 independently specification-reviewed passes**.
+- Candidate requirements: **105**; implementation provisionally **43** implemented, **21** partial, **5** unsupported, **36** unknown.
+- Evidence levels: **39** scenario samples, **27** package tests, **39** unverified; **0 independently specification-reviewed passes**.
 - Event-position cells: **63 legal**, **41 spec-illegal**, not a normative support denominator.
 - Workflow Control-Flow Patterns: **43** inventoried; **9** registered; **0 independently verified WCP semantics**. WCP is not OMG conformance.
 
@@ -29,11 +29,11 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 | FLOW-08 | Parallel event-based gateway | 13.4 | process-execution | required | unsupported | package-tested |
 | FLOW-09 | Instantiating event-based gateway | 13.4 | process-execution | required | unsupported | package-tested |
 | FLOW-10 | Complex Gateway | 13.4 | process-execution | required | unsupported | package-tested |
-| FLOW-11 | Multiple incoming/outgoing flows without gateways | 13.3.1 | process-execution | required | unknown | unverified |
+| FLOW-11 | Multiple incoming/outgoing flows without gateways | 13.3.1 | process-execution | required | unknown | package-tested |
 | FLOW-12 | Unstructured cycles and process completion | 13.2 | process-execution | required | unknown | unverified |
-| FLOW-13 | Gateway default-flow and no-match failure | 13.4 | process-execution | required | unknown | unverified |
-| FLOW-14 | Model validation: reachability/scope/refs | 13.4 | process-execution | required | implemented | unverified |
-| FLOW-15 | Uncontrolled flow: one activity arrival per token, multiple outgoing flow, mixed conditional/unconditional | 13.3.1 | process-execution | required | unknown | unverified |
+| FLOW-13 | Gateway default-flow and no-match failure | 13.4 | process-execution | required | unknown | package-tested |
+| FLOW-14 | Model validation: reachability/scope/refs | 13.4 | process-execution | required | partial | package-tested |
+| FLOW-15 | Uncontrolled flow: one activity arrival per token, multiple outgoing flow, mixed conditional/unconditional | 13.3.1 | process-execution | required | unknown | package-tested |
 | FLOW-16 | Process completion: no tokens and no active activities, including boundary/event subprocess/MI | 13.2 | process-execution | required | unknown | unverified |
 | ACT-01 | Generic task and manual task | 13.3 | process-execution | non-operational | implemented | package-tested |
 | ACT-02 | User Task; start, park, complete | 13.3 | process-execution | required | implemented | sample-tested |
@@ -68,14 +68,14 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 | EVT-09 | Intermediate Timer Catch | 13.5 | process-execution | required | partial | sample-tested |
 | EVT-10 | Intermediate Signal Catch | 13.5 | process-execution | required | implemented | sample-tested |
 | EVT-11 | Intermediate Conditional Catch | 13.5 | process-execution | required | implemented | package-tested |
-| EVT-12 | Intermediate Link Catch | 13.5 | process-execution | required | implemented | unverified |
+| EVT-12 | Intermediate Link Catch | 13.5 | process-execution | required | implemented | package-tested |
 | EVT-13 | Intermediate Multiple/Parallel Multiple Catch | 13.5 | process-execution | required | unknown | unverified |
 | EVT-14 | Intermediate None Throw | 13.5 | process-execution | required | unknown | unverified |
-| EVT-15 | Intermediate Message Throw | 13.5 | process-execution | required | implemented | unverified |
+| EVT-15 | Intermediate Message Throw | 13.5 | process-execution | required | implemented | package-tested |
 | EVT-16 | Intermediate Signal Throw | 13.5 | process-execution | required | implemented | sample-tested |
 | EVT-17 | Intermediate Escalation Throw | 13.5 | process-execution | required | implemented | package-tested |
 | EVT-18 | Intermediate Compensation Throw | 13.5 | process-execution | required | implemented | sample-tested |
-| EVT-19 | Intermediate Link Throw | 13.5 | process-execution | required | implemented | unverified |
+| EVT-19 | Intermediate Link Throw | 13.5 | process-execution | required | implemented | package-tested |
 | EVT-20 | Intermediate Multiple Throw | 13.5 | process-execution | required | unknown | unverified |
 | EVT-21 | Boundary Timer interrupting | 13.5 | process-execution | required | implemented | sample-tested |
 | EVT-22 | Boundary Timer non-interrupting, recurring | 13.5 | process-execution | required | unknown | unverified |
@@ -90,17 +90,17 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 | EVT-31 | Event Subprocess message/timer/signal start, both modes | 13.5 | process-execution | required | unknown | sample-tested |
 | EVT-32 | Event Subprocess Conditional non-interrupting repeat | 13.5 | process-execution | required | partial | package-tested |
 | EVT-33 | End None | 13.5 | process-execution | required | implemented | sample-tested |
-| EVT-34 | End Message | 13.5 | process-execution | required | implemented | unverified |
-| EVT-35 | End Error | 13.5 | process-execution | required | implemented | unverified |
+| EVT-34 | End Message | 13.5 | process-execution | required | implemented | package-tested |
+| EVT-35 | End Error | 13.5 | process-execution | required | implemented | package-tested |
 | EVT-36 | End Escalation | 13.5 | process-execution | required | implemented | package-tested |
-| EVT-37 | End Signal | 13.5 | process-execution | required | implemented | unverified |
+| EVT-37 | End Signal | 13.5 | process-execution | required | implemented | package-tested |
 | EVT-38 | End Terminate | 13.5.4 | process-execution | required | implemented | package-tested |
 | EVT-39 | End Cancel in Transaction | 13.5 | process-execution | required | implemented | sample-tested |
 | EVT-40 | End Compensation | 13.5 | process-execution | required | implemented | unverified |
 | EVT-41 | End Multiple | 13.5 | process-execution | required | unknown | unverified |
 | EVT-42 | Error and escalation propagation across scopes/call activity | 13.5 | process-execution | required | unknown | package-tested |
 | EVT-43 | Message delivery, correlation, deduplication and races | 13.5 | process-execution | required | unknown | unverified |
-| EVT-44 | Timer events across restart / cancelled losing waits | 13.5 | process-execution | required | unknown | unverified |
+| EVT-44 | Timer events across restart / cancelled losing waits | 13.5 | process-execution | required | unknown | package-tested |
 | DATA-01 | DataObject/Reference/DataState | 10.4 | process-execution | required | implemented | sample-tested |
 | DATA-02 | Collection DataObject | 10.4 | process-execution | required | implemented | sample-tested |
 | DATA-03 | Field-level DataObject writes | 10.4 | process-execution | required | implemented | sample-tested |

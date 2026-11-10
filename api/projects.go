@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -347,6 +348,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	var (
 		notFound        bool
 		panoramaBlocked bool
+		held            int
 		forbidden       int
 		fmsg            string
 		getErr          error
@@ -383,6 +385,19 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			panoramaBlocked = true
 			return
 		}
+		// Nor may it leave processes, decisions or forms behind under Not assigned
+		// (ADR-0544): they are moved into another
+		// application first, or go with this one in a purge.
+		if s.applicationRequired {
+			inv, err := s.inventoryOnLoop(rec)
+			if err != nil {
+				delErr = err
+				return
+			}
+			if held = inv.heldArtifacts(); held > 0 {
+				return
+			}
+		}
 		delErr = s.deleteApplicationRecordOnLoop(id)
 	})
 	switch {
@@ -392,6 +407,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, forbidden, fmsg)
 	case panoramaBlocked:
 		httpapi.Error(w, http.StatusConflict, "application contains Panorama models; delete them before deleting the application")
+	case held > 0:
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("the application still holds %d processes, decisions, forms "+
+			"or drafts, which would belong to no application: move them into another application, or delete them "+
+			"with it (?purge=true, see GET .../deletion-preview)", held))
 	case delErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "delete project: "+delErr.Error())
 	case notFound:

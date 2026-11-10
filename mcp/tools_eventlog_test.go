@@ -11,7 +11,7 @@ import (
 // ADR-0447).
 func TestTheEventLogAndTheInventoriesViaTools(t *testing.T) {
 	ts := newAtlas(t)
-	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN}))[0])); isErr {
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN, "projectId": testApp(t, ts)}))[0])); isErr {
 		t.Fatal("deploy failed")
 	}
 	if _, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1, "variables": map[string]any{"orderId": "order-1"}}))[0])); isErr {
