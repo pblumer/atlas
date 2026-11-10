@@ -153,7 +153,35 @@ The process model decides, with an ordinary exclusive gateway on `summary.invali
   person accepts the remainder with a reason.
 
 Atlas does not pick the threshold: it is a property of the people doing the work, not of
-the engine, so it lives in the model.
+the engine, so it lives in the model. `failureSample` is a property of the task for the
+same reason. Its real ceiling is `limits.Variable`: the failures must fit one variable,
+which at about 100 bytes a row is in the order of ten thousand.
+
+### Writing the corrections back
+
+Token-driven correction ends with corrected *rows*, but the person needs a corrected
+*file*, the one they will load into the system the records came from. A second operation
+of the same Worker Type, working name `apply-corrections`, closes that loop. It takes:
+
+- the source document;
+- the corrected rows, each carrying the `_row` it replaces. This is the multi-instance
+  output collection of the correction loop, bounded by the same `failureSample`;
+- optionally, a list of `_row` numbers to drop (a record a person rejected rather than
+  corrected).
+
+It streams the source, replaces or drops the named rows, writes a new document and binds
+it to the instance. The source document is never changed: a document is immutable
+(ADR-0543), and keeping both is what makes the correction reviewable. The operation
+refuses a `_row` that is not in the source and a row whose columns differ from the
+source's layout, so a correction cannot add or reshape records unnoticed. The model may
+then run `validate-rows` once more over the new document as the final check.
+
+The whole flow for a quality manager is then:
+
+1. pick the file in a form (a document, ADR-0543);
+2. `validate-rows` checks every row and writes the result document;
+3. the failures, if few enough, become correction tasks, one token each;
+4. `apply-corrections` writes the corrected file, and a last `validate-rows` confirms it.
 
 ### Audit
 
@@ -227,8 +255,9 @@ Assessed against [`docs/architecture/scale-out-readiness.md`](../architecture/sc
   choice between Option 2 and 3 is revisited before S1.
 - **S1 — the operation.** `validate-rows` in process: streaming evaluation, result
   document, summary, one evaluation record. Modeler panel and handbook.
-- **S2 — the correction paths.** An example model with both branches; the file
-  correction task with a filtered download and re-upload.
+- **S2 — the correction paths.** `apply-corrections`; an example model with both
+  branches, from upload to corrected file; the file correction task with a filtered
+  download and re-upload.
 - **S3 — the Datenprüfung screen.** Show the summary and the result document instead of
   1,500 open tasks.
 
