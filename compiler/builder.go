@@ -1844,7 +1844,11 @@ type EntraConfig struct {
 	// delta-groups): a literal-or-FEEL @odata.deltaLink from a previous run, empty on
 	// the first. Zero on every other operation.
 	DeltaLink RestExpr
-	Retries   int32
+	// Keep is a delta query's keep predicate as authored, already parsed and held
+	// against Select by the compiler (ADR-draft-entra-delta-keep); empty keeps every
+	// object, which is what a delta did before keep existed.
+	Keep    string
+	Retries int32
 }
 
 // AddEntraConnectorTask adds an Entra ID task and returns its element id.
@@ -1879,6 +1883,7 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 		EntraSearch:        cfg.Search,
 		EntraAdvanced:      cfg.Advanced,
 		EntraDeltaLink:     cfg.DeltaLink,
+		EntraKeep:          b.intern(cfg.Keep),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

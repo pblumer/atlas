@@ -4521,6 +4521,15 @@ const SERVICE_TASK_KINDS = [
         // enumeration that seeds a new cursor.
         hint: "Setzt eine Änderungsverfolgung fort: der @odata.deltaLink, den ein früherer Lauf zurückgab — fast immer eine FEEL-Variable (fx), z.B. =letzterDeltaLink. Leer lassen für den ersten Lauf: dann zählt der Worker das Verzeichnis einmal vollständig auf und liefert einen frischen Cursor. Das Ergebnis ist ein Objekt { value: [Änderungen], deltaLink: \"…\" }; den deltaLink persistieren (Datenobjekt) und beim nächsten Lauf hier wieder übergeben. Gelöschte Objekte kommen mit @removed markiert mit.",
       },
+      {
+        key: "keep", label: "Keep", placeholder: "department eq 'IT'",
+        showIf: (v) => v.operation === "delta-users" || v.operation === "delta-groups",
+        // Graph's delta endpoint takes no $filter, and a job's result is in the log
+        // before any output mapping could drop what a model does not want — so the
+        // worker filters (ADR-draft-entra-delta-keep). Literal only: the compiler holds
+        // its fields against the select at deploy.
+        hint: "Keeps only the objects that match, decided by the worker on every page before it answers — so in a tenant shared with real people nothing about them reaches the result or the event log. department eq 'IT', startswith(displayName,'test-'), combined with and / or and parentheses; case-insensitive, a literal and never FEEL. Every field must be in Properties above. Deleted objects are always kept, reduced to id and @removed. A later run's pages carry only what changed: an object without a field the filter reads is withheld and counted as undecided in the result.",
+      },
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: (v) => entraResultType(v.operation), placeholder: "konto",

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -209,6 +210,47 @@ func TestRunEntraJobCarriesTheDeltaCursor(t *testing.T) {
 		t.Errorf("first request = %q, want the resume deltaLink verbatim (it was dropped on the hop otherwise)", spy.path)
 	}
 }
+
+// keep has to survive the hop above all: a keep decoding to "" turns a filtered delta
+// into an unfiltered one, and every object of a shared tenant would reach the
+// completion and the log (ADR-draft-entra-delta-keep). Asserted through what the worker
+// answers.
+func TestRunEntraJobCarriesTheKeep(t *testing.T) {
+	c := &pageSpy{page: map[string]any{
+		"value": []any{
+			map[string]any{"id": "mine", "department": "atlas-test-58o4"},
+			map[string]any{"id": "stranger", "department": "Finance", "displayName": "A Real Person"},
+		},
+		"@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z2",
+	}}
+	reg := entra.NewRegistry()
+	reg.Register("contoso", c)
+
+	out, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "delta-users", "select": "id,department",
+			"keep": "department eq 'atlas-test-58o4'", "resultVariable": "konten",
+		},
+	}}, reg)
+	if err != nil {
+		t.Fatalf("RunEntraJob: %v", err)
+	}
+	raw, _ := json.Marshal(out)
+	if strings.Contains(string(raw), "stranger") || strings.Contains(string(raw), "Real Person") {
+		t.Fatalf("the completion carries a withheld object: %s", raw)
+	}
+	if !strings.Contains(string(raw), "mine") {
+		t.Errorf("the completion lost the kept object: %s", raw)
+	}
+}
+
+// pageSpy answers one fixed delta page.
+type pageSpy struct{ page map[string]any }
+
+func (pageSpy) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
+
+func (s *pageSpy) Call(context.Context, entra.Request) (any, error) { return s.page, nil }
 
 // newPassword has to survive the hop as well: it is the whole of a reset-password, and a
 // dropped one decodes to "" — which the worker's checkRequired then refuses, so a

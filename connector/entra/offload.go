@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/entra/keep"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
@@ -285,6 +286,11 @@ type Job struct {
 	// endpoint, client.go) and returns only what changed since it was minted. It is zero
 	// on every non-delta operation.
 	DeltaLink string `json:"deltaLink,omitempty"`
+	// Keep is a delta query's filter (ADR-draft-entra-delta-keep): a predicate in the
+	// language of connector/entra/keep that this worker applies to every page before
+	// it answers, so only the objects it keeps reach the result — and the log. Empty
+	// keeps every object. It is zero on every non-delta operation.
+	Keep string `json:"keep,omitempty"`
 	// Search is Graph's $search term, authored exactly as Graph takes it — quotes
 	// included, so a compound term stays expressible. Advanced asks for advanced
 	// query support (ConsistencyLevel: eventual plus $count=true), which a search
@@ -356,6 +362,7 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		PageSize:       detail.EntraPageSize,
 		MaxUsers:       detail.EntraMaxUsers,
 		DeltaLink:      resolveValue(detail.EntraDeltaLink, elementInstanceKey, vars),
+		Keep:           cp.Intern(detail.EntraKeep),
 		Search:         resolveValue(detail.EntraSearch, elementInstanceKey, vars),
 		Advanced:       detail.EntraAdvanced,
 		ResultVariable: cp.Intern(detail.ResultVar),
@@ -709,10 +716,39 @@ func deltaPath(j Job, collection string) string {
 //
 // Removed objects are not filtered out. Graph reports a deletion as an item carrying an
 // @removed annotation, and dropping it would hide exactly the change a leaver flow is
-// watching for — so the page is passed through as Graph sent it, deletions included.
+// watching for — so without a keep the page is passed through as Graph sent it,
+// deletions included.
+//
+// With a keep (ADR-draft-entra-delta-keep) every page is filtered as it arrives, before
+// anything is answered: only objects the predicate keeps are added, so in a tenant this
+// process shares with real people nothing about them reaches the job's result, which
+// the engine writes into the log before any output mapping runs (I6). A removed object
+// is always kept, reduced to its id and its @removed — a deletion carries no properties
+// to decide on, and the receiver skips an id it never knew. The deltaLink is Graph's,
+// untouched: the next run's pages come from the same cursor and are filtered the same
+// way. The result then also says how many objects were withheld, and how many of those
+// only because the page did not carry a property the keep reads ("undecided": a later
+// page carries only what changed), which is the one way a keep can lose a change.
+//
+// Two bounds, counting two things. The page bound counts requests to Graph, filtered or
+// not, so a run whose every page is withheld still ends. maxUsers counts what is kept —
+// what would land in the result variable, which is what the cap protects — so a keep
+// over a large tenant does not fail on objects it was never going to pass on. The result
+// may therefore be smaller than one page, or empty with a fresh cursor.
 func deltaCollection(ctx context.Context, j Job, spec Op, client Client) (map[string]any, error) {
+	var pred *keep.Predicate
+	if src := strings.TrimSpace(j.Keep); src != "" {
+		p, err := keep.Parse(src)
+		if err != nil {
+			// The compiler refused this at deploy; a job built by hand or by an older
+			// engine fails here rather than answering unfiltered.
+			return nil, fmt.Errorf("entra: %s: %w", j.Operation, err)
+		}
+		pred = p
+	}
 	req := request(j, spec, client.BaseURL())
 	items := []any{}
+	withheld, undecided := 0, 0
 	for pages := 0; pages < maxListPages; pages++ {
 		res, err := client.Call(ctx, req)
 		if err != nil {
@@ -722,12 +758,26 @@ func deltaCollection(ctx context.Context, j Job, spec Op, client Client) (map[st
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, batch...)
+		if pred == nil {
+			items = append(items, batch...)
+		} else {
+			for _, it := range batch {
+				kept, verdict := keepObject(pred, it)
+				if kept != nil {
+					items = append(items, kept)
+					continue
+				}
+				withheld++
+				if verdict == keep.Undecided {
+					undecided++
+				}
+			}
+		}
 		// The cap fails the job rather than truncating, as a listing's does: a short
 		// change set is a wrong answer a process would act on confidently, and it also
 		// means the deltaLink would be persisted having skipped changes.
 		if j.MaxUsers > 0 && len(items) > int(j.MaxUsers) {
-			return nil, fmt.Errorf("entra: %s returned more than the %d-item maxUsers cap; narrow with $select or raise maxUsers (a truncated change set drops changes silently)", j.Operation, j.MaxUsers)
+			return nil, fmt.Errorf("entra: %s returned more than the %d-item maxUsers cap; narrow with $select or keep, or raise maxUsers (a truncated change set drops changes silently)", j.Operation, j.MaxUsers)
 		}
 		if next == "" {
 			// The last page carries the deltaLink in place of a nextLink. Graph always
@@ -737,11 +787,42 @@ func deltaCollection(ctx context.Context, j Job, spec Op, client Client) (map[st
 			if delta == "" {
 				return nil, fmt.Errorf("entra: %s finished with no %s to resume from; the last page carried neither another page nor a delta cursor", j.Operation, deltaLinkKey)
 			}
-			return map[string]any{"value": items, "deltaLink": delta}, nil
+			out := map[string]any{"value": items, "deltaLink": delta}
+			if pred != nil {
+				out["withheld"] = withheld
+				out["undecided"] = undecided
+			}
+			return out, nil
 		}
 		req.Path = next
 	}
 	return nil, fmt.Errorf("entra: %s still offered another page after %d requests; narrow with $select, or set maxUsers so an oversized change set fails by its own bound", j.Operation, maxListPages)
+}
+
+// removedKey is the annotation Graph marks a deleted object with on a delta page.
+const removedKey = "@removed"
+
+// keepObject decides one object of a filtered delta page. It returns what to pass on —
+// the object itself, or for a removed one only its id and its @removed — or nil when the
+// object is withheld, with the verdict that withheld it. An item that is not an object
+// is withheld: there is nothing in it a keep could match.
+func keepObject(pred *keep.Predicate, it any) (any, keep.Verdict) {
+	obj, ok := it.(map[string]any)
+	if !ok {
+		return nil, keep.Drop
+	}
+	if rm, removed := obj[removedKey]; removed {
+		out := map[string]any{removedKey: rm}
+		if id, ok := obj["id"]; ok {
+			out["id"] = id
+		}
+		return out, keep.Keep
+	}
+	v := pred.Decide(obj)
+	if v != keep.Keep {
+		return nil, v
+	}
+	return obj, v
 }
 
 // deltaPage reads one page of a delta query: its items, the @odata.nextLink to the next
@@ -794,6 +875,9 @@ func checkRequired(j Job, spec Op) error {
 	}
 	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
+	}
+	if strings.TrimSpace(j.Keep) != "" && !spec.IsDelta {
+		return fmt.Errorf("entra: operation %q takes no keep; keep filters the pages of delta-users and delta-groups", j.Operation)
 	}
 	if spec.SelectOnly && (strings.TrimSpace(j.Filter) != "" || strings.TrimSpace(j.Search) != "" || j.Advanced || j.PageSize > 0) {
 		return fmt.Errorf("entra: operation %q takes only a select; Graph answers %s whole and refuses a filter, a search, an advanced query and a page size there", j.Operation, spec.ListPath)
