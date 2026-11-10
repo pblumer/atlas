@@ -143,6 +143,21 @@ func TestADocumentSearchFailsRatherThanCuts(t *testing.T) {
 	if _, err := ad.RunWithDocuments(ctx, documentSearch(0), dir, noSecret, nil, &storedDocs{err: errors.New("disk full")}); err == nil || !strings.Contains(err.Error(), "disk full") {
 		t.Errorf("store refuses = %v", err)
 	}
+	// The limit the activating server sent with the job is the one held, ahead of the
+	// store's and the default: on a Worker Instance it is the only one that is the
+	// server's own.
+	sent := documentSearch(0)
+	sent.DocumentLimit = 700
+	if _, err := ad.RunWithDocuments(ctx, sent, dir, noSecret, nil, &storedDocs{limit: 1 << 20}); err == nil || !strings.Contains(err.Error(), "700 bytes a document may be") {
+		t.Errorf("past the limit the job carries = %v", err)
+	}
+	if _, err := ad.RunWithDocuments(ctx, sent, dir, noSecret, nil, &storedDocs{}); err == nil || !strings.Contains(err.Error(), "700 bytes a document may be") {
+		t.Errorf("past the limit the job carries, to a store that reports none = %v", err)
+	}
+	sent.DocumentLimit = 1 << 20
+	if _, err := ad.RunWithDocuments(ctx, sent, dir, noSecret, nil, &storedDocs{limit: 500}); err != nil {
+		t.Errorf("within the limit the job carries, past the store's = %v", err)
+	}
 	noSelect := documentSearch(0)
 	noSelect.Select = nil
 	if _, err := ad.RunWithDocuments(ctx, noSelect, dir, noSecret, nil, &storedDocs{}); err == nil || !strings.Contains(err.Error(), "select") {

@@ -136,6 +136,13 @@ As built:
 - **Both places it runs:** in process through `jobDocuments` (which now reports the
   configured document limit), on a Worker Instance through `workersdk.UploadDocument`; the
   job payload carries `asDocument` and `documentName`. The completion binds the document.
+- **The limit is the server's in both places:** the server puts its document budget
+  (`ATLAS_LIMIT_DOCUMENT`) on the job when it hands it out (`documentLimit`), and the
+  search is held to that, ahead of the store's own and the default. Without it a Worker
+  Instance checked against the 35 MiB default: on a server that allows more it stopped too
+  early, on one that allows less it read the whole directory only to have the upload
+  refused. A worker talking to a server that sends no limit still falls back to the
+  default.
 - **The chain:** `<atlas:rowsFrom source="benutzer.document"/>` — a business rule task
   over a file may name its file at a field inside a variable, so the AD result is read
   directly, without a step that copies the reference.

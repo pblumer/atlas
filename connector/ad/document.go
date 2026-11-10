@@ -69,10 +69,7 @@ func runSearchDocument(ctx context.Context, j Job, conn Conn, docs DocumentStore
 	if len(j.Select) == 0 {
 		return nil, fmt.Errorf("ad: a search written as a document needs the attributes it writes as columns (select)")
 	}
-	limit := limits.Default().Document
-	if l, ok := docs.(documentLimiter); ok && l.DocumentLimit() > 0 {
-		limit = l.DocumentLimit()
-	}
+	limit := documentLimit(j, docs)
 	w := newEntryWriter(j.Select)
 	count := 0
 	first := ""
@@ -139,6 +136,20 @@ func runSearchDocument(ctx context.Context, j Job, conn Conn, docs DocumentStore
 		out[j.FoundVariable] = count > 0
 	}
 	return out, nil
+}
+
+// documentLimit is how large the document may grow: the limit the activating server
+// sent with the job, else the one the store reports, else the default budget. The job's
+// comes first because on a Worker Instance it is the only one that is the server's own;
+// in process the store reports the same configured value.
+func documentLimit(j Job, docs DocumentStore) int64 {
+	if j.DocumentLimit > 0 {
+		return j.DocumentLimit
+	}
+	if l, ok := docs.(documentLimiter); ok && l.DocumentLimit() > 0 {
+		return l.DocumentLimit()
+	}
+	return limits.Default().Document
 }
 
 // entryWriter writes entries as CSV rows: the DN, then one column per selected

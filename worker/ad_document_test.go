@@ -13,6 +13,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/worker"
 )
 
@@ -87,5 +88,47 @@ func TestAWorkerWritesADirectorySearchAsADocument(t *testing.T) {
 	}
 	if got := strings.Join(rows[1], ";"); got != "cn=u0001,ou=users,dc=x;u0001;u0001@x.ch;CN=Alle,DC=x|CN=Team,DC=x" {
 		t.Fatalf("first row = %q", got)
+	}
+}
+
+// A Worker Instance holds the search to the document limit of the server that handed
+// the job out, not to a default of its own: on a server that allows 4,000 bytes, a
+// search of 750 accounts fails on the worker with that number, before any upload, and
+// the job does not complete.
+func TestAWorkerHoldsADirectorySearchToTheServersDocumentLimit(t *testing.T) {
+	l := limits.Default()
+	l.Document = 4000
+	ts := bareAtlas(t, adDocumentModel, api.WithOffloadedConnectorKinds([]string{"ad"}), api.WithLimits(l))
+	post(t, ts, "/api/v1/processes/1/instances", `{}`, "application/json")
+
+	var seed []ad.Entry
+	for i := 1; i <= 750; i++ {
+		seed = append(seed, ad.Entry{DN: fmt.Sprintf("cn=u%04d,ou=users,dc=x", i), Attributes: map[string][]string{
+			"objectClass": {"user"}, "sAMAccountName": {fmt.Sprintf("u%04d", i)},
+		}})
+	}
+	dir := ad.NewMockDirectory(seed...)
+	var handlerErr error
+	w := worker.New(worker.Options{Server: ts.URL, ID: "ad-1", Handlers: map[string]worker.Exec{
+		compiler.AdJobType: worker.ExecFunc(func(ctx context.Context, j worker.Job) (map[string]any, error) {
+			out, err := worker.RunADJob(ctx, j, dir, func(string) string { return "" }, nil)
+			handlerErr = err
+			return out, err
+		}),
+	}})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	// The server refuses such an upload in the same words; that the search stopped on
+	// the worker, before any upload, is what "after … entries" and the absence of the
+	// store's error show.
+	if handlerErr == nil || !strings.Contains(handlerErr.Error(), "4000 bytes a document may be (ATLAS_LIMIT_DOCUMENT) after") ||
+		strings.Contains(handlerErr.Error(), "store the search result") {
+		t.Fatalf("the worker's handler = %v; want the search stopped at the server's limit of 4000 bytes, before any upload", handlerErr)
+	}
+	if running := runningInstances(t, ts); running != 1 {
+		t.Fatalf("%d instances running; the job must not have completed", running)
 	}
 }

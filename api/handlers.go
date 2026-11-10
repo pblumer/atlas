@@ -7359,6 +7359,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// (docs/planning/ad-search-as-document.md). Left out, a Worker Instance
 			// would write the whole result into the variable instead.
 			"asDocument": j.AsDocument, "documentName": j.DocumentName,
+			// The document budget this server holds an upload to, so a Worker Instance
+			// checks the search against the limit the upload will meet rather than
+			// against a default of its own.
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.LdapJobTypeIndex:
 		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and

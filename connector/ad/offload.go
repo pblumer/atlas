@@ -94,6 +94,13 @@ type Job struct {
 	// (docs/planning/ad-search-as-document.md).
 	AsDocument   bool   `json:"asDocument,omitempty"`
 	DocumentName string `json:"documentName,omitempty"`
+	// DocumentLimit is the largest document the server that handed the job out
+	// accepts (ATLAS_LIMIT_DOCUMENT), set when the job is activated. A Worker Instance
+	// has no other way to know it, and checking against a default instead would cut
+	// a search short on a server that allows more, or read a whole directory only to
+	// have the upload refused on one that allows less. Zero leaves the limit to the
+	// document store or the default.
+	DocumentLimit int64 `json:"documentLimit,omitempty"`
 }
 
 // Resolve turns a compiled AD task into a [Job]: the authored values
