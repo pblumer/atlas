@@ -71,6 +71,19 @@
       ]
     },
     {
+      "name": "RowsFrom",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:BusinessRuleTask"] },
+      "properties": [
+        { "name": "source", "type": "String", "isAttr": true },
+        { "name": "delimiter", "type": "String", "isAttr": true },
+        { "name": "hasHeader", "type": "String", "isAttr": true },
+        { "name": "columns", "type": "String", "isAttr": true },
+        { "name": "validOutput", "type": "String", "isAttr": true },
+        { "name": "failureSample", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "ClioConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

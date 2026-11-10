@@ -87,70 +87,87 @@ func ParseRows(cfg Config, data []byte) ([]map[string]any, error) {
 		return nil, fmt.Errorf("CSV is empty")
 	}
 
-	// Resolve each configured column to a source position in a record.
 	dataStart := 0
-	var srcIndex []int
+	var header []string
 	if cfg.hasHeader() {
-		header := records[0]
+		header = records[0]
 		dataStart = 1
-		// With no explicit column layout, derive one string column per distinct,
-		// non-empty header cell — the "just turn this CSV into JSON" case (ADR-0139).
-		if len(cfg.Columns) == 0 {
-			seen := make(map[string]struct{}, len(header))
-			for _, h := range header {
-				name := strings.TrimSpace(h)
-				if name == "" {
-					continue // a blank header names no field
-				}
-				if _, dup := seen[name]; dup {
-					continue // first occurrence wins, like the header lookup below
-				}
-				seen[name] = struct{}{}
-				cfg.Columns = append(cfg.Columns, Column{Name: name})
-			}
-			if len(cfg.Columns) == 0 {
-				return nil, fmt.Errorf("CSV header row has no usable column names")
-			}
-		}
-		srcIndex = make([]int, len(cfg.Columns))
-		pos := make(map[string]int, len(header))
-		for i, h := range header {
-			key := strings.TrimSpace(h)
-			if _, seen := pos[key]; !seen { // first occurrence wins
-				pos[key] = i
-			}
-		}
-		for c, col := range cfg.Columns {
-			want := strings.TrimSpace(col.Header)
-			if want == "" {
-				want = strings.TrimSpace(col.Name)
-			}
-			i, ok := pos[want]
-			if !ok {
-				return nil, fmt.Errorf("column %q (header %q) not found in CSV header", col.Name, want)
-			}
-			srcIndex[c] = i
-		}
-	} else {
-		srcIndex = make([]int, len(cfg.Columns))
-		for c, col := range cfg.Columns {
-			srcIndex[c] = *col.Index
-		}
 	}
-
+	cols, srcIndex, err := resolveColumns(cfg, header)
+	if err != nil {
+		return nil, err
+	}
 	rows := make([]map[string]any, 0, len(records)-dataStart)
 	for _, rec := range records[dataStart:] {
-		row := make(map[string]any, len(cfg.Columns))
-		for c, col := range cfg.Columns {
-			cell := ""
-			if i := srcIndex[c]; i >= 0 && i < len(rec) {
-				cell = rec[i]
-			}
-			row[col.Name] = coerceCell(cell, col.Type)
-		}
-		rows = append(rows, row)
+		rows = append(rows, rowOf(cols, srcIndex, rec))
 	}
 	return rows, nil
+}
+
+// resolveColumns resolves each configured column to its position in a record. With a
+// header row and no columns, it derives one string column per distinct, non-empty
+// header cell — the "just turn this CSV into JSON" case (ADR-0139). header is nil for
+// a file without one.
+func resolveColumns(cfg Config, header []string) ([]Column, []int, error) {
+	cols := cfg.Columns
+	if !cfg.hasHeader() {
+		srcIndex := make([]int, len(cols))
+		for c, col := range cols {
+			srcIndex[c] = *col.Index
+		}
+		return cols, srcIndex, nil
+	}
+	if len(cols) == 0 {
+		seen := make(map[string]struct{}, len(header))
+		for _, h := range header {
+			name := strings.TrimSpace(h)
+			if name == "" {
+				continue // a blank header names no field
+			}
+			if _, dup := seen[name]; dup {
+				continue // first occurrence wins, like the header lookup below
+			}
+			seen[name] = struct{}{}
+			cols = append(cols, Column{Name: name})
+		}
+		if len(cols) == 0 {
+			return nil, nil, fmt.Errorf("CSV header row has no usable column names")
+		}
+	}
+	srcIndex := make([]int, len(cols))
+	pos := make(map[string]int, len(header))
+	for i, h := range header {
+		key := strings.TrimSpace(h)
+		if _, seen := pos[key]; !seen { // first occurrence wins
+			pos[key] = i
+		}
+	}
+	for c, col := range cols {
+		want := strings.TrimSpace(col.Header)
+		if want == "" {
+			want = strings.TrimSpace(col.Name)
+		}
+		i, ok := pos[want]
+		if !ok {
+			return nil, nil, fmt.Errorf("column %q (header %q) not found in CSV header", col.Name, want)
+		}
+		srcIndex[c] = i
+	}
+	return cols, srcIndex, nil
+}
+
+// rowOf builds one row object from a record: each column's cell, coerced to its type.
+// A record shorter than the layout gives the missing cells as empty strings.
+func rowOf(cols []Column, srcIndex []int, rec []string) map[string]any {
+	row := make(map[string]any, len(cols))
+	for c, col := range cols {
+		cell := ""
+		if i := srcIndex[c]; i >= 0 && i < len(rec) {
+			cell = rec[i]
+		}
+		row[col.Name] = coerceCell(cell, col.Type)
+	}
+	return row
 }
 
 // validateConfig rejects a layout that could never map a file: no columns,

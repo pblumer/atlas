@@ -180,3 +180,36 @@ test("the task says where its input mapping and the decision's inputs disagree",
   await expect(note).not.toContainText("Sie wird ignoriert");
   expect(page.__errors).toEqual([]);
 });
+
+// A business rule task over a file (ADR-0548): choosing "once per record of a file"
+// writes atlas:rowsFrom, its fields write the element's attributes, and choosing
+// "once" again takes the element away rather than leaving an empty one behind.
+test("a business rule task can be set to check a file record by record", async ({ page }) => {
+  await page.evaluate(() => window.__select("Activity_rule"));
+  await page.locator('.pgroup[data-group="Records of a file"] > .pgroup-head').click();
+  await page.locator("#f-brt-rows").selectOption("file");
+  await page.locator('.pgroup[data-group="Records of a file"] #f-rows-source').waitFor();
+  const set = async (sel, value) => {
+    await page.locator(sel).fill(value);
+    await page.locator(sel).dispatchEvent("change");
+  };
+  await set("#f-rows-source", "antrag");
+  await set("#f-rows-delimiter", ";");
+  await set("#f-rows-columns", "email,group,license");
+  await set("#f-rows-sample", "50");
+  await page.locator("#f-rows-header").selectOption("false");
+
+  let xml = await page.evaluate(() => window.__xml());
+  const rowsFrom = xml.match(/<atlas:rowsFrom[^>]*>/);
+  expect(rowsFrom, xml).not.toBeNull();
+  for (const attr of ['source="antrag"', 'delimiter=";"', 'hasHeader="false"', 'columns="email,group,license"', 'failureSample="50"']) {
+    expect(rowsFrom[0]).toContain(attr);
+  }
+
+  await page.locator("#f-brt-rows").selectOption("");
+  // Switched off, the fields go with the element.
+  await expect(page.locator("#f-rows-source")).toHaveCount(0);
+  xml = await page.evaluate(() => window.__xml());
+  expect(xml).not.toContain("rowsFrom");
+  expect(page.__errors).toEqual([]);
+});
