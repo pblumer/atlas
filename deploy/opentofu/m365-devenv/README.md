@@ -251,6 +251,8 @@ Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` 
 
 Einen durchgehenden Test mit einer erfundenen Firma beschreibt
 [TESTSZENARIO.md](TESTSZENARIO.md).
+Den wiederholbaren Abnahmetest aller Kataloge, den ein Agent über MCP in mehreren Rollen
+durchführt, beschreibt [TESTLAUF-KATALOG.md](TESTLAUF-KATALOG.md).
 
 ## Beispiele einspielen
 
