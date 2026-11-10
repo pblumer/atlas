@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A business rule task can check a file record by record.** With `<atlas:rowsFrom source="antrag"/>`
+  (panel: *Over a file → Once per record of a file*) a business rule task evaluates its decision once
+  for every record of an uploaded CSV document, in one job of the in-process DMN worker, instead of
+  once over the instance's variables. Input mappings read the record as `row`; without mappings the
+  columns enter the decision by name. The result variable receives a summary — total, valid,
+  invalid and failed records, the first failures with their line, the decision deployment used — and
+  a result document with every record, its `_row`, `_valid` and the decision's other outputs. One
+  decision evaluation is recorded for the run. 50,000 records take seconds, where one
+  multi-instance iteration per record takes hours (ADR-0548).
 - **Built-in Worker Type operations declare technical capabilities.** The operation rows of the
   Entra and Teams Phone Worker Types carry their capability claims (ADR-0480), and
   `GET /api/v1/worker-types` lists them per operation as `candidate`: Entra's Team operations
