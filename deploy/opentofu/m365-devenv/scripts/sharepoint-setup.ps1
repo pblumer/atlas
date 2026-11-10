@@ -107,6 +107,9 @@ function Get-File([string] $Url, [string] $Path) {
 function Invoke-Checked([string] $File, [string[]] $Arguments, [int[]] $Ok = @(0), [int] $TimeoutMinutes = 60) {
     Write-Output "> $File $($Arguments -join ' ')"
     $p = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru -NoNewWindow
+    # Without -Wait, Windows PowerShell 5.1 reports ExitCode only if the handle was taken
+    # while the process ran; otherwise it is empty and every exit reads as a failure.
+    $null = $p.Handle
     if (-not $p.WaitForExit($TimeoutMinutes * 60 * 1000)) {
         & taskkill.exe /PID $p.Id /T /F | Out-Null
         throw "$File did not finish within $TimeoutMinutes minutes; see its log"
