@@ -1,6 +1,6 @@
 # ADR-0449: A wizard is a subprocess one filler walks through
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-10: a step is also prefilled with the variable a choice field takes its options from — valuesKey — read and never written; see «Amendment (2026-11-10)»)
 - **Implementation:** Landed
 - **Date:** 2026-10-10
 - **Deciders:** Atlas maintainers
@@ -300,6 +300,30 @@ both written as new events) is a decision of its own.
   - Only operators may start a process in the Tasks app. A person with the role `user`
     enters an internal wizard through a first screen assigned to them, as
     `examples/arbeitsplatz` shows; whoever started is answered `handedOver`.
+
+## Amendment (2026-11-10): a choice field's options are read
+
+A screen is prefilled with the variables its form binds, and nothing else (*The pass*,
+point 3). A choice field whose options are a variable — form-js's `valuesKey` — binds that
+variable too: it is what the screen offers. Until this amendment the rule read only the
+fields' own keys, so a public step whose options a worker had found between two screens
+showed an empty list, though the variable sat in the wizard's scope. The appointment
+booking (`examples/terminbuchung`, ADR-draft-calendar-worker-type) is the case: the free
+slots of a calendar, read by a service task, offered by the next screen.
+
+- **Read, never written.** The public step's prefill adds the variables named by its
+  choice fields' `valuesKey` (`collectFormOptionKeys`) to the fields' own
+  (`collectFormFieldKeys`); what a submission may carry stays `formShapeOf`'s, which a
+  `valuesKey` never enters. A submission naming the variable is refused like any other
+  key the form cannot produce, so a visitor cannot hand the process a list of its own.
+- **Only the public step.** `collectFormFieldKeys` also decides which answers of a shop
+  order are written as variables (`orderAnswerVars`). Widening it would have let an
+  orderer write the options' variable, so the read is a function of its own, called by
+  the public step's prefill alone. The Tasks app is unchanged.
+- **The choice itself is not checked against the list.** A static list is checked at
+  completion; a list from a variable is not, because the server does not hold it at the
+  form. A process that must only take an offered value checks it after the screen, as the
+  booking example does with a script and a gateway.
 
 ## Pros and cons of the options
 

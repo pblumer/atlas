@@ -45,8 +45,9 @@ type publicStep struct {
 	Documentation string          `json:"documentation,omitempty"`
 	Schema        json.RawMessage `json:"schema,omitempty"`
 	// Data prefills the screen: the values the instance holds under the variables the
-	// form binds, and nothing else — the rule ADR-0275 applies to the holder of a
-	// task, with the pass holder as the holder.
+	// form binds — its fields, and the variables its choice fields take their options
+	// from — and nothing else: the rule ADR-0275 applies to the holder of a task, with
+	// the pass holder as the holder (ADR-0449, amended 2026-11-10).
 	Data map[string]any `json:"data,omitempty"`
 }
 
@@ -177,6 +178,7 @@ func (s *Server) publicStepOf(tr taskResp) (*publicStep, error) {
 		step.Schema = json.RawMessage(f.Schema)
 		fields := map[string]bool{}
 		collectFormFieldKeys([]byte(f.Schema), fields)
+		collectFormOptionKeys([]byte(f.Schema), fields)
 		data := map[string]any{}
 		err = state.VisibleVariables(s.personalReader(s.store), tr.ElementInstanceKey, func(v *model.VariableValue) error {
 			if fields[v.Name] {

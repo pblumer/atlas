@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Terminbuchung — ein öffentlicher Wizard, der freie Termine aus einem Kalender liest
+  und den gewählten Termin dort bucht (ADR-draft-calendar-worker-type, ADR-0449).
+
+    Start "Termin anfragen"          (Startformular termin-dienstleistung; öffentlicher Link)
+     → Subprozess "Buchungsassistent" (atlas:wizard="public")
+          Script     "Dienstleistung nachschlagen"   (Name und Dauer)
+          Kalender   "Freie Termine suchen"          (find-free-slots → freieTermine)
+          Script     "Termine aufbereiten"           (terminOptionen für die Auswahl)
+          User-Task  "Termin wählen"                 (termin-wahl, Optionen aus terminOptionen)
+          Script     "Termin übernehmen"             (slot: nur ein angebotener Termin)
+          Gateway    kein angebotener Termin → zurück zur Wahl
+          User-Task  "Ihre Angaben"                  (termin-angaben)
+          Kalender   "Termin reservieren"            (reserve-slot → buchung)
+              Fehler CALENDAR_SLOT_TAKEN → "Termin vergeben" → Termine neu suchen
+          Kalender   "Buchung bestätigen"            (confirm-booking, lädt die Kundin ein)
+          User-Task  "Bestätigung"                   (termin-bestaetigung)
+        Timer am Rand: 30 Minuten ohne Abschluss → "Sitzung abgelaufen"
+     → User-Task "Termin vorbereiten" (Werkstatt, candidateGroups werkstatt)
+     → Ende "Termin vorbereitet"
+
+  Der Kalender-Worker "filiale" ist eine Einstellung des Servers, nicht des Modells: ein
+  Microsoft-365-Tenant oder, zum Ausprobieren, der Mock. Das Modell bleibt gleich.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_terminbuchung" targetNamespace="http://atlas/examples">
+  <error id="err_slot_taken" name="Termin vergeben" errorCode="CALENDAR_SLOT_TAKEN"/>
+  <process id="proc_terminbuchung" name="Terminbuchung" isExecutable="true">
+
+    <startEvent id="start" name="Termin anfragen">
+      <extensionElements>
+        <zeebe:formDefinition formId="termin-dienstleistung"/>
+      </extensionElements>
+        <outgoing>f_start</outgoing>
+    </startEvent>
+
+    <subProcess id="assistent" name="Buchungsassistent" atlas:wizard="public">
+      <documentation>Die Masken nach der Wahl der Dienstleistung. Wer den öffentlichen Link geöffnet hat, sieht die freien Termine aus dem Kalender der Werkstatt, wählt einen, gibt seine Angaben ein und bucht.</documentation>
+      <extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=dienstleistung" target="dienstleistung"/>
+          <zeebe:output source="=leistung" target="leistung"/>
+          <zeebe:output source="=slot" target="slot"/>
+          <zeebe:output source="=buchung" target="buchung"/>
+          <zeebe:output source="=kunde" target="kunde"/>
+          <zeebe:output source="=velo" target="velo"/>
+          <zeebe:output source="=mitteilung" target="mitteilung"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+        <incoming>f_start</incoming>
+        <outgoing>f_assistent</outgoing>
+
+      <startEvent id="a_start">
+        <outgoing>f_a1</outgoing>
+      </startEvent>
+
+      <scriptTask id="leistung" name="Dienstleistung nachschlagen">
+        <extensionElements>
+          <zeebe:script resultVariable="leistung"
+            expression="= if dienstleistung = &quot;beratung&quot; then {name: &quot;Beratung Velokauf&quot;, dauer: 60} else if dienstleistung = &quot;ergonomie&quot; then {name: &quot;Ergonomie-Check&quot;, dauer: 30} else {name: &quot;Veloservice&quot;, dauer: 60}"/>
+        </extensionElements>
+        <incoming>f_a1</incoming>
+        <outgoing>f_a2</outgoing>
+      </scriptTask>
+
+      <serviceTask id="suchen" name="Freie Termine suchen">
+        <documentation>Liest die belegten Zeiten des Werkstattkalenders der nächsten zwei Wochen und legt das Raster der Dienstleistung über die Öffnungszeiten.</documentation>
+        <extensionElements>
+          <atlas:calendarConnector connector="filiale" operation="find-free-slots" resultVariable="freieTermine"
+            input="{&quot;calendars&quot;: [&quot;werkstatt@velo-beispiel.ch&quot;],&#10; &quot;from&quot;: &quot;=string(today()) + \&quot;T00:00:00Z\&quot;&quot;,&#10; &quot;to&quot;: &quot;=string(today() + duration(\&quot;P14D\&quot;)) + \&quot;T00:00:00Z\&quot;&quot;,&#10; &quot;durationMinutes&quot;: &quot;=leistung.dauer&quot;,&#10; &quot;timeZone&quot;: &quot;Europe/Zurich&quot;,&#10; &quot;openingHours&quot;: {&#10;  &quot;tue&quot;: [{&quot;from&quot;: &quot;09:00&quot;, &quot;to&quot;: &quot;12:00&quot;}, {&quot;from&quot;: &quot;13:30&quot;, &quot;to&quot;: &quot;18:00&quot;}],&#10;  &quot;wed&quot;: [{&quot;from&quot;: &quot;09:00&quot;, &quot;to&quot;: &quot;12:00&quot;}, {&quot;from&quot;: &quot;13:30&quot;, &quot;to&quot;: &quot;18:00&quot;}],&#10;  &quot;thu&quot;: [{&quot;from&quot;: &quot;09:00&quot;, &quot;to&quot;: &quot;12:00&quot;}, {&quot;from&quot;: &quot;13:30&quot;, &quot;to&quot;: &quot;18:00&quot;}],&#10;  &quot;fri&quot;: [{&quot;from&quot;: &quot;09:00&quot;, &quot;to&quot;: &quot;12:00&quot;}, {&quot;from&quot;: &quot;13:30&quot;, &quot;to&quot;: &quot;18:00&quot;}],&#10;  &quot;sat&quot;: [{&quot;from&quot;: &quot;09:00&quot;, &quot;to&quot;: &quot;16:00&quot;}]},&#10; &quot;minLeadMinutes&quot;: 120,&#10; &quot;maxResults&quot;: 60}"/>
+        </extensionElements>
+        <incoming>f_a2</incoming>
+        <incoming>f_vergeben_suchen</incoming>
+        <outgoing>f_a3</outgoing>
+      </serviceTask>
+
+      <scriptTask id="aufbereiten" name="Termine aufbereiten">
+        <extensionElements>
+          <zeebe:script resultVariable="terminOptionen"
+            expression="= for s in freieTermine.slots return {label: s.date + &quot; &quot; + s.time, value: s.start}"/>
+        </extensionElements>
+        <incoming>f_a3</incoming>
+        <outgoing>f_a4</outgoing>
+      </scriptTask>
+
+      <userTask id="wahl" name="Termin wählen">
+        <documentation>Die freien Termine kommen aus dem Kalender der Werkstatt. Verbindlich wird ein Termin erst mit der Buchung.</documentation>
+        <extensionElements>
+          <zeebe:formDefinition formId="termin-wahl"/>
+        </extensionElements>
+        <incoming>f_a4</incoming>
+        <incoming>f_gw_wahl</incoming>
+        <outgoing>f_a5</outgoing>
+      </userTask>
+
+      <scriptTask id="uebernehmen" name="Termin übernehmen">
+        <documentation>Nur ein angebotener Termin wird übernommen: Die Auswahl schickt der Browser, und ein Besucher könnte jeden Wert schicken.</documentation>
+        <extensionElements>
+          <zeebe:script resultVariable="slot" expression="= freieTermine.slots[item.start = termin][1]"/>
+        </extensionElements>
+        <incoming>f_a5</incoming>
+        <outgoing>f_a6</outgoing>
+      </scriptTask>
+
+      <exclusiveGateway id="gw_slot" name="Angebotener Termin?" default="f_gw_angaben">
+        <incoming>f_a6</incoming>
+        <outgoing>f_gw_angaben</outgoing>
+        <outgoing>f_gw_wahl</outgoing>
+      </exclusiveGateway>
+
+      <userTask id="angaben" name="Ihre Angaben">
+        <extensionElements>
+          <zeebe:formDefinition formId="termin-angaben"/>
+        </extensionElements>
+        <incoming>f_gw_angaben</incoming>
+        <outgoing>f_a7</outgoing>
+      </userTask>
+
+      <serviceTask id="reservieren" name="Termin reservieren">
+        <documentation>Trägt den Termin als Platzhalter ein und prüft den Kalender danach: Ist inzwischen etwas anderes eingetragen, wird der Platzhalter entfernt und der Fehler CALENDAR_SLOT_TAKEN geworfen.</documentation>
+        <extensionElements>
+          <atlas:calendarConnector connector="filiale" operation="reserve-slot" resultVariable="buchung"
+            input="{&quot;calendar&quot;: &quot;=slot.calendars[1]&quot;, &quot;start&quot;: &quot;=slot.start&quot;, &quot;end&quot;: &quot;=slot.end&quot;,&#10; &quot;subject&quot;: &quot;=\&quot;Reserviert: \&quot; + leistung.name&quot;, &quot;timeZone&quot;: &quot;Europe/Zurich&quot;}"/>
+        </extensionElements>
+        <incoming>f_a7</incoming>
+        <outgoing>f_a8</outgoing>
+      </serviceTask>
+
+      <boundaryEvent id="err_vergeben" name="Termin vergeben" attachedToRef="reservieren">
+        <outgoing>f_err</outgoing>
+        <errorEventDefinition errorRef="err_slot_taken"/>
+      </boundaryEvent>
+
+      <scriptTask id="vergeben" name="Hinweis: Termin vergeben">
+        <extensionElements>
+          <zeebe:script resultVariable="terminVergeben" expression="= true"/>
+        </extensionElements>
+        <incoming>f_err</incoming>
+        <outgoing>f_vergeben_suchen</outgoing>
+      </scriptTask>
+
+      <serviceTask id="kalender_bestaetigen" name="Buchung bestätigen">
+        <documentation>Erst jetzt, da der Termin sicher ist, erhält er Betreff, Text und die Kundin als Teilnehmerin; der Kalender lädt sie ein.</documentation>
+        <extensionElements>
+          <atlas:calendarConnector connector="filiale" operation="confirm-booking" resultVariable="buchung"
+            input="{&quot;calendar&quot;: &quot;=buchung.calendar&quot;, &quot;bookingId&quot;: &quot;=buchung.bookingId&quot;,&#10; &quot;subject&quot;: &quot;=leistung.name + \&quot; – \&quot; + kunde.name&quot;,&#10; &quot;body&quot;: &quot;=\&quot;Velo: \&quot; + velo.typ + (if velo.marke = null then \&quot;\&quot; else \&quot;, \&quot; + velo.marke) + (if mitteilung = null then \&quot;\&quot; else \&quot;. \&quot; + mitteilung)&quot;,&#10; &quot;attendees&quot;: [{&quot;email&quot;: &quot;=kunde.email&quot;, &quot;name&quot;: &quot;=kunde.name&quot;}],&#10; &quot;timeZone&quot;: &quot;Europe/Zurich&quot;}"/>
+        </extensionElements>
+        <incoming>f_a8</incoming>
+        <outgoing>f_a9</outgoing>
+      </serviceTask>
+
+      <userTask id="quittung" name="Bestätigung">
+        <extensionElements>
+          <zeebe:formDefinition formId="termin-bestaetigung"/>
+        </extensionElements>
+        <incoming>f_a9</incoming>
+        <outgoing>f_a10</outgoing>
+      </userTask>
+
+      <endEvent id="a_end">
+        <incoming>f_a10</incoming>
+      </endEvent>
+
+      <sequenceFlow id="f_a1" sourceRef="a_start" targetRef="leistung"/>
+      <sequenceFlow id="f_a2" sourceRef="leistung" targetRef="suchen"/>
+      <sequenceFlow id="f_a3" sourceRef="suchen" targetRef="aufbereiten"/>
+      <sequenceFlow id="f_a4" sourceRef="aufbereiten" targetRef="wahl"/>
+      <sequenceFlow id="f_a5" sourceRef="wahl" targetRef="uebernehmen"/>
+      <sequenceFlow id="f_a6" sourceRef="uebernehmen" targetRef="gw_slot"/>
+      <sequenceFlow id="f_gw_angaben" sourceRef="gw_slot" targetRef="angaben"/>
+      <sequenceFlow id="f_gw_wahl" sourceRef="gw_slot" targetRef="wahl">
+        <conditionExpression>= slot = null</conditionExpression>
+      </sequenceFlow>
+      <sequenceFlow id="f_a7" sourceRef="angaben" targetRef="reservieren"/>
+      <sequenceFlow id="f_a8" sourceRef="reservieren" targetRef="kalender_bestaetigen"/>
+      <sequenceFlow id="f_a9" sourceRef="kalender_bestaetigen" targetRef="quittung"/>
+      <sequenceFlow id="f_a10" sourceRef="quittung" targetRef="a_end"/>
+      <sequenceFlow id="f_err" sourceRef="err_vergeben" targetRef="vergeben"/>
+      <sequenceFlow id="f_vergeben_suchen" sourceRef="vergeben" targetRef="suchen"/>
+      <sequenceFlow id="f_assistent" sourceRef="assistent" targetRef="vorbereiten"/>
+    </subProcess>
+
+    <boundaryEvent id="verfallen" name="30 Minuten ohne Abschluss" attachedToRef="assistent">
+        <outgoing>f_verfallen</outgoing>
+      <timerEventDefinition>
+        <timeDuration>PT30M</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <endEvent id="end_verfallen" name="Sitzung abgelaufen">
+        <incoming>f_verfallen</incoming>
+    </endEvent>
+
+    <userTask id="vorbereiten" name="Termin vorbereiten">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="werkstatt"/>
+        <zeebe:formDefinition formId="termin-vorbereiten"/>
+      </extensionElements>
+        <incoming>f_assistent</incoming>
+        <outgoing>f_vorbereiten</outgoing>
+    </userTask>
+
+    <endEvent id="end" name="Termin vorbereitet">
+        <incoming>f_vorbereiten</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start" sourceRef="start" targetRef="assistent"/>
+    <sequenceFlow id="f_assistent" sourceRef="assistent" targetRef="vorbereiten"/>
+    <sequenceFlow id="f_vorbereiten" sourceRef="vorbereiten" targetRef="end"/>
+    <sequenceFlow id="f_verfallen" sourceRef="verfallen" targetRef="end_verfallen"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_terminbuchung">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="92" y="302" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="assistent_di" bpmnElement="assistent" isExpanded="true">
+        <dc:Bounds x="180" y="160" width="1700" height="400"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_start_di" bpmnElement="a_start">
+        <dc:Bounds x="212" y="302" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="leistung_di" bpmnElement="leistung">
+        <dc:Bounds x="270" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="suchen_di" bpmnElement="suchen">
+        <dc:Bounds x="430" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="aufbereiten_di" bpmnElement="aufbereiten">
+        <dc:Bounds x="590" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="wahl_di" bpmnElement="wahl">
+        <dc:Bounds x="750" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="uebernehmen_di" bpmnElement="uebernehmen">
+        <dc:Bounds x="910" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_slot_di" bpmnElement="gw_slot">
+        <dc:Bounds x="1085" y="295" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="angaben_di" bpmnElement="angaben">
+        <dc:Bounds x="1180" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="reservieren_di" bpmnElement="reservieren">
+        <dc:Bounds x="1340" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="kalender_bestaetigen_di" bpmnElement="kalender_bestaetigen">
+        <dc:Bounds x="1500" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="quittung_di" bpmnElement="quittung">
+        <dc:Bounds x="1660" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_end_di" bpmnElement="a_end">
+        <dc:Bounds x="1812" y="302" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="vergeben_di" bpmnElement="vergeben">
+        <dc:Bounds x="1340" y="440" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="err_vergeben_di" bpmnElement="err_vergeben">
+        <dc:Bounds x="1382" y="342" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="vorbereiten_di" bpmnElement="vorbereiten">
+        <dc:Bounds x="1930" y="280" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="2112" y="302" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verfallen_di" bpmnElement="verfallen">
+        <dc:Bounds x="242" y="542" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_verfallen_di" bpmnElement="end_verfallen">
+        <dc:Bounds x="242" y="642" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start">
+        <di:waypoint x="128" y="320"/>
+        <di:waypoint x="180" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a1_di" bpmnElement="f_a1">
+        <di:waypoint x="248" y="320"/>
+        <di:waypoint x="270" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a2_di" bpmnElement="f_a2">
+        <di:waypoint x="390" y="320"/>
+        <di:waypoint x="430" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a3_di" bpmnElement="f_a3">
+        <di:waypoint x="550" y="320"/>
+        <di:waypoint x="590" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a4_di" bpmnElement="f_a4">
+        <di:waypoint x="710" y="320"/>
+        <di:waypoint x="750" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a5_di" bpmnElement="f_a5">
+        <di:waypoint x="870" y="320"/>
+        <di:waypoint x="910" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a6_di" bpmnElement="f_a6">
+        <di:waypoint x="1030" y="320"/>
+        <di:waypoint x="1085" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_angaben_di" bpmnElement="f_gw_angaben">
+        <di:waypoint x="1135" y="320"/>
+        <di:waypoint x="1180" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_wahl_di" bpmnElement="f_gw_wahl">
+        <di:waypoint x="1110" y="295"/>
+        <di:waypoint x="1110" y="220"/>
+        <di:waypoint x="810" y="220"/>
+        <di:waypoint x="810" y="280"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a7_di" bpmnElement="f_a7">
+        <di:waypoint x="1300" y="320"/>
+        <di:waypoint x="1340" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a8_di" bpmnElement="f_a8">
+        <di:waypoint x="1460" y="320"/>
+        <di:waypoint x="1500" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a9_di" bpmnElement="f_a9">
+        <di:waypoint x="1620" y="320"/>
+        <di:waypoint x="1660" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_a10_di" bpmnElement="f_a10">
+        <di:waypoint x="1780" y="320"/>
+        <di:waypoint x="1812" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_err_di" bpmnElement="f_err">
+        <di:waypoint x="1400" y="378"/>
+        <di:waypoint x="1400" y="440"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_vergeben_suchen_di" bpmnElement="f_vergeben_suchen">
+        <di:waypoint x="1340" y="480"/>
+        <di:waypoint x="490" y="480"/>
+        <di:waypoint x="490" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_assistent_di" bpmnElement="f_assistent">
+        <di:waypoint x="1880" y="320"/>
+        <di:waypoint x="1930" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_vorbereiten_di" bpmnElement="f_vorbereiten">
+        <di:waypoint x="2050" y="320"/>
+        <di:waypoint x="2112" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_verfallen_di" bpmnElement="f_verfallen">
+        <di:waypoint x="260" y="578"/>
+        <di:waypoint x="260" y="642"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -1,0 +1,85 @@
+{
+  "type": "default",
+  "id": "termin-angaben",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Ihre Angaben\n\nWir brauchen Ihren Namen und eine E-Mail-Adresse für die Bestätigung."
+    },
+    {
+      "key": "dienstleistung",
+      "type": "textfield",
+      "label": "Dienstleistung",
+      "disabled": true,
+      "conditional": {
+        "hide": "=true"
+      }
+    },
+    {
+      "key": "kunde.name",
+      "type": "textfield",
+      "label": "Name",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "kunde.email",
+      "type": "textfield",
+      "label": "E-Mail",
+      "validate": {
+        "required": true,
+        "validationType": "email"
+      }
+    },
+    {
+      "key": "kunde.telefon",
+      "type": "textfield",
+      "label": "Telefon"
+    },
+    {
+      "key": "velo.typ",
+      "type": "select",
+      "label": "Velo-Typ",
+      "values": [
+        {
+          "label": "Citybike",
+          "value": "city"
+        },
+        {
+          "label": "E-Bike",
+          "value": "ebike"
+        },
+        {
+          "label": "Mountainbike",
+          "value": "mtb"
+        },
+        {
+          "label": "Rennvelo",
+          "value": "rennvelo"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "velo.marke",
+      "type": "textfield",
+      "label": "Velo-Marke"
+    },
+    {
+      "key": "koerpergroesse",
+      "type": "number",
+      "label": "Körpergrösse (cm)",
+      "conditional": {
+        "hide": "=dienstleistung != \"beratung\""
+      }
+    },
+    {
+      "key": "mitteilung",
+      "type": "textarea",
+      "label": "Möchten Sie uns noch etwas mitteilen?"
+    }
+  ]
+}

@@ -179,3 +179,28 @@ func TestAMailViewIsReadNeverWritten(t *testing.T) {
 		t.Errorf("bindings = %v; the mail view's variable is one the form reads", reads.children)
 	}
 }
+
+// TestAChoiceFieldsOptionsAreReadNeverWritten: a select whose options are a variable
+// (valuesKey) reads that variable — a public wizard screen is prefilled with it, so the
+// free slots a worker found are what the screen offers — and a submission naming it is
+// refused, like any other key the form cannot produce. The paths that decide what is
+// written (orders, task folders) keep reading the fields alone.
+func TestAChoiceFieldsOptionsAreReadNeverWritten(t *testing.T) {
+	schema := `{"components":[{"type":"group","components":[{"type":"select","key":"termin","valuesKey":"terminOptionen"}]}]}`
+	read := map[string]bool{}
+	collectFormOptionKeys([]byte(schema), read)
+	if !read["terminOptionen"] || read["termin"] {
+		t.Fatalf("the options read %v; want the variable the options come from, and only it", read)
+	}
+	fields := map[string]bool{}
+	collectFormFieldKeys([]byte(schema), fields)
+	if fields["terminOptionen"] {
+		t.Fatal("the fields a form writes now include the options' variable")
+	}
+	if bad := shapeCheck(t, schema, `{"termin":"2030-03-25T09:00:00+01:00"}`); len(bad) != 0 {
+		t.Fatalf("the choice itself was refused: %v", bad)
+	}
+	if bad := shapeCheck(t, schema, `{"termin":"x","terminOptionen":[{"label":"x","value":"x"}]}`); !slices.Contains(bad, "terminOptionen") {
+		t.Fatalf("a submitted option list was accepted: %v", bad)
+	}
+}

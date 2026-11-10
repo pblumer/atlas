@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">51</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">52</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">51</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">52</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -3715,6 +3715,62 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               choosing a shape.</li>
           </ul>
         </details>
+      </div>
+
+      <div class="bsp" id="bsp-terminbuchung">
+        <h4><span class="rz-emoji" aria-hidden="true">📅</span>
+          <span data-l="de">Terminbuchung: freie Termine aus dem Kalender, ohne Doppelbuchung</span><span data-l="en">Appointment booking: free slots from the calendar, never booked twice</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err" data-l="de">Kalender-Worker</span><span class="tag err" data-l="en">calendar worker</span>
+          <span class="tag">Mockup</span>
+          <span class="tag" data-l="de">öffentlicher Wizard</span><span class="tag" data-l="en">public wizard</span>
+          <span class="tag">Microsoft 365</span>
+          <span class="tag">examples/terminbuchung/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Ein Veloladen lässt Kundinnen und Kunden online einen Termin buchen: Dienstleistung wählen,
+              freien Termin wählen, Angaben machen, verbindlich buchen. <b>Frei ist, was der Kalender der Werkstatt
+              sagt</b> – auch das, was jemand von Hand in Outlook eingetragen hat. Nach der Buchung bereitet die
+              Werkstatt den Termin vor. Eine Beratung, eine Sprechstunde oder eine Raumreservation folgt demselben
+              Muster.</p>
+            <p data-l="en">A bike shop lets customers book an appointment online: choose a service, choose a free slot,
+              give their details, book. <b>Free is what the workshop's calendar says</b> – including what somebody
+              entered by hand in Outlook. After the booking the workshop prepares the appointment. A consultation, a
+              surgery hour or a room reservation follows the same pattern.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein <a href="#wizards">öffentlicher Wizard</a> mit drei Tasks des
+              <a href="#runbook-calendar">Kalender-Workers</a>: <code>find-free-slots</code> legt das Raster der
+              Dienstleistung über die Öffnungszeiten und liest die belegten Zeiten, die Auswahl der Maske kommt über
+              <code>valuesKey</code> aus dem Ergebnis. Ein Script übernimmt nur einen angebotenen Termin.
+              <code>reserve-slot</code> trägt einen Platzhalter ein und prüft danach; ist der Termin inzwischen
+              vergeben, wirft es <code>CALENDAR_SLOT_TAKEN</code>, und ein Fehler-Grenzereignis führt mit neu gelesener
+              Liste zurück zur Wahl. Erst <code>confirm-booking</code> lädt die Kundin ein. Welcher Kalender antwortet –
+              Microsoft 365 oder der Mock –, ist die Einstellung des Workers <code>filiale</code>, nicht des Modells.</p>
+            <p data-l="en">A <a href="#wizards">public wizard</a> with three tasks of the
+              <a href="#runbook-calendar">calendar worker</a>: <code>find-free-slots</code> lays the service's grid over
+              the opening hours and reads the busy times, and the screen's choice takes its options from the result
+              through <code>valuesKey</code>. A script takes only a slot that was offered. <code>reserve-slot</code>
+              enters a placeholder and checks afterwards; if the slot was taken in the meantime it throws
+              <code>CALENDAR_SLOT_TAKEN</code>, and an error boundary leads back to the choice with a list read again.
+              Only <code>confirm-booking</code> invites the customer. Which calendar answers – Microsoft 365 or the
+              mock – is the setting of the worker <code>filiale</code>, not of the model.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Lege unter <b>Workers</b> einen Worker <code>filiale</code> vom Typ <b>Calendar booking</b> an, mit einem Secret <code>{"provider": "mock", "calendars": {"werkstatt@velo-beispiel.ch": {}}}</code>.</span><span data-l="en">Under <b>Workers</b>, add a worker <code>filiale</code> of type <b>Calendar booking</b>, with a secret <code>{"provider": "mock", "calendars": {"werkstatt@velo-beispiel.ch": {}}}</code>.</span></li>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b>, dann in der Tasks-App unter <i>Start process</i> bei <b>Terminbuchung</b> auf <i>Publish public link</i>.</span><span data-l="en">Click <b>⬇ Install</b>, then in the Tasks app under <i>Start process</i> click <i>Publish public link</i> for <b>Terminbuchung</b>.</span></li>
+            <li><span data-l="de">Öffne den Link in einem privaten Browserfenster und buche einen Termin.</span><span data-l="en">Open the link in a private browser window and book a slot.</span></li>
+          </ol>
+        </div>
       </div>
 
       <div class="bsp" id="bsp-arbeitsplatz">
@@ -14810,7 +14866,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">51</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">51</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">52</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">52</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

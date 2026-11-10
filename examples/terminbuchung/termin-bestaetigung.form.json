@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "termin-bestaetigung",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Ihr Termin ist gebucht\n\nDer Termin steht im Kalender der Werkstatt. Eine Einladung geht an Ihre E-Mail-Adresse."
+    },
+    {
+      "key": "slot.date",
+      "type": "textfield",
+      "label": "Datum",
+      "disabled": true
+    },
+    {
+      "key": "slot.time",
+      "type": "textfield",
+      "label": "Uhrzeit",
+      "disabled": true
+    },
+    {
+      "key": "leistung.name",
+      "type": "textfield",
+      "label": "Dienstleistung",
+      "disabled": true
+    },
+    {
+      "key": "gelesen",
+      "type": "checkbox",
+      "label": "Verstanden",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

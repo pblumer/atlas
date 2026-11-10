@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "termin-dienstleistung",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Termin buchen\n\nWählen Sie die Dienstleistung. Im nächsten Schritt sehen Sie die freien Termine, gelesen aus dem Kalender der Werkstatt."
+    },
+    {
+      "key": "dienstleistung",
+      "type": "radio",
+      "label": "Dienstleistung",
+      "values": [
+        { "label": "Beratung Velokauf (60 Min.)", "value": "beratung" },
+        { "label": "Veloservice (60 Min.)", "value": "service" },
+        { "label": "Ergonomie-Check (30 Min.)", "value": "ergonomie" }
+      ],
+      "validate": { "required": true }
+    }
+  ]
+}

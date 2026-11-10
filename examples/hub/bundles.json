@@ -52,6 +52,11 @@
       "examples": ["onboarding"]
     },
     {
+      "id": "terminbuchung",
+      "tags": ["kalender", "wizard"],
+      "examples": ["terminbuchung"]
+    },
+    {
       "id": "verwaltung-dienstleistungen",
       "tags": ["verwaltung"],
       "examples": ["verwaltung-dienstleistungen"]
