@@ -20,9 +20,9 @@ import (
 // Three groups, kept apart on purpose:
 //   - located diagnostics: graph-wide (stage 5) rules that carry a stable rule
 //     slug and the offending element id;
-//   - coarse diagnostics: element-local (stages 1-4) faults that are refused but
-//     reported under the generic "compile" rule with no element field, the id
-//     appearing only in the message text — a known gap in location reporting;
+//   - element-local diagnostics: faults stages 1-4 raise while the process is being
+//     built, reported under the generic "compile" rule and, since ADR-0547 part 2,
+//     with the offending element as well;
 //   - forbidden flow shapes (ADR-0547): refused at deploy like the located group,
 //     and brought back unchanged, with the problem reported, when a stored
 //     definition is reloaded.
@@ -102,13 +102,12 @@ func con2HasProblem(problems []compiler.Problem, rule, element string, severity 
 	return false
 }
 
-// TestCON2InvalidModelsHaveCoarseDiagnostics covers element-local faults: the
-// deploy is refused, but the modeler problem carries only the generic "compile"
-// rule and no element field; the offending id is in the message text alone. The
-// assertion on the empty element field is a tripwire: when location reporting
-// improves, this test fails and the case moves to the located table above, and
-// registry row FLOW-14 is updated with it.
-func TestCON2InvalidModelsHaveCoarseDiagnostics(t *testing.T) {
+// TestCON2ElementLocalFaultsCarryTheirElement covers element-local faults: the
+// deploy is refused, and the modeler problem carries the generic "compile" rule
+// (a stable slug clients may group by, ADR-0547) together with the offending
+// element, which the message names as well. Until ADR-0547 part 2 the element
+// field was empty and the id was in the message text alone.
+func TestCON2ElementLocalFaultsCarryTheirElement(t *testing.T) {
 	F := con2Flow
 	cases := []struct {
 		name, mentions string
@@ -166,9 +165,8 @@ func TestCON2InvalidModelsHaveCoarseDiagnostics(t *testing.T) {
 			if !strings.Contains(p.Message, tc.mentions) {
 				t.Fatalf("message %q does not name %s", p.Message, tc.mentions)
 			}
-			if p.Element != "" {
-				t.Fatalf("diagnostic now carries element %q: move %s to the located table and update FLOW-14",
-					p.Element, tc.name)
+			if want := strings.Trim(tc.mentions, `"`); p.Element != want {
+				t.Fatalf("problem %+v: element %q, want %q", p, p.Element, want)
 			}
 		})
 	}

@@ -270,7 +270,7 @@
       "conformanceClass": "process-execution",
       "clause": "13.4",
       "applicability": "required",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "package-tested",
       "sourceRefs": [
         "compiler/validation.go",
@@ -278,14 +278,15 @@
       ],
       "testRefs": [
         "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveLocatedDiagnostics",
-        "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveCoarseDiagnostics",
+        "conformance/normative_diagnostics_test.go:TestCON2ElementLocalFaultsCarryTheirElement",
         "conformance/normative_diagnostics_test.go:TestCON2ModelingSmellsAreWarningsNotRefusals",
         "conformance/normative_diagnostics_test.go:TestCON2ForbiddenFlowShapesReloadUnchanged",
         "compiler/forbidden_flow_shapes_test.go:TestGatewayDefaultMustBeItsOwnOutgoingFlow",
-        "compiler/forbidden_flow_shapes_test.go:TestReloadKeepsForbiddenShapesAsCompiled"
+        "compiler/forbidden_flow_shapes_test.go:TestReloadKeepsForbiddenShapesAsCompiled",
+        "compiler/elementerror_test.go:TestValidateModelAnchorsElementLocalFaults"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/validation.go`. CON2 pins 12 located diagnostics (rule + element + severity), including the four sequence-flow shapes ADR-0547 refuses (start event with incoming flow, end event with outgoing flow, gateway default that is not the gateway's own outgoing flow, including a default naming another gateway's flow); 10 element-local refusals that still carry only rule \"compile\" and no element field (ADR-0547 part 2, not started); 2 non-blocking warnings. Stored definitions with the refused shapes reload unchanged per ADR-0177/ADR-0393.",
+      "limitations": "`compiler/validation.go`, `compiler/elementerror.go`. CON2 pins 12 located stage-5 diagnostics, including the four sequence-flow shapes ADR-0547 refuses (stored definitions reload unchanged per ADR-0177/ADR-0393), 10 element-local refusals that carry rule \"compile\" and their element (ADR-0547 part 2), and 2 non-blocking warnings. Remaining: Worker Type configuration errors and process-level faults are unanchored; further forbidden shapes may surface in the CON0 per-clause review.",
       "reviewState": "provisional"
     },
     {
