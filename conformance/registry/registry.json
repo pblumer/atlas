@@ -101,12 +101,13 @@
         "compiler/process.go"
       ],
       "testRefs": [
-        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles"
+        "conformance/normative_oracles_test.go:TestCON2ExecutionOracles",
+        "conformance/normative_joins_test.go:TestCON2InclusiveJoinWhoseUpstreamTokenEndsElsewhere"
       ],
       "scenarioIds": [
         "inclusive-gateway"
       ],
-      "limitations": "`inclusive-gateway`; ADR-0033 limits cycles",
+      "limitations": "`inclusive-gateway`; ADR-0033 limits cycles. Known gap (CON2): a join re-checks only when a token arrives at it, so it hangs when an upstream token ends elsewhere (Table 13.3 states activation as a condition on the diagram's tokens); fix proposed in ADR-draft-complex-gateway part 1. Atlas also blocks on any ancestor token, stricter than the Table 13.3 path rule (to be classified).",
       "reviewState": "provisional"
     },
     {

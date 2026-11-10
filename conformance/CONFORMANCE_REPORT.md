@@ -66,7 +66,7 @@ Some variants run; the limitations say which do not.
 
 | ID | Candidate | Section | Limitations |
 | --- | --- | --- | --- |
-| FLOW-05 | Inclusive choice/synchronizing merge | 13.4 | `inclusive-gateway`; ADR-0033 limits cycles |
+| FLOW-05 | Inclusive choice/synchronizing merge | 13.4 | `inclusive-gateway`; ADR-0033 limits cycles. Known gap (CON2): a join re-checks only when a token arrives at it, so it hangs when an upstream token ends elsewhere (Table 13.3 states activation as a condition on the diagram's tokens); fix proposed in ADR-draft-complex-gateway part 1. Atlas also blocks on any ancestor token, stricter than the Table 13.3 path rule (to be classified). |
 | ACT-04 | Script Task; FEEL execution and script errors | 13.3 | `script-task`; dialect distinction required |
 | ACT-09 | Event Subprocess: interrupting / non-interrupting | 13.3 | concurrent non-interrupting scenario only |
 | ACT-10 | Transaction: normal commit, cancel, compensation | 13.3 | `transaction-cancel` narrow variant |
