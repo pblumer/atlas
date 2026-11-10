@@ -994,6 +994,11 @@ type Server struct {
 	// cataloguePurgeOff: the purge is an opt-out, so the zero value allows it. Set once
 	// before Handler is mounted.
 	instancePurgeOff bool
+	// mcpShopOff refuses the shop's customer side to requests that came through MCP
+	// (--mcp-shop=false / WithoutMCPShop, ADR-0550). "off"
+	// for cataloguePurgeOff's reason: offering it is the default. Set once before
+	// Handler is mounted.
+	mcpShopOff bool
 	// catalogueReporting is every process id that calls the order routes, read once
 	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
 	catalogueReporting map[string]bool
@@ -3957,10 +3962,10 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		if s.traceRoutes {
 			// The span is named for the *pattern*, which is fixed by this table, so the
 			// set of span names is bounded by the code rather than by traffic (ADR-0142).
-			mount(class, r.op.role, route, tracing.Handler(route, r.handler))
+			mount(class, r.op.role, route, tracing.Handler(route, s.guardMCPShop(route, r.handler)))
 			continue
 		}
-		mountFunc(class, r.op.role, route, r.handler)
+		mountFunc(class, r.op.role, route, s.guardMCPShop(route, r.handler))
 	}
 
 	// The MCP transport, when the binary supplied one (ADR-0016). It is mounted

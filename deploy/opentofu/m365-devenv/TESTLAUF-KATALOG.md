@@ -58,7 +58,7 @@ ausdrücklicher Zustimmung:
 ## Werkzeuge
 
 Die Shop-Werkzeuge handeln immer als die Person der Verbindung, mit deren Rechten
-(ADR-Entwurf `docs/adr/draft-mcp-shop-customer-side.md`). Ein Server mit
+(ADR-Entwurf `docs/adr/0550-mcp-shop-customer-side.md`). Ein Server mit
 `--mcp-shop=false` lehnt sie mit 403 ab; dann bricht der Lauf in Phase 0 ab.
 
 | Schritt im Drehbuch | Werkzeug |

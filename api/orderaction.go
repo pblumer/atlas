@@ -41,10 +41,11 @@ type actionReq struct {
 	Variables map[string]any `json:"variables"`
 	// Trigger, when set, is which of the action's triggers the caller asks as:
 	// `customer`, `operator` or `system`. The action must declare it and the caller
-	// must be one — an operator for the last two. An agent asks through MCP with
-	// `operator` or `system` only, so a customer's action is never an agent's to ask
-	// (ADR-0429 §2, maintainers' decision of 2026-10-01). Left out, the caller asks
-	// as whichever trigger they are.
+	// must be one — an operator for the last two. An agent asks through MCP as the
+	// person it is connected as, with any of the three; a server started with
+	// --mcp-shop=false refuses `customer`, or none, over MCP
+	// (ADR-0550, reversing ADR-0429 §2's decision of
+	// 2026-10-01). Left out, the caller asks as whichever trigger they are.
 	Trigger string `json:"trigger"`
 }
 
@@ -73,6 +74,9 @@ func (s *Server) handleLineAction(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.CommandID) == "" {
 		httpapi.Error(w, http.StatusBadRequest, "commandId is required: it is what makes a retry "+
 			"answer with the first outcome instead of asking for the action twice")
+		return
+	}
+	if s.refuseCustomerActionOverMCP(w, r, req.Trigger) {
 		return
 	}
 	out, status, msg := s.actOnLine(httpapi.PrincipalFrom(r.Context()), r.PathValue("id"),
