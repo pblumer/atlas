@@ -58,6 +58,13 @@ var (
 // name instead of carrying its own url; it may be nil where none are configured. Returning an error fails the job (retry, then an incident,
 // ADR-0061); the runner completes it only on success.
 func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret SecretResolver, dirs *Registry) job.OutputHandler {
+	return HandlerWithDocuments(store, lookup, dialer, secret, dirs, nil)
+}
+
+// HandlerWithDocuments is [Handler] where a search may write its result as a document
+// into docs, the document store as the server reaches it for an in-process job
+// (docs/planning/ad-search-as-document.md).
+func HandlerWithDocuments(store state.Reader, lookup ProcessLookup, dialer Dialer, secret SecretResolver, dirs *Registry, docs DocumentStore) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -81,7 +88,7 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
 		// cannot change what a resolved AD task means — only which process holds the
 		// bind password behind the reference.
-		out, err := Run(context.Background(), task, dialer, secret, dirs)
+		out, err := RunWithDocuments(context.Background(), task, dialer, secret, dirs, docs)
 		if err != nil {
 			return nil, err
 		}

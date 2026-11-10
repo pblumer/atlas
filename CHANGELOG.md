@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **An Active Directory search can write its result as a document.** With `resultAs="document"` an
+  AD `search` writes its entries into a CSV document — the DN, then the attributes named in `select`,
+  a multi-valued attribute joined by `|` with `\|` and `\\` escaped — instead of into the result
+  variable, which then holds `{found, count, dn, document}`. The directory is read page by page and
+  written as it arrives; `maxEntries` defaults to 100,000 in this form, and the document budget is the
+  hard ceiling. It runs in process and on a Worker Instance. A business rule task over a file can read
+  it directly with `<atlas:rowsFrom source="benutzer.document"/>`, so a whole directory is checked
+  against DMN rules in two tasks (docs/planning/ad-search-as-document.md).
 - **A business rule task can check a file record by record.** With `<atlas:rowsFrom source="antrag"/>`
   (panel: *Over a file → Once per record of a file*) a business rule task evaluates its decision once
   for every record of an uploaded CSV document, in one job of the in-process DMN worker, instead of

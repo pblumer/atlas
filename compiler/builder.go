@@ -1630,6 +1630,10 @@ type AdConfig struct {
 	Attributes RestExpr
 	Select     string
 	FoundVar   string
+	// AsDocument makes a search write its entries into a CSV document named
+	// DocumentName instead of into the result variable.
+	AsDocument   bool
+	DocumentName string
 }
 
 // AddAdConnectorTask adds an Active Directory task and returns its element
@@ -1678,6 +1682,8 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		AdAttributes:     cfg.Attributes,
 		AdSelect:         b.intern(cfg.Select),
 		AdFoundVar:       b.intern(cfg.FoundVar),
+		AdAsDocument:     cfg.AsDocument,
+		AdDocumentName:   b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

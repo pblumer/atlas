@@ -7355,6 +7355,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// A search's attribute selection and the variable its found goes to on its
 			// own (ADR-0166, amended 2026-11-03).
 			"select": j.Select, "foundVariable": j.FoundVariable,
+			// A search written as a document, and the file's name
+			// (docs/planning/ad-search-as-document.md). Left out, a Worker Instance
+			// would write the whole result into the variable instead.
+			"asDocument": j.AsDocument, "documentName": j.DocumentName,
 		}}
 	case compiler.LdapJobTypeIndex:
 		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and

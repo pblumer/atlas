@@ -205,6 +205,8 @@
         { "name": "foundVariable", "type": "String", "isAttr": true },
         { "name": "maxEntries", "type": "String", "isAttr": true },
         { "name": "objectSecurity", "type": "String", "isAttr": true },
+        { "name": "resultAs", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },

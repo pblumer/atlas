@@ -744,6 +744,12 @@ var adOps = map[string]adOp{
 const (
 	defaultAdSyncMaxEntries   = 1000
 	defaultAdSearchMaxEntries = 1000
+	// defaultAdDocumentMaxEntries is the cap of a search written to a document. Reading
+	// a large result is what the document form is for, so its default is a whole
+	// directory of a mid-sized organisation; the document budget is the hard ceiling.
+	defaultAdDocumentMaxEntries = 100000
+	// defaultAdDocumentName is the file a search writes when the model names none.
+	defaultAdDocumentName = "ad-search.csv"
 )
 
 // adOpNames lists the operations, sorted, for the error messages that say what was
@@ -859,6 +865,13 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if err != nil {
 		return 0, err
 	}
+	asDocument, documentName, err := adResultAs(st.Id, op, spec, cn, selectList)
+	if err != nil {
+		return 0, err
+	}
+	if asDocument && strings.TrimSpace(cn.MaxEntries) == "" {
+		maxEntries = defaultAdDocumentMaxEntries
+	}
 	foundVar := strings.TrimSpace(cn.FoundVariable)
 	if foundVar != "" {
 		if !validVariableName(foundVar) {
@@ -932,7 +945,54 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		Attributes:     entry,
 		Select:         selectList,
 		FoundVar:       foundVar,
+		AsDocument:     asDocument,
+		DocumentName:   documentName,
 	}), nil
+}
+
+// adResultAs reads where a search's entries go: into the result variable (the
+// default), or into a CSV document the result variable names
+// (docs/planning/ad-search-as-document.md). The document form is refused where it
+// could not be read back: on any operation but search, without a result variable to
+// name it, and without a select — a server's default attribute set differs between
+// directories, and a file whose columns depend on the server cannot be checked by a
+// rule that names them.
+func adResultAs(taskID, op string, spec adOp, cn *xmlAdConnector, selectList string) (bool, string, error) {
+	as := strings.ToLower(strings.TrimSpace(cn.ResultAs))
+	name := strings.TrimSpace(cn.DocumentName)
+	switch as {
+	case "", "variable":
+		if name != "" {
+			return false, "", fmt.Errorf("compiler: ad task %q sets documentName, which names the document a search writes with resultAs=\"document\"", taskID)
+		}
+		return false, "", nil
+	case "document":
+	default:
+		return false, "", fmt.Errorf("compiler: ad task %q has an unknown resultAs %q (want variable or document)", taskID, cn.ResultAs)
+	}
+	if !spec.isSearch {
+		return false, "", fmt.Errorf("compiler: ad task %q sets resultAs=\"document\" on operation %q; only a search writes its result as a document", taskID, op)
+	}
+	if strings.TrimSpace(cn.ResultVariable) == "" {
+		return false, "", fmt.Errorf("compiler: ad task %q writes its search as a document and needs a resultVariable to hold the reference to it", taskID)
+	}
+	if selectList == "" {
+		return false, "", fmt.Errorf("compiler: ad task %q writes its search as a document and needs select: the document's columns are the attributes it names, and a server's default set differs between directories", taskID)
+	}
+	// Each name is a column, so it has to be one: * and + select whatever the server
+	// holds, and dn is the first column already.
+	for _, a := range strings.Split(selectList, ",") {
+		if a == "*" || a == "+" || strings.EqualFold(a, "dn") {
+			return false, "", fmt.Errorf("compiler: ad task %q writes its search as a document and selects %q; every name in select is a column, so name the attributes (dn is the first column already)", taskID, a)
+		}
+	}
+	if name == "" {
+		name = defaultAdDocumentName
+	}
+	if strings.ContainsAny(name, "/\\") || name == "." || name == ".." {
+		return false, "", fmt.Errorf("compiler: ad task %q documentName %q is a path; name the file only", taskID, name)
+	}
+	return true, name, nil
 }
 
 // adMaxEntries reads the authored cap on what an operation returns. It applies to the

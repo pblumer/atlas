@@ -423,7 +423,8 @@ type BusinessRuleTaskDetail struct {
 // <atlas:rowsFrom> on the task and read only by the in-process DMN worker, never on
 // the run loop, so its fields are plain values rather than interned indices.
 type DecisionRows struct {
-	// Source is the process variable holding the reference to the document to read.
+	// Source is the process variable holding the reference to the document to read, or a
+	// dotted path to a field inside one ("benutzer.document").
 	Source string
 	// Delimiter is the CSV field separator, one character; empty means ",".
 	Delimiter string
@@ -921,6 +922,11 @@ type ConnectorTaskDetail struct {
 	AdAttributes RestExpr
 	AdSelect     int32
 	AdFoundVar   int32
+	// AdAsDocument makes a search write its entries into a CSV document, one row per
+	// entry, rather than into the result variable; AdDocumentName is the interned file
+	// name (docs/planning/ad-search-as-document.md).
+	AdAsDocument   bool
+	AdDocumentName int32
 	// Generic SQL worker fields (JobType == SqlJobType, ADR-0173). Worker
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is

@@ -2663,6 +2663,12 @@ type xmlAdConnector struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	MaxEntries     string `xml:"maxEntries,attr"`
 	ObjectSecurity string `xml:"objectSecurity,attr"`
+	// ResultAs (search only) is "variable" (the default) or "document": the entries go
+	// into a CSV document the result variable names, rather than into the variable
+	// itself, so a whole directory can be read (docs/planning/ad-search-as-document.md).
+	// DocumentName is that document's file name.
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

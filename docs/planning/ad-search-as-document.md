@@ -1,7 +1,7 @@
 # AD search as a document — delivery plan
 
-**Status of this plan:** proposed, not started. Decisions D1–D4 below are proposals that
-need confirmation; D5 is an open question that needs an answer before S1 ships.
+**Status of this plan:** S0 and S1 done (2026-11-10). D1–D4 were confirmed as proposed;
+D5 was answered with option 1. S2 and S3 are open.
 
 **Builds on:** [ADR-0543](../adr/0543-a-file-is-a-document-not-a-variable.md) (documents),
 [ADR-0548](../adr/0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md)
@@ -42,13 +42,13 @@ log, the state and the per-step history — the cost ADR-0543 exists to avoid.
 
 ## Decisions
 
-### D1 — Format: CSV (proposed)
+### D1 — Format: CSV (taken)
 
 CSV, because the next step reads CSV (ADR-0548), and because a person opens it in the tool
 they already have. JSON Lines would carry multi-valued attributes without an encoding, but
 would need a second reader in the business rule task and opens in no spreadsheet.
 
-### D2 — Columns: `dn`, then `select` in its order (proposed)
+### D2 — Columns: `dn`, then `select` in its order (taken)
 
 The first column is `dn`, always: it is the one value that names an entry, and what a
 later correction needs. Then one column per attribute in `select`, in the order written.
@@ -56,7 +56,7 @@ An empty `select` is refused for the document form: the server's default attribu
 differs between directories, and a file whose columns depend on the server cannot be
 checked by a rule that names them.
 
-### D3 — Multi-valued attributes: joined with `|`, escaped (proposed)
+### D3 — Multi-valued attributes: joined with `|`, escaped (taken)
 
 `memberOf`, `proxyAddresses` and similar hold several values. They are written into one
 cell, joined by `|`; a `|` or `\` inside a value is escaped as `\|` and `\\`. A rule tests
@@ -69,7 +69,7 @@ the row count depend on the data, which a decision table cannot be written again
 **To verify in S1:** whether FEEL's `split` with that pattern behaves as written in temis,
 and whether a helper is needed in the Modeler hint.
 
-### D4 — Limits (proposed)
+### D4 — Limits (taken)
 
 - `maxEntries` keeps its meaning (more fails the job). Its default for the document form is
   100,000 instead of 1,000, because the document form exists for large results.
@@ -79,7 +79,7 @@ and whether a helper is needed in the Modeler hint.
 - The search is written page by page as it arrives, not held whole: `Conn.Search` gains a
   callback form, so memory holds one page (500 entries) and the CSV being written.
 
-### D5 — Personal data (open question)
+### D5 — Personal data (taken: option 1)
 
 A directory export names tens of thousands of people. ADR-0314 seals personal data per
 *data subject*: a variable declared personal is enciphered under the key of the instance's
@@ -103,6 +103,11 @@ Options, to be decided before S1 ships:
 Recommendation: 1 now, 2 as a follow-up. 3 restricts what can be checked without making
 the file less personal (a `dn` names a person already).
 
+**Taken: option 1.** The export is as protected as the instance it belongs to. Option 2 stays
+the follow-up if a check runs regularly. Unchanged by this plan: a result variable the process
+declares personal seals the document it names under the instance's subject, as any personal
+reference does (`encipherJobVars` → `sealDocuments`).
+
 ## Slices
 
 ### S0 — Decide
@@ -110,7 +115,39 @@ the file less personal (a `dn` names a person already).
 - D1–D4 confirmed or changed; D5 answered.
 - Exit: this plan's decisions marked taken.
 
-### S1 — Search writes a document
+### S1 — Search writes a document (done)
+
+As built:
+
+- **Compiler** (`compiler/connector_compile.go`, `adResultAs`): `resultAs` (`variable` |
+  `document`) and `documentName` on `<atlas:adConnector>`. Refused at deploy: the document
+  form on any operation but `search`, without a `resultVariable`, without `select`, with `*`,
+  `+` or `dn` in `select` (every name is a column, and `dn` is the first), and a
+  `documentName` with a path; `documentName` without the document form. `maxEntries`
+  defaults to 100,000 in the document form.
+- **Reading** (`connector/ad/document.go`): `goConn.SearchPages` follows the paging
+  cookie and hands each page over before asking for the next; the mock pages its own
+  result; a connection without paging is read whole. Rows are in the directory's order;
+  `dn` in the result is still the smallest DN, tracked as the pages arrive.
+- **Writing:** one CSV row per entry, attributes matched without regard to case, a missing
+  attribute an empty cell, values joined and escaped as D3 says. The cap and the document
+  budget are checked as rows are written, so a result past either fails the job instead of
+  storing a cut file.
+- **Both places it runs:** in process through `jobDocuments` (which now reports the
+  configured document limit), on a Worker Instance through `workersdk.UploadDocument`; the
+  job payload carries `asDocument` and `documentName`. The completion binds the document.
+- **The chain:** `<atlas:rowsFrom source="benutzer.document"/>` — a business rule task
+  over a file may name its file at a field inside a variable, so the AD result is read
+  directly, without a step that copies the reference.
+- **Modeler:** the moddle descriptor knows `resultAs` and `documentName`, so a model keeps
+  them on save. The panel fields are S2.
+- **Measured** against the mock directory, 50,000 accounts with three attributes
+  (`BenchmarkADocumentSearchOf50000Users`): 0.27 s, a 5.8 MB document. The heap in use
+  (165 MB) is not a measure of the search: the mock holds the whole directory in memory.
+  Against a real directory, memory holds one page of 500 entries plus the document being
+  written; that is by construction, not measured.
+
+Planned, for reference:
 
 - Compiler: the AD task's `search` gains `resultAs="document"` and `documentName`
   (default `ad-search.csv`); `select` required in that form; `maxEntries` default 100,000.

@@ -89,6 +89,11 @@ type Job struct {
 	// result and branch on a boolean that names nobody (ADR-0166, amended 2026-11-03).
 	Select        []string `json:"select,omitempty"`
 	FoundVariable string   `json:"foundVariable,omitempty"`
+	// AsDocument (search only) writes the entries into a CSV document named
+	// DocumentName, which the result variable then names, instead of into the variable
+	// (docs/planning/ad-search-as-document.md).
+	AsDocument   bool   `json:"asDocument,omitempty"`
+	DocumentName string `json:"documentName,omitempty"`
 }
 
 // Resolve turns a compiled AD task into a [Job]: the authored values
@@ -159,6 +164,8 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 			j.Select = strings.Split(sel, ",")
 		}
 		j.FoundVariable = cp.Intern(detail.AdFoundVar)
+		j.AsDocument = detail.AdAsDocument
+		j.DocumentName = cp.Intern(detail.AdDocumentName)
 	}
 	return j, nil
 }
@@ -177,7 +184,13 @@ func needsEntry(op string) bool {
 // secret store, dials and binds, performs the operation, and closes. It is the whole
 // of the worker's half, and the in-process path calls it too, so there is one
 // definition of what a resolved AD task means rather than two that drift.
-func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver, dirs *Registry) (map[string]any, error) {
+func Run(ctx context.Context, j Job, dialer Dialer, secret SecretResolver, dirs *Registry) (map[string]any, error) {
+	return RunWithDocuments(ctx, j, dialer, secret, dirs, nil)
+}
+
+// RunWithDocuments is [Run] where a search may write its result as a document: docs is
+// the document store of the job's instance (docs/planning/ad-search-as-document.md).
+func RunWithDocuments(ctx context.Context, j Job, dialer Dialer, secret SecretResolver, dirs *Registry, docs DocumentStore) (map[string]any, error) {
 	url, bindDN, bindPassword, startTLS, err := target(j, secret, dirs)
 	if err != nil {
 		return nil, err
@@ -191,6 +204,9 @@ func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver, dirs *R
 	case "sync":
 		return runSync(j, conn)
 	case "search":
+		if j.AsDocument {
+			return runSearchDocument(ctx, j, conn, docs)
+		}
 		return runSearch(j, conn)
 	}
 	return nil, dispatch(j, conn)
