@@ -5,6 +5,10 @@ erfundene Firma wird über den Shop aufgebaut, ihre Mitarbeitenden treten über 
 ein, danach wird ein Bürotag durchgespielt. Das Szenario zeigt, ob die Produkte im
 Zusammenspiel tragen, nicht nur einzeln.
 
+Denselben Hochlauf der Firma führt ein Agent automatisch und mit allen Produkten über MCP
+durch: [TESTLAUF-KATALOG.md](TESTLAUF-KATALOG.md). Dieser Test von Hand bleibt für das, was der
+Agent nicht sieht: Outlook, Teams und den Explorer (Bürotag).
+
 Bestellt wird im Shop als Testperson **Anna Muster**. Alle Objekte tragen den Präfix der
 Umgebung (`atlas-test-<zufall>-`) und fallen damit unter die Aufräumskripte
 (Abschnitt «Abbauen» im [README](README.md)). Alle Personen sind erfunden.
