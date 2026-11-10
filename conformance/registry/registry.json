@@ -280,10 +280,12 @@
         "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveLocatedDiagnostics",
         "conformance/normative_diagnostics_test.go:TestCON2InvalidModelsHaveCoarseDiagnostics",
         "conformance/normative_diagnostics_test.go:TestCON2ModelingSmellsAreWarningsNotRefusals",
-        "conformance/normative_diagnostics_test.go:TestCON2KnownAcceptedSpecViolations"
+        "conformance/normative_diagnostics_test.go:TestCON2ForbiddenFlowShapesReloadUnchanged",
+        "compiler/forbidden_flow_shapes_test.go:TestGatewayDefaultMustBeItsOwnOutgoingFlow",
+        "compiler/forbidden_flow_shapes_test.go:TestReloadKeepsForbiddenShapesAsCompiled"
       ],
       "scenarioIds": [],
-      "limitations": "`compiler/validation.go`. CON2 pins 8 located diagnostics (rule + element + severity), 10 element-local refusals that carry only rule \"compile\" and no element field (id in message text only), and 2 non-blocking warnings. Known accepted violations: start event with incoming flow, end event with outgoing flow (silently never taken), gateway default naming a non-outgoing flow (ignored; only the generic missing-default warning), and a default naming another gateway's flow (silently becomes that gateway's default and mis-routes it). Closing them changes deploy acceptance: proposed in ADR-0547; reload of existing definitions is protected by ADR-0177/ADR-0393.",
+      "limitations": "`compiler/validation.go`. CON2 pins 12 located diagnostics (rule + element + severity), including the four sequence-flow shapes ADR-0547 refuses (start event with incoming flow, end event with outgoing flow, gateway default that is not the gateway's own outgoing flow, including a default naming another gateway's flow); 10 element-local refusals that still carry only rule \"compile\" and no element field (ADR-0547 part 2, not started); 2 non-blocking warnings. Stored definitions with the refused shapes reload unchanged per ADR-0177/ADR-0393.",
       "reviewState": "provisional"
     },
     {

@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-09",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Owner review of ADR-0547 (first CON6 slice): accept, amend or reject; on acceptance deliver PR 1 (three stage-5 rules) and PR 2 (element locations) as separate vertical PRs. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
+  "next_action": "Merge ADR-0547 part 1 (CON6), then deliver part 2 (element locations) and start CON5 (generated public report and documentation reconciliation) as a provisional report. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
   "slices": [
     {
       "id": "CON0",
@@ -130,7 +130,7 @@
     {
       "id": "CON6",
       "title": "Close genuine BPMN semantics gaps via ADR-gated slices",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON0",
@@ -138,9 +138,11 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First proposed slice: ADR-0547 (Proposed, not accepted) — stage-5 deploy refusal of start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow (including the silent cross-gateway mis-route found in CON2), reload stays tolerant per ADR-0177/ADR-0393; plus element locations on element-local compile diagnostics. Implementation waits for owner acceptance of the ADR.",
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First slice: ADR-0547 (Accepted 2026-11-09, Partial). Part 1 delivered: stage-5 deploy refusal of start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow (including the silent cross-gateway mis-route), with stored definitions reloading and routing unchanged. Part 2 (element locations on element-local compile diagnostics) is next.",
       "evidence": [
         "../../adr/0547-refuse-forbidden-sequence-flow-shapes.md",
+        "../../../compiler/forbidden_flow_shapes_test.go",
+        "../../../api/forbiddenflowshapes_test.go",
         "../../../conformance/normative_diagnostics_test.go"
       ]
     }

@@ -23,6 +23,17 @@ _Changed_ / _Removed_ for each version.
   profile keeps it to the one provider. Tests pin the reviewed claims, hold every row to the
   manifest's rule and refuse one contract identity on two operations.
 
+### Changed
+- **A deploy refuses the sequence-flow shapes BPMN forbids.** A start event that is the
+  target of a sequence flow (`start.incoming-flow`), an end event that is the source of one
+  (`end.outgoing-flow`), and an exclusive or inclusive gateway whose `default` names a flow
+  that does not leave it (`gateway.default-not-outgoing`) are now errors at deploy and in the
+  modeler's Problems panel. The last one matters most: a default naming *another* gateway's
+  flow made that flow the other gateway's default, which then routed there although the
+  flow's condition was false. A definition already stored keeps loading and running exactly
+  as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
+  refuses only the next deploy of an affected model (ADR-0547).
+
 ## [0.25.0] — 2026-11-09
 
 **Every process, decision and form belongs to an application** (ADR-0544). Nothing new is

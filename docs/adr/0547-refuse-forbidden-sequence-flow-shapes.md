@@ -1,7 +1,7 @@
 # ADR-0547: Refuse the sequence-flow shapes BPMN forbids, and locate element-local compile errors
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-11-09
 - **Deciders:** Patrick Blumer (programme owner, BPMN conformance)
 - **Open question:** how many *stored production* deployments contain one of the four shapes.
@@ -187,6 +187,14 @@ the Problems panel unable to select ten common faults.
   value of ADR-0393, never a plain compile error.
 
 ### Delivery and acceptance
+
+> **Implementation status.** Accepted by the programme owner on 2026-11-09. **Part 1 has
+> landed:** `start.incoming-flow`, `end.outgoing-flow` and `gateway.default-not-outgoing`
+> in `compiler/validation.go`, the declaring-gateway record beside each default in
+> `markDefault`, compiler tests per rule and per start/end kind, the conformance cases
+> moved to the located table, and reload tests in `compiler`, `conformance` and `api`
+> showing a stored definition comes back with the problem and routes as before.
+> **Part 2 (element locations) is not started**, which is why this record is `Partial`.
 
 1. **PR 1 — rules.** The three rules in `compiler/validation.go`, the declaring-gateway
    metadata in `markDefault`; compiler unit tests per rule; the four
