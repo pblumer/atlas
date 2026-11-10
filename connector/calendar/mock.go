@@ -65,11 +65,14 @@ type MockCalendarSpec struct {
 }
 
 // MockBusy is one appointment of a seeded calendar. Free marks one that does not
-// block its time.
+// block its time. Weekly, above one, makes it a series of that many weekly
+// occurrences; the mock holds the occurrences, as a provider's expanded read answers
+// them.
 type MockBusy struct {
-	Start time.Time `json:"start"`
-	End   time.Time `json:"end"`
-	Free  bool      `json:"free,omitempty"`
+	Start  time.Time `json:"start"`
+	End    time.Time `json:"end"`
+	Free   bool      `json:"free,omitempty"`
+	Weekly int       `json:"weekly,omitempty"`
 }
 
 // NewMockCalendars creates the mock with the calendars named. A calendar not named
@@ -85,10 +88,12 @@ func NewMockCalendars(specs map[string]MockCalendarSpec) *MockCalendars {
 		spec := specs[name]
 		c := &mockCalendar{readOnly: spec.ReadOnly, refuseAttendees: spec.RefuseAttendees}
 		for _, b := range spec.Busy {
-			m.next++
-			c.events = append(c.events, &mockEvent{Event: Event{
-				ID: "seed-" + strconv.Itoa(m.next), Start: b.Start, End: b.End, Busy: !b.Free,
-			}, subject: "Busy"})
+			for i := 0; i < max(b.Weekly, 1); i++ {
+				m.next++
+				c.events = append(c.events, &mockEvent{Event: Event{
+					ID: "seed-" + strconv.Itoa(m.next), Start: b.Start.AddDate(0, 0, 7*i), End: b.End.AddDate(0, 0, 7*i), Busy: !b.Free,
+				}, subject: "Busy"})
+			}
 		}
 		m.calendars[name] = c
 	}

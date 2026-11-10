@@ -58,9 +58,9 @@ func outcomes(t *testing.T, name string) map[string]evidence.Result {
 }
 
 // TestTheOperationsMeetTheirContractsOnEveryBackend pins every case's outcome: all
-// pass, except the two no fake can show.
+// pass, except the one no fake can show.
 func TestTheOperationsMeetTheirContractsOnEveryBackend(t *testing.T) {
-	notExercised := map[string]bool{caseFindRecurring: true, caseReserveVisible: true}
+	notExercised := map[string]bool{caseReserveVisible: true}
 	for name := range contractOf {
 		for c, r := range outcomes(t, name) {
 			want := evidence.OutcomePassed

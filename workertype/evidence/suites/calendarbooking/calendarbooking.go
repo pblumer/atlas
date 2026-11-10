@@ -35,6 +35,7 @@ import (
 
 	"github.com/pblumer/atlas/connector/calendar"
 	"github.com/pblumer/atlas/connector/calendar/catalog"
+	"github.com/pblumer/atlas/connector/calendar/graphfake"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/workertype"
 	"github.com/pblumer/atlas/workertype/evidence"
@@ -113,9 +114,13 @@ type observed struct {
 type world interface {
 	backend() calendar.Backend
 	events(cal string) []observed
+	close()
 }
 
-// backendUnderTest builds a world for every case.
+// backendUnderTest builds a world for every case. build answers nil when the
+// calendars asked for describe a refusal the provider never makes — Graph never
+// refuses attendees — and the case is then vacuously met on that backend: a provider
+// that never refuses cannot refuse wrongly.
 type backendUnderTest struct {
 	name  string
 	build func(specs map[string]calendar.MockCalendarSpec) world
@@ -127,11 +132,63 @@ var backends = []backendUnderTest{
 	{name: "mock", build: func(specs map[string]calendar.MockCalendarSpec) world {
 		return mockWorld{calendar.NewMockCalendars(specs)}
 	}},
+	{name: calendar.ProviderGraph, build: buildGraphWorld},
+}
+
+// graphWorld is the Graph backend against the in-process fake of Microsoft Graph.
+type graphWorld struct {
+	fake *graphfake.Server
+	b    calendar.Backend
+}
+
+func buildGraphWorld(specs map[string]calendar.MockCalendarSpec) world {
+	boxes := map[string]graphfake.Mailbox{}
+	for name, spec := range specs {
+		if spec.RefuseAttendees {
+			return nil
+		}
+		mb := graphfake.Mailbox{ReadOnly: spec.ReadOnly}
+		for _, b := range spec.Busy {
+			show := "busy"
+			if b.Free {
+				show = "free"
+			}
+			mb.Busy = append(mb.Busy, graphfake.Busy{Start: b.Start, End: b.End, ShowAs: show, Weekly: b.Weekly})
+		}
+		boxes[name] = mb
+	}
+	fake := graphfake.New(boxes)
+	fake.PageSize = 2 // every read pages
+	bundle := `{"provider":"microsoft-graph","tenantId":"suite","clientId":"suite","clientSecret":"suite"}`
+	b, err := calendar.NewBackend(fake.GraphURL(), bundle, calendar.Options{HTTPClient: fake.HTTPClient(), TokenURL: fake.TokenURL()})
+	if err != nil {
+		panic("calendarbooking: the Graph backend does not build against the fake: " + err.Error())
+	}
+	return graphWorld{fake: fake, b: b}
+}
+
+func (w graphWorld) backend() calendar.Backend { return w.b }
+
+func (w graphWorld) close() { w.fake.Close() }
+
+func (w graphWorld) events(cal string) []observed {
+	evs := w.fake.Events(cal)
+	out := make([]observed, len(evs))
+	for i, e := range evs {
+		att := make([]calendar.Attendee, len(e.Attendees))
+		for j, a := range e.Attendees {
+			att[j] = calendar.Attendee{Email: a.Email, Name: a.Name}
+		}
+		out[i] = observed{ID: e.ID, Key: e.TransactionID, Start: e.Start, End: e.End, Subject: e.Subject, Body: e.Body, Attendees: att}
+	}
+	return out
 }
 
 type mockWorld struct{ m *calendar.MockCalendars }
 
 func (w mockWorld) backend() calendar.Backend { return w.m }
+
+func (w mockWorld) close() {}
 
 func (w mockWorld) events(cal string) []observed {
 	evs, err := w.m.Snapshot(cal)
@@ -161,8 +218,10 @@ func Suite(name string) evidence.Suite {
 		Package: "github.com/pblumer/atlas/workertype/evidence/suites/calendarbooking",
 		Environment: "The calendar Worker Type's " + operationOf[name] + " run through calendar.RunAt at 2030-03-25T07:00 " +
 			"Europe/Zurich against each backend: " + strings.Join(names, ", ") + ". A case passes only when it passes on " +
-			"every backend. The backends see every create that returned before a read began; whether a provider does is " +
-			"not shown here.",
+			"every backend. microsoft-graph runs against connector/calendar/graphfake, an in-process fake written from " +
+			"Graph's documentation, not observed from a tenant; it pages every read and does not filter a repeated " +
+			"transactionId. A refusal a provider never makes (Graph never refuses attendees) is met vacuously on it. " +
+			"The backends see every create that returned before a read began; whether a provider does is not shown here.",
 		Run: func(ctx context.Context, contract workertype.TechnicalContract) ([]evidence.Result, error) {
 			return run(ctx, name, contract)
 		},
@@ -195,7 +254,8 @@ func run(ctx context.Context, name string, contract workertype.TechnicalContract
 		}
 		var failures []string
 		for _, b := range backends {
-			why, err := c.check(s, b)
+			why, err := c.check(s, s.tracked(b))
+			s.closeWorlds()
 			if err != nil {
 				return nil, fmt.Errorf("case %q on %s: %w", c.name, b.name, err)
 			}
@@ -218,6 +278,27 @@ type session struct {
 	contract  *workertype.CompiledTechnicalContract
 	operation string
 	jobs      int
+	worlds    []world
+}
+
+// tracked is b with every world it builds recorded, so the case's fakes are closed
+// when it ends. A world a backend cannot build stands for a refusal it never makes.
+func (s *session) tracked(b backendUnderTest) backendUnderTest {
+	return backendUnderTest{name: b.name, build: func(specs map[string]calendar.MockCalendarSpec) world {
+		w := b.build(specs)
+		if w == nil {
+			return nil
+		}
+		s.worlds = append(s.worlds, w)
+		return w
+	}}
+}
+
+func (s *session) closeWorlds() {
+	for _, w := range s.worlds {
+		w.close()
+	}
+	s.worlds = nil
 }
 
 const (
@@ -457,8 +538,26 @@ var casesOf = map[string][]suiteCase{
 			_, err := s.operate(w, findInput("werkstatt", "fehlt"), "")
 			return expectCode(err, "CALENDAR_NOT_FOUND", nil, "", 0)
 		}},
-		{name: caseFindRecurring, notExercised: "the mock holds occurrences, not series: expanding a recurring appointment is " +
-			"each provider backend's work, shown by its fake once it exists"},
+		{name: caseFindRecurring, check: func(s *session, b backendUnderTest) (string, error) {
+			// A weekly appointment Monday 09:00-10:00, starting the week before: its
+			// occurrence on the 25th must block 09:00.
+			w := b.build(map[string]calendar.MockCalendarSpec{"werkstatt": {Busy: []calendar.MockBusy{
+				{Start: at(18, 9, 0), End: at(18, 10, 0), Weekly: 4},
+			}}})
+			in := findInput("werkstatt")
+			in["to"] = stamp(at(26, 0, 0))
+			out, err := s.operate(w, in, "")
+			if err != nil {
+				return "the operation failed: " + err.Error(), suiteErr(err)
+			}
+			got, why := slotTimes(s, out)
+			want := "25 08:00 werkstatt,25 10:00 werkstatt,25 11:00 werkstatt,25 13:30 werkstatt,25 14:30 werkstatt," +
+				"25 15:30 werkstatt,25 16:30 werkstatt"
+			if why == "" && got != want {
+				why = "offered " + got + "; want " + want
+			}
+			return why, nil
+		}},
 	},
 	NameReserve: {
 		{name: caseReserveFree, check: func(s *session, b backendUnderTest) (string, error) {
@@ -605,8 +704,8 @@ var casesOf = map[string][]suiteCase{
 		}},
 		{name: caseConfirmAttendees, check: func(s *session, b backendUnderTest) (string, error) {
 			w, id, err := reserved(s, b, calendar.MockCalendarSpec{RefuseAttendees: true})
-			if err != nil {
-				return "", err
+			if err != nil || w == nil {
+				return "", err // no world: the provider never refuses attendees
 			}
 			_, err = s.operate(w, confirmInput(id), "")
 			if why, e := expectCode(err, "ATTENDEES_NOT_ALLOWED", w, "werkstatt", 1); why != "" || e != nil {
@@ -718,6 +817,9 @@ func confirmInput(id string) map[string]any {
 // and answers its booking id. Its failure is a suite setup failure.
 func reserved(s *session, b backendUnderTest, spec calendar.MockCalendarSpec) (world, string, error) {
 	w := b.build(map[string]calendar.MockCalendarSpec{"werkstatt": spec})
+	if w == nil {
+		return nil, "", nil
+	}
 	out, err := s.operateOn(w.backend(), catalog.OpReserveSlot, reserveInput(9, 0, 10, 0), "setup")
 	if err != nil {
 		return nil, "", fmt.Errorf("suite setup: reserve-slot failed: %w", err)
