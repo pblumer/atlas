@@ -1015,6 +1015,12 @@ type ConnectorTaskDetail struct {
 	// (a fresh full enumeration) on the first run. It is the zero RestExpr on every
 	// other operation, which the compiler enforces (ADR-0172).
 	EntraDeltaLink RestExpr
+	// EntraKeep is the interned keep predicate of a delta query: the filter the Worker
+	// applies to each page before it answers, so only matching objects leave it
+	// (ADR-draft-entra-delta-keep). The compiler has parsed it and held its fields
+	// against EntraSelect; the Worker parses it again because a job carries text. -1
+	// when the task keeps everything, and on every other operation.
+	EntraKeep int32
 	// Directory-file worker fields (JobType == LdifJobType, ADR-0171). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the

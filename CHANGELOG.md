@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A directory delta can keep only the objects it is about.** `delta-users` and `delta-groups`
+  take a `keep` predicate — `department eq 'IT'`, `startswith(displayName,'test-')`, joined with
+  `and` / `or` and parentheses, compared case-insensitively — and the Entra Worker applies it to
+  every page before it answers. Graph's delta endpoint has no `$filter`, and a job's result is in
+  the event log before any output mapping runs, so this is the only place a test environment
+  sharing a tenant with real people can stop their names and addresses from reaching Atlas.
+  Deleted objects are always kept, reduced to `id` and `@removed`; the deltaLink is Graph's own;
+  `maxUsers` counts what is kept, and the result says how many objects were `withheld` and how
+  many were `undecided` because a later page carried no field the keep reads. The compiler refuses
+  a keep on any other operation, as FEEL, or reading a field outside the task's `select`. The M365
+  test environment installs the directory mirroring this way with
+  `scripts/install-verzeichnisabgleich.py` (ADR-draft-entra-delta-keep).
 - **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
   names `"provider": "google-calendar"` uses a service account the booking calendars are shared
   with; the model stays the same. Recurring and all-day appointments block their time, and a

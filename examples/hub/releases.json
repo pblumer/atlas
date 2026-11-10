@@ -287,6 +287,12 @@
       "minAtlas": "0.25.0-0"
     },
     {
+      "bundle": "identitaet",
+      "version": "1.0.2",
+      "digest": "sha256:d1d743ee16bb29d605bea31de1634fa981f25f45ccf45e11632f8b8298fc75ad",
+      "minAtlas": "0.25.0-0"
+    },
+    {
       "bundle": "m365-dienste",
       "version": "1.0.18",
       "digest": "sha256:190e4d80c89554abd064b92ac2091e2cce68e4c0464d452e76ee4dc44dd96af4",
