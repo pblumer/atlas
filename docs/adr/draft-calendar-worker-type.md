@@ -1,9 +1,9 @@
 # ADR-DRAFT: A calendar Worker Type finds free slots and books them on Microsoft 365, Google, CalDAV and Exchange Server
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-11-10
-- **Deciders:** pblumer (maintainer)
+- **Deciders:** pblumer (maintainer; approval to implement on 2026-11-10)
 - **Open question:** Whether Microsoft Graph and Google Calendar show an event to a
   free/busy read that starts after the event's create has returned to another client.
   The conflict rule below is safe only if they do. Neither provider's documentation
@@ -168,6 +168,22 @@ reservation is a bare placeholder (a neutral subject such as the service name an
 booking reference, no attendees), and only `confirm-booking`, which runs after the rule
 has kept it, adds what the installation configures.
 
+### Whose calendar: a resource mailbox by default, every case possible
+
+All three cases occur in practice, and the operations serve each without a mode:
+
+| Case | `find-free-slots` | Booking |
+|---|---|---|
+| **One resource** — a workshop bay, a room, a counter. **The Blueprint's default.** | one calendar | `reserve-slot` on it |
+| **Any of several people or equal resources** — "any free mechanic" | several calendars, `require: any`; each slot names the calendars free in it | `reserve-slot` on one of them; on `CALENDAR_SLOT_TAKEN` the process may try the next before it asks the customer again |
+| **A person and a resource together** — an advisor and a fitting room | several calendars, `require: all` | one `reserve-slot` per calendar; if a later one is taken, the process cancels the earlier ones (compensation in the model) |
+
+A resource mailbox is the default because it is what the organisation books against
+already, it carries no personal appointments whose existence the Worker could reveal, and
+on Microsoft 365 it can decline conflicts on its own as the second line described above.
+Personal calendars need a Worker whose permission reaches each person's calendar, which
+is a larger grant to justify.
+
 ### Idempotent creation
 
 The job's `idempotencyKey` (ADR-0538) makes the placeholder unique per job:
@@ -195,6 +211,10 @@ No provider offers "create only if free" on an ordinary calendar. The rule is:
 3. If anything overlaps — another reservation, a booking, or anything a person entered —
    **delete the placeholder and throw `SLOT_TAKEN`.** Otherwise keep it.
 
+The conflict check reads the slot itself, not the slot widened by the buffer
+`find-free-slots` keeps: the buffer is a rule for what is offered, not a property of the
+calendar another client's appointment could violate.
+
 **Why at most one of two competing reservations survives.** Let A and B reserve
 overlapping slots. Each one's read starts after its own create returned. Whichever read
 starts later therefore starts after *both* creates returned. If a read that starts after a
@@ -212,7 +232,7 @@ through the existing `set-calendar-processing`) declines a conflicting meeting o
 It does so asynchronously, through the calendar attendant, so it cannot be the answer a
 waiting wizard step gets.
 
-`SLOT_TAKEN` is a declared, catchable error code. The process catches it on the
+`SLOT_TAKEN` (thrown as `CALENDAR_SLOT_TAKEN`) is a declared, catchable error code. The process catches it on the
 reservation task and leads back to the screen where the slot is chosen, with the list
 read again. (ADR-0483's first evidence record failed exactly where an operation ended a
 known condition with a plain failure instead of a code a process can catch.)
@@ -244,11 +264,16 @@ The operations above are written first as technical capability contracts
 
 | Contract | `resourceKind` | `idempotency` | `consistency` | Errors |
 |---|---|---|---|---|
-| `io.atlas.calendar.slot.find` | `calendar-slot` | `read-only` | `provider-defined` | `CALENDAR_NOT_FOUND`, `CALENDAR_NOT_READABLE` |
+| `io.atlas.calendar.slot.find` | `calendar-slot` | `read-only` | `provider-defined` | `CALENDAR_NOT_FOUND` |
 | `io.atlas.calendar.booking.reserve` | `calendar-booking` | `conditional` | `strong` | `SLOT_TAKEN`, `CALENDAR_NOT_FOUND`, `CALENDAR_NOT_WRITABLE` |
-| `io.atlas.calendar.booking.confirm` | `calendar-booking` | `idempotent` | `provider-defined` | `BOOKING_NOT_FOUND`, `ATTENDEES_NOT_ALLOWED` |
-| `io.atlas.calendar.booking.cancel` | `calendar-booking` | `idempotent` | `provider-defined` | — (an event already gone is success) |
-| `io.atlas.calendar.booking.get` | `calendar-booking` | `read-only` | `provider-defined` | — (absence is an output, `exists: false`) |
+| `io.atlas.calendar.booking.confirm` | `calendar-booking` | `idempotent` | `provider-defined` | `BOOKING_NOT_FOUND`, `ATTENDEES_NOT_ALLOWED`, `CALENDAR_NOT_WRITABLE` |
+| `io.atlas.calendar.booking.cancel` | `calendar-booking` | `idempotent` | `provider-defined` | `CALENDAR_NOT_FOUND`, `CALENDAR_NOT_WRITABLE` (a booking already gone is success) |
+| `io.atlas.calendar.booking.get` | `calendar-booking` | `read-only` | `provider-defined` | `CALENDAR_NOT_FOUND` (absence is an output, `exists: false`) |
+
+The contract codes are provider- and product-neutral. The Worker Type throws each as a
+BPMN error under its own prefix — `SLOT_TAKEN` as `CALENDAR_SLOT_TAKEN`,
+`BOOKING_NOT_FOUND` as `CALENDAR_BOOKING_NOT_FOUND`, and so on — when the task's process
+catches it, and as a plain failure otherwise (ADR-0461); the suites map one to the other.
 
 `identityScope` is `calendar` throughout. The contracts also pin what the backends would
 otherwise answer differently: **busy** is every event that is not marked transparent or
@@ -325,6 +350,32 @@ a means, not something the organisation can do.
 4. EWS for Exchange Server.
 
 Each phase also answers this record's open question for its provider, by test.
+
+### As built: phase 0 (2026-11-10)
+
+- `connector/calendar/catalog` — the operation table: the five operations, their bounds
+  (window at most 62 days, at most 20 calendars, at most 1000 slots), their ADR-0538
+  declarations and their claims under `free-busy-calendar`. It imports nothing of atlas's.
+- `connector/calendar` — `Backend`, the provider's half; `slots.go`, the grid in local
+  wall time, opening hours, closed dates, buffer, lead time, `require`, and the
+  daylight-saving rule; `run.go`, `Job`, `Run`/`RunAt`, the checks, `reserve` (the
+  conflict rule), the BPMN codes and `CreateKey`; `mock.go`, the in-memory backend
+  that executes rather than answers. Tested, the two interleavings of the conflict rule
+  included: one reservation between the other's create and read, and both reads before
+  either gives up.
+- `workertype/evidence/testdata/contracts/calendar-*.json` — the five contracts, drafted
+  and not published.
+- `workertype/evidence/suites/calendarbooking` — five suites, each running every case
+  against every backend in `backends` (the mock today), registered with the gate and the
+  evidence command. Every case passes except the two no fake can show: recurring
+  appointments (the mock holds occurrences, not series) and read-after-write visibility
+  (the open question). The suite's own tests replace the operation with variants that
+  skip the conflict rule, ignore the create key, keep a slot by tie-break, or throw no
+  codes, and show the cases fail them.
+
+Not built: the Worker Type's registration (job type, compiler, `api`, worker, Modeler,
+Console), the provider backends, and evidence records, which need the Worker Type to be
+one Atlas ships.
 
 ### Consequences
 

@@ -26,6 +26,7 @@ import (
 	"github.com/pblumer/atlas/workertype/evidence"
 	// The registered conformance suites: a record names its suite, so renewing or
 	// verifying it needs the suite's code in this binary.
+	_ "github.com/pblumer/atlas/workertype/evidence/suites/calendarbooking"
 	_ "github.com/pblumer/atlas/workertype/evidence/suites/entrachannel"
 )
 
