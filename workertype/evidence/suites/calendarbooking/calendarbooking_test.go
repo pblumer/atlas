@@ -3,6 +3,7 @@ package calendarbooking
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"reflect"
 	"sort"
@@ -254,5 +255,39 @@ func TestASuiteInputTheContractRefusesStopsTheSuite(t *testing.T) {
 	}
 	if describeOrSuccess(nil) != "success" {
 		t.Fatal("no error is not described as success")
+	}
+}
+
+// TestEveryCaseFailsAnOperationThatOnlyFailsOrAnswersNonsense runs every suite with
+// two broken operations: one that fails every job plainly, one that answers an object
+// no contract allows without touching the calendar. No case may pass either, except
+// those that ask only for a refusal, which the failing operation gives — though never
+// under the contract's code.
+func TestEveryCaseFailsAnOperationThatOnlyFailsOrAnswersNonsense(t *testing.T) {
+	broken := map[string]func(context.Context, calendar.Job, *calendar.Registry, time.Time) (map[string]any, error){
+		"fails": func(context.Context, calendar.Job, *calendar.Registry, time.Time) (map[string]any, error) {
+			return nil, errors.New("the provider is down")
+		},
+		"nonsense": func(_ context.Context, j calendar.Job, _ *calendar.Registry, _ time.Time) (map[string]any, error) {
+			if j.ResultVariable == "" {
+				return nil, nil
+			}
+			return map[string]any{j.ResultVariable: map[string]any{"nonsense": true}}, nil
+		},
+	}
+	// A cancel answers nothing, so "nonsense" is a correct cancel of a booking gone.
+	vacuous := map[string]bool{caseCancelGone: true}
+	for how, op := range broken {
+		for name := range contractOf {
+			got := misbehave(t, name, op)
+			for c, r := range got {
+				if r.Outcome == evidence.OutcomeNotExercised || (how == "nonsense" && vacuous[c]) {
+					continue
+				}
+				if r.Outcome != evidence.OutcomeFailed {
+					t.Errorf("%s / %s: %q = %s, want failed", how, name, c, r.Outcome)
+				}
+			}
+		}
 	}
 }

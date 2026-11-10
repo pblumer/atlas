@@ -344,7 +344,13 @@ func (s *session) operateOn(b calendar.Backend, operation string, in map[string]
 	}
 	reg := calendar.NewRegistry()
 	reg.Register(workerName, b)
-	res, err := runOperation(s.ctx, j, reg, now)
+	// Only the operation under test is the one a suite's own tests may replace; a
+	// reservation made to set a case up is always the real one.
+	run := calendar.RunAt
+	if operation == s.operation {
+		run = runOperation
+	}
+	res, err := run(s.ctx, j, reg, now)
 	if err != nil {
 		return nil, err
 	}
@@ -586,7 +592,7 @@ var casesOf = map[string][]suiteCase{
 			w := b.build(map[string]calendar.MockCalendarSpec{"werkstatt": {}})
 			first, err := s.operate(w, reserveInput(9, 0, 10, 0), "delivered-twice")
 			if err != nil {
-				return "", fmt.Errorf("suite setup: the first delivery failed: %w", err)
+				return "the first delivery failed for a free slot: " + describe(err), suiteErr(err)
 			}
 			second, err := s.operate(w, reserveInput(9, 0, 10, 0), "delivered-twice")
 			switch {
