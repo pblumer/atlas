@@ -1,0 +1,27 @@
+{
+  "type": "default",
+  "id": "datensatz-korrigieren",
+  "components": [
+    {
+      "type": "text",
+      "text": "Dieser Datensatz verletzt eine Regel von MitarbeitendeGueltig: Adresse in beispiel.ch, bekannte Abteilung, Pensum von 10 bis 100, kein Austritt vor dem Eintritt. Korrigieren Sie die Werte; die Korrektur wird sofort nachgeprüft."
+    },
+    { "key": "personalnummer", "type": "textfield", "label": "Personalnummer", "readonly": true },
+    { "key": "vorname", "type": "textfield", "label": "Vorname" },
+    { "key": "name", "type": "textfield", "label": "Name" },
+    { "key": "mail", "type": "textfield", "label": "E-Mail" },
+    {
+      "key": "abteilung", "type": "select", "label": "Abteilung",
+      "values": [
+        { "label": "Buchhaltung", "value": "Buchhaltung" },
+        { "label": "Informatik", "value": "Informatik" },
+        { "label": "Logistik", "value": "Logistik" },
+        { "label": "Personal", "value": "Personal" },
+        { "label": "Vertrieb", "value": "Vertrieb" }
+      ]
+    },
+    { "key": "eintritt", "type": "textfield", "label": "Eintritt (JJJJ-MM-TT)" },
+    { "key": "austritt", "type": "textfield", "label": "Austritt (JJJJ-MM-TT, leer solange angestellt)" },
+    { "key": "pensum", "type": "textfield", "label": "Pensum in Prozent" }
+  ]
+}

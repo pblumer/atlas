@@ -27,6 +27,9 @@ type fakeRowDocs struct {
 	stored   []byte
 	name     string
 	readFor  uint64
+	// all holds every document stored, by name; stored and name are the first, which
+	// is the result document.
+	all map[string][]byte
 }
 
 func (f *fakeRowDocs) ReadDocument(instance uint64, id string) ([]byte, error) {
@@ -45,7 +48,13 @@ func (f *fakeRowDocs) StoreDocument(_ context.Context, name, contentType string,
 	if f.storeErr != nil {
 		return nil, f.storeErr
 	}
-	f.stored, f.name = append([]byte(nil), data...), name
+	if f.all == nil {
+		f.all = map[string][]byte{}
+	}
+	f.all[name] = append([]byte(nil), data...)
+	if f.name == "" {
+		f.stored, f.name = append([]byte(nil), data...), name
+	}
 	return map[string]any{"$document": "doc_result", "name": name, "contentType": contentType}, nil
 }
 
@@ -189,6 +198,15 @@ func TestBusinessRuleTaskOverAFile(t *testing.T) {
 	if strings.Join(rows[2], ",") != "bob,users,PRO,3,false,false,true,true," || len(rows) != 5 {
 		t.Fatalf("result rows = %v", rows)
 	}
+	// The failures document is the result's layout, filtered to the records that
+	// failed: the file a person downloads, corrects and uploads again (S2).
+	if fd, _ := s["failuresDocument"].(map[string]any); fd["name"] != "antrag.failures.csv" {
+		t.Fatalf("failures document = %v", s["failuresDocument"])
+	}
+	failed := resultRows(t, docs.all["antrag.failures.csv"])
+	if len(failed) != 3 || strings.Join(failed[0], ",") != strings.Join(rows[0], ",")+",_drop" || failed[1][3] != "3" || failed[2][3] != "4" {
+		t.Fatalf("failures document rows = %v", failed)
+	}
 	if len(run.evals) != 1 {
 		t.Fatalf("evaluation records = %d, want one for the run", len(run.evals))
 	}
@@ -234,6 +252,21 @@ func TestBusinessRuleTaskOverAFileRecordErrors(t *testing.T) {
 	rows := resultRows(t, docs.stored)
 	if !strings.Contains(rows[1][len(rows[1])-1], `"nope" is not true or false`) {
 		t.Fatalf("error column = %v", rows[1])
+	}
+}
+
+// A file whose records all pass has no failures document: there is nothing to correct.
+// Records the decision could not evaluate are failures too, and land in it.
+func TestBusinessRuleTaskOverAFileFailuresDocument(t *testing.T) {
+	docs := &fakeRowDocs{files: map[string]string{"doc_src": "email,group,license\nada@x.io,users,PRO\n"}}
+	run := runRows(t, `source="antrag"`, "", docVar("antrag.csv"), docs, nil)
+	if _, ok := run.summary["failuresDocument"]; ok || len(docs.all) != 1 {
+		t.Fatalf("summary = %v, stored %d documents", run.summary, len(docs.all))
+	}
+	docs = &fakeRowDocs{files: map[string]string{"doc_src": rowsCSV}}
+	run = runRows(t, `source="antrag" validOutput="nope"`, "", docVar("antrag.csv"), docs, nil)
+	if failed := resultRows(t, docs.all["antrag.failures.csv"]); len(failed) != 5 {
+		t.Fatalf("failures document = %v (summary %v)", failed, run.summary)
 	}
 }
 

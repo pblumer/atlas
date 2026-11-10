@@ -51,18 +51,25 @@ const (
 	rowColumn   = "_row"
 	validColumn = "_valid"
 	errorColumn = "_error"
+	// dropColumn is the failures document's last column: x there drops the record when
+	// the corrected file is applied (csvimport, apply-corrections).
+	dropColumn = "_drop"
 )
 
 // rowsSummary is the variable a business rule task over a file completes with.
 type rowsSummary struct {
-	Total    int              `json:"total"`
-	Valid    int              `json:"valid"`
-	Invalid  int              `json:"invalid"`
-	Errors   int              `json:"errors"`
-	Decision summaryDecision  `json:"decision"`
-	Source   map[string]any   `json:"source"`
-	Result   map[string]any   `json:"result"`
-	Failures []map[string]any `json:"failures"`
+	Total    int             `json:"total"`
+	Valid    int             `json:"valid"`
+	Invalid  int             `json:"invalid"`
+	Errors   int             `json:"errors"`
+	Decision summaryDecision `json:"decision"`
+	Source   map[string]any  `json:"source"`
+	Result   map[string]any  `json:"result"`
+	// FailuresDocument holds only the records that failed, in the result document's
+	// layout: the file to download, correct and upload again when there are too many
+	// failures for a task each (ADR-0548, S2). Absent when nothing failed.
+	FailuresDocument map[string]any   `json:"failuresDocument,omitempty"`
+	Failures         []map[string]any `json:"failures"`
 	// Truncated says the failures shown are fewer than the failed records: the
 	// result document has the rest.
 	Truncated bool `json:"truncated,omitempty"`
@@ -124,6 +131,10 @@ func evaluateRows(ctx context.Context, store state.Reader, j job.Job, ei *model.
 
 	sum := rowsSummary{Decision: summaryDecision{ID: decisionId}, Source: ref, Failures: []map[string]any{}}
 	out := newResultWriter(rows.Delimiter)
+	// fails is the same layout, filtered to the records that failed, with a _drop
+	// column to mark a record to leave out.
+	fails := newResultWriter(rows.Delimiter)
+	fails.drop = true
 	var key uint64
 	resolved := false
 	pinned := evaluate
@@ -148,6 +159,9 @@ func evaluateRows(ctx context.Context, store state.Reader, j job.Job, ei *model.
 			if werr := out.add(rec.Header, rows.Columns, rec, false, nil, err.Error()); werr != nil {
 				return werr
 			}
+			if werr := fails.add(rec.Header, rows.Columns, rec, false, nil, err.Error()); werr != nil {
+				return werr
+			}
 			sum.addFailure(rec, nil, err.Error(), int(rows.FailureSample))
 			return nil
 		}
@@ -155,6 +169,9 @@ func evaluateRows(ctx context.Context, store state.Reader, j job.Job, ei *model.
 		if verr != nil {
 			sum.Errors++
 			if werr := out.add(rec.Header, rows.Columns, rec, false, nil, verr.Error()); werr != nil {
+				return werr
+			}
+			if werr := fails.add(rec.Header, rows.Columns, rec, false, nil, verr.Error()); werr != nil {
 				return werr
 			}
 			sum.addFailure(rec, nil, verr.Error(), int(rows.FailureSample))
@@ -165,6 +182,9 @@ func evaluateRows(ctx context.Context, store state.Reader, j job.Job, ei *model.
 		} else {
 			sum.Invalid++
 			sum.addFailure(rec, reasons, "", int(rows.FailureSample))
+			if werr := fails.add(rec.Header, rows.Columns, rec, false, reasons, ""); werr != nil {
+				return werr
+			}
 		}
 		return out.add(rec.Header, rows.Columns, rec, valid, reasons, "")
 	})
@@ -181,6 +201,17 @@ func evaluateRows(ctx context.Context, store state.Reader, j job.Job, ei *model.
 		return job.Completion{}, fmt.Errorf("dmn: store the result document: %w", err)
 	}
 	sum.Result = stored
+	if sum.Invalid+sum.Errors > 0 {
+		failed, err := fails.bytes(header, rows.Columns)
+		if err != nil {
+			return job.Completion{}, err
+		}
+		ref, err := opts.Docs.StoreDocument(ctx, failuresName(ref), "text/csv; charset=utf-8", failed)
+		if err != nil {
+			return job.Completion{}, fmt.Errorf("dmn: store the failures document: %w", err)
+		}
+		sum.FailuresDocument = ref
+	}
 	summary, err := sum.encode(opts.MaxSummary)
 	if err != nil {
 		return job.Completion{}, err
@@ -330,6 +361,9 @@ type resultWriter struct {
 	started bool
 	waiting []resultRecord
 	line    []string
+	// drop adds an empty _drop column at the end: the failures document's, where a
+	// person correcting the file marks a record to drop (ADR-0548, S2).
+	drop bool
 }
 
 type resultRecord struct {
@@ -386,6 +420,9 @@ func (w *resultWriter) start(header, columns []string, reasons map[string]any) e
 		head = append(head, "_"+n)
 	}
 	head = append(head, errorColumn)
+	if w.drop {
+		head = append(head, dropColumn)
+	}
 	if err := w.cw.Write(head); err != nil {
 		return err
 	}
@@ -415,6 +452,9 @@ func (w *resultWriter) write(r resultRecord) error {
 		line = append(line, cellText(r.reasons[n]))
 	}
 	line = append(line, r.err)
+	if w.drop {
+		line = append(line, "")
+	}
 	w.line = line
 	return w.cw.Write(line)
 }
@@ -473,6 +513,12 @@ func documentRefAt(v model.VariableValue, path string) (map[string]any, string) 
 
 // resultName names the result document after the file it checked: antrag.csv becomes
 // antrag.result.csv, so the two sort side by side wherever they are downloaded to.
+// failuresName is the failures document's name beside the result's: data.csv gives
+// data.failures.csv.
+func failuresName(ref map[string]any) string {
+	return strings.TrimSuffix(resultName(ref), ".result.csv") + ".failures.csv"
+}
+
 func resultName(ref map[string]any) string {
 	name, _ := ref["name"].(string)
 	name = path.Base(strings.TrimSpace(name))

@@ -38,7 +38,19 @@ type Job struct {
 	// Result names the process variable the outcome is written to; empty means the
 	// default. On a read that is the rows; on a write it is the rendered file.
 	Result string `json:"resultVariable,omitempty"`
+	// apply-corrections (ADR-0548, S2): the corrected records, resolved from the task's
+	// corrections variable when it holds a list, or the document they are in when it
+	// holds a file; the line numbers to drop; the name of the file written, and the
+	// activating server's document budget.
+	Corrections         []map[string]any `json:"corrections,omitempty"`
+	CorrectionsDocument string           `json:"correctionsDocument,omitempty"`
+	Drop                []int            `json:"drop,omitempty"`
+	DocumentName        string           `json:"documentName,omitempty"`
+	DocumentLimit       int64            `json:"documentLimit,omitempty"`
 }
+
+// Correcting reports whether the job writes a corrected copy of an uploaded file.
+func (j Job) Correcting() bool { return j.Operation == OperationApplyCorrections }
 
 // Writing reports whether the job renders a file rather than parsing one.
 func (j Job) Writing() bool { return j.Operation == OperationWrite }
@@ -81,6 +93,9 @@ func (r Result) Variables() (map[string]any, error) {
 // A missing source or an unparseable file is an error, never an empty batch: a
 // silently empty result is the failure this worker exists to avoid.
 func Run(j Job) (Result, error) {
+	if j.Correcting() {
+		return Result{}, fmt.Errorf("csv-import: apply-corrections writes a new document, and where it runs there is no document store to write it to")
+	}
 	cfg, err := configOf(j)
 	if err != nil {
 		return Result{}, err
@@ -185,6 +200,9 @@ func ResolveWithDocuments(store VarStore, cp *compiler.CompiledProcess, detail *
 		Operation: cp.Intern(detail.CsvOperation),
 		Result:    cp.Intern(detail.CsvResult),
 	}
+	if j.Correcting() {
+		return resolveCorrections(j, src, sourceName, vars, cp, detail)
+	}
 	// Reading takes text; writing takes the rows, which are a structured variable and
 	// travel as the JSON they already are.
 	if j.Writing() {
@@ -211,6 +229,43 @@ func ResolveWithDocuments(store VarStore, cp *compiler.CompiledProcess, detail *
 			col.Width = int(detail.CsvWidths[i])
 		}
 		j.Columns = append(j.Columns, col)
+	}
+	return j, nil
+}
+
+// resolveCorrections is Resolve for apply-corrections: the source has to be an
+// uploaded document, which is read where the job runs, never here; the corrections are
+// a list that travels resolved, or a document read where the job runs; the drop list is
+// line numbers.
+func resolveCorrections(j Job, src model.VariableValue, sourceName string, vars map[string]model.VariableValue, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail) (Job, error) {
+	j.Source = ""
+	if j.SourceDocument = documentID(src); j.SourceDocument == "" {
+		return Job{}, fmt.Errorf("csv-import: source variable %q holds no document; apply-corrections corrects an uploaded file", sourceName)
+	}
+	j.DocumentName = cp.Intern(detail.CsvDocumentName)
+	name := cp.Intern(detail.CsvCorrections)
+	c, ok := vars[name]
+	if !ok {
+		return Job{}, fmt.Errorf("csv-import: corrections variable %q is missing", name)
+	}
+	if id := documentID(c); id != "" {
+		j.CorrectionsDocument = id
+	} else {
+		var list []map[string]any
+		if c.Kind != model.VarJSON || json.Unmarshal([]byte(c.Text), &list) != nil {
+			return Job{}, fmt.Errorf("csv-import: corrections variable %q must hold a list of corrected records, or a corrected file", name)
+		}
+		if list == nil {
+			list = []map[string]any{}
+		}
+		j.Corrections = list
+	}
+	if name := cp.Intern(detail.CsvDrop); name != "" {
+		if d, ok := vars[name]; ok && strings.TrimSpace(d.Text) != "" && d.Text != "null" {
+			if d.Kind != model.VarJSON || json.Unmarshal([]byte(d.Text), &j.Drop) != nil {
+				return Job{}, fmt.Errorf("csv-import: drop variable %q must hold a list of line numbers", name)
+			}
+		}
 	}
 	return j, nil
 }

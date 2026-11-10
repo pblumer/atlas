@@ -228,16 +228,23 @@ func registerScope(
 			if format == csvimportFormatCSV && operation == csvimportOperationRead && !hasHeader && len(cols) == 0 {
 				return elementErrorf(st.Id, "compiler: csv task %q without a header row must list its columns", st.Id)
 			}
+			documentName, err := csvApplyCorrections(st.Id, format, operation, hasHeader, cols, cn)
+			if err != nil {
+				return err
+			}
 			id := b.AddCsvConnectorTask(CsvConfig{
-				Source:    strings.TrimSpace(cn.Source),
-				Result:    strings.TrimSpace(cn.ResultVariable),
-				Delimiter: cn.Delimiter,
-				HasHeader: hasHeader,
-				Columns:   cols,
-				Format:    format,
-				Operation: operation,
-				Widths:    widths,
-				Retries:   retries,
+				Source:       strings.TrimSpace(cn.Source),
+				Result:       strings.TrimSpace(cn.ResultVariable),
+				Delimiter:    cn.Delimiter,
+				HasHeader:    hasHeader,
+				Columns:      cols,
+				Format:       format,
+				Operation:    operation,
+				Widths:       widths,
+				Retries:      retries,
+				Corrections:  strings.TrimSpace(cn.Corrections),
+				Drop:         strings.TrimSpace(cn.Drop),
+				DocumentName: documentName,
 			})
 			reg.taskNode(st.Id, id, st.Form.FormId)
 			return nil
@@ -1258,4 +1265,50 @@ func isPlainVariableName(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// csvApplyCorrections checks what apply-corrections needs and what only it may carry,
+// and answers the name of the file it writes (ADR-0548, S2). It replaces records by
+// the line they are on and names their fields by the header, so it reads a delimited
+// file with a header row: a fixed-width or attribute-value file, or one without a
+// header, has nothing a correction could name a field by. The corrections, the drop
+// list and the file name mean nothing to a read or a write, and are refused there
+// rather than ignored.
+func csvApplyCorrections(taskID, format, operation string, hasHeader bool, cols []string, cn *xmlCsvConnector) (string, error) {
+	name := strings.TrimSpace(cn.DocumentName)
+	if operation != csvimportOperationApply {
+		for attr, v := range map[string]string{"corrections": cn.Corrections, "drop": cn.Drop, "documentName": name} {
+			if strings.TrimSpace(v) != "" {
+				return "", elementErrorf(taskID, "compiler: csv task %q sets %s, which only apply-corrections reads", taskID, attr)
+			}
+		}
+		return "", nil
+	}
+	if format != csvimportFormatCSV {
+		return "", elementErrorf(taskID, "compiler: csv task %q applies corrections to a %s file; apply-corrections reads a delimited file with a header row", taskID, format)
+	}
+	if !hasHeader {
+		return "", elementErrorf(taskID, "compiler: csv task %q applies corrections to a file without a header row; a correction names its fields by the header", taskID)
+	}
+	if len(cols) > 0 {
+		return "", elementErrorf(taskID, "compiler: csv task %q lists columns for apply-corrections, which keeps every column of the file as it is", taskID)
+	}
+	if strings.TrimSpace(cn.Source) == "" {
+		return "", elementErrorf(taskID, "compiler: csv task %q applies corrections and needs a source: the variable holding the uploaded file", taskID)
+	}
+	if strings.TrimSpace(cn.Corrections) == "" {
+		return "", elementErrorf(taskID, "compiler: csv task %q applies corrections and needs corrections: the variable holding the corrected records", taskID)
+	}
+	if strings.TrimSpace(cn.ResultVariable) == "" {
+		return "", elementErrorf(taskID, "compiler: csv task %q applies corrections and needs a resultVariable to hold the corrected file", taskID)
+	}
+	for _, v := range []string{cn.Source, cn.Corrections, cn.Drop, cn.ResultVariable} {
+		if v = strings.TrimSpace(v); v != "" && !validVariableName(v) {
+			return "", elementErrorf(taskID, "compiler: csv task %q names the variable %q, which is not a variable name", taskID, v)
+		}
+	}
+	if strings.ContainsAny(name, "/\\") || name == "." || name == ".." {
+		return "", elementErrorf(taskID, "compiler: csv task %q documentName %q is a path; name the file only", taskID, name)
+	}
+	return name, nil
 }

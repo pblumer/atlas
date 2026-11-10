@@ -344,7 +344,73 @@ Not yet:
   for a run near the lease.
 - **Formats other than CSV.** The CSV Worker Type's fixed-width and attribute-value
   formats are not read here.
-- **S2 and S3**, below.
+- **S3**, below. S2 is built; see *As built (Slice 2)*.
+
+### As built (Slice 2)
+
+The correction paths, from upload to corrected file, as *Correction, chosen by size* and
+*Writing the corrections back* decided, with these choices made in the building:
+
+- **Failures document** (`dmn/rows.go`): beside the result document the check stores
+  `<name>.failures.csv`, the result's layout filtered to the records that failed, with
+  an empty `_drop` column at the end. The summary names it as `failuresDocument`;
+  absent when nothing failed. This is the "result document filtered to the failing
+  rows" the file correction task offers: written by the check, as the records are read,
+  rather than derived from the result document afterwards.
+- **`apply-corrections`** (`connector/csvimport/corrections.go`) is an operation of the
+  CSV Worker Type, `<atlas:csvConnector operation="apply-corrections" source=…
+  corrections=… drop=… documentName=… resultVariable=…>`:
+  - **Corrections as a list or as a file.** `corrections` names a variable holding either
+    a list (the multi-instance output collection of the correction tasks) or a document
+    (the failures document after a person corrected it). Either way a record names its
+    line by `_row` and is dropped by `_drop` (true, or `x`, `ja` or `1` in a file); other
+    fields starting with `_` are the check's own and are ignored. `drop` is the optional
+    list of lines to drop the ADR names.
+  - **Fields replace, they do not reshape.** A correction sets the fields it names and
+    keeps the rest. The ADR said a correction whose columns differ from the source's is
+    refused; as built, a field the file has no column for is refused, and a correction
+    may name fewer fields than the file has. That keeps a correction built from a check
+    over a column subset (`columns="email,group"`) usable without weakening the rule
+    that a correction cannot add or reshape what the file holds.
+  - **Refused:** a `_row` the source does not have, a line corrected twice, a line both
+    corrected and dropped, a field without a column. At deploy: another format than CSV,
+    a file without a header row (a correction names its fields by the header), `columns`
+    (the operation keeps every column), a missing source, corrections or result
+    variable, a path as `documentName`.
+  - **The file it writes** keeps the source's header, delimiter and byte-order mark
+    (Excel needs the mark to read UTF-8), is named `<name>.corrected.csv` unless the
+    model names it, and is held to the document budget the activating server sends with
+    the job. The source is never changed. The result is `{document, source, total,
+    replaced, dropped, records}`.
+  - It runs in process (`HandlerWithStores`, the server's store for the job's instance)
+    and on a Worker Instance (`runCSV`, under the job's lease), through the same
+    `Resolve` and `ApplyCorrections`.
+- **The file correction task** (`api/web/app.js`): a form's file field whose variable
+  already holds a document shows it as a download link; marked `readonly` it takes no
+  file. The completion leaves that variable alone, instead of clearing it with the
+  `null` form-js answers for it, and uploads a file picked in any other field. The
+  server already let whoever holds a task read a document its form shows
+  (`mayReadDocument`), so the link works for the assignee and not only for an operator.
+- **The example** (`examples/mitarbeitende-pruefen/mitarbeitende-korrigieren.bpmn`):
+  upload, check, then by the number of findings: none ends; up to 20 (the threshold is
+  the model's) become a multi-instance correction task each, re-checked with the same
+  decision until valid (ADR-0084's loop over the failures only); more go out as the
+  failures document and come back as an upload, or the rest is accepted with a reason.
+  Both paths end in `apply-corrections`, and the corrected copy is checked once more.
+  `worker/quality_corrections_test.go` runs all three ends: 200 records task by task
+  (one correction refused by the re-check and given back), 1,000 records as a file on a
+  Worker Instance, and the rest accepted.
+
+Not built in this slice:
+
+- **The re-check of a single corrected record is not pinned** to the deployment key the
+  summary names. It is a business rule task over the record's variables, bound as the
+  model binds it (the latest deployment pinned at deploy). A decision redeployed while
+  corrections are open checks them against the new version; the last check of the whole
+  file then runs against that same version.
+- **A correction task does not say which rule failed** in a sentence. The form shows the
+  record's values; the reasons are in `befund` as `_<output>` fields, which a form could
+  render read-only.
 
 ### Slices
 
@@ -355,9 +421,9 @@ Not yet:
 - **S1 — the operation (done, as a business rule task over a file; see *As built*).**
   In process: streaming evaluation, result document, summary, one evaluation record.
   Modeler panel and handbook.
-- **S2 — the correction paths.** `apply-corrections`; an example model with both
-  branches, from upload to corrected file; the file correction task with a filtered
-  download and re-upload.
+- **S2 — the correction paths (done; see *As built (Slice 2)*).** `apply-corrections`;
+  an example model with both branches, from upload to corrected file; the file
+  correction task with a filtered download and re-upload.
 - **S3 — the Datenprüfung screen.** Show the summary and the result document instead of
   1,500 open tasks.
 

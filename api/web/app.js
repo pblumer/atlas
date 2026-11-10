@@ -158,6 +158,54 @@ export async function apiBytes(method, path, file) {
   return data;
 }
 
+// offerFormDocuments draws a download link under each file field whose variable names a
+// document, and takes the picker away where the field is read-only: such a field only
+// hands a file out (ADR-0548, S2). The server lets whoever holds the task read a
+// document a variable its form shows names (mayReadDocument), so the link works for
+// the person the task is assigned to and not only for an operator. The fields are
+// matched to the file inputs by their order, the order the completion matches them in.
+function offerFormDocuments(host, schema, docs) {
+  const keys = fileFieldKeys(schema);
+  const comps = {};
+  const walk = (cs) => {
+    for (const c of cs || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "filepicker" && c.key) comps[c.key] = c;
+      if (Array.isArray(c.components)) walk(c.components);
+    }
+  };
+  walk(schema && schema.components);
+  const inputs = [...host.querySelectorAll("input[type=file]")];
+  keys.forEach((key, i) => {
+    const input = inputs[i];
+    const ref = docs[key];
+    if (!input) return;
+    const c = comps[key] || {};
+    if (c.readonly || c.disabled) {
+      input.disabled = true;
+      const field = input.closest(".fjs-form-field") || input.parentElement;
+      for (const b of field ? field.querySelectorAll("button") : []) b.style.display = "none";
+    }
+    if (!ref) return;
+    const p = document.createElement("p");
+    p.className = "task-doc";
+    const a = document.createElement("a");
+    a.href = "/api/v1/documents/" + encodeURIComponent(ref.$document);
+    a.setAttribute("download", ref.name || "");
+    a.dataset.document = ref.$document;
+    a.textContent = "⬇ " + tr("tasks.form.download", { name: ref.name || ref.$document });
+    p.appendChild(a);
+    if (typeof ref.size === "number") {
+      const size = document.createElement("span");
+      size.className = "muted";
+      size.textContent = " (" + (ref.size < 1024 ? ref.size + " B" : Math.ceil(ref.size / 1024) + " KB") + ")";
+      p.appendChild(size);
+    }
+    const field = input.closest(".fjs-form-field") || input.parentElement;
+    (field || host).appendChild(p);
+  });
+}
+
 // fileFieldKeys lists the keys of a form schema's file pickers, in the order form-js
 // renders them, which is the order of the file inputs on the page.
 function fileFieldKeys(schema) {
@@ -10076,8 +10124,11 @@ async function viewTasks(preselectKey) {
       // A file field (form-js filepicker) holds the picked File client-side, not its
       // bytes, so completing the task has to do something with it. There are two
       // answers and the task's own variables choose between them.
-      const fileInput = document.querySelector("#task-form input[type=file]");
-      const picked = fileInput && fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+      // The first file picked, in any field: a read-only field that only offers a
+      // document for download comes first in a correction form and holds none.
+      const picked = [...document.querySelectorAll("#task-form input[type=file]")]
+        .map((input) => (input.files && input.files.length ? input.files[0] : null))
+        .find(Boolean) || null;
       // logoKatalog names the catalogue a picked image is the brand mark of. Where
       // it is set, the image goes straight to that catalogue's logo endpoint and
       // never becomes a process variable.
@@ -10139,6 +10190,12 @@ async function viewTasks(preselectKey) {
           toast(tr("tasks.complete.uploadFailed", { error: err.message }), "err");
           return;
         }
+      }
+      // A field that only offered a document hands it back as null; completing with
+      // that would clear the variable the document is in. A field given a new file
+      // keeps the new reference.
+      for (const key of Object.keys(state.formDocs || {})) {
+        if (data[key] == null) delete data[key];
       }
       payload = { variables: data };
     }
@@ -10290,6 +10347,7 @@ async function viewTasks(preselectKey) {
     // because the day they are read from somewhere else is the day that stops
     // being true, and the failure then is somebody's logo on another catalogue.
     state.formVars = null;
+    state.formDocs = null;
   }
 
   // withPeopleNamed hands a form the people of an approval by name, beside their
@@ -10361,7 +10419,22 @@ async function viewTasks(preselectKey) {
       // atlasLocale: the e-mail view speaks the language the Tasks app does
       // (ADR-0489).
       const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasDecisions: decisionOptions({ formId: t.formId }), atlasLocale: trLocale() });
-      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
+      // A file field whose variable already names a document offers that document
+      // (ADR-0548, S2): the failures of a check to download, correct and upload again.
+      // form-js knows a picked File, not a reference, so the reference stays out of the
+      // data it is given and is drawn as a download link beside the field instead.
+      const docs = {};
+      const formData = { ...(data || {}) };
+      for (const key of fileFieldKeys(def.schema)) {
+        const v = formData[key];
+        if (v && typeof v === "object" && typeof v.$document === "string") {
+          docs[key] = v;
+          delete formData[key];
+        }
+      }
+      await form.importSchema(def.schema, withPeopleNamed(formData, state.approvals.get(t.key), names));
+      offerFormDocuments(host, def.schema, docs);
+      state.formDocs = docs;
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
       state.mountedSchema = def.schema;
