@@ -373,9 +373,46 @@ Each phase also answers this record's open question for its provider, by test.
   skip the conflict rule, ignore the create key, keep a slot by tie-break, or throw no
   codes, and show the cases fail them.
 
-Not built: the Worker Type's registration (job type, compiler, `api`, worker, Modeler,
-Console), the provider backends, and evidence records, which need the Worker Type to be
-one Atlas ships.
+### As built: phase 1 (2026-11-10)
+
+- **The task.** `<atlas:calendarConnector connector operation input resultVariable>` at
+  reserved job type `io.atlas.calendar`, index 40 (`compiler/calendar_compile.go`). It
+  carries one `input` attribute instead of one per value: a JSON object whose keys are the
+  operation's contract input and whose values may be =expressions, compiled to one FEEL
+  context at deploy (I5). The compiler refuses a key outside the operation's row and a
+  missing required one, and checks the literal values it can judge (time zone, instants,
+  bounds, weekdays). The model, the job and the suites thereby speak one shape, and a
+  test holds the catalog's keys to the contracts' input schemas.
+- **The engine half.** `connector/calendar.Resolve` evaluates the input; a null value is
+  an absent one, and a whole number FEEL computed as 60.0 is taken as 60. The payload arm
+  sends the resolved job's own fields, marshalled, so it cannot drift from the job.
+- **Microsoft Graph** (`connector/calendar/graph.go`): a calendar is a mailbox, read
+  through `calendarView` (recurring appointments expanded) with `$select` narrowed to
+  `id,start,end,showAs,isCancelled,transactionId`, in UTC, every page followed up to 5000
+  appointments and a window holding more refused, a `nextLink` outside the Graph root
+  refused. A reservation carries the create key as `transactionId` and the backend looks
+  for its own reservation before posting, because Graph does not say how long it remembers
+  a `transactionId`. A 404 on an event is a missing booking only under Graph's
+  `ErrorItemNotFound`; the suite caught the first version reading a missing mailbox as a
+  missing booking. The codes are taken from Graph's documentation, not observed from a
+  tenant. `connector/calendar/graphfake` stands in for Graph in tests and suites; it
+  refuses a wide `$select` and does not filter a repeated `transactionId`.
+- **Registration.** The built-in, supervised, worker-only kind `calendar`
+  (`ATLAS_CALENDAR_*`), its manifest, Repository package, release row, candidate claims,
+  Modeler panel (`calendar-ops.js`, held to the catalog), Worker dialog, vault shape,
+  setup entry and handbook card. The bundle names the provider: `microsoft-graph` or
+  `mock`.
+- **Evidence.** With the Worker Type shipped, the record binding each operation to its
+  drafted contract derives and verifies (`workertype/evidence/calendarrecord_test.go`);
+  none is written to `workertype/evidence/records` while the contracts are unpublished.
+  Every case passes on both backends except read-after-write visibility.
+- **The example.** `examples/terminbuchung`, a public wizard, and
+  `api/terminbuchung_example_test.go`, which books as an anonymous visitor and walks the
+  case of a slot taken meanwhile. It needed a public step to be prefilled with the
+  variable a choice field takes its options from (ADR-0449, amended 2026-11-10).
+
+Not built: Google Calendar, CalDAV and EWS (phases 2 to 4), a live run against a tenant,
+and published contracts with written evidence records.
 
 ### Consequences
 
