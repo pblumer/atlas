@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pblumer/atlas/connector/entra/keep"
 	"github.com/pblumer/atlas/expr/feelers"
 )
 
@@ -445,6 +446,10 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	keepSrc, err := entraKeep(st.Id, op, spec, cn)
+	if err != nil {
+		return 0, err
+	}
 	advanced, err := entraAdvancedQuery(st.Id, cn)
 	if err != nil {
 		return 0, err
@@ -472,8 +477,57 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		Search:        search,
 		Advanced:      advanced,
 		DeltaLink:     deltaLink,
+		Keep:          keepSrc,
 		Retries:       retries,
 	}), nil
+}
+
+// entraKeep checks a delta query's keep predicate at deploy and returns it as the job
+// will carry it (ADR-draft-entra-delta-keep). The Worker applies it to every page
+// before it answers, because Graph's delta endpoint filters on nothing but ids and a
+// job's result is in the log before any output mapping could drop what a model does
+// not want (I6). So a keep that cannot work is refused here rather than discovered as
+// an empty — or worse, unfiltered — change set:
+//
+//   - keep belongs to delta-users and delta-groups alone; a listing has Graph's own
+//     $filter, which reads the whole collection on Graph's side and is the better tool;
+//   - it is a literal predicate, never FEEL: its fields are known at deploy, which is
+//     what lets them be held against the select, and a predicate that changed per run
+//     would filter the pages of one cursor in different ways;
+//   - every field it reads must be in the task's select (id aside, which Graph always
+//     returns): Graph sends only selected properties, so a field outside it would be
+//     absent from every page and every object would be withheld.
+func entraKeep(taskID, op string, spec entraOp, cn *xmlEntraConnector) (string, error) {
+	src := strings.TrimSpace(cn.Keep)
+	if src == "" {
+		return "", nil
+	}
+	if !spec.isDelta {
+		return "", fmt.Errorf("compiler: entra task %q sets keep on operation %q, which is not a change-tracking query (keep applies to delta-users and delta-groups; a listing filters with filter)", taskID, op)
+	}
+	if strings.HasPrefix(src, "=") {
+		return "", fmt.Errorf("compiler: entra task %q has a keep that is a FEEL expression; keep is a literal predicate such as department eq 'IT', checked against the select at deploy", taskID)
+	}
+	pred, err := keep.Parse(src)
+	if err != nil {
+		return "", fmt.Errorf("compiler: entra task %q: %w", taskID, err)
+	}
+	selected := map[string]bool{}
+	for _, f := range strings.Split(cn.Select, ",") {
+		if f = strings.ToLower(strings.TrimSpace(f)); f != "" {
+			selected[f] = true
+		}
+	}
+	if len(selected) == 0 {
+		return "", fmt.Errorf("compiler: entra task %q sets keep without a select; name the properties the delta returns, including every field keep reads (%s)", taskID, strings.Join(pred.Fields(), ", "))
+	}
+	for _, f := range pred.Fields() {
+		if strings.EqualFold(f, "id") || selected[strings.ToLower(f)] {
+			continue
+		}
+		return "", fmt.Errorf("compiler: entra task %q has a keep that reads %q, which is not in its select %q; Graph returns only selected properties, so every object would be withheld (add %s to select)", taskID, f, cn.Select, f)
+	}
+	return src, nil
 }
 
 // entraAdvancedQuery settles whether the listing asks for Graph's advanced query

@@ -7508,6 +7508,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"groupId": j.GroupID, "attributes": j.Attributes, "newPassword": j.NewPassword,
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
+			// keep travels so the worker filters each delta page before it answers: only
+			// what it keeps ever reaches a completion, and so the log
+			// (ADR-draft-entra-delta-keep).
+			"keep":           j.Keep,
 			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ExchangeJobTypeIndex:
