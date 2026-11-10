@@ -499,3 +499,40 @@ func (a *afterCreate) Create(ctx context.Context, cal string, ne NewEvent) (Even
 	}
 	return ev, err
 }
+
+// failingDelete is a backend whose delete fails: a reservation that lost must then
+// fail the job, so a retry deletes again rather than leaving the placeholder.
+type failingDelete struct{ Backend }
+
+func (failingDelete) Delete(context.Context, string, string) error {
+	return errors.New("the provider is unavailable")
+}
+
+func TestALostReservationWhoseDeleteFailsIsRetried(t *testing.T) {
+	m := NewMockCalendars(map[string]MockCalendarSpec{"werkstatt": {Busy: []MockBusy{{Start: at(25, 9, 0), End: at(25, 10, 0)}}}})
+	reg := NewRegistry()
+	reg.Register("shop", failingDelete{m})
+	_, err := RunAt(context.Background(), reserveJob("k", at(25, 9, 0), at(25, 10, 0)), reg, now)
+	if err == nil || bpmnCode(err) != "" || !strings.Contains(err.Error(), "retried") {
+		t.Fatalf("err = %v, want a plain failure the job retries", err)
+	}
+}
+
+func TestTheMockNamesAnUnknownCalendar(t *testing.T) {
+	m := NewMockCalendars(nil)
+	if _, _, err := m.Get(context.Background(), "fehlt", "x"); kindOf(err) != KindCalendarNotFound {
+		t.Errorf("Get: %v", err)
+	}
+	if _, err := m.Snapshot("fehlt"); kindOf(err) != KindCalendarNotFound {
+		t.Errorf("Snapshot: %v", err)
+	}
+	if _, err := m.Update(context.Background(), "fehlt", "x", Details{}); kindOf(err) != KindCalendarNotFound {
+		t.Errorf("Update: %v", err)
+	}
+	if err := m.Delete(context.Background(), "fehlt", "x"); kindOf(err) != KindCalendarNotFound {
+		t.Errorf("Delete: %v", err)
+	}
+	if (&Error{Message: "x"}).Error() != "calendar: x" {
+		t.Error("an error does not name its Worker Type")
+	}
+}
