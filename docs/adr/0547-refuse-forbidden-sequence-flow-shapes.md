@@ -1,7 +1,7 @@
 # ADR-0547: Refuse the sequence-flow shapes BPMN forbids, and locate element-local compile errors
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-11-09
 - **Deciders:** Patrick Blumer (programme owner, BPMN conformance)
 - **Open question:** how many *stored production* deployments contain one of the four shapes.
@@ -194,7 +194,13 @@ the Problems panel unable to select ten common faults.
 > `markDefault`, compiler tests per rule and per start/end kind, the conformance cases
 > moved to the located table, and reload tests in `compiler`, `conformance` and `api`
 > showing a stored definition comes back with the problem and routes as before.
-> **Part 2 (element locations) is not started**, which is why this record is `Partial`.
+> **Part 2 has landed too:** `compiler.ElementError` (`compiler/elementerror.go`) carries
+> the element of 103 BPMN-structural compile-error sites in `parse.go`, `scope_compile.go`
+> and `builder.go`, chosen where the message's first quoted id is the element (or, for an
+> unnamed message or signal, the element referencing it); `ValidateModel` fills
+> `Problem.Element` from it, the message text and the `compile` rule unchanged.
+> Process-level faults (TTLs, personal data declarations) stay unanchored by design, and the
+> Worker Type configuration sites follow as they are touched, as decided above.
 
 1. **PR 1 — rules.** The three rules in `compiler/validation.go`, the declaring-gateway
    metadata in `markDefault`; compiler unit tests per rule; the four

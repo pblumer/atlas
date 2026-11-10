@@ -807,16 +807,16 @@ func (b *Builder) compileAgentParams(ownerBpmnID string) ([]AgentParam, error) {
 	for _, sp := range specs {
 		name := strings.TrimSpace(sp.Name)
 		if name == "" {
-			return nil, fmt.Errorf("compiler: tool %q declares an agentParam without a name — "+
+			return nil, elementErrorf(ownerBpmnID, "compiler: tool %q declares an agentParam without a name — "+
 				"a tool's parameter is named for the model that has to fill it", ownerBpmnID)
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("compiler: tool %q declares the parameter %q twice", ownerBpmnID, name)
+			return nil, elementErrorf(ownerBpmnID, "compiler: tool %q declares the parameter %q twice", ownerBpmnID, name)
 		}
 		seen[name] = true
 		typ := strings.TrimSpace(sp.Type)
 		if !slices.Contains(agentParamTypes, typ) {
-			return nil, fmt.Errorf("compiler: tool %q parameter %q has type %q, which is not one of %s",
+			return nil, elementErrorf(ownerBpmnID, "compiler: tool %q parameter %q has type %q, which is not one of %s",
 				ownerBpmnID, name, typ, strings.Join(agentParamTypes, ", "))
 		}
 		p := AgentParam{Name: b.intern(name), Type: b.intern(typ), Description: -1, Required: sp.Required}
@@ -2887,11 +2887,11 @@ func assign(g *feelGate, taskID, what, raw string) (Assignment, error) {
 	}
 	text := strings.TrimSpace(trimmed[1:])
 	if text == "" {
-		return Assignment{}, fmt.Errorf("compiler: user task %q has an empty FEEL expression for %s", taskID, what)
+		return Assignment{}, elementErrorf(taskID, "compiler: user task %q has an empty FEEL expression for %s", taskID, what)
 	}
 	e, err := g.compileFEEL(text)
 	if err != nil {
-		return Assignment{}, fmt.Errorf("compiler: user task %q: %s: %w", taskID, what, err)
+		return Assignment{}, elementErrorf(taskID, "compiler: user task %q: %s: %w", taskID, what, err)
 	}
 	return Assignment{Expr: e}, nil
 }
@@ -3634,7 +3634,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		container := b.bpmnIdOf(n.ElementId)
 		entries := scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
 		if len(entries) == 0 {
-			return nil, fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q has no entry activity, "+
+			return nil, elementErrorf(container, "compiler: agent-driven ad-hoc subprocess %q has no entry activity, "+
 				"so its agent has no tool to call — give it at least one contained activity nothing "+
 				"sequences into, or model a tool-less agent as a service task (ADR-0117) instead", container)
 		}

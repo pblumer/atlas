@@ -68,7 +68,7 @@ func httpKVList(g *feelGate, taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, er
 			continue
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("compiler: rest task %q has a duplicate %s %q", taskID, kind, name)
+			return nil, elementErrorf(taskID, "compiler: rest task %q has a duplicate %s %q", taskID, kind, name)
 		}
 		seen[name] = true
 		val, err := restValue(g, taskID, kind+" "+name, kv.Value)
@@ -101,11 +101,11 @@ func connectorValue(g *feelGate, taskID, kind, what, raw string) (RestExpr, erro
 	}
 	text := strings.TrimSpace(trimmed[1:])
 	if text == "" {
-		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
+		return RestExpr{}, elementErrorf(taskID, "compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
 	}
 	e, err := g.compileFEEL(text)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: %s task %q: %s: %w", kind, taskID, what, err)
+		return RestExpr{}, elementErrorf(taskID, "compiler: %s task %q: %s: %w", kind, taskID, what, err)
 	}
 	return RestExpr{Expr: e}, nil
 }
@@ -126,13 +126,13 @@ func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
 // (secrets live server-side, ADR-0041). Scope is optional.
 func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
 	if strings.TrimSpace(c.AuthTokenURL) == "" {
-		return RestAuth{}, fmt.Errorf("compiler: rest task %q uses oauth2 auth but names no tokenUrl", taskID)
+		return RestAuth{}, elementErrorf(taskID, "compiler: rest task %q uses oauth2 auth but names no tokenUrl", taskID)
 	}
 	if strings.TrimSpace(c.AuthClientID) == "" {
-		return RestAuth{}, fmt.Errorf("compiler: rest task %q uses oauth2 auth but names no clientId", taskID)
+		return RestAuth{}, elementErrorf(taskID, "compiler: rest task %q uses oauth2 auth but names no clientId", taskID)
 	}
 	if strings.TrimSpace(c.AuthSecret) == "" {
-		return RestAuth{}, fmt.Errorf("compiler: rest task %q uses oauth2 auth but names no client secret reference", taskID)
+		return RestAuth{}, elementErrorf(taskID, "compiler: rest task %q uses oauth2 auth but names no client secret reference", taskID)
 	}
 	return RestAuth{
 		Type:      "oauth2",
@@ -155,10 +155,10 @@ func connectorAuth(taskID, kind, authType, username, apiKeyName, secret string) 
 		return RestAuth{}, nil
 	case "basic", "bearer", "apikey":
 		if strings.TrimSpace(secret) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: %s task %q uses %s auth but names no secret reference", kind, taskID, t)
+			return RestAuth{}, elementErrorf(taskID, "compiler: %s task %q uses %s auth but names no secret reference", kind, taskID, t)
 		}
 		if t == "apikey" && strings.TrimSpace(apiKeyName) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: %s task %q uses apiKey auth but names no header", kind, taskID)
+			return RestAuth{}, elementErrorf(taskID, "compiler: %s task %q uses apiKey auth but names no header", kind, taskID)
 		}
 		return RestAuth{
 			Type:       t,
@@ -167,7 +167,7 @@ func connectorAuth(taskID, kind, authType, username, apiKeyName, secret string) 
 			SecretRef:  strings.TrimSpace(secret),
 		}, nil
 	default:
-		return RestAuth{}, fmt.Errorf("compiler: %s task %q has an unsupported auth type %q", kind, taskID, authType)
+		return RestAuth{}, elementErrorf(taskID, "compiler: %s task %q has an unsupported auth type %q", kind, taskID, authType)
 	}
 }
 
@@ -474,10 +474,10 @@ func buildMessageResolver(defs xmlDefinitions, g *feelGate) func(ownerId, messag
 	return func(ownerId, messageRef string) (string, *expr.Compiled, error) {
 		m, ok := messages[messageRef]
 		if !ok {
-			return "", nil, fmt.Errorf("compiler: message event %q references unknown message %q", ownerId, messageRef)
+			return "", nil, elementErrorf(ownerId, "compiler: message event %q references unknown message %q", ownerId, messageRef)
 		}
 		if m.Name == "" {
-			return "", nil, fmt.Errorf("compiler: message %q referenced by %q has no name", messageRef, ownerId)
+			return "", nil, elementErrorf(ownerId, "compiler: message %q referenced by %q has no name", messageRef, ownerId)
 		}
 		var keyExpr *expr.Compiled
 		if text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(m.Subscription.CorrelationKey), "=")); text != "" {
@@ -508,10 +508,10 @@ func buildOperationResolver(defs xmlDefinitions) func(ownerId, operationRef stri
 	return func(ownerId, operationRef string) (string, error) {
 		msg, ok := ops[operationRef]
 		if !ok {
-			return "", fmt.Errorf("compiler: send task %q references unknown operation %q", ownerId, operationRef)
+			return "", elementErrorf(ownerId, "compiler: send task %q references unknown operation %q", ownerId, operationRef)
 		}
 		if msg == "" {
-			return "", fmt.Errorf("compiler: operation %q referenced by send task %q has no inMessageRef", operationRef, ownerId)
+			return "", elementErrorf(ownerId, "compiler: operation %q referenced by send task %q has no inMessageRef", operationRef, ownerId)
 		}
 		return msg, nil
 	}
@@ -530,10 +530,10 @@ func buildSignalResolver(defs xmlDefinitions) func(ownerId, signalRef string) (s
 	return func(ownerId, signalRef string) (string, error) {
 		s, ok := signals[signalRef]
 		if !ok {
-			return "", fmt.Errorf("compiler: signal event %q references unknown signal %q", ownerId, signalRef)
+			return "", elementErrorf(ownerId, "compiler: signal event %q references unknown signal %q", ownerId, signalRef)
 		}
 		if s.Name == "" {
-			return "", fmt.Errorf("compiler: signal %q referenced by %q has no name", signalRef, ownerId)
+			return "", elementErrorf(ownerId, "compiler: signal %q referenced by %q has no name", signalRef, ownerId)
 		}
 		return s.Name, nil
 	}
@@ -559,7 +559,7 @@ func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (str
 		}
 		e, ok := errs[errorRef]
 		if !ok {
-			return "", fmt.Errorf("compiler: error event %q references unknown error %q", ownerId, errorRef)
+			return "", elementErrorf(ownerId, "compiler: error event %q references unknown error %q", ownerId, errorRef)
 		}
 		return e.ErrorCode, nil
 	}
@@ -585,7 +585,7 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 		}
 		e, ok := escs[escalationRef]
 		if !ok {
-			return "", fmt.Errorf("compiler: escalation event %q references unknown escalation %q", ownerId, escalationRef)
+			return "", elementErrorf(ownerId, "compiler: escalation event %q references unknown escalation %q", ownerId, escalationRef)
 		}
 		return e.EscalationCode, nil
 	}
@@ -883,7 +883,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if name, ok := objName[ref]; ok {
 			return name, "", nil // names the object directly; no state change
 		}
-		return "", "", fmt.Errorf("compiler: data association on %q names %q, which is neither a data object nor a data object reference", ownerId, ref)
+		return "", "", elementErrorf(ownerId, "compiler: data association on %q names %q, which is neither a data object nor a data object reference", ownerId, ref)
 	}
 	// The four wiring passes below each repeat one shape at every activity kind they
 	// handle — around thirty call sites of "wire it, propagate the rejection". keepWire
@@ -904,7 +904,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		for _, a := range assocs {
 			name, state, err := resolveDataTarget(ownerId, a.TargetRef)
 			if err != nil {
-				keepWire(fmt.Errorf("compiler: data output association on %q target: %w", ownerId, err))
+				keepWire(elementErrorf(ownerId, "compiler: data output association on %q target: %w", ownerId, err))
 				return
 			}
 			// Every <assignment>, in document order, because the order decides which of
@@ -919,7 +919,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				}
 				ce, err := g.compileFEEL(from)
 				if err != nil {
-					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
+					keepWire(elementErrorf(ownerId, "compiler: data output association on %q assignment: %w", ownerId, err))
 					return
 				}
 				writes = append(writes, DataWrite{Value: ce, TargetPath: strings.TrimSpace(asg.To)})
@@ -943,7 +943,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		for _, a := range assocs {
 			name, _, err := resolveDataTarget(ownerId, a.SourceRef)
 			if err != nil {
-				keepWire(fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err))
+				keepWire(elementErrorf(ownerId, "compiler: data input association on %q source: %w", ownerId, err))
 				return
 			}
 			// The target variable is the assignment's <to> (a free string the Modeler
@@ -955,14 +955,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				variable = strings.TrimSpace(a.TargetRef)
 			}
 			if variable == "" {
-				keepWire(fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId))
+				keepWire(elementErrorf(ownerId, "compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId))
 				return
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
 				ce, err := g.compileFEEL(from)
 				if err != nil {
-					keepWire(fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err))
+					keepWire(elementErrorf(ownerId, "compiler: data input association on %q assignment: %w", ownerId, err))
 					return
 				}
 				valExpr = ce
@@ -981,11 +981,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	compileSource := func(ownerId, dir, target, source string) (*expr.Compiled, error) {
 		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(source), "="))
 		if text == "" {
-			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
+			return nil, elementErrorf(ownerId, "compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
 		}
 		e, err := g.compileFEEL(text)
 		if err != nil {
-			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
+			return nil, elementErrorf(ownerId, "compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
 		}
 		return e, nil
 	}
@@ -993,7 +993,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		for _, in := range iom.Inputs {
 			target := strings.TrimSpace(in.Target)
 			if target == "" {
-				keepWire(fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId))
+				keepWire(elementErrorf(ownerId, "compiler: task %q has an ioMapping input with no target", ownerId))
 				return
 			}
 			e, err := compileSource(ownerId, "input", target, in.Source)
@@ -1006,7 +1006,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		for _, out := range iom.Outputs {
 			target := strings.TrimSpace(out.Target)
 			if target == "" {
-				keepWire(fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId))
+				keepWire(elementErrorf(ownerId, "compiler: task %q has an ioMapping output with no target", ownerId))
 				return
 			}
 			e, err := compileSource(ownerId, "output", target, out.Source)
@@ -1070,7 +1070,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		e, err := g.compileFEEL(text)
 		if err != nil {
-			return nil, fmt.Errorf("compiler: loop %s on %q: %w", what, ownerId, err)
+			return nil, elementErrorf(ownerId, "compiler: loop %s on %q: %w", what, ownerId, err)
 		}
 		return e, nil
 	}
@@ -1091,12 +1091,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text := strings.TrimSpace(sl.LoopMaximum); text != "" {
 			n, err := strconv.Atoi(text)
 			if err != nil || n <= 0 {
-				return fmt.Errorf("compiler: loop activity %q has an invalid loopMaximum %q (want a positive whole number)", ownerId, sl.LoopMaximum)
+				return elementErrorf(ownerId, "compiler: loop activity %q has an invalid loopMaximum %q (want a positive whole number)", ownerId, sl.LoopMaximum)
 			}
 			max = int32(n)
 		}
 		if cond == nil && max == 0 {
-			return fmt.Errorf("compiler: loop activity %q needs a loopCondition or a loopMaximum", ownerId)
+			return elementErrorf(ownerId, "compiler: loop activity %q needs a loopCondition or a loopMaximum", ownerId)
 		}
 		b.SetStandardLoop(ids[ownerId], strings.TrimSpace(sl.TestBefore) == "true", max, cond)
 		return nil
@@ -1114,10 +1114,10 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return err
 		}
 		if coll == nil && card == nil {
-			return fmt.Errorf("compiler: multi-instance activity %q needs an inputCollection or a loopCardinality", ownerId)
+			return elementErrorf(ownerId, "compiler: multi-instance activity %q needs an inputCollection or a loopCardinality", ownerId)
 		}
 		if coll != nil && card != nil {
-			return fmt.Errorf("compiler: multi-instance activity %q has both an inputCollection and a loopCardinality (use one)", ownerId)
+			return elementErrorf(ownerId, "compiler: multi-instance activity %q has both an inputCollection and a loopCardinality (use one)", ownerId)
 		}
 		out, err := compileMI(ownerId, "outputElement", mi.Loop.OutputElement)
 		if err != nil {
@@ -1137,7 +1137,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// so a model with both is refused rather than silently running one of them.
 	wireLoop := func(ownerId string, mi *xmlMultiInstance, sl *xmlStandardLoop) {
 		if mi != nil && sl != nil {
-			keepWire(fmt.Errorf("compiler: activity %q has both a multiInstanceLoopCharacteristics and a standardLoopCharacteristics (use one)", ownerId))
+			keepWire(elementErrorf(ownerId, "compiler: activity %q has both a multiInstanceLoopCharacteristics and a standardLoopCharacteristics (use one)", ownerId))
 			return
 		}
 		if err := wireMultiInstance(ownerId, mi); err != nil {
@@ -1670,7 +1670,7 @@ func resolveLanes(b *Builder, ids map[string]int32, fc *xmlFlowContent) error {
 					return fmt.Errorf("compiler: lane %q references unknown flow node %q", laneLabel(lane), ref)
 				}
 				if prev, dup := assigned[node]; dup {
-					return fmt.Errorf("compiler: flow node %q is in two lanes (%q and %q); a node belongs to at most one lane", ref, prev, laneLabel(lane))
+					return elementErrorf(ref, "compiler: flow node %q is in two lanes (%q and %q); a node belongs to at most one lane", ref, prev, laneLabel(lane))
 				}
 				assigned[node] = laneLabel(lane)
 				b.SetLane(node, idx)
@@ -1902,7 +1902,7 @@ func resolveSendTaskOperations(fc *xmlFlowContent, resolveOperation func(ownerId
 			continue
 		}
 		if strings.TrimSpace(st.MessageRef) != "" {
-			return fmt.Errorf("compiler: send task %q sets both messageRef and operationRef; use one", st.Id)
+			return elementErrorf(st.Id, "compiler: send task %q sets both messageRef and operationRef; use one", st.Id)
 		}
 		msg, err := resolveOperation(st.Id, op)
 		if err != nil {
@@ -3034,7 +3034,7 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 	switch format {
 	case csvimportFormatCSV, csvimportFormatFixedWidth, csvimportFormatAVP:
 	default:
-		return "", "", fmt.Errorf("compiler: csv task %q has an unknown format %q (want %s, %s, or %s)",
+		return "", "", elementErrorf(taskID, "compiler: csv task %q has an unknown format %q (want %s, %s, or %s)",
 			taskID, rawFormat, csvimportFormatAVP, csvimportFormatCSV, csvimportFormatFixedWidth)
 	}
 	op := strings.ToLower(strings.TrimSpace(rawOp))
@@ -3042,7 +3042,7 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 		op = csvimportOperationRead
 	}
 	if op != csvimportOperationRead && op != csvimportOperationWrite {
-		return "", "", fmt.Errorf("compiler: csv task %q has an unknown operation %q (want %s or %s)",
+		return "", "", elementErrorf(taskID, "compiler: csv task %q has an unknown operation %q (want %s or %s)",
 			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
 	}
 	return format, op, nil
@@ -3058,7 +3058,7 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
 	if strings.TrimSpace(s) == "" {
 		if format == csvimportFormatFixedWidth {
-			return nil, nil, fmt.Errorf("compiler: csv task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
+			return nil, nil, elementErrorf(taskID, "compiler: csv task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
 		}
 		return nil, nil, nil
 	}
@@ -3079,18 +3079,18 @@ func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
 		var width int32
 		switch {
 		case hasWidth && format != csvimportFormatFixedWidth:
-			return nil, nil, fmt.Errorf("compiler: csv task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
+			return nil, nil, elementErrorf(taskID, "compiler: csv task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
 		case hasWidth:
 			n, err := strconv.Atoi(strings.TrimSpace(rawWidth))
 			if err != nil {
-				return nil, nil, fmt.Errorf("compiler: csv task %q has a non-numeric width for column %q", taskID, name)
+				return nil, nil, elementErrorf(taskID, "compiler: csv task %q has a non-numeric width for column %q", taskID, name)
 			}
 			if n <= 0 {
-				return nil, nil, fmt.Errorf("compiler: csv task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
+				return nil, nil, elementErrorf(taskID, "compiler: csv task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
 			}
 			width = int32(n)
 		case format == csvimportFormatFixedWidth:
-			return nil, nil, fmt.Errorf("compiler: csv task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
+			return nil, nil, elementErrorf(taskID, "compiler: csv task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
 		}
 		names = append(names, name)
 		widths = append(widths, width)
@@ -3584,10 +3584,10 @@ func calledDecisionBinding(taskId string, cd xmlCalledDecision) (DecisionBinding
 	if v := strings.TrimSpace(cd.Version); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil || n < 1 {
-			return 0, 0, fmt.Errorf("compiler: business rule task %q: version %q is not a deployed version number (1, 2, 3, …)", taskId, cd.Version)
+			return 0, 0, elementErrorf(taskId, "compiler: business rule task %q: version %q is not a deployed version number (1, 2, 3, …)", taskId, cd.Version)
 		}
 		if bt := strings.TrimSpace(cd.BindingType); bt != "" && bt != "latest" {
-			return 0, 0, fmt.Errorf("compiler: business rule task %q: version %d cannot be combined with bindingType %q; remove one of the two", taskId, n, bt)
+			return 0, 0, elementErrorf(taskId, "compiler: business rule task %q: version %d cannot be combined with bindingType %q; remove one of the two", taskId, n, bt)
 		}
 		return BindingVersion, int32(n), nil
 	}
@@ -3681,15 +3681,15 @@ func decisionInputMappings(g *feelGate, taskID string, in []xmlZeebeIOMapInput) 
 	out := make([]DecisionInputMapping, 0, len(in))
 	for _, im := range in {
 		if im.Target == "" {
-			return nil, fmt.Errorf("compiler: business rule task %q has an input mapping with no target", taskID)
+			return nil, elementErrorf(taskID, "compiler: business rule task %q has an input mapping with no target", taskID)
 		}
 		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(im.Source), "="))
 		if text == "" {
-			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
+			return nil, elementErrorf(taskID, "compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
 		}
 		e, err := g.compileFEEL(text)
 		if err != nil {
-			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
+			return nil, elementErrorf(taskID, "compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
 		}
 		out = append(out, DecisionInputMapping{Target: im.Target, Source: e})
 	}

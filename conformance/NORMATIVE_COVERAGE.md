@@ -10,7 +10,7 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 
 ## Provisional inventory
 
-- Candidate requirements: **105**; implementation provisionally **43** implemented, **21** partial, **5** unsupported, **36** unknown.
+- Candidate requirements: **105**; implementation provisionally **44** implemented, **20** partial, **5** unsupported, **36** unknown.
 - Evidence levels: **39** scenario samples, **27** package tests, **39** unverified; **0 independently specification-reviewed passes**.
 - Event-position cells: **63 legal**, **41 spec-illegal**, not a normative support denominator.
 - Workflow Control-Flow Patterns: **43** inventoried; **9** registered; **0 independently verified WCP semantics**. WCP is not OMG conformance.
@@ -32,7 +32,7 @@ The legacy [scenario-local report](COVERAGE.md) remains a different measure.
 | FLOW-11 | Multiple incoming/outgoing flows without gateways | 13.3.1 | process-execution | required | unknown | package-tested |
 | FLOW-12 | Unstructured cycles and process completion | 13.2 | process-execution | required | unknown | unverified |
 | FLOW-13 | Gateway default-flow and no-match failure | 13.4 | process-execution | required | unknown | package-tested |
-| FLOW-14 | Model validation: reachability/scope/refs | 13.4 | process-execution | required | partial | package-tested |
+| FLOW-14 | Model validation: reachability/scope/refs | 13.4 | process-execution | required | implemented | package-tested |
 | FLOW-15 | Uncontrolled flow: one activity arrival per token, multiple outgoing flow, mixed conditional/unconditional | 13.3.1 | process-execution | required | unknown | package-tested |
 | FLOW-16 | Process completion: no tokens and no active activities, including boundary/event subprocess/MI | 13.2 | process-execution | required | unknown | unverified |
 | ACT-01 | Generic task and manual task | 13.3 | process-execution | non-operational | implemented | package-tested |

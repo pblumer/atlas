@@ -33,6 +33,12 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **The Problems panel points at the element behind a compile error.** A fault the compiler
+  meets while building a process — a duplicate id, an unknown error, message, signal or
+  escalation reference, a link throw without its catch, a condition that does not parse, a
+  dangling flow, a boundary on an unknown host, a loop without a bound, an element atlas does
+  not run — now names its element in the problem's `element` field, so the modeler can select
+  it. The rule stays `compile` and the message is unchanged (ADR-0547).
 - **A deploy refuses the sequence-flow shapes BPMN forbids.** A start event that is the
   target of a sequence flow (`start.incoming-flow`), an end event that is the source of one
   (`end.outgoing-flow`), and an exclusive or inclusive gateway whose `default` names a flow
