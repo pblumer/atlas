@@ -247,9 +247,10 @@ known condition with a plain failure instead of a code a process can catch.)
   restricted says so in its connection check.
 - **Google:** a service account the booking calendar is shared with ("make changes to
   events"). No domain-wide delegation for reading and creating. Adding attendees from a
-  service account is, to this record's author's knowledge, refused without domain-wide
-  delegation; `confirm-booking` with attendees on Google therefore either needs
-  delegation or the confirmation mail comes from atlas. To be verified.
+  service account is refused without domain-wide delegation according to Google's
+  documentation (not yet observed in a domain); `confirm-booking` with attendees on Google
+  therefore either needs delegation (`subject` in the bundle) or the confirmation mail
+  comes from atlas.
 - **CalDAV:** user name and an app password over TLS, as the CardDAV Worker does
   (`connector/carddav`), whose WebDAV client the CalDAV backend reuses.
 - **EWS:** a service account with delegate access to the booking mailboxes. The first
@@ -411,8 +412,43 @@ Each phase also answers this record's open question for its provider, by test.
   case of a slot taken meanwhile. It needed a public step to be prefilled with the
   variable a choice field takes its options from (ADR-0449, amended 2026-11-10).
 
-Not built: Google Calendar, CalDAV and EWS (phases 2 to 4), a live run against a tenant,
-and published contracts with written evidence records.
+Not built in phase 1: Google Calendar, CalDAV and EWS (phases 2 to 4), a live run against
+a tenant, and published contracts with written evidence records.
+
+### As built: phase 2 (2026-11-10)
+
+- **Google Calendar** (`connector/calendar/google.go`), provider `google-calendar`. The
+  bundle is a service account's `clientEmail` and `privateKey`, and an optional
+  `subject` for domain-wide delegation; a bundle field of another provider is refused for
+  every provider, not ignored. A calendar is a Google calendar id shared with the service
+  account.
+- **Reading.** The events list with `singleEvents=true`, which expands recurring
+  appointments (without it the list answers the series), `fields` narrowed to
+  `id,status,transparency,start,end` and paged by `nextPageToken` up to 5000 events. An
+  all-day appointment is read as its dates in the calendar's own zone, which the list
+  answers; it blocks those days. Busy is every event not `transparent` and not `cancelled`.
+- **Idempotent creation by the event id.** Google lets a client choose an event id in
+  base32hex and refuses a second insert with an id it has seen, a deleted event's
+  included. The id is `atlas` followed by the create key in hex, so any key is a valid id
+  and the key reads back from the id. A repeated delivery that meets `409 duplicate` reads
+  the event; when the conflict rule had given it up — it is then `cancelled` — it is
+  confirmed again and the rule runs on it again. That is the same outcome the mock and
+  Graph give, reached through the way Google keeps ids.
+- **A missing calendar is told from a missing booking.** Google answers both on an event
+  route with 404 (or 410 for a deleted event), so on such an answer the backend asks for
+  the calendar (`GET /calendars/{id}?fields=id`) and reports whichever is missing.
+- **Attendees.** `confirm-booking` writes with `sendUpdates=all`, which makes Google
+  invite the attendees. A service account without delegation is refused attendees
+  (`forbiddenForServiceAccounts`, from Google's documentation); the backend throws that as
+  `CALENDAR_ATTENDEES_NOT_ALLOWED`, which the attendees case of the suites now exercises on
+  a real backend instead of meeting it vacuously.
+- **Evidence.** `connector/calendar/googlefake` stands in for the Calendar API; it refuses
+  a wide `fields`, answers a series without `singleEvents`, refuses a repeated id and keeps
+  a deleted event as cancelled. Every suite case passes on the mock, Graph and Google
+  except read-after-write visibility, which no fake can show.
+
+Not built: CalDAV and EWS (phases 3 and 4), a live run against a tenant or a domain, and
+published contracts with written evidence records.
 
 ### Consequences
 

@@ -31,8 +31,8 @@ func TestTheBundleIsReadStrictly(t *testing.T) {
 		"unknown provider":     {"", `{"provider":"lotus-notes"}`, "does not implement"},
 		"graph without secret": {"", `{"provider":"microsoft-graph","tenantId":"t","clientId":"c"}`, "needs tenantId, clientId and clientSecret"},
 		"graph over http":      {"http://graph.example.com/v1.0", graphBundle, "not an https URL"},
-		"graph with calendars": {"", `{"provider":"microsoft-graph","tenantId":"t","clientId":"c","clientSecret":"s","calendars":{}}`, "belong to the mock"},
-		"mock with secret":     {"", `{"provider":"mock","clientSecret":"s"}`, "takes no credential"},
+		"graph with calendars": {"", `{"provider":"microsoft-graph","tenantId":"t","clientId":"c","clientSecret":"s","calendars":{}}`, "calendars belongs to another provider"},
+		"mock with secret":     {"", `{"provider":"mock","clientSecret":"s"}`, "clientSecret belongs to another provider"},
 		"mock with endpoint":   {"https://example.com", `{"provider":"mock"}`, "has no endpoint"},
 	} {
 		err := CheckBundle(tc.endpoint, tc.bundle)

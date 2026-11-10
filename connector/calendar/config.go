@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -13,17 +14,20 @@ import (
 const (
 	// ProviderGraph is Microsoft 365 / Exchange Online through Microsoft Graph.
 	ProviderGraph = "microsoft-graph"
+	// ProviderGoogle is Google Workspace through the Google Calendar API.
+	ProviderGoogle = "google-calendar"
 	// ProviderMock is the in-memory calendars of [MockCalendars]: the worker's switch,
 	// not the model's (ADR-0221), so a model runs unchanged against either.
 	ProviderMock = "mock"
 )
 
 // Providers lists the providers this build implements.
-var Providers = []string{ProviderGraph, ProviderMock}
+var Providers = []string{ProviderGraph, ProviderGoogle, ProviderMock}
 
 // Bundle is what a calendar Worker's vault entry holds: which provider, and as whom.
 //
 //	{"provider": "microsoft-graph", "tenantId": "…", "clientId": "…", "clientSecret": "…"}
+//	{"provider": "google-calendar", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey": "-----BEGIN PRIVATE KEY-----…"}
 //	{"provider": "mock", "calendars": {"werkstatt@firma.ch": {"busy": [ … ]}}}
 //
 // The provider is the Worker's, not the model's: a booking process names a Worker and a
@@ -37,6 +41,15 @@ type Bundle struct {
 	TenantID     string `json:"tenantId,omitempty"`
 	ClientID     string `json:"clientId,omitempty"`
 	ClientSecret string `json:"clientSecret,omitempty"`
+
+	// Google Calendar: a service account's key. The booking calendars are shared with
+	// the service account ("make changes to events"); no domain-wide delegation is
+	// needed for that. Subject, when set, makes the service account act as that
+	// Workspace user through domain-wide delegation — which is what Google requires
+	// before a service account may invite attendees.
+	ClientEmail string `json:"clientEmail,omitempty"`
+	PrivateKey  string `json:"privateKey,omitempty"`
+	Subject     string `json:"subject,omitempty"`
 
 	// Mock: the calendars and what they already hold.
 	Calendars map[string]MockCalendarSpec `json:"calendars,omitempty"`
@@ -82,16 +95,15 @@ func NewBackend(endpoint, raw string, opts Options) (Backend, error) {
 	if err != nil {
 		return nil, err
 	}
+	if f := b.foreignTo(b.Provider); f != "" {
+		return nil, fmt.Errorf("calendar: %s belongs to another provider's bundle, not to %q; remove it", f, b.Provider)
+	}
 	switch b.Provider {
 	case ProviderGraph:
-		if b.Calendars != nil {
-			return nil, fmt.Errorf("calendar: calendars belong to the mock provider; a Microsoft Graph Worker reads them from the tenant")
-		}
 		return newGraph(endpoint, b, opts)
+	case ProviderGoogle:
+		return newGoogle(endpoint, b, opts)
 	case ProviderMock:
-		if b.TenantID != "" || b.ClientID != "" || b.ClientSecret != "" {
-			return nil, fmt.Errorf("calendar: the mock provider takes no credential; remove tenantId, clientId and clientSecret")
-		}
 		if strings.TrimSpace(endpoint) != "" {
 			return nil, fmt.Errorf("calendar: the mock provider has no endpoint; leave it empty")
 		}
@@ -100,6 +112,34 @@ func NewBackend(endpoint, raw string, opts Options) (Backend, error) {
 		return nil, fmt.Errorf("calendar: the bundle names no provider (want %s)", strings.Join(Providers, ", "))
 	}
 	return nil, fmt.Errorf("calendar: the bundle names the provider %q, which this build does not implement (want %s)", b.Provider, strings.Join(Providers, ", "))
+}
+
+// fieldsOf are the bundle fields each provider takes besides provider itself.
+var fieldsOf = map[string][]string{
+	ProviderGraph:  {"tenantId", "clientId", "clientSecret"},
+	ProviderGoogle: {"clientEmail", "privateKey", "subject"},
+	ProviderMock:   {"calendars"},
+}
+
+// foreignTo names the first field set in the bundle that the provider does not take,
+// or "" when there is none. A field of another provider is a bundle written for that
+// provider, and is refused rather than ignored.
+func (b Bundle) foreignTo(provider string) string {
+	set := map[string]bool{
+		"tenantId": b.TenantID != "", "clientId": b.ClientID != "", "clientSecret": b.ClientSecret != "",
+		"clientEmail": b.ClientEmail != "", "privateKey": b.PrivateKey != "", "subject": b.Subject != "",
+		"calendars": b.Calendars != nil,
+	}
+	takes, known := fieldsOf[provider]
+	if !known {
+		return ""
+	}
+	for _, f := range []string{"tenantId", "clientId", "clientSecret", "clientEmail", "privateKey", "subject", "calendars"} {
+		if set[f] && !slices.Contains(takes, f) {
+			return f
+		}
+	}
+	return ""
 }
 
 // CheckBundle reports whether an endpoint and a bundle build a backend. It is the one
