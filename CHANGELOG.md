@@ -37,6 +37,28 @@ _Changed_ / _Removed_ for each version.
   how a rule tests a multi-valued cell; the example *AD-Benutzer prüfen* reads 24 accounts from the
   mock directory and reports six findings with the rules they break
   (docs/planning/ad-search-as-document.md).
+- **The shop over MCP, as the connected person.** An agent connected as a person — with
+  their OAuth grant or session on `/mcp`, or their API token over `atlas mcp` — can now act
+  as that person in the shop: `atlas_shop_catalogs` and `atlas_shop_catalog`,
+  `atlas_shop_form_query` for an order form's person and value pickers, `atlas_place_order`,
+  `atlas_list_orders`, `atlas_get_order`, `atlas_order_ready_lines`, `atlas_shop_tasks`,
+  `atlas_order_line_progress`, `atlas_cancel_order`, `atlas_cancel_order_line`,
+  `atlas_amend_order_line`, `atlas_return_order_line`, `atlas_change_order_line`,
+  `atlas_list_approvals` and `atlas_decide_approvals`, and `atlas_ask_order_line_action`
+  takes `trigger: customer`. Each tool is the route the portal calls, decided by the same
+  handler with that person's rights, and what it does is recorded under their name — so a
+  catalogue can be tested end to end by an agent holding one connection per test person.
+  On by default; `--mcp-shop=false` (`ATLAS_MCP_SHOP=false`) makes the server refuse those
+  routes, and a customer's action, to requests that come through MCP while the portal keeps
+  working, and `GET /api/v1/info` says `mcpShop`. `atlas_catalog_releases` takes `limit`.
+  This reverses the MCP exclusion of ADR-0428 and ADR-0429 §2
+  (ADR-draft-mcp-shop-customer-side).
+- **The handbooks can be searched.** The handbook and the shop handbook carry a search field
+  in their top bar: it lists the matching passages with chapter and heading, and choosing one
+  scrolls there, opens a folded block around it and marks the words. Only the language on
+  screen is searched, accents and ß need not be typed, `/` or Ctrl+K opens the field, and
+  `/handbuch.html?q=…` opens the page with a search. It runs in the browser on the page's own
+  text; nothing is sent to the server.
 - **A business rule task can check a file record by record.** With `<atlas:rowsFrom source="antrag"/>`
   (panel: *Over a file → Once per record of a file*) a business rule task evaluates its decision once
   for every record of an uploaded CSV document, in one job of the in-process DMN worker, instead of
@@ -301,6 +323,16 @@ directory gains the document store. Four changes can break what worked against 0
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A multi-instance body's collection fills round by round in the replay.** The replay showed
+  the output collection as it was seeded — `[null, …]` — in every round and filled only once
+  the loop had finished, because a round records only its element (ADR-0296) and that element
+  was not retained. It is now retained, the size of one result, in a column family of its own
+  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
+  linear in the round count. The instance timeline applies each element to the collection as
+  it stands, so a round shows the list the rounds before it left and its own answer at
+  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
+  this keep the old reading, and only there does the Environment still explain it
+  ([ADR-0549](docs/adr/0549-collection-by-round.md)).
 - **A new built-in Worker Type declares what a second delivery does.** Every new built-in
   Worker Type ships a manifest stating each operation's idempotency and effect, as an
   installed one must; `go test ./api` refuses one without it, and the 31 kinds released

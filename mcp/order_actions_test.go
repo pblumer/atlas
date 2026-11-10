@@ -9,11 +9,12 @@ import (
 	"testing"
 )
 
-// TestAnAgentAsksAnActionAsOperatorOrSystemOnly: the action tool proxies to the action
-// act with the trigger it names, and refuses a customer's action before any request
-// leaves the adapter — what a person asks of what they hold is theirs to ask
-// (ADR-0429, maintainers' decision of 2026-10-01). The server checks the same.
-func TestAnAgentAsksAnActionAsOperatorOrSystemOnly(t *testing.T) {
+// TestAnAgentAsksAnActionAsTheTriggerItNames: the action tool proxies to the action
+// act with the trigger it names — customer included, since the maintainers' decision
+// of 2026-11-10 (ADR-draft-mcp-shop-customer-side) — and refuses only a trigger no
+// server knows, before any request leaves the adapter. Whether the caller may ask as
+// that trigger is the server's to decide.
+func TestAnAgentAsksAnActionAsTheTriggerItNames(t *testing.T) {
 	var (
 		calls          int
 		gotMethod, got string
@@ -37,9 +38,14 @@ func TestAnAgentAsksAnActionAsOperatorOrSystemOnly(t *testing.T) {
 		}
 	}
 
-	text, isErr := toolText(t, result(t, callToolAgainstBackend(t, backend, "atlas_ask_order_line_action", args("customer"))))
-	if !isErr || !strings.Contains(text, "operator or system") || calls != 0 {
-		t.Fatalf("a customer trigger = %q (error %v, %d requests), want refused in the adapter", text, isErr, calls)
+	text, isErr := toolText(t, result(t, callToolAgainstBackend(t, backend, "atlas_ask_order_line_action", args("somebody"))))
+	if !isErr || !strings.Contains(text, "customer, operator or system") || calls != 0 {
+		t.Fatalf("an unknown trigger = %q (error %v, %d requests), want refused in the adapter", text, isErr, calls)
+	}
+
+	text, isErr = toolText(t, result(t, callToolAgainstBackend(t, backend, "atlas_ask_order_line_action", args("customer"))))
+	if isErr || calls != 1 || gotBody["trigger"] != "customer" {
+		t.Fatalf("a customer trigger = %q (error %v, %d requests, body %v), want it sent to the act", text, isErr, calls, gotBody)
 	}
 
 	text, isErr = toolText(t, result(t, callToolAgainstBackend(t, backend, "atlas_ask_order_line_action", args("system"))))

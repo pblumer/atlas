@@ -1,6 +1,10 @@
 package api
 
-import "github.com/pblumer/atlas/compiler"
+import (
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/model"
+)
 
 // What a scope in an instance's replay is (variableView.ScopeKind). The process scope
 // carries none.
@@ -33,4 +37,23 @@ func constantKind(cp *compiler.CompiledProcess, name string) string {
 		}
 	}
 	return constantKindProcess
+}
+
+// withListElement is the list a view holds with one element set, serialised the way
+// the engine's own fold serialises it (engine.setVariableElement), so the replay shows
+// the value the instance held. ok is false where the view holds no list the element
+// fits — not JSON, not a list, or an index outside it — the same cases the engine
+// leaves the collection untouched in.
+func withListElement(view variableView, el *model.VariableValue) (variableView, bool) {
+	if view.Kind != "json" {
+		return view, false
+	}
+	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, view.Value))
+	if !ok || el.Index < 0 || int(el.Index) >= len(elems) {
+		return view, false
+	}
+	elems[el.Index] = expr.FromStored(userToExprKind(el.Kind), el.Bool, el.Text)
+	_, _, text := expr.Classify(expr.ListOf(elems...))
+	view.Value = text
+	return view, true
 }

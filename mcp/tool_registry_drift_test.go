@@ -91,10 +91,30 @@ var mcpToolRoutes = map[string]string{
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
 	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",
-	// Asking for one, as an operator or the system only: the tool sends the trigger and
-	// the server refuses an action that does not declare it (maintainers' decision of
-	// 2026-10-01). A customer's action stays the person's, in the shop.
+	// Asking for one, as the caller: customer, operator or system. The server refuses an
+	// action that does not declare the trigger and a trigger the caller may not ask as,
+	// and — on a server started with --mcp-shop=false — a customer's action over MCP
+	// (ADR-draft-mcp-shop-customer-side, which reverses the decision of 2026-10-01).
 	"atlas_ask_order_line_action": "POST /api/v1/orders/{id}/lines/{item}/actions/{action}",
+	// The shop's customer side (ADR-draft-mcp-shop-customer-side): what a person does in
+	// the portal, as that person, refused over MCP by a server started with
+	// --mcp-shop=false.
+	"atlas_shop_catalogs":       "GET /api/v1/shop/catalogs",
+	"atlas_shop_catalog":        "GET /api/v1/shop/catalog",
+	"atlas_shop_form_query":     "POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query",
+	"atlas_place_order":         "POST /api/v1/orders",
+	"atlas_list_orders":         "GET /api/v1/orders",
+	"atlas_get_order":           "GET /api/v1/orders/{id}",
+	"atlas_order_ready_lines":   "GET /api/v1/orders/{id}/next",
+	"atlas_shop_tasks":          "GET /api/v1/shop/tasks",
+	"atlas_order_line_progress": "GET /api/v1/shop/orders/{id}/lines/{position}/progress",
+	"atlas_cancel_order":        "POST /api/v1/orders/{id}/cancel",
+	"atlas_cancel_order_line":   "POST /api/v1/orders/{id}/lines/{item}/cancel",
+	"atlas_amend_order_line":    "POST /api/v1/orders/{id}/lines/{item}/details",
+	"atlas_return_order_line":   "POST /api/v1/orders/{id}/lines/{item}/return",
+	"atlas_change_order_line":   "POST /api/v1/orders/{id}/lines/{item}/change",
+	"atlas_list_approvals":      "GET /api/v1/approvals",
+	"atlas_decide_approvals":    "POST /api/v1/approvals/decide",
 	// How what was asked ended (ADR-0429 §3). Reading changes nothing; reporting it
 	// is omitted below.
 	"atlas_order_line_outcomes":        "GET /api/v1/orders/{id}/lines/{item}/outcomes",
@@ -319,18 +339,10 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/catalogs/{id}/theme":                                   "an instance's appearance is an operator's choice, not an agent's",
 	"POST /api/v1/instances":                                            "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
 	"GET /api/v1/approvals/stalled":                                     "an operations list still settling with the portal around it; a tool is a public contract",
-	"POST /api/v1/orders/{id}/cancel":                                   "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
-	"POST /api/v1/orders/{id}/lines/{item}/cancel":                      "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
-	"POST /api/v1/orders/{id}/lines/{item}/details":                     "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
-	"POST /api/v1/orders/{id}/lines/{item}/change":                      "changing a right somebody holds reaches the target system like a return does; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome": "states how an action ended in a target system, which the process that carried it out reports, as a provisioning outcome is; an agent must not be able to assert it on that system's behalf",
-	"POST /api/v1/orders/{id}/lines/{item}/return":                      "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/fulfilment/repair":                             "a repair that ends running processes and starts others; it is an operator looking at their own installation and deciding, and the dry run exists so that a person reads the list first",
-	"GET /api/v1/shop/orders/{id}/lines/{position}/progress":            "gated on owning the order and on nothing else, so the answer depends on who is asking; an agent is nobody's orderer, and the instance surface it would otherwise need is already a tool",
 	"POST /api/v1/orders/{id}/lines/{item}/escalate":                    "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
 	"POST /api/v1/orders/{id}/lines/{item}/reassign":                    "same: an intervention records the person who made it, and an agent is not one",
-	"POST /api/v1/approvals/decide":                                     "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
-	"GET /api/v1/approvals":                                             "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
 	"GET /api/v1/approvals/{key}/logo":                                  "a brand mark is bytes for a browser; an agent has no use for the image",
 	"GET /api/v1/users/{id}/avatar":                                     "a picture of a person is bytes for a browser; an agent has no use for the image",
 	"PUT /api/v1/users/{id}/avatar":                                     "how a colleague appears to everybody else is a person's to choose, and an agent is not one; the bytes it would upload came from somewhere no record would name",
@@ -342,28 +354,23 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/catalog-products/{id}/content-images/{image}":          "an image of a product's description is bytes for a browser, same as its picture; an agent reads the rich description in the product record instead",
 	"PUT /api/v1/catalog-products/{id}/picture":                         "a product's picture is bytes for a browser, same as a brand mark; an agent has no image to upload",
 	"DELETE /api/v1/catalog-products/{id}/picture":                      "a product's picture is bytes for a browser, same as a brand mark; removing one is a maintainer's decision about how the catalogue looks",
-	// Ordering, for the same reason. An order is also somebody's own: the handler
-	// confines reads to the orders you placed or are the recipient of, and a tool
-	// acting as a server identity would have no such person to be.
-	"GET /api/v1/shop/tasks":    "one person's view of their own orders and the tasks they hold in them, drawn beside those orders in the shop; an agent is nobody's orderer, and the task tools already reach any task by key",
-	"GET /api/v1/shop/catalog":  "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
-	"GET /api/v1/shop/catalogs": "which catalogues are *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
 	// The inventory. Same shape as the catalogue above — it answers about the
 	// caller — with one more reason on top: a list of somebody's access is exactly
 	// the read that should need a person behind it, and an agent acting as a server
 	// identity is not one. The ?principal= form an administrator uses would hand
 	// every agent the whole estate's access map through one tool call.
-	"GET /api/v1/inventory":   "what one person holds; an agent has no inventory of its own, and the administrator's form of it reads somebody else's access",
-	"POST /api/v1/orders":     "portal ordering surface still being built; a tool is a public contract",
-	"GET /api/v1/orders":      "portal ordering surface still being built, and an order is read as the person who placed it",
-	"GET /api/v1/orders/{id}": "portal ordering surface still being built, and an order is read as the person who placed it",
-	// The orchestrator pair. These drive real provisioning, and an agent that
+	"GET /api/v1/inventory": "what one person holds; an agent has no inventory of its own, and the administrator's form of it reads somebody else's access",
+	// The orchestrator's report. It drives real provisioning, and an agent that
 	// could report a line as provisioned could make an order say something no
 	// target system ever did — the one place in this surface where a wrong call
-	// is not a wrong answer but a wrong record.
-	"GET /api/v1/orders/{id}/next":                   "orchestrator call; the ordering surface is still being built",
-	"POST /api/v1/orders/{id}/lines/{item}":          "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
-	"POST /api/v1/orders/{id}/lines/{item}/decision": "records somebody's refusal of a request; an agent must not be able to decide on a person's behalf, and the record is kept forever",
+	// is not a wrong answer but a wrong record. Its read half, /next, is a tool.
+	"POST /api/v1/orders/{id}/lines/{item}": "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
+	// The approval process's record of a decision. It takes the approver's name as a
+	// field, so it records whoever the caller writes there: an agent approving as the
+	// person it acts for does so through the person's own approvals
+	// (atlas_decide_approvals, atlas_complete_task), which record the caller
+	// (ADR-draft-mcp-shop-customer-side).
+	"POST /api/v1/orders/{id}/lines/{item}/decision": "records a decision under whatever name the body gives, which is the approval process's call; an agent approves as the person it acts for through atlas_decide_approvals or the approval task, which record the caller",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is
@@ -1058,13 +1065,12 @@ var mcpOmittedRoutes = map[string]string{
 	// task submits the entry's id, and completion checks it against the directory the
 	// same way it checks a person's — so the agent loses nothing it needs, and the
 	// directory behind a Worker's credential is not made browsable by a tool.
-	"POST /api/v1/tasks/{key}/form-data/{field}/query":                          "a person's interactive directory search inside a task form; an agent submits the id and completion verifies it",
-	"POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query": "a person's interactive directory search inside a product's order form; an agent places the order with the value and placement verifies it (ADR-0473, amended)",
-	"GET /api/v1/form-data/sources":                                             "the form editor's picker feed for a directory field; an agent authors the form's atlasDataSource and the save checks it",
-	"GET /api/v1/form-data/decisions":                                           "the form editor's picker feed for a field whose options come from a decision; an agent lists decisions with atlas_deployed_decisions and authors the form's atlasDecision, which the save checks",
-	"POST /api/v1/form-data/decisions/{decisionId}/options":                     "the form editor's preview of a decision against an author's inputs; an agent evaluates a model with atlas_try_decision",
-	"POST /api/v1/forms/{id}/fields/{field}/options":                            "what a rendered form asks for a field as a person chooses in the fields it is bound to; an agent reads the form and the deployed model, and completion checks the submitted value",
-	"POST /api/v1/forms/{id}/fields/{field}/availability":                       "what a rendered form asks while a person types a name; it needs a signed-in person, and the provisioning process an agent starts checks the name again",
+	"POST /api/v1/tasks/{key}/form-data/{field}/query":      "a person's interactive directory search inside a task form; an agent submits the id and completion verifies it",
+	"GET /api/v1/form-data/sources":                         "the form editor's picker feed for a directory field; an agent authors the form's atlasDataSource and the save checks it",
+	"GET /api/v1/form-data/decisions":                       "the form editor's picker feed for a field whose options come from a decision; an agent lists decisions with atlas_deployed_decisions and authors the form's atlasDecision, which the save checks",
+	"POST /api/v1/form-data/decisions/{decisionId}/options": "the form editor's preview of a decision against an author's inputs; an agent evaluates a model with atlas_try_decision",
+	"POST /api/v1/forms/{id}/fields/{field}/options":        "what a rendered form asks for a field as a person chooses in the fields it is bound to; an agent reads the form and the deployed model, and completion checks the submitted value",
+	"POST /api/v1/forms/{id}/fields/{field}/availability":   "what a rendered form asks while a person types a name; it needs a signed-in person, and the provisioning process an agent starts checks the name again",
 
 	// Decision drafts (ADR-0321): the Modeler's holding place for a
 	// decision an author has not finished. Its whole purpose is that nothing else

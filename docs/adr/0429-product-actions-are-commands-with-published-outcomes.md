@@ -1,6 +1,6 @@
 # ADR-0429: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
 
-- **Status:** Accepted (amended 2026-10-01 — the points left open are decided at acceptance; see §10; amended 2026-11-03 — a third shop send task mode, `order`, admitted by `orderableBy`, ADR-0520)
+- **Status:** Accepted (amended 2026-10-01 — the points left open are decided at acceptance; see §10; amended 2026-11-03 — a third shop send task mode, `order`, admitted by `orderableBy`, ADR-0520; amended 2026-11-10 — a customer's action may be asked through MCP as the connected person, unless the server switches it off, [ADR-draft-mcp-shop-customer-side](draft-mcp-shop-customer-side.md))
 - **Implementation:** Partial
 - **Date:** 2026-09-30
 - **Deciders:** Atlas maintainers
@@ -260,6 +260,12 @@ triggers the caller asks as — and refuses one the action does not declare, or 
 what an operator or an observer asks for, and never for a customer's action, which stays
 the person's in the shop. That lifts ADR-0428's exclusion for those two triggers only, and
 the server, not the adapter, is what holds the line.
+*Amended 2026-11-10:* the maintainers reversed that exclusion. `atlas_ask_order_line_action`
+takes `trigger: customer` too, and asks as the person whose credential the MCP connection
+carries, under the checks above; the adapter refuses only a trigger no server knows. A server
+started with `--mcp-shop=false` refuses `customer`, or no trigger, to a request that comes
+through MCP, and still takes `operator` and `system`
+([ADR-draft-mcp-shop-customer-side](draft-mcp-shop-customer-side.md)).
 
 ### 3. The outcome is a fact
 

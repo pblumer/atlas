@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -511,9 +512,8 @@ func catalogTools() []Tool {
 				"instance per position, whether the action is possible right now is the " +
 				"process's answer, read from where its instance stands. Each action carries its " +
 				"key, effect, triggers, labels, form, `available` and, when it is not, `why`. " +
-				"READ-ONLY. To ask for an operator's or a system's action use " +
-				"atlas_ask_order_line_action; a customer's action is the person's to ask for, " +
-				"in the shop.",
+				"READ-ONLY. To ask for one use atlas_ask_order_line_action; a change keyed " +
+				"`change` also goes through atlas_change_order_line.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -574,17 +574,21 @@ func catalogTools() []Tool {
 		},
 		{
 			Name: "atlas_ask_order_line_action",
-			Description: "Ask one held order position for an action its product declares for an " +
-				"OPERATOR or the SYSTEM (ADR-0429) — a password reset an operator runs, a " +
-				"threshold crossing an observer reports. It reaches the target system: the " +
+			Description: "Ask one held order position for an action its product declares " +
+				"(ADR-0429): as a CUSTOMER — a larger mailbox, a password reset the person asks " +
+				"for what they hold — or as an OPERATOR or the SYSTEM — a reset an operator runs, " +
+				"a threshold crossing an observer reports. It reaches the target system: the " +
 				"action is delivered to the process that carries the right, which acts on it. " +
-				"Customer actions are NOT available here, by the maintainers' decision: what a " +
-				"person asks of what they hold is theirs to ask in the shop. The server refuses " +
-				"(403) an action that does not declare the trigger you name, and a caller who is " +
-				"not an operator. Read atlas_order_line_actions first: it says which actions exist " +
-				"and whether the position takes each NOW — a 409 means it does not. commandId " +
-				"makes a retry answer with the first outcome instead of asking twice: reuse it " +
-				"when you retry, and choose a new one only for a new request.",
+				"You ask as yourself, with your own rights: as customer whoever placed the order " +
+				"or holds the position (or an operator), as operator or system only an operator. " +
+				"The server refuses (403) an action that does not declare the trigger you name, " +
+				"and a trigger you may not ask as. A server may have switched customer actions " +
+				"off for agents (--mcp-shop=false): it then answers 403 naming that setting for " +
+				"trigger customer, and operator and system still work. Read " +
+				"atlas_order_line_actions first: it says which actions exist and whether the " +
+				"position takes each NOW — a 409 means it does not. commandId makes a retry " +
+				"answer with the first outcome instead of asking twice: reuse it when you " +
+				"retry, and choose a new one only for a new request.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -597,9 +601,10 @@ func catalogTools() []Tool {
 					"action":    map[string]any{"type": "string", "description": "The action's key, e.g. password-reset."},
 					"commandId": map[string]any{"type": "string", "description": "Idempotency id for this request."},
 					"trigger": map[string]any{
-						"type": "string", "enum": []any{"operator", "system"},
-						"description": "Which of the action's triggers you ask as: operator for a " +
-							"person running the service, system for an observed condition.",
+						"type": "string", "enum": []any{"customer", "operator", "system"},
+						"description": "Which of the action's triggers you ask as: customer for " +
+							"the person who ordered or holds the position, operator for a person " +
+							"running the service, system for an observed condition.",
 					},
 					"reason":    map[string]any{"type": "string", "description": "Why; it reaches the process."},
 					"variables": map[string]any{"type": "object", "description": "What the action needs."},
@@ -627,11 +632,13 @@ func catalogTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				// Checked here as well as by the server, so a customer's action is refused
-				// before any request leaves the adapter.
-				if trigger != "operator" && trigger != "system" {
-					return "", fmt.Errorf("trigger must be operator or system; a customer's action " +
-						"is the person's to ask for, not an agent's")
+				// Whether a customer's action may be asked over MCP is the server's
+				// decision (--mcp-shop, ADR-draft-mcp-shop-customer-side); the adapter
+				// only refuses what no server would understand.
+				switch trigger {
+				case "customer", "operator", "system":
+				default:
+					return "", fmt.Errorf("trigger must be customer, operator or system")
 				}
 				body := map[string]any{"commandId": commandID, "trigger": trigger}
 				if reason, ok := args["reason"].(string); ok && reason != "" {
@@ -747,13 +754,28 @@ func catalogTools() []Tool {
 				"when it was published, which is what lets an order placed last month stay " +
 				"answerable after this month's edits. Read this to see what the shop is actually " +
 				"offering, as opposed to what the catalogue currently says.",
-			InputSchema: catalogIDArg("The catalogue whose releases to list."),
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": stringProp("The catalogue whose releases to list."),
+					"limit": map[string]any{"type": "integer", "description": "Answer only this many of " +
+						"the newest; 1 is the release the shop offers, whose id an order names. A " +
+						"catalogue that is published often has hundreds."},
+				},
+				"required": []any{"id"},
+			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				id, err := argString(args, "id")
 				if err != nil {
 					return "", err
 				}
-				return asText(c.get(withID(id, "/releases")))
+				path := withID(id, "/releases")
+				if n, ok, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if ok {
+					path += "?limit=" + strconv.FormatUint(n, 10)
+				}
+				return asText(c.get(path))
 			},
 		},
 		{

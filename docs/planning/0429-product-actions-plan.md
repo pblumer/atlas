@@ -154,7 +154,9 @@ lost an event-based gateway's race now answers "not waiting" (it answered "deliv
 **MCP (decided 2026-10-01):** `atlas_order_line_actions` reads the availability and
 `atlas_ask_order_line_action` asks for an `operator` or `system` action; the act's optional
 `trigger` field is what the server checks, so a customer's action cannot be asked by an
-agent.
+agent. **Reversed 2026-11-10:** an agent asks a customer's action too, as the person it is
+connected as, unless the server was started with `--mcp-shop=false`
+([ADR-draft-mcp-shop-customer-side](../adr/draft-mcp-shop-customer-side.md)).
 **Not in this slice:** the Console's surface for operator actions, because the Console has
 no order view to put it in — operators use the route (and, for reading, the MCP tool
 `atlas_order_line_actions`) until one exists.

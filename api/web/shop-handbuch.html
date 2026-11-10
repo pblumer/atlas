@@ -298,12 +298,12 @@ th{color:var(--muted);font-weight:600}
     <tr><td><code>change</code></td><td data-l="de">Ändern, das Recht bleibt (Badge sperren); meldet mit einer Shop-Aufgabe <code>completed</code>.</td><td data-l="en">Change, the right stays (block the badge); reports <code>completed</code> with a shop task.</td></tr>
     <tr><td><code>service</code></td><td data-l="de">Dienstleistung an der Position (Ersatzbadge); meldet ebenfalls mit einer Shop-Aufgabe.</td><td data-l="en">A service on the position (replacement badge); also reports with a shop task.</td></tr>
   </table>
-  <p data-l="de">Auslöser sind <code>customer</code> (die Person im Shop), <code>operator</code> (der Betrieb, auch über
-    MCP) und <code>system</code> (ein anderer Prozess). Jede Aktion ist ein Nachrichtenstart des Prozesses; die
+  <p data-l="de">Auslöser sind <code>customer</code> (die Person im Shop, auch über MCP als diese Person),
+    <code>operator</code> (der Betrieb, auch über MCP) und <code>system</code> (ein anderer Prozess). Jede Aktion ist ein Nachrichtenstart des Prozesses; die
     Veröffentlichung prüft, dass es ihn gibt und dass jede Änderung und jeder Service von einer Shop-Aufgabe
     beantwortet wird. Diese Form lohnt sich, sobald ein Produkt mehr kann als kommen und gehen.</p>
-  <p data-l="en">Triggers are <code>customer</code> (the person in the shop), <code>operator</code> (operations, also
-    over MCP) and <code>system</code> (another process). Each action is a message start of the process; publishing
+  <p data-l="en">Triggers are <code>customer</code> (the person in the shop, also over MCP as that person),
+    <code>operator</code> (operations, also over MCP) and <code>system</code> (another process). Each action is a message start of the process; publishing
     checks it exists and that every change and service is answered by a shop task. This form pays off as soon as a
     product can do more than come and go.</p>
   <h3 data-l="de">Was jeder Produktprozess bekommt</h3><h3 data-l="en">What every product process receives</h3>
@@ -397,8 +397,16 @@ th{color:var(--muted);font-weight:600}
     <li data-l="en"><b>Event feed.</b> Every action and every right granted and removed is a CloudEvent that another
       system can pull (<code>GET /api/v1/events</code>) or have delivered (a worker of type "CloudEvents endpoint"),
       narrowed to catalogues if wanted.</li>
-    <li data-l="de"><b>Agenten.</b> Über MCP lassen sich Kataloge pflegen, importieren und veröffentlichen.</li>
-    <li data-l="en"><b>Agents.</b> Over MCP, catalogues can be maintained, imported and published.</li>
+    <li data-l="de"><b>Agenten.</b> Über MCP lassen sich Kataloge pflegen, importieren und veröffentlichen. Ein
+      Agent, der als eine Person verbunden ist, kann ausserdem in ihrem Namen und mit genau ihren Rechten im Shop
+      bestellen, Bestellungen verfolgen, zurückziehen, korrigieren, zurückgeben und ändern und ihre Genehmigungen
+      entscheiden. Wer das nicht will, startet den Server mit <code>--mcp-shop=false</code>: Dann lehnt er diese
+      Aufrufe über MCP ab, und der Shop im Browser funktioniert weiter.</li>
+    <li data-l="en"><b>Agents.</b> Over MCP, catalogues can be maintained, imported and published. An agent connected
+      as a person can also order in the shop in that person's name and with exactly their rights, follow, withdraw,
+      correct, return and change orders and decide their approvals. An installation that does not want that starts
+      the server with <code>--mcp-shop=false</code>: it then refuses those calls over MCP, and the shop in the browser
+      keeps working.</li>
   </ul>
 </section>
 
@@ -983,5 +991,7 @@ document.getElementById("lang-en").addEventListener("click", () => setLang("en")
   load();
 })();
 </script>
+<!-- Full-text search in the top bar, for readers who do not know Ctrl+F (handbook-search.js). -->
+<script type="module" src="handbook-search.js"></script>
 </body>
 </html>
