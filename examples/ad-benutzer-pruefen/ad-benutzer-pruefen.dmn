@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AdBenutzerGueltig: die Regeln, an denen ein Konto aus dem Active Directory gemessen
+  wird (docs/planning/ad-search-as-document.md, S2).
+
+  Der Business-Rule-Task "Konten prüfen" wertet diese Entscheidung einmal je Zeile der
+  Datei aus, die die AD-Suche geschrieben hat. Die Spalten der Datei treten unter
+  ihrem Namen in die Entscheidung ein: userAccountControl, mail, department, memberOf
+  (dazu dn und sAMAccountName, die hier keine Regel braucht). Jede Zelle ist Text.
+
+    * kontoAktiv       Bit 2 (ACCOUNTDISABLE) von userAccountControl ist nicht gesetzt.
+                       FEEL kennt keine Bitoperationen; modulo(floor(x / 2), 2) liest
+                       das zweite Bit. Ein leerer Wert gilt als nicht aktiv.
+    * mailGesetzt      die Zelle mail enthält ein "@".
+    * abteilungBekannt department ist eine der Abteilungen der Liste.
+    * lizenzEindeutig  genau eine Gruppe in memberOf beginnt mit "CN=Lizenz-". Eine
+                       Zelle mit mehreren Werten ist durch | getrennt, also wird sie mit
+                       split(memberOf, "[|]") aufgeteilt. Die eckigen Klammern machen
+                       aus dem | ein gewöhnliches Zeichen, ohne Escape im FEEL-String.
+    * valid            alle vier Regeln erfüllt; das Feld, das der Task als Urteil
+                       liest (validOutput, Vorgabe "valid").
+
+  Wie bei RowValid (pruefe-datensaetze.dmn) trifft die eine Regel immer zu, und die
+  Logik steht in den Ausgabespalten. Ein Konto mit Befund wird so nicht nur als
+  ungültig gemeldet, sondern mit den Regeln, die es verletzt: die übrigen Ausgaben
+  stehen in der Ergebnisdatei und in der Stichprobe der Zusammenfassung.
+
+  Die Liste der Abteilungen und die Lizenzgruppen sind Annahmen dieses Beispiels.
+  Eine echte Prüfung nimmt sie aus den Regeln, die die Qualitätsverantwortliche
+  durchsetzen will.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_adbenutzer" name="ad-benutzer-pruefen" namespace="http://atlas/dmn">
+  <itemDefinition id="tBefund" name="tBefund">
+    <itemComponent id="tBefund_kontoAktiv" name="kontoAktiv"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_mailGesetzt" name="mailGesetzt"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_abteilungBekannt" name="abteilungBekannt"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_lizenzEindeutig" name="lizenzEindeutig"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_valid" name="valid"><typeRef>boolean</typeRef></itemComponent>
+  </itemDefinition>
+  <inputData id="id_uac" name="userAccountControl"><variable id="var_uac" name="userAccountControl" typeRef="string"/></inputData>
+  <inputData id="id_mail" name="mail"><variable id="var_mail" name="mail" typeRef="string"/></inputData>
+  <inputData id="id_department" name="department"><variable id="var_department" name="department" typeRef="string"/></inputData>
+  <inputData id="id_memberOf" name="memberOf"><variable id="var_memberOf" name="memberOf" typeRef="string"/></inputData>
+  <decision id="AdBenutzerGueltig" name="AdBenutzerGueltig">
+    <variable id="var_AdBenutzerGueltig" name="AdBenutzerGueltig" typeRef="tBefund"/>
+    <informationRequirement id="ir_uac"><requiredInput href="#id_uac"/></informationRequirement>
+    <informationRequirement id="ir_mail"><requiredInput href="#id_mail"/></informationRequirement>
+    <informationRequirement id="ir_department"><requiredInput href="#id_department"/></informationRequirement>
+    <informationRequirement id="ir_memberOf"><requiredInput href="#id_memberOf"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in_uac" label="userAccountControl"><inputExpression id="ie_uac" typeRef="string"><text>userAccountControl</text></inputExpression></input>
+      <input id="in_mail" label="mail"><inputExpression id="ie_mail" typeRef="string"><text>mail</text></inputExpression></input>
+      <input id="in_department" label="department"><inputExpression id="ie_department" typeRef="string"><text>department</text></inputExpression></input>
+      <input id="in_memberOf" label="memberOf"><inputExpression id="ie_memberOf" typeRef="string"><text>memberOf</text></inputExpression></input>
+      <output id="o_aktiv" label="kontoAktiv" name="kontoAktiv" typeRef="boolean"/>
+      <output id="o_mail" label="mailGesetzt" name="mailGesetzt" typeRef="boolean"/>
+      <output id="o_abteilung" label="abteilungBekannt" name="abteilungBekannt" typeRef="boolean"/>
+      <output id="o_lizenz" label="lizenzEindeutig" name="lizenzEindeutig" typeRef="boolean"/>
+      <output id="o_valid" label="valid" name="valid" typeRef="boolean"/>
+      <rule id="r1">
+        <inputEntry id="e1"><text>-</text></inputEntry>
+        <inputEntry id="e2"><text>-</text></inputEntry>
+        <inputEntry id="e3"><text>-</text></inputEntry>
+        <inputEntry id="e4"><text>-</text></inputEntry>
+        <outputEntry id="oe1"><text>modulo(floor(number(userAccountControl) / 2), 2) = 0</text></outputEntry>
+        <outputEntry id="oe2"><text>contains(mail, "@")</text></outputEntry>
+        <outputEntry id="oe3"><text>list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], department)</text></outputEntry>
+        <outputEntry id="oe4"><text>count(split(memberOf, "[|]")[starts with(item, "CN=Lizenz-")]) = 1</text></outputEntry>
+        <outputEntry id="oe5"><text>modulo(floor(number(userAccountControl) / 2), 2) = 0 and contains(mail, "@") and list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], department) and count(split(memberOf, "[|]")[starts with(item, "CN=Lizenz-")]) = 1</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

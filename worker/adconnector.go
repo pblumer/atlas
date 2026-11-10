@@ -62,7 +62,9 @@ func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretReso
 	}
 	// Every AD operation but sync writes to the directory rather than back to a
 	// variable, and returns nothing; sync returns the changes and the next cookie.
-	return ad.Run(ctx, task, dialer, secret, dirs)
+	// A search written as a document stores it through the job's lease, as every
+	// document a Worker Instance writes (ADR-0543).
+	return ad.RunWithDocuments(ctx, task, dialer, secret, dirs, sdkDocuments{})
 }
 
 // adDirEnvPrefix is where an AD worker's configured directories live.

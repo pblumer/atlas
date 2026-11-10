@@ -423,7 +423,8 @@ type BusinessRuleTaskDetail struct {
 // <atlas:rowsFrom> on the task and read only by the in-process DMN worker, never on
 // the run loop, so its fields are plain values rather than interned indices.
 type DecisionRows struct {
-	// Source is the process variable holding the reference to the document to read.
+	// Source is the process variable holding the reference to the document to read, or a
+	// dotted path to a field inside one ("benutzer.document").
 	Source string
 	// Delimiter is the CSV field separator, one character; empty means ",".
 	Delimiter string
@@ -847,6 +848,13 @@ type ConnectorTaskDetail struct {
 	LdapPageSize         int32
 	LdapMaxEntries       int32
 	LdapClientCertSecret int32
+	// LdapSelect is a search's interned attribute selection ("cn,mail"; "" for the
+	// server's default set). LdapAsDocument writes the search into a CSV document
+	// named LdapDocumentName (interned) instead of into the result variable
+	// (docs/planning/ad-search-as-document.md, S3).
+	LdapSelect       int32
+	LdapAsDocument   bool
+	LdapDocumentName int32
 	// SOAP worker fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
 	// web-service URL (from the WSDL's soap:address) — a literal-or-FEEL value evaluated
 	// over the instance's variables at call time. SoapOp is the interned operation name,
@@ -921,6 +929,11 @@ type ConnectorTaskDetail struct {
 	AdAttributes RestExpr
 	AdSelect     int32
 	AdFoundVar   int32
+	// AdAsDocument makes a search write its entries into a CSV document, one row per
+	// entry, rather than into the result variable; AdDocumentName is the interned file
+	// name (docs/planning/ad-search-as-document.md).
+	AdAsDocument   bool
+	AdDocumentName int32
 	// Generic SQL worker fields (JobType == SqlJobType, ADR-0173). Worker
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is
@@ -942,6 +955,12 @@ type ConnectorTaskDetail struct {
 	SqlStatement int32
 	SqlParamsVar int32
 	SqlMaxRows   int32
+	// SqlAsDocument writes a query's rows into a CSV document named SqlDocumentName
+	// (interned) instead of into the result variable; SqlMaxRows is then the document
+	// form's cap, 0 for none but the document limit
+	// (docs/planning/ad-search-as-document.md, S3).
+	SqlAsDocument   bool
+	SqlDocumentName int32
 	// Microsoft Entra ID worker fields (JobType == EntraJobType, ADR-0172).
 	// Worker (above) names the tenant the *worker* is configured for; a task
 	// carries no tenant id and no client secret, because they never enter the engine.

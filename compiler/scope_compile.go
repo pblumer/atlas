@@ -1197,8 +1197,13 @@ func decisionRows(taskID string, x *xmlRowsFrom) (*DecisionRows, error) {
 	if source == "" {
 		return nil, fail("names no source variable")
 	}
-	if !isPlainVariableName(source) {
-		return nil, fail("source %q is not a variable name; name the variable that holds the uploaded file", source)
+	// A variable, or a field inside one — "benutzer.document" is where an AD search
+	// written as a document puts its reference, and naming it directly saves the model
+	// a step that only copies it.
+	for _, part := range strings.Split(source, ".") {
+		if !isPlainVariableName(part) {
+			return nil, fail("source %q is not a variable name or a path of field names (antrag, or benutzer.document); name where the reference to the file is", source)
+		}
 	}
 	r := &DecisionRows{
 		Source:        source,
