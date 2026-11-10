@@ -1,14 +1,18 @@
 package engine_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // logBytes is how much this run wrote to the write-ahead log.
@@ -180,5 +184,78 @@ func TestAnIterationResultTooLargeParksItsRound(t *testing.T) {
 	}
 	if pi, _ := counts(t, h.store); pi != 1 {
 		t.Errorf("process instances = %d, want the instance still standing", pi)
+	}
+}
+
+// elementTrail is every retained element write of an instance, as "scope:index=value"
+// in change order per scope. The body's key is one the run generated, so every key it
+// could have generated is asked.
+func elementTrail(t *testing.T, s *state.Store, pi uint64) []string {
+	t.Helper()
+	var out []string
+	for seq := uint64(1); seq <= 200; seq++ {
+		scope := model.NewKey(1, seq)
+		if err := s.VariableElementHistory(pi, scope, func(_ int64, _ uint64, v *model.VariableValue) error {
+			out = append(out, fmt.Sprintf("%d:%d=%s", seq, v.Index, v.Text))
+			return nil
+		}); err != nil {
+			t.Fatalf("VariableElementHistory: %v", err)
+		}
+	}
+	return out
+}
+
+// TestEachRoundsElementIsRetainedAndRecovers: a round's result joins the body's
+// collection as one element (ADR-0296), and the element is retained so the replay can
+// show the collection as each round left it (ADR-0549). One row
+// per round, the element alone — and replaying the log into an empty store rebuilds
+// the identical rows, because the fold writes them from the event and the batch's own
+// state (I4).
+func TestEachRoundsElementIsRetainedAndRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp := miCollectProcess(t, "[1, 2, 3]", true)
+	clock := &manualClock{}
+
+	h := openHarness(t, dir)
+	p := engine.New(1, h.log, h.store, clock)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	pi := model.NewKey(1, 1)
+	live := elementTrail(t, h.store, pi)
+	if len(live) != 3 {
+		t.Fatalf("retained elements = %v, want one per round", live)
+	}
+	for i, want := range []string{"=10", "=20", "=30"} {
+		if !strings.HasSuffix(live[i], fmt.Sprintf(":%d%s", i, want)) {
+			t.Errorf("element %d = %q, want index %d%s", i, live[i], i, want)
+		}
+	}
+	h.close(t)
+
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	defer func() {
+		_ = store2.Close()
+		_ = log2.Close()
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover (replay): %v", err)
+	}
+	if replayed := elementTrail(t, store2, pi); !reflect.DeepEqual(replayed, live) {
+		t.Errorf("replayed elements = %v, want %v", replayed, live)
 	}
 }

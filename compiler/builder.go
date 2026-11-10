@@ -1502,6 +1502,11 @@ type LdapConfig struct {
 	MaxEntries       int32
 	ClientCertSecret string
 	Retries          int32
+	// Select is a search's normalized attribute selection ("" for the server's
+	// default set); AsDocument and DocumentName write the search as a CSV document.
+	Select       string
+	AsDocument   bool
+	DocumentName string
 }
 
 // AddLdapConnectorTask adds a generic LDAP task and returns its element id.
@@ -1538,6 +1543,9 @@ func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 		LdapPageSize:         cfg.PageSize,
 		LdapMaxEntries:       cfg.MaxEntries,
 		LdapClientCertSecret: b.intern(cfg.ClientCertSecret),
+		LdapSelect:           b.intern(cfg.Select),
+		LdapAsDocument:       cfg.AsDocument,
+		LdapDocumentName:     b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1630,6 +1638,10 @@ type AdConfig struct {
 	Attributes RestExpr
 	Select     string
 	FoundVar   string
+	// AsDocument makes a search write its entries into a CSV document named
+	// DocumentName instead of into the result variable.
+	AsDocument   bool
+	DocumentName string
 }
 
 // AddAdConnectorTask adds an Active Directory task and returns its element
@@ -1678,6 +1690,8 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		AdAttributes:     cfg.Attributes,
 		AdSelect:         b.intern(cfg.Select),
 		AdFoundVar:       b.intern(cfg.FoundVar),
+		AdAsDocument:     cfg.AsDocument,
+		AdDocumentName:   b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1703,6 +1717,9 @@ type SqlConfig struct {
 	MaxRows   int32
 	ResultVar string
 	Retries   int32
+	// AsDocument writes a query's rows into a CSV document named DocumentName.
+	AsDocument   bool
+	DocumentName string
 }
 
 // AddSqlConnectorTask adds a SQL task of cfg's product and returns its
@@ -1715,20 +1732,22 @@ type SqlConfig struct {
 func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:      b.intern(cfg.JobType),
-		Connector:    b.intern(cfg.Connector),
-		Subject:      -1, // not a clio task
-		EventType:    -1,
-		ClioQuery:    -1,
-		ReduceSpec:   -1,
-		Method:       -1, // a SQL operation, not an HTTP method, is authored
-		Auth:         -1, // the DSN lives on the worker; there is nothing to reference
-		ResultVar:    b.intern(cfg.ResultVar),
-		Retries:      cfg.Retries,
-		SqlOp:        b.intern(cfg.Op),
-		SqlStatement: b.intern(cfg.Statement),
-		SqlParamsVar: b.intern(cfg.ParamsVar),
-		SqlMaxRows:   cfg.MaxRows,
+		JobType:         b.intern(cfg.JobType),
+		Connector:       b.intern(cfg.Connector),
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // a SQL operation, not an HTTP method, is authored
+		Auth:            -1, // the DSN lives on the worker; there is nothing to reference
+		ResultVar:       b.intern(cfg.ResultVar),
+		Retries:         cfg.Retries,
+		SqlOp:           b.intern(cfg.Op),
+		SqlStatement:    b.intern(cfg.Statement),
+		SqlParamsVar:    b.intern(cfg.ParamsVar),
+		SqlMaxRows:      cfg.MaxRows,
+		SqlAsDocument:   cfg.AsDocument,
+		SqlDocumentName: b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -2106,6 +2125,11 @@ type CsvConfig struct {
 	Format    string
 	Operation string
 	Widths    []int32
+	// Corrections and Drop name apply-corrections' input variables, DocumentName the
+	// file it writes (empty → the source's name with .corrected.csv).
+	Corrections  string
+	Drop         string
+	DocumentName string
 }
 
 // AddCsvConnectorTask adds a CSV-to-JSON task and returns its element
@@ -2123,24 +2147,27 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 		cols = append(cols, b.intern(c))
 	}
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:      b.intern(CsvImportJobType),
-		Connector:    -1, // CSV carries its layout in the model, not a registry name
-		Subject:      -1,
-		EventType:    -1,
-		ClioQuery:    -1,
-		ReduceSpec:   -1,
-		Method:       -1,
-		ResultVar:    -1, // CSV uses its own CsvResult field, not the REST/clio one
-		Auth:         -1,
-		CsvSource:    b.intern(cfg.Source),
-		CsvResult:    b.intern(cfg.Result),
-		CsvFormat:    b.intern(cfg.Format),
-		CsvOperation: b.intern(cfg.Operation),
-		CsvWidths:    cfg.Widths,
-		CsvDelimiter: b.intern(cfg.Delimiter),
-		CsvHasHeader: cfg.HasHeader,
-		CsvColumns:   cols,
-		Retries:      cfg.Retries,
+		JobType:         b.intern(CsvImportJobType),
+		Connector:       -1, // CSV carries its layout in the model, not a registry name
+		Subject:         -1,
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1,
+		ResultVar:       -1, // CSV uses its own CsvResult field, not the REST/clio one
+		Auth:            -1,
+		CsvSource:       b.intern(cfg.Source),
+		CsvResult:       b.intern(cfg.Result),
+		CsvFormat:       b.intern(cfg.Format),
+		CsvOperation:    b.intern(cfg.Operation),
+		CsvWidths:       cfg.Widths,
+		CsvDelimiter:    b.intern(cfg.Delimiter),
+		CsvHasHeader:    cfg.HasHeader,
+		CsvColumns:      cols,
+		Retries:         cfg.Retries,
+		CsvCorrections:  b.intern(cfg.Corrections),
+		CsvDrop:         b.intern(cfg.Drop),
+		CsvDocumentName: b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

@@ -636,6 +636,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0546](0546-new-built-in-worker-types-ship-a-manifest.md) | Every new built-in Worker Type ships a manifest that declares its operations' idempotency and effect | Accepted | Landed |
 | [0547](0547-refuse-forbidden-sequence-flow-shapes.md) | Refuse the sequence-flow shapes BPMN forbids, and locate element-local compile errors | Accepted | Landed |
 | [0548](0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md) | Bulk validation evaluates a decision per row inside one job, not one token per row | Proposed | Partial |
+| [0549](0549-collection-by-round.md) | A loop's collection is retained one element per round | Accepted | Landed |
+| [0550](0550-mcp-shop-customer-side.md) | The shop's customer side is offered over MCP, as the connected person, unless the server switches it off | Accepted | Landed |
 
 ## The two states of a record
 

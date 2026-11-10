@@ -81,7 +81,11 @@ const (
 	cfOutlineHidden          columnFamily = 0x45 // outlineHidden:<piKey>:<elKey> → owning iteration elKey(8); an element inside an MI iteration (ADR-0517)
 	cfIterationStep          columnFamily = 0x46 // iterStep:<piKey>:<iterationElKey>:<ts>:<pos> → step inside one MI iteration (ADR-0517, OHS3 replay window)
 	cfScopeTrigger           columnFamily = 0x47 // scopeTrig:<scopeKey>:<triggerElKey> → nil; an armed event-subprocess trigger of a scope (ADR-0082, #1494)
-	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
+	// One element of a multi-instance body's output collection, as a round set it: the
+	// element alone, so the history stays linear in the round count (ADR-0296,
+	// ADR-0549). Keyed under the instance so a purge reaches it.
+	cfVariableElementSnapshot columnFamily = 0x48 // varElemSnap:<piKey>:<scopeKey>:<ts>:<pos> → VariableValue (element; Index set)
+	cfJobTake                 columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -488,6 +492,28 @@ func keyVariableSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
 // scope, in change order.
 func variableSnapshotScopePrefix(scopeKey uint64) []byte {
 	return appendBE64([]byte{byte(cfVariableSnapshot)}, scopeKey)
+}
+
+// keyVariableElementSnapshot keys one retained element write of a list variable. The
+// instance leads so a purge drops every element of it with one prefix delete; the
+// scope follows so one body's elements are one prefix scan; then the event timestamp
+// and the log position, in the variable snapshot's own shape, so the two fold together
+// by position (ADR-0048).
+func keyVariableElementSnapshot(piKey, scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(variableElementSnapshotScopePrefix(piKey, scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// variableElementSnapshotInstancePrefix spans every retained element write of one
+// process instance.
+func variableElementSnapshotInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfVariableElementSnapshot)}, piKey)
+}
+
+// variableElementSnapshotScopePrefix spans one scope's retained element writes, in
+// change order.
+func variableElementSnapshotScopePrefix(piKey, scopeKey uint64) []byte {
+	return appendBE64(variableElementSnapshotInstancePrefix(piKey), scopeKey)
 }
 
 // timestampFromVarSnapKey extracts the event timestamp from a variable-snapshot

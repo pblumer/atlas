@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MitarbeitendeGueltig: die Regeln, an denen ein Datensatz des Personalstamms gemessen
+  wird (docs/planning/ad-search-as-document.md, S3).
+
+  Beide Prozesse dieses Beispiels prüfen mit dieser Entscheidung: der eine eine
+  hochgeladene CSV-Datei, der andere die Tabelle dbo.Mitarbeitende eines SQL Servers,
+  als Dokument gelesen. Datei und Tabelle haben dieselben Spalten
+  (personalnummer, vorname, name, mail, abteilung, eintritt, austritt, pensum); sie
+  treten unter ihrem Namen in die Entscheidung ein, jede Zelle als Text. NULL aus der
+  Tabelle ist eine leere Zelle.
+
+    * mailGueltig       die Adresse endet auf @beispiel.ch. Eine leere Zelle ist ungültig.
+    * abteilungBekannt  die Abteilung ist eine der Liste.
+    * pensumGueltig     das Pensum ist eine Zahl von 10 bis 100. "(… ) = true" macht aus
+                        einem nicht lesbaren Wert false statt null.
+    * datenKonsistent   kein Austritt, oder der Austritt liegt nicht vor dem Eintritt.
+    * valid             alle vier Regeln erfüllt; das Urteil, das der Task liest.
+
+  Wie bei RowValid (pruefe-datensaetze.dmn) trifft die eine Regel immer zu, und die
+  Logik steht in den Ausgabespalten, damit jeder Befund die Regeln nennt, die er
+  verletzt. Abteilungen, Domain und Pensumgrenzen sind Annahmen dieses Beispiels.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_mitarbeitende" name="mitarbeitende-pruefen" namespace="http://atlas/dmn">
+  <itemDefinition id="tBefund" name="tBefund">
+    <itemComponent id="tBefund_mailGueltig" name="mailGueltig"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_abteilungBekannt" name="abteilungBekannt"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_pensumGueltig" name="pensumGueltig"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_datenKonsistent" name="datenKonsistent"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_valid" name="valid"><typeRef>boolean</typeRef></itemComponent>
+  </itemDefinition>
+  <inputData id="id_mail" name="mail"><variable id="var_mail" name="mail" typeRef="string"/></inputData>
+  <inputData id="id_abteilung" name="abteilung"><variable id="var_abteilung" name="abteilung" typeRef="string"/></inputData>
+  <inputData id="id_eintritt" name="eintritt"><variable id="var_eintritt" name="eintritt" typeRef="string"/></inputData>
+  <inputData id="id_austritt" name="austritt"><variable id="var_austritt" name="austritt" typeRef="string"/></inputData>
+  <inputData id="id_pensum" name="pensum"><variable id="var_pensum" name="pensum" typeRef="string"/></inputData>
+  <decision id="MitarbeitendeGueltig" name="MitarbeitendeGueltig">
+    <variable id="var_MitarbeitendeGueltig" name="MitarbeitendeGueltig" typeRef="tBefund"/>
+    <informationRequirement id="ir_mail"><requiredInput href="#id_mail"/></informationRequirement>
+    <informationRequirement id="ir_abteilung"><requiredInput href="#id_abteilung"/></informationRequirement>
+    <informationRequirement id="ir_eintritt"><requiredInput href="#id_eintritt"/></informationRequirement>
+    <informationRequirement id="ir_austritt"><requiredInput href="#id_austritt"/></informationRequirement>
+    <informationRequirement id="ir_pensum"><requiredInput href="#id_pensum"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in_mail" label="mail"><inputExpression id="ie_mail" typeRef="string"><text>mail</text></inputExpression></input>
+      <input id="in_abteilung" label="abteilung"><inputExpression id="ie_abteilung" typeRef="string"><text>abteilung</text></inputExpression></input>
+      <input id="in_eintritt" label="eintritt"><inputExpression id="ie_eintritt" typeRef="string"><text>eintritt</text></inputExpression></input>
+      <input id="in_austritt" label="austritt"><inputExpression id="ie_austritt" typeRef="string"><text>austritt</text></inputExpression></input>
+      <input id="in_pensum" label="pensum"><inputExpression id="ie_pensum" typeRef="string"><text>pensum</text></inputExpression></input>
+      <output id="o_mail" label="mailGueltig" name="mailGueltig" typeRef="boolean"/>
+      <output id="o_abteilung" label="abteilungBekannt" name="abteilungBekannt" typeRef="boolean"/>
+      <output id="o_pensum" label="pensumGueltig" name="pensumGueltig" typeRef="boolean"/>
+      <output id="o_daten" label="datenKonsistent" name="datenKonsistent" typeRef="boolean"/>
+      <output id="o_valid" label="valid" name="valid" typeRef="boolean"/>
+      <rule id="r1">
+        <inputEntry id="e1"><text>-</text></inputEntry>
+        <inputEntry id="e2"><text>-</text></inputEntry>
+        <inputEntry id="e3"><text>-</text></inputEntry>
+        <inputEntry id="e4"><text>-</text></inputEntry>
+        <inputEntry id="e5"><text>-</text></inputEntry>
+        <outputEntry id="oe1"><text>ends with(mail, "@beispiel.ch")</text></outputEntry>
+        <outputEntry id="oe2"><text>list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], abteilung)</text></outputEntry>
+        <outputEntry id="oe3"><text>(number(pensum) &gt;= 10) = true and (number(pensum) &lt;= 100) = true</text></outputEntry>
+        <outputEntry id="oe4"><text>austritt = "" or (date(austritt) &gt;= date(eintritt)) = true</text></outputEntry>
+        <outputEntry id="oe5"><text>ends with(mail, "@beispiel.ch") and list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], abteilung) and (number(pensum) &gt;= 10) = true and (number(pensum) &lt;= 100) = true and (austritt = "" or (date(austritt) &gt;= date(eintritt)) = true)</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

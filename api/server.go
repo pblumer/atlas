@@ -994,6 +994,11 @@ type Server struct {
 	// cataloguePurgeOff: the purge is an opt-out, so the zero value allows it. Set once
 	// before Handler is mounted.
 	instancePurgeOff bool
+	// mcpShopOff refuses the shop's customer side to requests that came through MCP
+	// (--mcp-shop=false / WithoutMCPShop, ADR-0550). "off"
+	// for cataloguePurgeOff's reason: offering it is the default. Set once before
+	// Handler is mounted.
+	mcpShopOff bool
 	// catalogueReporting is every process id that calls the order routes, read once
 	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
 	catalogueReporting map[string]bool
@@ -2472,7 +2477,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// a job asking for another, and Close releases what it holds at shutdown.
 	s.ldapPool = ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
 	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-		return ldap.Handler(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret)
+		return ldap.HandlerWithDocuments(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret, jobDocuments{s: s})
 	})
 	// A SOAP / Web Services (WSDL) task invokes an operation against a
 	// model-authored web-service endpoint (ADR-0165) — reading identities (import) or
@@ -2508,7 +2513,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// No directory registry in-process: a task naming a Console-configured
 		// directory is served by the worker that holds it (ADR-0164/0168), and this
 		// path exists only for a task that carries its own url.
-		return ad.Handler(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret, nil)
+		// A search may write its result as a document, for the job's own instance
+		// (docs/planning/ad-search-as-document.md).
+		return ad.HandlerWithDocuments(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret, nil, jobDocuments{s: s})
 	})
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
@@ -2518,7 +2525,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// A source variable may name an uploaded document rather than hold its text
 		// (ADR-0543).
-		return csvimport.HandlerWithDocuments(rd, s.processLookup, s.readDocumentBytes)
+		return csvimport.HandlerWithStores(rd, s.processLookup, s.readDocumentBytes, func(instance uint64) csvimport.DocumentStore {
+			return jobDocuments{s: s, instance: instance}
+		})
 	})
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
@@ -3957,10 +3966,10 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		if s.traceRoutes {
 			// The span is named for the *pattern*, which is fixed by this table, so the
 			// set of span names is bounded by the code rather than by traffic (ADR-0142).
-			mount(class, r.op.role, route, tracing.Handler(route, r.handler))
+			mount(class, r.op.role, route, tracing.Handler(route, s.guardMCPShop(route, r.handler)))
 			continue
 		}
-		mountFunc(class, r.op.role, route, r.handler)
+		mountFunc(class, r.op.role, route, s.guardMCPShop(route, r.handler))
 	}
 
 	// The MCP transport, when the binary supplied one (ADR-0016). It is mounted

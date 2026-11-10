@@ -1,0 +1,14 @@
+{
+  "type": "default",
+  "id": "datei-korrigieren",
+  "components": [
+    {
+      "type": "text",
+      "text": "Zu viele Befunde für einen Task je Datensatz. Laden Sie die Befunddatei herunter: Sie enthält nur die fehlerhaften Datensätze, mit ihrer Zeile (_row) und den verletzten Regeln. Korrigieren Sie die Werte in den Spalten des Personalstamms, lassen Sie _row stehen, tragen Sie in _drop ein x ein, um einen Datensatz zu verwerfen, und laden Sie die Datei wieder hoch. Die Spalten, die mit _ beginnen, werden sonst nicht gelesen."
+    },
+    { "key": "befundeDatei", "type": "filepicker", "label": "Befunddatei", "readonly": true },
+    { "key": "korrekturen", "type": "filepicker", "label": "Korrigierte Befunddatei", "accept": ".csv,text/csv" },
+    { "key": "akzeptieren", "type": "checkbox", "label": "Die verbleibenden Befunde akzeptieren, statt sie zu korrigieren" },
+    { "key": "begruendung", "type": "textarea", "label": "Begründung (beim Akzeptieren)" }
+  ]
+}

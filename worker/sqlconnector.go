@@ -114,7 +114,9 @@ func RunSQLJob(ctx context.Context, j Job, reg *sqldb.Registry) (map[string]any,
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("sqldb: cannot read the resolved detail: %w", err)
 	}
-	return sqldb.Run(ctx, task, reg)
+	// A query written as a document stores it through the job's lease, as every
+	// document a Worker Instance writes (ADR-0543).
+	return sqldb.RunWithDocuments(ctx, task, reg, sdkDocuments{})
 }
 
 // Mock mode, for the SQL products. It is the AD mockup switch (ADR-0181) applied to a

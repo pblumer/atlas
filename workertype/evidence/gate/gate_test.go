@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/workertype/evidence"
+	// Every registered suite, so a record verifies here exactly as it renews with
+	// the evidence command.
+	_ "github.com/pblumer/atlas/workertype/evidence/suites/entrachannel"
 )
 
 // TestEveryRecordOnThisBranchIsCurrent: main never carries evidence for code it no

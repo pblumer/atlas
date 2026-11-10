@@ -22,6 +22,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | --- | --- | --- |
 | `einstieg` | Beispiele: Einstieg | 7 small examples that run without a configured worker |
 | `auftrag-finanzen` | Beispiele: Auftrag & Finanzen | dunning, price changes, product capture, order-to-cash, record checks |
+| `datenqualitaet` | Beispiele: Datenqualität | checking every record of a source against DMN rules: an uploaded file, a SQL Server table, an Active Directory, an LDAP directory |
 | `personal` | Beispiele: Personal & Mitarbeitende | relocation, examination, travel booking, workplace equipment |
 | `umsysteme` | Beispiele: Umsysteme | Google Sheets, Jira, MS SQL, SharePoint |
 | `identitaet` | Beispiele: Identität & Verzeichnis | 17 Entra, AD and Exchange examples |

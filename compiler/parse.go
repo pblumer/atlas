@@ -2663,6 +2663,12 @@ type xmlAdConnector struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	MaxEntries     string `xml:"maxEntries,attr"`
 	ObjectSecurity string `xml:"objectSecurity,attr"`
+	// ResultAs (search only) is "variable" (the default) or "document": the entries go
+	// into a CSV document the result variable names, rather than into the variable
+	// itself, so a whole directory can be read (docs/planning/ad-search-as-document.md).
+	// DocumentName is that document's file name.
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2684,6 +2690,11 @@ type xmlSqlConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	MaxRows            string `xml:"maxRows,attr"`
+	// ResultAs and DocumentName write a query's rows into a CSV document the result
+	// variable names, instead of into the variable
+	// (docs/planning/ad-search-as-document.md, S3).
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2881,6 +2892,13 @@ type xmlLdapConnector struct {
 	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
 	// reference, never a value (ADR-0041).
 	ClientCertSecret string `xml:"clientCertSecret,attr"`
+	// Select (search only) is the attribute selection the search asks for, as AD's
+	// select; empty asks for the server's default set. ResultAs and DocumentName write
+	// a search's entries into a CSV document instead of into the result variable
+	// (docs/planning/ad-search-as-document.md, S3).
+	Select       string `xml:"select,attr"`
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -3009,7 +3027,13 @@ type xmlCsvConnector struct {
 	// Operation the direction ("read" | "write"; blank is read) — ADR-0139, amended.
 	Format    string `xml:"format,attr"`
 	Operation string `xml:"operation,attr"`
-	Retries   string `xml:"retries,attr"`
+	// Corrections, Drop and DocumentName are apply-corrections' (ADR-0548, S2): the
+	// variable holding the corrected records (a list, or a document with a _row column),
+	// the variable holding the line numbers to drop, and the name of the file written.
+	Corrections  string `xml:"corrections,attr"`
+	Drop         string `xml:"drop,attr"`
+	DocumentName string `xml:"documentName,attr"`
+	Retries      string `xml:"retries,attr"`
 }
 
 // The file formats and directions a csvConnector can author. They are spelled here
@@ -3021,6 +3045,8 @@ const (
 	csvimportFormatAVP        = "avp"
 	csvimportOperationRead    = "read"
 	csvimportOperationWrite   = "write"
+	// csvimportOperationApply writes a corrected copy of an uploaded file (ADR-0548, S2).
+	csvimportOperationApply = "apply-corrections"
 )
 
 // csvFormatAndOperation reads the authored format and direction, applying the
@@ -3041,9 +3067,9 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 	if op == "" {
 		op = csvimportOperationRead
 	}
-	if op != csvimportOperationRead && op != csvimportOperationWrite {
-		return "", "", elementErrorf(taskID, "compiler: csv task %q has an unknown operation %q (want %s or %s)",
-			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
+	if op != csvimportOperationRead && op != csvimportOperationWrite && op != csvimportOperationApply {
+		return "", "", elementErrorf(taskID, "compiler: csv task %q has an unknown operation %q (want %s, %s, or %s)",
+			taskID, rawOp, csvimportOperationApply, csvimportOperationRead, csvimportOperationWrite)
 	}
 	return format, op, nil
 }

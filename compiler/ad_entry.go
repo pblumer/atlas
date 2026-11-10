@@ -61,7 +61,12 @@ var ldapAttrNameRe = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9-]*|[0-9]+(?:\.[0
 //
 // A duplicate is refused rather than dropped: LDAP attribute names are
 // case-insensitive, so "mail,Mail" is a typo or a misunderstanding, not a request.
-func adSelectList(taskID, raw string) (string, error) {
+func adSelectList(taskID, raw string) (string, error) { return attributeSelection("ad", taskID, raw) }
+
+// attributeSelection normalizes a directory search's select: names trimmed, each an
+// LDAP attribute name (or * / +), none twice regardless of case. kind names the
+// Worker Type in a refusal ("ad", "ldap").
+func attributeSelection(kind, taskID, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", nil
@@ -71,14 +76,14 @@ func adSelectList(taskID, raw string) (string, error) {
 	for _, part := range strings.Split(raw, ",") {
 		name := strings.TrimSpace(part)
 		if name == "" {
-			return "", fmt.Errorf("compiler: ad task %q select %q has an empty attribute name; separate names with single commas", taskID, raw)
+			return "", fmt.Errorf("compiler: %s task %q select %q has an empty attribute name; separate names with single commas", kind, taskID, raw)
 		}
 		if name != "*" && name != "+" && !ldapAttrNameRe.MatchString(name) {
-			return "", fmt.Errorf("compiler: ad task %q select names %q, which is not an LDAP attribute name (a letter, then letters, digits and hyphens, or a numeric OID; * and + select all user or operational attributes)", taskID, name)
+			return "", fmt.Errorf("compiler: %s task %q select names %q, which is not an LDAP attribute name (a letter, then letters, digits and hyphens, or a numeric OID; * and + select all user or operational attributes)", kind, taskID, name)
 		}
 		key := strings.ToLower(name)
 		if seen[key] {
-			return "", fmt.Errorf("compiler: ad task %q select names %q twice; LDAP attribute names are case-insensitive", taskID, name)
+			return "", fmt.Errorf("compiler: %s task %q select names %q twice; LDAP attribute names are case-insensitive", kind, taskID, name)
 		}
 		seen[key] = true
 		names = append(names, name)

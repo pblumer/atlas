@@ -158,7 +158,10 @@
         { "name": "pageSize", "type": "String", "isAttr": true },
         { "name": "maxEntries", "type": "String", "isAttr": true },
         { "name": "clientCertSecret", "type": "String", "isAttr": true },
-        { "name": "retries", "type": "String", "isAttr": true }
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "select", "type": "String", "isAttr": true },
+        { "name": "resultAs", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -205,6 +208,8 @@
         { "name": "foundVariable", "type": "String", "isAttr": true },
         { "name": "maxEntries", "type": "String", "isAttr": true },
         { "name": "objectSecurity", "type": "String", "isAttr": true },
+        { "name": "resultAs", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
@@ -282,6 +287,8 @@
         { "name": "parametersVariable", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "maxRows", "type": "String", "isAttr": true },
+        { "name": "resultAs", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
@@ -296,6 +303,8 @@
         { "name": "parametersVariable", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "maxRows", "type": "String", "isAttr": true },
+        { "name": "resultAs", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
@@ -310,6 +319,8 @@
         { "name": "parametersVariable", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "maxRows", "type": "String", "isAttr": true },
+        { "name": "resultAs", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
@@ -357,7 +368,10 @@
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "format", "type": "String", "isAttr": true },
         { "name": "operation", "type": "String", "isAttr": true },
-        { "name": "retries", "type": "String", "isAttr": true }
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "corrections", "type": "String", "isAttr": true },
+        { "name": "drop", "type": "String", "isAttr": true },
+        { "name": "documentName", "type": "String", "isAttr": true }
       ]
     },
     {

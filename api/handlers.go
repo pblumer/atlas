@@ -294,6 +294,11 @@ type infoResp struct {
 	// ADR-0434), so the Console can leave them out
 	// of its menus rather than lead somebody to a view whose every call is a 404.
 	Catalogue bool `json:"catalogue"`
+	// MCPShop reports whether the shop's customer side — ordering, following and
+	// changing orders, approving, a customer's actions — is offered to agents over
+	// MCP (the --mcp-shop switch, ADR-0550), so an adapter
+	// or an agent can say so before a tool call is refused.
+	MCPShop bool `json:"mcpShop"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,
 	// so the web UI can show exactly which commit the running server was built from.
 	Revision  string `json:"revision,omitempty"`
@@ -793,6 +798,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 		Version:   Version,
 		Docs:      s.docsEnabled,
 		Catalogue: !s.catalogueOff,
+		MCPShop:   !s.catalogueOff && !s.mcpShopOff,
 		Revision:  b.Revision,
 		BuildTime: b.Time,
 		Modified:  b.Modified,
@@ -2426,6 +2432,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			endPos   uint64 // last position the change's scope is live (^0 for the root scope)
 			producer uint64 // element instance that wrote it; 0 = none recorded
 			view     variableView
+			// elem is set on one element of a list being set — a multi-instance round's
+			// result joining its body's collection (ADR-0296) — rather than a whole
+			// value: the fold applies it to the list as it stands
+			// (ADR-0549).
+			elem *model.VariableValue
 		}
 		var (
 			stepRows []stepRow
@@ -2585,10 +2596,29 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			if scanErr != nil {
 				break
 			}
+			// A multi-instance body's collection fills one element per round, and only
+			// the element is retained. Read first so the fold can show the list as each
+			// round left it, and so the body's values can say whether its elements are on
+			// record at all: an instance recorded before they were retained has none, and
+			// its collection reads as seeded until the loop promotes it.
+			recorded := false
+			if sp.kind == scopeKindMultiInstanceBody {
+				scanErr = s.store.VariableElementHistory(key, sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
+					el := *v
+					view := variableView{Name: v.Name, Scope: sp.label, ScopeKind: sp.kind}
+					changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view, elem: &el})
+					recorded = true
+					return nil
+				})
+				if scanErr != nil {
+					break
+				}
+			}
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
 				view.ScopeKind = sp.kind
+				view.ElementsRecorded = recorded
 				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view})
 				return nil
@@ -2815,12 +2845,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			view   variableView
 			endPos uint64
 		}
+		// fold applies one change to a running set: a whole value replaces the entry, an
+		// element is set into the list the entry holds.
+		fold := func(m map[varKey]varEntry, c varChange) {
+			k := varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}
+			if c.elem == nil {
+				m[k] = varEntry{view: c.view, endPos: c.endPos}
+				return
+			}
+			if e, ok := m[k]; ok {
+				if view, ok := withListElement(e.view, c.elem); ok {
+					m[k] = varEntry{view: view, endPos: e.endPos}
+				}
+			}
+		}
 		running := map[varKey]varEntry{}
 		ci := 0
 		for _, sr := range stepRows {
 			for ci < len(changes) && changes[ci].pos <= sr.pos {
-				c := changes[ci]
-				running[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				fold(running, changes[ci])
 				ci++
 			}
 			vars := make([]variableView, 0, len(running))
@@ -2979,8 +3022,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		ai := 0
 		for _, r := range refs {
 			for ai < len(changes) && changes[ai].pos <= r.pos {
-				c := changes[ai]
-				after[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				fold(after, changes[ai])
 				ai++
 			}
 			vars := make([]variableView, 0, len(after))
@@ -3015,6 +3057,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		for _, c := range changes {
 			if c.producer == 0 {
 				continue // start variables, an operator override, or pre-attribution history
+			}
+			if c.elem != nil {
+				// A round's element joining the body's collection is the round's result
+				// on its way to the loop's; the round's own result is already its output.
+				continue
 			}
 			w := byProducer[c.producer]
 			if w == nil {
@@ -3159,6 +3206,11 @@ type variableView struct {
 	// ADR-0456): "process" for a process constant's own variable, "application" or
 	// "server" for the namespace the installation fills. Empty for every other variable.
 	Constant string `json:"constant,omitempty"`
+	// ElementsRecorded marks a multi-instance body's variable whose per-round element
+	// writes are on record, so the timeline shows the output collection as each round
+	// left it (ADR-0549). Absent on an instance recorded before
+	// those writes were retained: its collection reads as seeded until the loop is done.
+	ElementsRecorded bool `json:"elementsRecorded,omitempty"`
 	// Actor names the operator who last set this value via an external override
 	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
 	// value was written by the model itself or the override carried no identity (auth
@@ -7170,6 +7222,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"source": j.Source, "sourceDocument": j.SourceDocument, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
+			// apply-corrections (ADR-0548, S2): the corrected records or the file they are
+			// in, the lines to drop, the file's name and this server's document budget.
+			"corrections": j.Corrections, "correctionsDocument": j.CorrectionsDocument,
+			"drop": j.Drop, "documentName": j.DocumentName,
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.LdifJobTypeIndex:
 		// A pure transform: what travels is the file text (or the entries) and the
@@ -7329,6 +7386,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "product": j.Product, "operation": j.Operation,
 			"statement": j.Statement, "params": j.Params, "named": j.Named,
 			"maxRows": j.MaxRows, "resultVariable": j.ResultVariable,
+			// A query written as a document, with this server's document budget
+			// (docs/planning/ad-search-as-document.md, S3).
+			"asDocument": j.AsDocument, "documentName": j.DocumentName,
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.AdJobTypeIndex:
 		// AD authors its own server (ADR-0166), so unlike mail the endpoint travels.
@@ -7355,6 +7416,14 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// A search's attribute selection and the variable its found goes to on its
 			// own (ADR-0166, amended 2026-11-03).
 			"select": j.Select, "foundVariable": j.FoundVariable,
+			// A search written as a document, and the file's name
+			// (docs/planning/ad-search-as-document.md). Left out, a Worker Instance
+			// would write the whole result into the variable instead.
+			"asDocument": j.AsDocument, "documentName": j.DocumentName,
+			// The document budget this server holds an upload to, so a Worker Instance
+			// checks the search against the limit the upload will meet rather than
+			// against a default of its own.
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.LdapJobTypeIndex:
 		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and
@@ -7372,6 +7441,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"newPassword": j.NewPassword, "baseDN": j.BaseDN, "scope": j.Scope,
 			"filter": j.Filter, "pageSize": j.PageSize, "maxEntries": j.MaxEntries,
 			"resultVariable": j.ResultVariable,
+			// A search's attribute selection, and the search written as a document with
+			// this server's document budget (docs/planning/ad-search-as-document.md, S3).
+			"select": j.Select, "asDocument": j.AsDocument, "documentName": j.DocumentName,
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.SoapJobTypeIndex:
 		// REST's arm exactly, and for REST's reason: everything about the call is model

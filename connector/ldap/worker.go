@@ -1,7 +1,6 @@
 package ldap
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -38,32 +37,7 @@ type SecretResolver func(ref string) string
 // relocating the work cannot change what a resolved LDAP task means — only which
 // process holds the credentials behind the references (ADR-0168).
 func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret SecretResolver) job.OutputHandler {
-	return func(j job.Job) ([]model.VariableValue, error) {
-		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, nil // element instance gone (e.g. already completed); nothing to do
-		}
-		cp := lookup(ei.ProcessDefKey)
-		if cp == nil {
-			return nil, fmt.Errorf("ldap: no compiled process for def %d", ei.ProcessDefKey)
-		}
-		detail, err := cp.ConnectorTaskOf(ei.ElementId)
-		if err != nil {
-			return nil, fmt.Errorf("ldap: %w", err)
-		}
-		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey)
-		if err != nil {
-			return nil, err
-		}
-		res, err := Run(context.Background(), task, dialer, secret)
-		if err != nil {
-			return nil, err
-		}
-		return res.Variables(), nil
-	}
+	return HandlerWithDocuments(store, lookup, dialer, secret, nil)
 }
 
 // modsFor turns the authored attribute object into the change operations one of the

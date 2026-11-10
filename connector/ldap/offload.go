@@ -3,6 +3,7 @@ package ldap
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/envname"
@@ -57,6 +58,16 @@ type Job struct {
 	PageSize       int32  `json:"pageSize,omitempty"`
 	MaxEntries     int32  `json:"maxEntries,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
+	// Select (search only) is the attribute selection the search asks for; empty asks
+	// for the server's default set.
+	Select []string `json:"select,omitempty"`
+	// AsDocument (search only) writes the entries into a CSV document named
+	// DocumentName, which the result variable then names, instead of into the
+	// variable. DocumentLimit is the activating server's document budget, set when the
+	// job is handed out (docs/planning/ad-search-as-document.md, S3).
+	AsDocument    bool   `json:"asDocument,omitempty"`
+	DocumentName  string `json:"documentName,omitempty"`
+	DocumentLimit int64  `json:"documentLimit,omitempty"`
 }
 
 // Result is what running a Job produces: the five mutating operations write to the
@@ -112,6 +123,11 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		j.PageSize = detail.LdapPageSize
 		j.MaxEntries = detail.LdapMaxEntries
 		j.ResultVariable = cp.Intern(detail.ResultVar)
+		if sel := cp.Intern(detail.LdapSelect); sel != "" {
+			j.Select = strings.Split(sel, ",")
+		}
+		j.AsDocument = detail.LdapAsDocument
+		j.DocumentName = cp.Intern(detail.LdapDocumentName)
 	default:
 		// Every other operation names the entry it acts on.
 		j.DN = resolveValue(detail.LdapDN, piKey, scopeVars)
@@ -144,29 +160,37 @@ func needsEntry(op string) bool {
 // worker's half, and the in-process path calls it too, so there is one definition of
 // what a resolved LDAP task means rather than two that drift.
 func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver) (Result, error) {
+	if j.AsDocument {
+		return Result{}, fmt.Errorf("ldap: this search writes its result as a document, and where it runs there is no document store to write it to")
+	}
+	conn, err := connect(j, dialer, secret)
+	if err != nil {
+		return Result{}, err
+	}
+	defer conn.Close()
+	return dispatch(j, conn)
+}
+
+// connect resolves the job's secrets where it runs, dials and binds.
+func connect(j Job, dialer Dialer, secret SecretResolver) (Conn, error) {
 	if j.URL == "" {
-		return Result{}, fmt.Errorf("ldap: %s has an empty url", j.Operation)
+		return nil, fmt.Errorf("ldap: %s has an empty url", j.Operation)
 	}
 	bindPassword, err := credential(j.BindSecret, "bind secret", secret)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 	clientCert, err := credential(j.ClientCertSecret, "client certificate secret", secret)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
-	conn, err := dialer.Dial(DialOptions{
+	return dialer.Dial(DialOptions{
 		URL:          j.URL,
 		StartTLS:     j.StartTLS,
 		BindDN:       j.BindDN,
 		BindPassword: bindPassword,
 		ClientCert:   clientCert,
 	})
-	if err != nil {
-		return Result{}, err
-	}
-	defer conn.Close()
-	return dispatch(j, conn)
 }
 
 // credential resolves one secret reference where the job runs. An empty reference is
@@ -196,6 +220,7 @@ func dispatch(j Job, conn Conn) (Result, error) {
 			BaseDN:     j.BaseDN,
 			Scope:      j.Scope,
 			Filter:     j.Filter,
+			Attributes: j.Select,
 			PageSize:   j.PageSize,
 			MaxEntries: j.MaxEntries,
 		})

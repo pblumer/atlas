@@ -13,6 +13,67 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Corrections can be written back into the checked file.** The CSV Worker Type gains
+  `operation="apply-corrections"`. It writes a corrected copy of an uploaded file: every
+  record a correction names by its `_row` is replaced or, with `_drop`, left out; every
+  other record, the header, the delimiter and the byte-order mark stay as they were; the
+  uploaded file is never changed. The corrections are a list (from a correction task per
+  finding) or a file (the check's new failures document, `failuresDocument`, after a
+  person corrected it). A `_row` the file does not have, a line named twice or a field
+  without a column fails the task. A task form's file field whose variable already holds
+  a document now offers it for download, and `readonly` takes no file. The example
+  *Mitarbeitende prüfen und korrigieren* goes from upload to corrected file: up to 20
+  findings as a task each with an immediate re-check, more as a file, or the rest
+  accepted with a reason, then a last check of the corrected copy (ADR-0548, Slice 2).
+- **The first technical capability contract is drafted, with its conformance suite.**
+  `io.atlas.collaboration.channel.create@1.0.0` (profile `microsoft-teams`) says what creating a
+  standard channel in a collaboration space takes, answers and refuses: an unknown space is
+  `SPACE_NOT_FOUND`, a name already in use is `CHANNEL_ALREADY_EXISTS`, and no second channel is
+  created. The suite `entra-create-channel` runs Entra's `create-channel` against a fake of Graph and
+  derives a current evidence record: four cases pass, the two refusal codes fail because the
+  operation ends both with a plain failure, and one needs a live tenant. The contract is not yet
+  published (ADR-0483): that waits for branch protection with the code owner's review. Entra's
+  `create-channel` now claims the contract's version `1.0.0`.
+- **An LDAP search and a SQL query can write their result as a document, too.** `resultAs="document"`
+  now works on the LDAP search, which also gains `select`, and on the `query` of the MS SQL, MariaDB and
+  PostgreSQL Worker Types. It writes the same CSV as the AD search, through one shared writer: the LDAP
+  form is `dn`, then the selected attributes; the SQL form is the statement's columns in their order,
+  with NULL as an empty cell. The result variable holds `{found, count, document}` (the LDAP form adds
+  `dn`), and the caps and the server's document limit are checked while the rows are written. Three
+  new examples check every record of a source against DMN rules: an uploaded file and a SQL Server
+  table with one decision (*Mitarbeitende prüfen*), and an LDAP directory (*LDAP-Personen prüfen*).
+  They join the AD example in the hub bundle *Beispiele: Datenqualität*. `go run
+  ./examples/testdaten/generieren -n 50000` writes deterministic test data for all four sources, six
+  findings in every hundred records. Against the mock sources, 50,000 records take two to three seconds
+  per source.
+- **An Active Directory search can write its result as a document.** With `resultAs="document"` an
+  AD `search` writes its entries into a CSV document — the DN, then the attributes named in `select`,
+  a multi-valued attribute joined by `|` with `\|` and `\\` escaped — instead of into the result
+  variable, which then holds `{found, count, dn, document}`. The directory is read page by page and
+  written as it arrives; `maxEntries` defaults to 100,000 in this form, and the document budget is the
+  hard ceiling, also on a Worker Instance, which is handed the server's limit with the job. It runs in
+  process and on a Worker Instance. A business rule task over a file can read it directly with
+  `<atlas:rowsFrom source="benutzer.document"/>`, so a whole directory is checked against DMN rules in
+  two tasks. The AD panel has the fields (*Result as*, *File name*) and explains the file's layout and
+  how a rule tests a multi-valued cell; the example *AD-Benutzer prüfen* reads 24 accounts from the
+  mock directory and reports six findings with the rules they break
+  (docs/planning/ad-search-as-document.md).
+- **The shop over MCP, as the connected person.** An agent connected as a person — with
+  their OAuth grant or session on `/mcp`, or their API token over `atlas mcp` — can now act
+  as that person in the shop: `atlas_shop_catalogs` and `atlas_shop_catalog`,
+  `atlas_shop_form_query` for an order form's person and value pickers, `atlas_place_order`,
+  `atlas_list_orders`, `atlas_get_order`, `atlas_order_ready_lines`, `atlas_shop_tasks`,
+  `atlas_order_line_progress`, `atlas_cancel_order`, `atlas_cancel_order_line`,
+  `atlas_amend_order_line`, `atlas_return_order_line`, `atlas_change_order_line`,
+  `atlas_list_approvals` and `atlas_decide_approvals`, and `atlas_ask_order_line_action`
+  takes `trigger: customer`. Each tool is the route the portal calls, decided by the same
+  handler with that person's rights, and what it does is recorded under their name — so a
+  catalogue can be tested end to end by an agent holding one connection per test person.
+  On by default; `--mcp-shop=false` (`ATLAS_MCP_SHOP=false`) makes the server refuse those
+  routes, and a customer's action, to requests that come through MCP while the portal keeps
+  working, and `GET /api/v1/info` says `mcpShop`. `atlas_catalog_releases` takes `limit`.
+  This reverses the MCP exclusion of ADR-0428 and ADR-0429 §2
+  (ADR-0550).
 - **The handbooks can be searched.** The handbook and the shop handbook carry a search field
   in their top bar: it lists the matching passages with chapter and heading, and choosing one
   scrolls there, opens a folded block around it and marks the words. Only the language on
@@ -283,6 +344,16 @@ directory gains the document store. Four changes can break what worked against 0
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A multi-instance body's collection fills round by round in the replay.** The replay showed
+  the output collection as it was seeded — `[null, …]` — in every round and filled only once
+  the loop had finished, because a round records only its element (ADR-0296) and that element
+  was not retained. It is now retained, the size of one result, in a column family of its own
+  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
+  linear in the round count. The instance timeline applies each element to the collection as
+  it stands, so a round shows the list the rounds before it left and its own answer at
+  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
+  this keep the old reading, and only there does the Environment still explain it
+  ([ADR-0549](docs/adr/0549-collection-by-round.md)).
 - **A new built-in Worker Type declares what a second delivery does.** Every new built-in
   Worker Type ships a manifest stating each operation's idempotency and effect, as an
   installed one must; `go test ./api` refuses one without it, and the 31 kinds released

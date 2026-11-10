@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mitarbeitende prüfen und korrigieren: vom Upload bis zur korrigierten Datei
+  (ADR-0548, S2).
+
+    Start
+     -> [User-Task]         Datei hochladen      -> mitarbeitende
+     -> [Script]            Datei übernehmen     -> datei = mitarbeitende
+     -> (X)                 ─────────────────────────────────────────────┐
+     -> [Business-Rule-Task über Datei] Datensätze prüfen -> pruefung     │
+     -> <Befunde?>                                                       │
+          keine                 -> Ende "Datei in Ordnung"               │
+          höchstens 20          -> [Multi-Instance] Datensatz korrigieren │
+                                   (ein Token je Befund, mit Nachprüfung)│
+                                   -> korrekturen = [{_row, Felder}]      │
+          mehr                  -> [User-Task] Datei korrigieren          │
+                                   Befunddatei herunterladen, korrigiert  │
+                                   hochladen -> korrekturen = Dokument    │
+                                   oder Rest akzeptieren -> Ende          │
+     -> [CSV apply-corrections] Korrekturen anwenden -> korrigiert         │
+     -> [Script]            datei = korrigiert.document ──────────────────┘
+
+  Die Schwelle 20 ist eine Eigenschaft der Menschen, die korrigieren, nicht der
+  Engine; sie steht deshalb hier im Modell (ADR-0548, "Correction, chosen by size").
+  Beide Wege enden in derselben Operation: apply-corrections ersetzt die Datensätze,
+  die eine Korrektur über ihre _row nennt, und legt eine neue Datei ab. Die
+  hochgeladene Datei bleibt unverändert; jede Runde ist eine eigene Datei und lässt
+  sich mit der vorherigen vergleichen. Die korrigierte Datei wird ein letztes Mal
+  geprüft, bevor der Prozess endet.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="Definitions_mitarbeitende_korrigieren" targetNamespace="http://atlas/examples">
+  <bpmn:process id="mitarbeitende-korrigieren" name="Mitarbeitende prüfen und korrigieren" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Prüfung angestossen"/>
+
+    <bpmn:userTask id="hochladen" name="Datei hochladen">
+      <bpmn:documentation>Die Qualitätsverantwortliche lädt den Export des Personalstamms hoch. Die Datei wird als Dokument abgelegt; mitarbeitende hält den Verweis.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="quality"/>
+        <zeebe:formDefinition formId="mitarbeitende-hochladen"/>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+
+    <bpmn:scriptTask id="uebernehmen" name="Datei übernehmen">
+      <bpmn:documentation>datei ist die Datei, die gerade geprüft wird: zuerst die hochgeladene, nach jeder Korrekturrunde die korrigierte Kopie.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=mitarbeitende" resultVariable="datei"/>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="runde" name="Prüfrunde"/>
+
+    <bpmn:businessRuleTask id="pruefen" name="Datensätze prüfen">
+      <bpmn:documentation>Wertet MitarbeitendeGueltig für jeden Datensatz von datei aus, in einem Job. pruefung erhält die Zusammenfassung, die ersten 100 Befunde (failures) und zwei Dateien: result mit allen Datensätzen und failuresDocument mit den fehlerhaften.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="MitarbeitendeGueltig" resultVariable="pruefung"/>
+        <atlas:rowsFrom source="datei" failureSample="100"/>
+      </bpmn:extensionElements>
+    </bpmn:businessRuleTask>
+
+    <bpmn:exclusiveGateway id="befunde" name="Befunde?" default="f_viele">
+      <bpmn:documentation>Keine Befunde: fertig. Höchstens 20: ein Korrektur-Task je Befund. Mehr: eine Datei zum Korrigieren. Ein Datensatz, den die Entscheidung nicht auswerten konnte (errors), zählt als Befund.</bpmn:documentation>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="ende_ok" name="Datei in Ordnung">
+      <bpmn:documentation>datei ist die geprüfte Datei ohne Befund: die hochgeladene, wenn sie schon in Ordnung war, sonst die zuletzt korrigierte Kopie.</bpmn:documentation>
+    </bpmn:endEvent>
+
+    <bpmn:subProcess id="korrigieren" name="Datensatz korrigieren">
+      <bpmn:documentation>Ein Token je Befund (ADR-0084, über die Befunde statt über jeden Datensatz). Die Korrektur wird mit derselben Entscheidung nachgeprüft und so lange zurückgegeben, bis sie gültig ist. befund trägt die _row, die die Korrektur ersetzt.</bpmn:documentation>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=pruefung.failures" inputElement="befund"
+            outputCollection="korrekturen" outputElement="=befund"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="k_start"/>
+      <bpmn:exclusiveGateway id="k_join"/>
+      <bpmn:userTask id="k_bearbeiten" name="Datensatz bearbeiten">
+        <bpmn:extensionElements>
+          <zeebe:assignmentDefinition candidateGroups="quality"/>
+          <zeebe:formDefinition formId="datensatz-korrigieren"/>
+          <zeebe:ioMapping>
+            <zeebe:input source="=befund.personalnummer" target="personalnummer"/>
+            <zeebe:input source="=befund.vorname" target="vorname"/>
+            <zeebe:input source="=befund.name" target="name"/>
+            <zeebe:input source="=befund.mail" target="mail"/>
+            <zeebe:input source="=befund.abteilung" target="abteilung"/>
+            <zeebe:input source="=befund.eintritt" target="eintritt"/>
+            <zeebe:input source="=befund.austritt" target="austritt"/>
+            <zeebe:input source="=befund.pensum" target="pensum"/>
+            <zeebe:output source="={_row: befund._row, personalnummer: personalnummer, vorname: vorname, name: name, mail: mail, abteilung: abteilung, eintritt: eintritt, austritt: austritt, pensum: pensum}" target="befund"/>
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+      </bpmn:userTask>
+      <bpmn:businessRuleTask id="k_nachpruefen" name="Korrektur nachprüfen">
+        <bpmn:extensionElements>
+          <zeebe:calledDecision decisionId="MitarbeitendeGueltig" resultVariable="urteil"/>
+          <zeebe:ioMapping>
+            <zeebe:input source="=befund.mail" target="mail"/>
+            <zeebe:input source="=befund.abteilung" target="abteilung"/>
+            <zeebe:input source="=befund.eintritt" target="eintritt"/>
+            <zeebe:input source="=befund.austritt" target="austritt"/>
+            <zeebe:input source="=befund.pensum" target="pensum"/>
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+      </bpmn:businessRuleTask>
+      <bpmn:exclusiveGateway id="k_gueltig" name="gültig?" default="k_f_nochmals"/>
+      <bpmn:endEvent id="k_ende"/>
+      <bpmn:sequenceFlow id="k_f_start" sourceRef="k_start" targetRef="k_join"/>
+      <bpmn:sequenceFlow id="k_f_bearbeiten" sourceRef="k_join" targetRef="k_bearbeiten"/>
+      <bpmn:sequenceFlow id="k_f_nachpruefen" sourceRef="k_bearbeiten" targetRef="k_nachpruefen"/>
+      <bpmn:sequenceFlow id="k_f_urteil" sourceRef="k_nachpruefen" targetRef="k_gueltig"/>
+      <bpmn:sequenceFlow id="k_f_gueltig" name="ja" sourceRef="k_gueltig" targetRef="k_ende">
+        <bpmn:conditionExpression>=urteil.valid</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="k_f_nochmals" name="nein" sourceRef="k_gueltig" targetRef="k_join"/>
+    </bpmn:subProcess>
+
+    <bpmn:scriptTask id="bereitstellen" name="Befunde bereitstellen">
+      <bpmn:documentation>Legt die Datei mit den fehlerhaften Datensätzen dorthin, wo das Formular sie anbietet, und leert die Antwort der vorigen Runde.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="={befundeDatei: pruefung.failuresDocument, korrekturen: null, akzeptieren: false, begruendung: &quot;&quot;}" resultVariable="dateiKorrektur"/>
+        <zeebe:ioMapping>
+          <zeebe:output source="=dateiKorrektur.befundeDatei" target="befundeDatei"/>
+          <zeebe:output source="=dateiKorrektur.korrekturen" target="korrekturen"/>
+          <zeebe:output source="=dateiKorrektur.akzeptieren" target="akzeptieren"/>
+          <zeebe:output source="=dateiKorrektur.begruendung" target="begruendung"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:userTask id="datei_korrigieren" name="Datei korrigieren">
+      <bpmn:documentation>Die Befunddatei herunterladen, die Werte in den Spalten der Quelle korrigieren (_row bleibt stehen; _drop = x verwirft einen Datensatz) und die Datei wieder hochladen. Oder die verbleibenden Befunde mit Begründung akzeptieren.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="quality"/>
+        <zeebe:formDefinition formId="datei-korrigieren"/>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="antwort" name="Antwort?" default="f_anwenden_datei"/>
+
+    <bpmn:endEvent id="ende_akzeptiert" name="Rest akzeptiert">
+      <bpmn:documentation>Die verbleibenden Befunde sind akzeptiert; begruendung sagt warum. datei ist die letzte Fassung, pruefung nennt die Befunde, die bleiben.</bpmn:documentation>
+    </bpmn:endEvent>
+
+    <bpmn:exclusiveGateway id="anwenden_join" name="Korrekturen"/>
+
+    <bpmn:serviceTask id="anwenden" name="Korrekturen anwenden">
+      <bpmn:documentation>Schreibt eine korrigierte Kopie von datei: jeder Datensatz, den eine Korrektur über seine _row nennt, wird ersetzt oder verworfen, alle anderen bleiben, wie sie sind. korrekturen ist eine Liste (aus den Korrektur-Tasks) oder eine Datei (die hochgeladene Befunddatei). Eine _row, die die Datei nicht hat, oder ein Feld ohne Spalte lässt den Task scheitern.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:csvConnector operation="apply-corrections" source="datei" corrections="korrekturen"
+                            delimiter="," documentName="mitarbeitende-korrigiert.csv"
+                            resultVariable="korrigiert"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:scriptTask id="naechste_runde" name="Korrigierte Datei prüfen">
+      <bpmn:documentation>Die korrigierte Kopie ist die Datei der nächsten Prüfrunde.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=korrigiert.document" resultVariable="datei"/>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:sequenceFlow id="f_start" sourceRef="start" targetRef="hochladen"/>
+    <bpmn:sequenceFlow id="f_hochladen" sourceRef="hochladen" targetRef="uebernehmen"/>
+    <bpmn:sequenceFlow id="f_uebernehmen" sourceRef="uebernehmen" targetRef="runde"/>
+    <bpmn:sequenceFlow id="f_runde" sourceRef="runde" targetRef="pruefen"/>
+    <bpmn:sequenceFlow id="f_pruefen" sourceRef="pruefen" targetRef="befunde"/>
+    <bpmn:sequenceFlow id="f_keine" name="keine" sourceRef="befunde" targetRef="ende_ok">
+      <bpmn:conditionExpression>=pruefung.invalid + pruefung.errors = 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_wenige" name="höchstens 20" sourceRef="befunde" targetRef="korrigieren">
+      <bpmn:conditionExpression>=pruefung.invalid + pruefung.errors &lt;= 20</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_viele" name="mehr" sourceRef="befunde" targetRef="bereitstellen"/>
+    <bpmn:sequenceFlow id="f_korrigiert" sourceRef="korrigieren" targetRef="anwenden_join"/>
+    <bpmn:sequenceFlow id="f_bereitstellen" sourceRef="bereitstellen" targetRef="datei_korrigieren"/>
+    <bpmn:sequenceFlow id="f_antwort" sourceRef="datei_korrigieren" targetRef="antwort"/>
+    <bpmn:sequenceFlow id="f_akzeptiert" name="Rest akzeptiert" sourceRef="antwort" targetRef="ende_akzeptiert">
+      <bpmn:conditionExpression>=akzeptieren = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_ohne_datei" name="keine Datei" sourceRef="antwort" targetRef="datei_korrigieren">
+      <bpmn:conditionExpression>=korrekturen = null</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_anwenden_datei" sourceRef="antwort" targetRef="anwenden_join"/>
+    <bpmn:sequenceFlow id="f_anwenden" sourceRef="anwenden_join" targetRef="anwenden"/>
+    <bpmn:sequenceFlow id="f_angewendet" sourceRef="anwenden" targetRef="naechste_runde"/>
+    <bpmn:sequenceFlow id="f_naechste" sourceRef="naechste_runde" targetRef="runde"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" id="BPMNDiagram_atlas">
+    <bpmndi:BPMNPlane id="BPMNPlane_atlas" bpmnElement="mitarbeitende-korrigieren">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="150" y="478" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="123" y="520" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_ok_di" bpmnElement="ende_ok">
+        <omgdc:Bounds x="893" y="560" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="866" y="600" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_akzeptiert_di" bpmnElement="ende_akzeptiert">
+        <omgdc:Bounds x="1775" y="360" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1748" y="330" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anwenden_di" bpmnElement="anwenden">
+        <omgdc:Bounds x="1968" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="uebernehmen_di" bpmnElement="uebernehmen">
+        <omgdc:Bounds x="386" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bereitstellen_di" bpmnElement="bereitstellen">
+        <omgdc:Bounds x="1177" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="naechste_runde_di" bpmnElement="naechste_runde">
+        <omgdc:Bounds x="2118" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="hochladen_di" bpmnElement="hochladen">
+        <omgdc:Bounds x="236" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="datei_korrigieren_di" bpmnElement="datei_korrigieren">
+        <omgdc:Bounds x="1618" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <omgdc:Bounds x="636" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="runde_di" bpmnElement="runde">
+        <omgdc:Bounds x="536" y="471" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="521" y="447" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="befunde_di" bpmnElement="befunde">
+        <omgdc:Bounds x="786" y="471" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="740" y="438" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="antwort_di" bpmnElement="antwort">
+        <omgdc:Bounds x="1768" y="471" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1722" y="438" width="50" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anwenden_join_di" bpmnElement="anwenden_join">
+        <omgdc:Bounds x="1868" y="471" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1853" y="527" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="korrigieren_di" bpmnElement="korrigieren" isExpanded="true">
+        <omgdc:Bounds x="886" y="90" width="682" height="210"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_start_di" bpmnElement="k_start">
+        <omgdc:Bounds x="916" y="152" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_ende_di" bpmnElement="k_ende">
+        <omgdc:Bounds x="1502" y="152" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_bearbeiten_di" bpmnElement="k_bearbeiten">
+        <omgdc:Bounds x="1102" y="130" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_nachpruefen_di" bpmnElement="k_nachpruefen">
+        <omgdc:Bounds x="1252" y="130" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_join_di" bpmnElement="k_join">
+        <omgdc:Bounds x="1002" y="145" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_gueltig_di" bpmnElement="k_gueltig">
+        <omgdc:Bounds x="1402" y="145" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1392" y="118" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="k_f_start_di" bpmnElement="k_f_start">
+        <omgdi:waypoint x="952" y="170"/>
+        <omgdi:waypoint x="1002" y="170"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="k_f_bearbeiten_di" bpmnElement="k_f_bearbeiten">
+        <omgdi:waypoint x="1052" y="170"/>
+        <omgdi:waypoint x="1102" y="170"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="k_f_nachpruefen_di" bpmnElement="k_f_nachpruefen">
+        <omgdi:waypoint x="1202" y="170"/>
+        <omgdi:waypoint x="1252" y="170"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="k_f_urteil_di" bpmnElement="k_f_urteil">
+        <omgdi:waypoint x="1352" y="170"/>
+        <omgdi:waypoint x="1402" y="170"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="k_f_gueltig_di" bpmnElement="k_f_gueltig">
+        <omgdi:waypoint x="1452" y="170"/>
+        <omgdi:waypoint x="1502" y="170"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1468" y="150" width="16" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="k_f_nochmals_di" bpmnElement="k_f_nochmals">
+        <omgdi:waypoint x="1427" y="195"/>
+        <omgdi:waypoint x="1427" y="270"/>
+        <omgdi:waypoint x="1027" y="270"/>
+        <omgdi:waypoint x="1027" y="195"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1433" y="235" width="26" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start">
+        <omgdi:waypoint x="186" y="496"/>
+        <omgdi:waypoint x="236" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_hochladen_di" bpmnElement="f_hochladen">
+        <omgdi:waypoint x="336" y="496"/>
+        <omgdi:waypoint x="386" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_uebernehmen_di" bpmnElement="f_uebernehmen">
+        <omgdi:waypoint x="486" y="496"/>
+        <omgdi:waypoint x="536" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_runde_di" bpmnElement="f_runde">
+        <omgdi:waypoint x="586" y="496"/>
+        <omgdi:waypoint x="636" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_pruefen_di" bpmnElement="f_pruefen">
+        <omgdi:waypoint x="736" y="496"/>
+        <omgdi:waypoint x="786" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_keine_di" bpmnElement="f_keine">
+        <omgdi:waypoint x="811" y="521"/>
+        <omgdi:waypoint x="811" y="578"/>
+        <omgdi:waypoint x="893" y="578"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="818" y="535" width="36" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_wenige_di" bpmnElement="f_wenige">
+        <omgdi:waypoint x="811" y="471"/>
+        <omgdi:waypoint x="811" y="195"/>
+        <omgdi:waypoint x="886" y="195"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="815" y="326" width="66" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_viele_di" bpmnElement="f_viele">
+        <omgdi:waypoint x="836" y="496"/>
+        <omgdi:waypoint x="1177" y="496"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="995" y="478" width="22" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_korrigiert_di" bpmnElement="f_korrigiert">
+        <omgdi:waypoint x="1568" y="195"/>
+        <omgdi:waypoint x="1893" y="195"/>
+        <omgdi:waypoint x="1893" y="471"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_bereitstellen_di" bpmnElement="f_bereitstellen">
+        <omgdi:waypoint x="1277" y="496"/>
+        <omgdi:waypoint x="1618" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_antwort_di" bpmnElement="f_antwort">
+        <omgdi:waypoint x="1718" y="496"/>
+        <omgdi:waypoint x="1768" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_akzeptiert_di" bpmnElement="f_akzeptiert">
+        <omgdi:waypoint x="1793" y="471"/>
+        <omgdi:waypoint x="1793" y="396"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1800" y="425" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ohne_datei_di" bpmnElement="f_ohne_datei">
+        <omgdi:waypoint x="1793" y="521"/>
+        <omgdi:waypoint x="1793" y="596"/>
+        <omgdi:waypoint x="1668" y="596"/>
+        <omgdi:waypoint x="1668" y="536"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1800" y="560" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anwenden_datei_di" bpmnElement="f_anwenden_datei">
+        <omgdi:waypoint x="1818" y="496"/>
+        <omgdi:waypoint x="1868" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anwenden_di" bpmnElement="f_anwenden">
+        <omgdi:waypoint x="1918" y="496"/>
+        <omgdi:waypoint x="1968" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_angewendet_di" bpmnElement="f_angewendet">
+        <omgdi:waypoint x="2068" y="496"/>
+        <omgdi:waypoint x="2118" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_naechste_di" bpmnElement="f_naechste">
+        <omgdi:waypoint x="2218" y="496"/>
+        <omgdi:waypoint x="2243" y="496"/>
+        <omgdi:waypoint x="2243" y="660"/>
+        <omgdi:waypoint x="561" y="660"/>
+        <omgdi:waypoint x="561" y="521"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,6 +1,7 @@
 package ad
 
 import (
+	"fmt"
 	"net"
 	"sort"
 	"sync"
@@ -37,6 +38,11 @@ type testDirectory struct {
 	dirsync   bool
 	cookieOut []byte
 	moreOut   bool
+	// pages makes a search answer as a paged one: each search returns the entry and,
+	// until pages searches have been answered, a paging control with a cookie, so a
+	// client following the cookies reads pages pages.
+	pages    int
+	answered int
 }
 
 func startTestDirectory(t *testing.T, d *testDirectory) *testDirectory {
@@ -96,6 +102,8 @@ func (d *testDirectory) handle(conn net.Conn) {
 			}
 			if d.dirSync() {
 				_, _ = conn.Write(searchDoneWithDirSync(id, code, d.syncCookie(), d.syncMore()))
+			} else if cookie, paged := d.nextPage(); paged {
+				_, _ = conn.Write(searchDoneWithPaging(id, code, cookie))
 			} else {
 				_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationSearchResultDone, code))
 			}
@@ -259,6 +267,48 @@ func searchDoneWithDirSync(id int64, code uint16, cookie []byte, more bool) []by
 
 	ctrl := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "Control")
 	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, goldap.ControlTypeDirSync, "Control Type"))
+	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, string(val.Bytes()), "Control Value"))
+
+	ctrls := ber.Encode(ber.ClassContext, ber.TypeConstructed, 0, nil, "Controls")
+	ctrls.AppendChild(ctrl)
+	msg.AppendChild(ctrls)
+	return msg.Bytes()
+}
+
+// nextPage counts one answered search of a paged directory and returns the cookie for
+// the next page, empty once the last page is answered. paged is false for a directory
+// that does not page.
+func (d *testDirectory) nextPage() (cookie []byte, paged bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.pages == 0 {
+		return nil, false
+	}
+	d.answered++
+	if d.answered >= d.pages {
+		return nil, true
+	}
+	return []byte(fmt.Sprintf("page-%d", d.answered)), true
+}
+
+// searchDoneWithPaging builds a SearchResultDone carrying the simple paged-results
+// response control (RFC 2696): SEQUENCE { size, cookie }. An empty cookie ends the
+// search.
+func searchDoneWithPaging(id int64, code uint16, cookie []byte) []byte {
+	msg := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAPMessage")
+	msg.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, id, "MessageID"))
+	res := ber.Encode(ber.ClassApplication, ber.TypeConstructed, ber.Tag(goldap.ApplicationSearchResultDone), nil, "Response")
+	res.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, int64(code), "resultCode"))
+	res.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN"))
+	res.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "diagnosticMessage"))
+	msg.AppendChild(res)
+
+	val := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "Paging Control Value")
+	val.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, int64(0), "Size"))
+	val.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, string(cookie), "Cookie"))
+
+	ctrl := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "Control")
+	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, goldap.ControlTypePaging, "Control Type"))
 	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, string(val.Bytes()), "Control Value"))
 
 	ctrls := ber.Encode(ber.ClassContext, ber.TypeConstructed, 0, nil, "Controls")

@@ -2514,8 +2514,14 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   `microsoft-teams-phone` — and `GET /api/v1/worker-types` projects them per
   operation as `candidate`. Tests pin the reviewed set, hold each row to the
   manifest's rule, require a profile and refuse one contract identity on two
-  operations. Still open: verified and withdrawn states (they need CDA2's
-  published contracts and evidence), and the account/contact/entry claims.
+  operations. The first contract, `io.atlas.collaboration.channel.create@1.0.0`
+  (profile `microsoft-teams`), is drafted with its conformance suite
+  `entra-create-channel` and a derived record: 4 cases pass, 2 fail because
+  `create-channel` ends an unknown team and a name in use with a plain
+  failure instead of a code, 1 needs a live tenant. It is published once
+  branch protection with the code owner's review is in force (ADR-0483).
+  Still open: that publication, the two codes, verified and withdrawn states,
+  and the account/contact/entry claims.
 - 🔲 **CDA4 — Cross-layer technical capability graph (T3).**
   Extend proposed [ADR-0420](docs/adr/0420-one-graph-model-several-projections.md)
   with stable technical capability and Worker operation nodes, authored
@@ -2687,6 +2693,14 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   the removed holds is kept; erasing it would need an engine event of its own.
 
 **The shop & ordering**
+- ✅ **The shop over MCP, as the connected person.** An agent connected as a person — OAuth
+  over `/mcp` or that person's API token over stdio — browses the catalogues they may order
+  from, orders, follows, withdraws, corrects, returns and changes orders, decides their own
+  approvals and asks a customer's action, with exactly that person's rights and under their
+  name: sixteen tools, one route each. On by default for repeatable agent-driven catalogue
+  tests; `--mcp-shop=false` refuses them to MCP requests while the portal keeps them
+  ([ADR-0550](docs/adr/0550-mcp-shop-customer-side.md), reversing
+  ADR-0428's and ADR-0429 §2's exclusion).
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
   product by eligibility: levels read from the graph once ([ADR-0383](docs/adr/0383-portal-level-names.md)),
   keyword search ([ADR-0355](docs/adr/0355-catalogue-search.md)), favourites
@@ -2799,7 +2813,8 @@ actions with closed effects, each a command whose outcome is a fact published be
   delivered to the strand or started at the action's start event; `GET …/actions` reads from
   the strand's live elements whether each action is possible now; MCP reads it
   (`atlas_order_line_actions`) and asks operator and system actions
-  (`atlas_ask_order_line_action`), never a customer's; a shop button per offered customer action, with its form or a
+  (`atlas_ask_order_line_action`) — since 2026-11-10 a customer's too, as the connected
+  person, unless `--mcp-shop=false` (ADR-0550); a shop button per offered customer action, with its form or a
   confirmation. `/change` is the act for the key `change`; the recipient may return and act
   (§10, decision 4); a directed delivery to a catch that lost an event-based gateway's race
   is now refused instead of reported delivered.

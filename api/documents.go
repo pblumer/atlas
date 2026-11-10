@@ -539,6 +539,10 @@ type jobDocuments struct {
 	instance uint64
 }
 
+// DocumentLimit is the largest document the store accepts, so a worker writing one
+// can stop at it rather than build a file the store will refuse.
+func (d jobDocuments) DocumentLimit() int64 { return d.s.budgets().Document }
+
 func (d jobDocuments) ReadDocument(_ context.Context, id string) ([]byte, string, string, error) {
 	data, rec, err := d.s.readJobDocument(d.instance, id)
 	return data, rec.Name, rec.ContentType, err

@@ -56,6 +56,17 @@ func (c caller) empty() bool { return c.authorization == "" && c.cookie == "" &&
 // to the server that wrote it.
 const TransportHeader = "X-Atlas-Via-MCP"
 
+// AdapterHeader declares that a request is a tool call this adapter made. It is
+// sent on every request, by the adapter behind /mcp and by a stdio adapter alike,
+// so the server can hold the line its --mcp-shop switch draws: the shop's customer
+// side refused to agents while the portal keeps it (ADR-0550).
+//
+// Unlike TransportHeader it proves nothing and is not meant to: a stdio adapter is a
+// separate process with an ordinary API token, and it says what it is because it is
+// honest, not because the server can check. It grants nothing either — a server
+// only ever refuses on it.
+const AdapterHeader = "X-Atlas-MCP-Adapter"
+
 // forCaller returns a Client that authenticates as the given caller instead of
 // with the token this one was built with. It shallow-copies, so the derived
 // client shares the underlying http.Client and its connection pool: one struct
@@ -205,6 +216,7 @@ func (c *Client) doResponse(method, path, contentType string, body []byte) (clie
 	if c.caller.via != "" {
 		req.Header.Set(TransportHeader, c.caller.via)
 	}
+	req.Header.Set(AdapterHeader, "1")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return clientResponse{}, fmt.Errorf("reach atlas server at %s: %w", c.baseURL, err)

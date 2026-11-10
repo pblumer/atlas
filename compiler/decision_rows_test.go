@@ -69,6 +69,12 @@ func TestDecisionRowsCompile(t *testing.T) {
 		t.Fatalf("defaults = %+v", r)
 	}
 
+	// A field inside a variable, where an AD search written as a document puts its file.
+	cp, err = Parse(1, 1, strings.NewReader(rowsBPMN(`source="benutzer.document"`, false)))
+	if err != nil || rowsDetail(t, cp).Rows.Source != "benutzer.document" {
+		t.Fatalf("dotted source = %v", err)
+	}
+
 	// An ordinary business rule task has none.
 	plain := strings.Replace(rowsBPMN(`source="x"`, false), `<rowsFrom source="x"/>`, "", 1)
 	cp, err = Parse(1, 1, strings.NewReader(plain))
@@ -89,6 +95,7 @@ func TestDecisionRowsRefused(t *testing.T) {
 	}{
 		{`source=""`, false, "names no source variable"},
 		{`source="=antrag.file"`, false, "is not a variable name"},
+		{`source="benutzer..document"`, false, "is not a variable name"},
 		{`source="antrag" delimiter=";;"`, false, "not one character"},
 		{`source="antrag" hasHeader="maybe"`, false, "neither true nor false"},
 		{`source="antrag" hasHeader="false"`, false, "must name its columns"},
