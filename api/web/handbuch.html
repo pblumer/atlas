@@ -8003,14 +8003,14 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
       <div class="card" id="runbook-calendar">
         <h4>Calendar booking</h4>
         <p data-l="de">Ein Kalender-Worker steht für <b>ein Kalenderkonto</b>: einen Microsoft-365-Tenant über
-          Microsoft Graph oder, zum Ausprobieren, Kalender im Speicher des Workers. Ein Prozess findet darin freie
+          Microsoft Graph, ein Google-Workspace-Dienstkonto über die Google Calendar API oder, zum Ausprobieren, Kalender im Speicher des Workers. Ein Prozess findet darin freie
           Termine über Öffnungszeiten, reserviert einen so, dass nie zwei Kundinnen denselben erhalten, bestätigt ihn
           mit Betreff, Text und Teilnehmenden, storniert und liest ihn. Ein Task nennt einen Kalender mit der Adresse
           seines Postfachs, normalerweise eines <b>Ressourcenpostfachs</b>. <i>Die Schritte sind gegen das
           prozessinterne Graph-Fake und den Mock durchgegangen worden; die Schritte für Microsoft 365 folgen der
           Dokumentation von Microsoft und wurden noch in keinem Tenant durchgegangen.</i></p>
         <p data-l="en">A calendar worker stands for <b>one calendar account</b>: a Microsoft 365 tenant through
-          Microsoft Graph or, to try a process out, calendars in the worker's memory. A process finds free slots in it
+          Microsoft Graph, a Google Workspace service account through the Google Calendar API or, to try a process out, calendars in the worker's memory. A process finds free slots in it
           over opening hours, reserves one so that two customers never get the same slot, confirms it with subject,
           body and attendees, cancels and reads it. A task names a calendar by its mailbox address, normally a
           <b>resource mailbox</b>. <i>These steps have been walked against the in-process Graph fake and the mock; the
@@ -8039,6 +8039,16 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             Credential-Referenz <code>kalender_filiale</code>. Speichern genügt; atlas startet den Worker selbst.</li>
           <li data-l="en">Create the worker: type <b>Calendar booking</b>, a name (the one a task names), no endpoint and the
             credential reference <code>kalender_filiale</code>. Saving is enough; atlas starts the worker itself.</li>
+          <li data-l="de"><b>Stattdessen Google Workspace:</b> ein Dienstkonto mit JSON-Schlüssel anlegen, die Google
+            Calendar API aktivieren und jeden Buchungskalender für die Adresse des Dienstkontos freigeben
+            (<i>Änderungen an Terminen vornehmen</i>). Secret: <code>{"provider": "google-calendar", "clientEmail":
+            "…", "privateKey": "…"}</code>. Ein Task nennt den Kalender mit seiner Kalender-ID. Teilnehmende einladen
+            darf ein Dienstkonto nur mit domänenweiter Delegation und <code>"subject"</code>.</li>
+          <li data-l="en"><b>Google Workspace instead:</b> create a service account with a JSON key, enable the Google
+            Calendar API and share each booking calendar with the service account's address (<i>Make changes to
+            events</i>). Secret: <code>{"provider": "google-calendar", "clientEmail": "…", "privateKey": "…"}</code>.
+            A task names the calendar by its calendar id. A service account may invite attendees only with
+            domain-wide delegation and a <code>"subject"</code>.</li>
         </ol>
         <p data-l="de"><b>Vergebene Termine abfangen:</b> Wird ein Termin vergeben, während die Kundin wählt, endet
           <i>Termin reservieren</i> mit dem Fehlercode <code>CALENDAR_SLOT_TAKEN</code>, wenn der Prozess ihn mit einem

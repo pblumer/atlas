@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
+  names `"provider": "google-calendar"` uses a service account the booking calendars are shared
+  with; the model stays the same. Recurring and all-day appointments block their time, and a
+  reservation repeated after a delivery that gave it up is confirmed again rather than created
+  twice, because Google never reuses an event id. Attendees are invited by Google; a service
+  account without domain-wide delegation is refused them, which a process catches as
+  `CALENDAR_ATTENDEES_NOT_ALLOWED`. The conformance suites now run every case against the mock,
+  Microsoft Graph and Google (ADR-0552).
 - **An order form can check whether a SharePoint Server site name is free.** The live name
   check of ADR-0519 gains the source `sharepointserver/sites`: the farm's Worker answers it with
   `get-site` under its own web application and managed path, so the check names only the Worker,

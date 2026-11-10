@@ -5632,7 +5632,7 @@ const SERVICE_TASK_KINDS = [
   },
   {
     id: "calendar", name: "Calendar booking", group: "Applications",
-    desc: "Find free slots in a calendar — a workshop bay, a room, any free advisor — reserve one so that no two customers get it, confirm the booking with its details and attendees, cancel or read it; Microsoft 365 or the mock, as the Worker says",
+    desc: "Find free slots in a calendar — a workshop bay, a room, any free advisor — reserve one so that no two customers get it, confirm the booking with its details and attendees, cancel or read it; Microsoft 365, Google Workspace or the mock, as the Worker says",
     icon: "K",
     // A calendar page with one slot taken, on amber: a booking, told apart from the
     // contact cards beside it.
@@ -5642,7 +5642,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Calendar" },
       {
         key: "connector", label: "Worker", datalist: "calendar", placeholder: "filiale-bern",
-        hint: "The configured calendar Worker whose calendars this task uses, by its name under Workers in the Console. Which provider answers — Microsoft 365 or the mock — and as whom is the Worker's; the credential reaches that worker and never the engine. A value starting with = is a FEEL expression.",
+        hint: "The configured calendar Worker whose calendars this task uses, by its name under Workers in the Console. Which provider answers — Microsoft 365, Google Workspace or the mock — and as whom is the Worker's; the credential reaches that worker and never the engine. A value starting with = is a FEEL expression.",
       },
       { group: "Operation" },
       {

@@ -63,8 +63,10 @@ Start "Termin anfragen"            (Startformular termin-dienstleistung, öffent
    ```
 
    Für Microsoft 365: `{"provider": "microsoft-graph", "tenantId": "…", "clientId": "…",
-   "clientSecret": "…"}` und im Modell die Adresse des eigenen Ressourcenpostfachs; die
-   Schritte stehen im Handbuch unter *Calendar booking*.
+   "clientSecret": "…"}` und im Modell die Adresse des eigenen Ressourcenpostfachs. Für
+   Google Workspace: `{"provider": "google-calendar", "clientEmail": "…", "privateKey":
+   "…"}` und im Modell die Kalender-ID des freigegebenen Kalenders. Die Schritte stehen im
+   Handbuch unter *Calendar booking*.
 2. Das Beispiel installieren (Handbuch, Kapitel Beispiele, oder atlas hub, Bundle
    `terminbuchung`) und in der Tasks-App unter *Start process* bei **Terminbuchung** den
    öffentlichen Link veröffentlichen.

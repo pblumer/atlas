@@ -273,7 +273,7 @@ export function workerShape(kind, provider) {
       : carddav
       ? "Credential reference (vault {username, password, groups})"
       : calendar
-      ? "Credential reference (vault {provider, tenantId, clientId, clientSecret})"
+      ? "Credential reference (vault {provider, …}: Microsoft 365, Google or mock)"
       : wiki
       ? "Credential reference (vault {token})"
       : googlesheets
@@ -303,7 +303,7 @@ export function workerShape(kind, provider) {
       : carddav
       ? "carddav_verkauf (vault {username, password, groups})"
       : calendar
-      ? "kalender_filiale (vault {provider, tenantId, clientId, clientSecret})"
+      ? "kalender_filiale (vault {provider, …})"
       : wiki
       ? "wiki_bot (vault {token})"
       : googlesheets
@@ -333,7 +333,7 @@ export function workerShape(kind, provider) {
       : carddav
       ? "The <b>endpoint</b> is the address book\u0027s URL, or any URL of the server it can be found from \u2014 <code>https://cloud.example.ch/remote.php/dav</code> for Nextcloud, <code>https://contacts.icloud.com</code> for iCloud, the server\u0027s root for Radicale or Baïkal. When the account has more than one address book, the first task says which ones there are, and you set the endpoint to the one this Worker uses. It must be <b>https</b>. The credential reference names a vault bundle \u2014 never a value: <code>{\"username\": \"\u2026\", \"password\": \"\u2026\", \"groups\": \"categories\"}</code>, with an <b>app-specific password</b> where the provider issues one, and <code>\"groups\": \"group-vcards\"</code> for iCloud and Fastmail. One Worker per address book."
       : calendar
-      ? "The credential reference names a vault bundle that says <b>which provider</b> answers and as whom \u2014 never a value. <b>Microsoft 365:</b> <code>{\"provider\": \"microsoft-graph\", \"tenantId\": \"\u2026\", \"clientId\": \"\u2026\", \"clientSecret\": \"\u2026\"}</code> for an app registration with the application permission <code>Calendars.ReadWrite</code>; restrict it in Exchange Online to the booking calendars, because unrestricted it reaches every mailbox. Leave the <b>endpoint empty</b>. A task names a calendar by its mailbox address, normally a <b>resource mailbox</b>. <b>Mock:</b> <code>{\"provider\": \"mock\", \"calendars\": {\"werkstatt@firma.ch\": {}}}</code> keeps the calendars in the worker\u0027s memory, the way to try a booking process before the tenant is ready."
+      ? "The credential reference names a vault bundle that says <b>which provider</b> answers and as whom \u2014 never a value. <b>Microsoft 365:</b> <code>{\"provider\": \"microsoft-graph\", \"tenantId\": \"\u2026\", \"clientId\": \"\u2026\", \"clientSecret\": \"\u2026\"}</code> for an app registration with the application permission <code>Calendars.ReadWrite</code>; restrict it in Exchange Online to the booking calendars, because unrestricted it reaches every mailbox. Leave the <b>endpoint empty</b>. A task names a calendar by its mailbox address, normally a <b>resource mailbox</b>. <b>Google Workspace:</b> <code>{\"provider\": \"google-calendar\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code> for a service account the booking calendars are <b>shared with</b> (\u201cmake changes to events\u201d); add <code>\"subject\"</code> and domain-wide delegation only if the Worker shall invite attendees. A task names a calendar by its calendar id. <b>Mock:</b> <code>{\"provider\": \"mock\", \"calendars\": {\"werkstatt@firma.ch\": {}}}</code> keeps the calendars in the worker\u0027s memory, the way to try a booking process before the tenant is ready."
       : wiki
       ? "The <b>endpoint</b> is the wiki\u0027s base URL, where its web UI is \u2014 <code>https://wiki.example.ch</code>, with the path when it runs below one. It must be <b>https</b>. The credential reference names a vault bundle \u2014 never a value: <code>{\"token\": \"wwbb_\u2026\"}</code>, an API token of a <b>technical account of its own</b> that is an editor in the spaces processes write to. An account with the system role <code>admin</code> or <code>erasure</code> is refused, and it must not be the read-only account the catalogue reads the wiki with. One Worker per wiki and account."
       : googlesheets

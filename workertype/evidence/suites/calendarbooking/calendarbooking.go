@@ -24,6 +24,7 @@ package calendarbooking
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,7 @@ import (
 
 	"github.com/pblumer/atlas/connector/calendar"
 	"github.com/pblumer/atlas/connector/calendar/catalog"
+	"github.com/pblumer/atlas/connector/calendar/googlefake"
 	"github.com/pblumer/atlas/connector/calendar/graphfake"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/workertype"
@@ -133,6 +135,58 @@ var backends = []backendUnderTest{
 		return mockWorld{calendar.NewMockCalendars(specs)}
 	}},
 	{name: calendar.ProviderGraph, build: buildGraphWorld},
+	{name: calendar.ProviderGoogle, build: buildGoogleWorld},
+}
+
+// googleWorld is the Google backend against the in-process fake of the Calendar API.
+type googleWorld struct {
+	fake *googlefake.Server
+	b    calendar.Backend
+}
+
+func buildGoogleWorld(specs map[string]calendar.MockCalendarSpec) world {
+	cals := map[string]googlefake.Calendar{}
+	for name, spec := range specs {
+		c := googlefake.Calendar{ReadOnly: spec.ReadOnly, RefuseAttendees: spec.RefuseAttendees}
+		for _, b := range spec.Busy {
+			c.Busy = append(c.Busy, googlefake.Busy{Start: b.Start, End: b.End, Transparent: b.Free, Weekly: b.Weekly})
+		}
+		cals[name] = c
+	}
+	fake := googlefake.New(cals)
+	fake.PageSize = 2 // every read pages
+	b, err := calendar.NewBackend(fake.APIURL(), googlefake.Bundle(""), calendar.Options{HTTPClient: fake.HTTPClient(), TokenURL: fake.TokenURL()})
+	if err != nil {
+		panic("calendarbooking: the Google backend does not build against the fake: " + err.Error())
+	}
+	return googleWorld{fake: fake, b: b}
+}
+
+func (w googleWorld) backend() calendar.Backend { return w.b }
+
+func (w googleWorld) close() { w.fake.Close() }
+
+// events are the calendar's events that are not cancelled: a reservation the conflict
+// rule gave up is a cancelled event to Google, and gone to the case.
+func (w googleWorld) events(cal string) []observed {
+	var out []observed
+	for _, e := range w.fake.Events(cal) {
+		if e.Status == "cancelled" {
+			continue
+		}
+		att := make([]calendar.Attendee, len(e.Attendees))
+		for j, a := range e.Attendees {
+			att[j] = calendar.Attendee{Email: a.Email, Name: a.Name}
+		}
+		key := ""
+		if rest, ok := strings.CutPrefix(e.ID, "atlas"); ok {
+			if raw, err := hex.DecodeString(rest); err == nil {
+				key = string(raw)
+			}
+		}
+		out = append(out, observed{ID: e.ID, Key: key, Start: e.Start, End: e.End, Subject: e.Summary, Body: e.Description, Attendees: att})
+	}
+	return out
 }
 
 // graphWorld is the Graph backend against the in-process fake of Microsoft Graph.
@@ -221,6 +275,9 @@ func Suite(name string) evidence.Suite {
 			"every backend. microsoft-graph runs against connector/calendar/graphfake, an in-process fake written from " +
 			"Graph's documentation, not observed from a tenant; it pages every read and does not filter a repeated " +
 			"transactionId. A refusal a provider never makes (Graph never refuses attendees) is met vacuously on it. " +
+			"google-calendar runs against connector/calendar/googlefake, written from Google's documentation, not observed " +
+			"from a domain; it pages every read, expands a series only for singleEvents, refuses an event id it has seen " +
+			"and keeps a deleted event as cancelled. " +
 			"The backends see every create that returned before a read began; whether a provider does is not shown here.",
 		Run: func(ctx context.Context, contract workertype.TechnicalContract) ([]evidence.Result, error) {
 			return run(ctx, name, contract)
