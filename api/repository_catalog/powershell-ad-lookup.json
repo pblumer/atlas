@@ -4,7 +4,7 @@
   "kind": "script-task",
   "title": "PowerShell · AD User Lookup",
   "author": "community · s.keller",
-  "description": "Resolve an Active Directory user by e-mail and return department and manager. Carries a PowerShell script, so it is imported as a reviewable draft and runs only where a PowerShell worker is enabled (ADR-0047).",
+  "description": "Resolve an Active Directory user by e-mail and return department and manager. Carries a PowerShell script: copy it into a script task, where it runs only if a PowerShell worker is enabled (ADR-0047).",
   "engineCompat": ">=0.10",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",

@@ -1,9 +1,16 @@
 # ADR-0212: The element-template applier, and what a template binding means in Atlas
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
+
+> **Honesty fix landed (2026-11-10).** The immediate half of the decision below is
+> built: the Console's Repository page no longer offers *Install* or *Remove*, and each
+> package says whether this server ships the kind it describes (`builtIn` on the list
+> response). The applier is not built. Whether it should be is taken up by
+> [ADR-draft-repository-becomes-atlas-hub-view](draft-repository-becomes-atlas-hub-view.md),
+> which proposes resolving this record by its option 4.
 
 ## Context and problem statement
 

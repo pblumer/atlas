@@ -12658,24 +12658,24 @@ function setTitle(label) {
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
 // Views with a dynamic subject — a diagram, an instance, a decision — refine it once
 // their data loads (see setTitle calls in the editor/live/replay mounts).
-// viewRepository is the community repository gallery (ADR-0081): browse the
-// curated catalog of workers, service tasks and script tasks and install one
-// into this server's template store. The trust split is the load-bearing UI
-// signal — a data-only worker/service task installs in one click ("Data only"),
-// while a script task carries code, so it reads "Runs code" and installs through a
-// review affordance (and is admin-gated server-side). No secret ever travels in a
-// shared package.
+// viewRepository is the community repository gallery (ADR-0081), and since ADR-0212's
+// honesty fix a catalogue only: it describes workers, service tasks and script tasks
+// and installs nothing. An install used to record a choice in a store the Modeler
+// never read, so "Install" and "Remove" changed nothing a modeller could see. What
+// the page can truthfully say per package is whether this server ships the kind it
+// describes (builtIn, from the release registry) and what the template holds. The
+// relation to atlas hub is settled in ADR-draft-repository-becomes-atlas-hub-view.
 async function viewRepository() {
   view.innerHTML = `
     <div class="between">
       <h1>Repository</h1>
       <button class="btn neutral" id="repo-refresh" title="Reload the repository catalog">Refresh</button>
     </div>
-    <p class="muted">Workers, service tasks and scripts the community already built,
-    packaged as element templates. Installing one keeps its template on this server;
-    applying it to a task in the Modeler is not built yet (ADR-0212). Data-only workers install in a click; a script task carries code, so it
-    is imported for review. Credentials never travel in a shared package — you connect
-    those on your server.</p>
+    <p class="muted">A catalogue of the workers, service tasks and scripts packaged as
+    element templates. It installs nothing: a package marked <b>Built in</b> describes a
+    Worker Type this server already ships, and you choose it on a service task in the
+    Modeler. A script task package is a sample whose script you can read here.
+    Credentials never travel in a package — you connect those on your server.</p>
     <div class="ops-toolbar">
       <input id="repo-q" class="filter-input" type="search" placeholder="Search workers, tasks and scripts…" aria-label="Search the repository">
       <div class="seg" id="repo-kinds" role="tablist">
@@ -12692,8 +12692,19 @@ async function viewRepository() {
   // elsewhere carries it — but what an operator reads is the Worker vocabulary.
   const kindLabel = { "connector": "Worker", "service-task": "Service task", "script-task": "Script task" };
   let packages = [];
-  let installed = new Set();
   let kind = "";
+  // Templates opened with "Show template", by package id. Fetched on first open and
+  // kept for the life of the view, so a re-render (search, tab) keeps them open.
+  const shown = new Map();
+
+  const availability = (p) => {
+    if (p.kind === "script-task") {
+      return '<span class="pill off" title="A script, not a Worker Type: a script task in the Modeler runs it">Script sample</span>';
+    }
+    return p.builtIn
+      ? '<span class="pill ok" title="This server ships the Worker Type: choose it on a service task in the Modeler"><span class="dot"></span>Built in</span>'
+      : '<span class="pill off" title="No Worker Type on this server implements this package; it is a description only"><span class="dot"></span>Not built in</span>';
+  };
 
   const render = () => {
     const q = document.getElementById("repo-q").value.trim().toLowerCase();
@@ -12707,16 +12718,13 @@ async function viewRepository() {
       return;
     }
     grid.innerHTML = list.map((p) => {
-      const isInstalled = installed.has(p.id);
       const trust = p.carriesCode
         ? '<span class="pill warn"><span class="dot"></span>Runs code</span>'
         : '<span class="pill ok"><span class="dot"></span>Data only</span>';
-      const action = isInstalled
-        ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}" title="Remove this template from your server">Remove</button>`
-        : p.carriesCode
-          ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}" title="Review the code, then install this template">Review &amp; install</button>`
-          : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template on this server">Install</button>`;
-      const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
+      const open = shown.has(p.id);
+      const template = open
+        ? `<pre class="repo-template" aria-label="Element template of ${esc(p.title)}">${esc(shown.get(p.id))}</pre>`
+        : "";
       return `<div class="repo-card card">
         <div class="repo-head">
           <div class="repo-title">
@@ -12730,9 +12738,13 @@ async function viewRepository() {
           <span class="chip">v${esc(p.version)}</span>
           <span class="chip">Atlas ${esc(p.engineCompat)}</span>
           ${trust}
-          ${installedTag}
+          ${availability(p)}
         </div>
-        <div class="repo-foot">${action}</div>
+        ${template}
+        <div class="repo-foot">
+          <button class="btn ghost" data-act="template" data-id="${esc(p.id)}" aria-expanded="${open}"
+            title="${open ? "Hide the element template" : "Show the element template this package carries"}">${open ? "Hide template" : "Show template"}</button>
+        </div>
       </div>`;
     }).join("");
   };
@@ -12740,12 +12752,7 @@ async function viewRepository() {
   const load = async () => {
     grid.innerHTML = `<div class="card empty">Loading…</div>`;
     try {
-      const [pkgs, inst] = await Promise.all([
-        api("GET", "/api/v1/repository/packages"),
-        api("GET", "/api/v1/repository/installed"),
-      ]);
-      packages = pkgs || [];
-      installed = new Set((inst || []).map((r) => r.id));
+      packages = (await api("GET", "/api/v1/repository/packages")) || [];
       render();
     } catch (e) {
       grid.innerHTML = `<div class="card empty">${esc(e.message)}</div>`;
@@ -12753,22 +12760,18 @@ async function viewRepository() {
   };
 
   grid.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-act]");
+    const btn = e.target.closest("button[data-act='template']");
     if (!btn) return;
     const id = btn.dataset.id;
-    const pkg = packages.find((p) => p.id === id);
-    const name = pkg ? pkg.title : "Package";
+    if (shown.has(id)) {
+      shown.delete(id);
+      render();
+      return;
+    }
     btn.disabled = true;
     try {
-      if (btn.dataset.act === "install") {
-        const res = await api("POST", `/api/v1/repository/packages/${encodeURIComponent(id)}/install`);
-        installed.add(id);
-        toast(res && res.reviewRequired ? `${name} imported for review` : `${name} installed`, "ok");
-      } else {
-        await api("DELETE", `/api/v1/repository/installed/${encodeURIComponent(id)}`);
-        installed.delete(id);
-        toast(`${name} removed`, "ok");
-      }
+      const pkg = await api("GET", `/api/v1/repository/packages/${encodeURIComponent(id)}`);
+      shown.set(id, JSON.stringify(pkg && pkg.template, null, 2));
       render();
     } catch (err) {
       toast(err.message, "err");

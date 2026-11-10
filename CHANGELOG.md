@@ -100,6 +100,14 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **The Repository page is a catalogue and no longer offers Install or Remove.** An
+  install only ever recorded a choice in a store the Modeler never read, so the buttons
+  changed nothing a modeller could see (ADR-0212). Each package now says whether this
+  server ships the Worker Type it describes — *Built in*, *Not built in* or *Script
+  sample* — and *Show template* displays the element template it carries. The list
+  route `GET /api/v1/repository/packages` gains `builtIn`; the install routes are
+  unchanged for API callers. Their retirement and the Repository's relation to atlas hub
+  are proposed in ADR-draft-repository-becomes-atlas-hub-view.
 - **The Problems panel points at the element behind a compile error.** A fault the compiler
   meets while building a process — a duplicate id, an unknown error, message, signal or
   escalation reference, a link throw without its catch, a condition that does not parse, a

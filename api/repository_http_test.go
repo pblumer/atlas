@@ -17,6 +17,7 @@ type manifestDTO struct {
 	Title       string `json:"title"`
 	CarriesCode bool   `json:"carriesCode"`
 	Checksum    string `json:"checksum"`
+	BuiltIn     bool   `json:"builtIn"`
 }
 
 func listPackages(t *testing.T, ts *httptest.Server, query string) []manifestDTO {
@@ -72,6 +73,34 @@ func TestRepositoryListFilters(t *testing.T) {
 	none := listPackages(t, ts, "?q=zzz-nothing-matches")
 	if len(none) != 0 {
 		t.Fatalf("q with no match returned %d, want 0", len(none))
+	}
+}
+
+// TestRepositoryListSaysWhatIsBuiltIn pins the one statement the gallery makes about
+// where a package's subject is found: a package the release registry names as a
+// shipped kind's package is built in, and one no kind stands behind is not. The Slack
+// package is the second case today — no Slack Worker Type exists — and a script task
+// never is, because it describes a script, not a kind.
+func TestRepositoryListSaysWhatIsBuiltIn(t *testing.T) {
+	ts := newTestServer(t)
+	byID := map[string]manifestDTO{}
+	for _, m := range listPackages(t, ts, "") {
+		byID[m.ID] = m
+	}
+	for id, want := range map[string]bool{
+		restPkgID:                 true,
+		"atlas.carddav":           true,
+		"community.slack-message": false,
+		scriptPkgID:               false,
+	} {
+		m, ok := byID[id]
+		if !ok {
+			t.Errorf("package %s is not in the catalog", id)
+			continue
+		}
+		if m.BuiltIn != want {
+			t.Errorf("package %s builtIn = %v, want %v", id, m.BuiltIn, want)
+		}
 	}
 }
 

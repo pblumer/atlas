@@ -4741,6 +4741,7 @@ tr[hidden] { display: none; }
 .repo-desc { margin: 0; color: var(--muted); font-size: 13px; flex: 1; }
 .repo-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .repo-foot { display: flex; justify-content: flex-end; margin-top: 2px; }
+.repo-template { margin: 0; max-height: 320px; overflow: auto; font: 12px/1.45 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; }
 
 .member-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
 .member-row + .member-row { border-top: 1px solid var(--border); }

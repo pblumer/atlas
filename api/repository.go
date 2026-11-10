@@ -21,7 +21,11 @@ import (
 // workers, service tasks, and script tasks — as one shareable unit: an
 // element-template payload (ADR-0027) wrapped in a manifest. This first slice
 // ships a curated, bundled catalog (compiled into the binary, no network) that
-// the Modeler can browse and install; a remote registry is a follow-up.
+// the Modeler can browse; a remote registry is a follow-up. The Console no longer
+// offers to install a package, because an install never reached the Modeler
+// (ADR-0212); the install routes stay for API callers until the record that
+// settles the Repository's relation to atlas hub decides their fate
+// (ADR-draft-repository-becomes-atlas-hub-view).
 //
 // The load-bearing rule is the trust split: a data-only artifact (a worker or
 // service task) is safe to install directly, but a script task carries
@@ -70,14 +74,36 @@ type repositoryManifest struct {
 	EngineCompat string `json:"engineCompat"`
 	Checksum     string `json:"checksum"`
 	CarriesCode  bool   `json:"carriesCode"`
+	// BuiltIn says the package describes a Worker Type this binary ships: a row of
+	// the release registry (releasedkinds.go) names it as that kind's package. The
+	// gallery shows it so a reader can tell a description of something the Modeler
+	// already offers from one that has no kind behind it — installing a package has
+	// never put anything in the Modeler (ADR-0212), so this is the only thing the
+	// page can truthfully say about where a package's subject is found.
+	BuiltIn bool `json:"builtIn"`
 }
 
 func (p repositoryPackage) manifest() repositoryManifest {
 	return repositoryManifest{
 		ID: p.ID, Version: p.Version, Kind: p.Kind, Title: p.Title, Author: p.Author,
 		Description: p.Description, EngineCompat: p.EngineCompat, Checksum: p.Checksum,
-		CarriesCode: p.carriesCode(),
+		CarriesCode: p.carriesCode(), BuiltIn: packageIsBuiltIn(p.ID),
 	}
+}
+
+// packageIsBuiltIn reports whether a release-registry row names id as the package of
+// a kind this binary ships. The registry is a short static slice, so a scan per call
+// is cheaper to read than a cache, and nothing on the engine's hot path asks.
+func packageIsBuiltIn(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, k := range releasedKinds {
+		if k.Package == id {
+			return true
+		}
+	}
+	return false
 }
 
 // repositoryPackageView is the full package the detail endpoint returns: the

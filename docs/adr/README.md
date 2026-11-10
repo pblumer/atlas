@@ -299,7 +299,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted | Landed |
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted | Landed |
 | [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted (amended) | Landed |
-| [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed | Not started |
+| [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed | Partial |
 | [0213](0213-ad-mock-directory-in-the-console.md) | The mock Active Directory is visible in the Console | Accepted | Landed |
 | [0214](0214-jira-inbound-issue-watch.md) | Jira as an inbound event source — a polled issue watch, deduplicated per issue | Accepted | Landed |
 | [0215](0215-modeler-playground.md) | The Modeler Playground — batch simulation and analysis of a draft | Accepted | Landed |
