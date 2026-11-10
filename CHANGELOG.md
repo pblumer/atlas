@@ -283,6 +283,16 @@ directory gains the document store. Four changes can break what worked against 0
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
+- **A multi-instance body's collection fills round by round in the replay.** The replay showed
+  the output collection as it was seeded — `[null, …]` — in every round and filled only once
+  the loop had finished, because a round records only its element (ADR-0296) and that element
+  was not retained. It is now retained, the size of one result, in a column family of its own
+  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
+  linear in the round count. The instance timeline applies each element to the collection as
+  it stands, so a round shows the list the rounds before it left and its own answer at
+  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
+  this keep the old reading, and only there does the Environment still explain it
+  ([ADR-draft-collection-by-round](docs/adr/draft-collection-by-round.md)).
 - **A new built-in Worker Type declares what a second delivery does.** Every new built-in
   Worker Type ships a manifest stating each operation's idempotency and effect, as an
   installed one must; `go test ./api` refuses one without it, and the 31 kinds released

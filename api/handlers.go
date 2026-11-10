@@ -2426,6 +2426,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			endPos   uint64 // last position the change's scope is live (^0 for the root scope)
 			producer uint64 // element instance that wrote it; 0 = none recorded
 			view     variableView
+			// elem is set on one element of a list being set — a multi-instance round's
+			// result joining its body's collection (ADR-0296) — rather than a whole
+			// value: the fold applies it to the list as it stands
+			// (ADR-draft-collection-by-round).
+			elem *model.VariableValue
 		}
 		var (
 			stepRows []stepRow
@@ -2585,10 +2590,29 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			if scanErr != nil {
 				break
 			}
+			// A multi-instance body's collection fills one element per round, and only
+			// the element is retained. Read first so the fold can show the list as each
+			// round left it, and so the body's values can say whether its elements are on
+			// record at all: an instance recorded before they were retained has none, and
+			// its collection reads as seeded until the loop promotes it.
+			recorded := false
+			if sp.kind == scopeKindMultiInstanceBody {
+				scanErr = s.store.VariableElementHistory(key, sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
+					el := *v
+					view := variableView{Name: v.Name, Scope: sp.label, ScopeKind: sp.kind}
+					changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view, elem: &el})
+					recorded = true
+					return nil
+				})
+				if scanErr != nil {
+					break
+				}
+			}
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
 				view.ScopeKind = sp.kind
+				view.ElementsRecorded = recorded
 				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view})
 				return nil
@@ -2815,12 +2839,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			view   variableView
 			endPos uint64
 		}
+		// fold applies one change to a running set: a whole value replaces the entry, an
+		// element is set into the list the entry holds.
+		fold := func(m map[varKey]varEntry, c varChange) {
+			k := varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}
+			if c.elem == nil {
+				m[k] = varEntry{view: c.view, endPos: c.endPos}
+				return
+			}
+			if e, ok := m[k]; ok {
+				if view, ok := withListElement(e.view, c.elem); ok {
+					m[k] = varEntry{view: view, endPos: e.endPos}
+				}
+			}
+		}
 		running := map[varKey]varEntry{}
 		ci := 0
 		for _, sr := range stepRows {
 			for ci < len(changes) && changes[ci].pos <= sr.pos {
-				c := changes[ci]
-				running[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				fold(running, changes[ci])
 				ci++
 			}
 			vars := make([]variableView, 0, len(running))
@@ -2979,8 +3016,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		ai := 0
 		for _, r := range refs {
 			for ai < len(changes) && changes[ai].pos <= r.pos {
-				c := changes[ai]
-				after[varKey{c.view.Scope, c.view.ScopeKind, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				fold(after, changes[ai])
 				ai++
 			}
 			vars := make([]variableView, 0, len(after))
@@ -3015,6 +3051,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		for _, c := range changes {
 			if c.producer == 0 {
 				continue // start variables, an operator override, or pre-attribution history
+			}
+			if c.elem != nil {
+				// A round's element joining the body's collection is the round's result
+				// on its way to the loop's; the round's own result is already its output.
+				continue
 			}
 			w := byProducer[c.producer]
 			if w == nil {
@@ -3159,6 +3200,11 @@ type variableView struct {
 	// ADR-0456): "process" for a process constant's own variable, "application" or
 	// "server" for the namespace the installation fills. Empty for every other variable.
 	Constant string `json:"constant,omitempty"`
+	// ElementsRecorded marks a multi-instance body's variable whose per-round element
+	// writes are on record, so the timeline shows the output collection as each round
+	// left it (ADR-draft-collection-by-round). Absent on an instance recorded before
+	// those writes were retained: its collection reads as seeded until the loop is done.
+	ElementsRecorded bool `json:"elementsRecorded,omitempty"`
 	// Actor names the operator who last set this value via an external override
 	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
 	// value was written by the model itself or the override carried no identity (auth

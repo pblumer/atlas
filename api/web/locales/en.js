@@ -165,7 +165,7 @@ export default {
   "ops.vars.atEnd": "at completion: {value}",
   "ops.vars.lateOnly": "only at completion",
   "ops.vars.lateOnlyTitle": "Appeared while this instance ran — written by another path, or by hand",
-  "ops.vars.collectionNote": "Fills round by round, but shows filled here only once the loop has finished. Each round's result is in that round's Output.",
+  "ops.vars.collectionNote": "This instance was recorded before Atlas kept each round's result: the collection shows filled here only once the loop has finished. Each round's result is in that round's Output.",
   "ops.vars.head.iteration": "round {n}",
   "ops.vars.head.done": "completed",
   "ops.vars.head.active": "active",

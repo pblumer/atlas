@@ -93,9 +93,9 @@ test("the environment groups what is in reach by scope, innermost first, and lea
 
   // A subprocess running beside the task shares the snapshot and is out of its reach.
   await expect(rowOf(page, "fremd")).toHaveCount(0);
-  // What only appeared while the round ran says so. The body's collection, which the
-  // history shows unfilled until the loop is done, says that rather than read as rounds
-  // that produced nothing.
+  // What only appeared while the round ran says so. On an instance recorded before each
+  // round's element was kept, the body's collection reads unfilled until the loop is
+  // done, and says so rather than read as rounds that produced nothing.
   await expect(rowOf(page, "notiz").locator(".c-late")).toBeVisible();
   await expect(rowOf(page, "bewertungen").locator(".v-coll")).toHaveCount(1);
   // A constant says whose it is.
@@ -166,5 +166,22 @@ test("with nothing selected the instance's variables stay one list, each scope n
   await expect(chip).toContainText("Bewerten_1");
   await expect(chip).not.toHaveText("Bewerten_1");
   await expect(rowOf(page, "limite").locator(".c-scope")).not.toHaveText(await chip.innerText());
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+// Where each round's element is on record, the body's collection fills round by round:
+// the round that answered shows the list with its answer at completion, the next round
+// starts from it, and nothing explains an unfilled list away.
+test("a recorded collection fills round by round and needs no explanation", async ({ page }) => {
+  await page.goto("/variables-sections-harness.html?recorded=1");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate(() => window.__mount());
+  await selectRound(page, "1003");
+  await tab(page).locator(".v-env-toggle").click();
+  await expect(rowOf(page, "bewertungen").locator(".v-was")).toContainText('["gut",null]');
+  await expect(rowOf(page, "bewertungen").locator(".v-coll")).toHaveCount(0);
+  await selectRound(page, "1004");
+  await expect(rowOf(page, "bewertungen").locator(".v-open .peek")).toContainText('"gut"');
+  await expect(rowOf(page, "bewertungen").locator(".v-coll")).toHaveCount(0);
   expect(page.__errors, "page errors").toEqual([]);
 });

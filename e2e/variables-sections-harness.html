@@ -52,6 +52,11 @@
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
+      // ?recorded=1 is an instance whose rounds' elements are on record
+      // (ADR-draft-collection-by-round): the body's collection fills round by round. Without
+      // it, the instance predates that, and the collection reads as seeded until the loop
+      // has finished (ADR-0296).
+      const recorded = new URLSearchParams(location.search).has("recorded");
       const positionen = JSON.stringify([{ artikel: "Notebook", menge: 2 }, { artikel: "Maus", menge: 5 }]);
       const pos = JSON.stringify({ artikel: "Notebook", menge: 2 });
       // What the first round could see on entry: the process's variables and constants, its
@@ -63,15 +68,15 @@
         { name: "MAX_POSITIONEN", value: "20", kind: "number", constant: "process" },
         { name: "server", value: JSON.stringify({ environment: "test" }), kind: "json", constant: "server" },
         { name: "limite", value: "1000", kind: "number", scope: "Pruefung_1", scopeKind: "subprocess" },
-        { name: "bewertungen", value: "[null,null]", kind: "json", scope: "Bewerten_1", scopeKind: "multiInstanceBody" },
+        { name: "bewertungen", value: "[null,null]", kind: "json", scope: "Bewerten_1", scopeKind: "multiInstanceBody", elementsRecorded: recorded || undefined },
         { name: "fremd", value: "x", kind: "string", scope: "Andere_1", scopeKind: "subprocess" },
       ];
       // Once the round finished: it kept its answer in its own scope and rewrote a process
       // variable it found, another path wrote a note meanwhile — and the body's collection
-      // still reads unfilled, because its per-round element writes are not in the history
-      // (ADR-0296); the server folds it filled only once the loop has finished.
+      // took the round's answer, where its element is on record.
       const after = [
-        ...entry.map((v) => v.name === "szenario" ? { ...v, value: "geprueft" } : v),
+        ...entry.map((v) => v.name === "szenario" ? { ...v, value: "geprueft" }
+          : v.name === "bewertungen" && recorded ? { ...v, value: '["gut",null]' } : v),
         { name: "notiz", value: "von Hand", kind: "string" },
       ];
       const writes = [
