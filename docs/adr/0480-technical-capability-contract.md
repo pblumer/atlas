@@ -149,8 +149,9 @@ parallel list — is implemented for two Worker Types:
   `create-channel` and `archive-team` claim `io.atlas.collaboration.space.*` and
   `io.atlas.collaboration.channel.create` with the profile `microsoft-teams`; Teams Phone's
   operations claim `io.atlas.telephony.*` with `microsoft-teams-phone`. `resolve-users`
-  declares none. Every claim is version `0.1.0`: no contract with these identifiers is
-  published.
+  declares none. Every claim is version `0.1.0`, since no contract with these identifiers is
+  published, except `create-channel`: it claims `1.0.0`, the version of the contract drafted for it
+  (amended 2026-11-10; see ADR-0483, *First contract drafted*).
 - The identifiers are deliberately provider-neutral, and a built-in claim must carry a
   profile. The neutral name says what kind of step it is; the profile restricts the claim to
   that provider. Together they say nothing about interchangeability, which §3 leaves to a

@@ -2514,8 +2514,14 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   `microsoft-teams-phone` — and `GET /api/v1/worker-types` projects them per
   operation as `candidate`. Tests pin the reviewed set, hold each row to the
   manifest's rule, require a profile and refuse one contract identity on two
-  operations. Still open: verified and withdrawn states (they need CDA2's
-  published contracts and evidence), and the account/contact/entry claims.
+  operations. The first contract, `io.atlas.collaboration.channel.create@1.0.0`
+  (profile `microsoft-teams`), is drafted with its conformance suite
+  `entra-create-channel` and a derived record: 4 cases pass, 2 fail because
+  `create-channel` ends an unknown team and a name in use with a plain
+  failure instead of a code, 1 needs a live tenant. It is published once
+  branch protection with the code owner's review is in force (ADR-0483).
+  Still open: that publication, the two codes, verified and withdrawn states,
+  and the account/contact/entry claims.
 - 🔲 **CDA4 — Cross-layer technical capability graph (T3).**
   Extend proposed [ADR-0420](docs/adr/0420-one-graph-model-several-projections.md)
   with stable technical capability and Worker operation nodes, authored

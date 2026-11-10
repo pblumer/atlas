@@ -1,0 +1,43 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.collaboration.channel.create",
+    "version": "1.0.0",
+    "profile": "microsoft-teams",
+    "name": "Create a standard channel in a collaboration space"
+  },
+  "spec": {
+    "resourceKind": "channel",
+    "identityScope": "collaboration-space",
+    "verb": "create",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" }
+      },
+      "required": ["spaceId", "displayName"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "channelId": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string" }
+      },
+      "required": ["channelId"],
+      "additionalProperties": false
+    },
+    "errors": [
+      {"code": "SPACE_NOT_FOUND", "description": "The space identifier names no collaboration space the caller can reach; nothing is created", "retryable": false},
+      {"code": "CHANNEL_ALREADY_EXISTS", "description": "The space already has a channel with this display name; no second channel is created", "retryable": false}
+    ],
+    "idempotency": "conditional",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}

@@ -180,8 +180,12 @@ var Ops = map[string]Op{
 	"create-team":     {Method: "POST", NeedsGroup: true, Label: "create a team", Capabilities: teamsClaim("io.atlas.collaboration.space.create")},
 	"add-team-member": {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team member", Capabilities: teamsClaim("io.atlas.collaboration.space.member.add")},
 	"add-team-owner":  {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team owner", Capabilities: teamsClaim("io.atlas.collaboration.space.owner.add")},
-	"create-channel":  {Method: "POST", NeedsGroup: true, NeedsAttributes: true, Label: "create a channel", Capabilities: teamsClaim("io.atlas.collaboration.channel.create")},
-	"archive-team":    {Method: "POST", NeedsGroup: true, Label: "archive a team", Capabilities: teamsClaim("io.atlas.collaboration.space.archive")},
+	// create-channel claims the contract version that is drafted for it (ADR-0483):
+	// workertype/evidence/testdata/contracts/collaboration-channel-create.json, checked
+	// by the entrachannel suite, unpublished until branch protection is in force.
+	"create-channel": {Method: "POST", NeedsGroup: true, NeedsAttributes: true, Label: "create a channel",
+		Capabilities: []CapabilityClaim{{ID: "io.atlas.collaboration.channel.create", Version: "1.0.0", Profile: "microsoft-teams"}}},
+	"archive-team": {Method: "POST", NeedsGroup: true, Label: "archive a team", Capabilities: teamsClaim("io.atlas.collaboration.space.archive")},
 	// assign-license and assign-role author their body through the attributes variable:
 	// {addLicenses,removeLicenses} for a licence, and the role assignment's
 	// {roleDefinitionId,directoryScopeId} for a role — into which the worker merges

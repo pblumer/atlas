@@ -42,6 +42,14 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 **Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. [PR #1360](https://github.com/pblumer/atlas/pull/1360) added contract digests over the file's bytes, and [PR #1388](https://github.com/pblumer/atlas/pull/1388) the dependency digest of a built-in Worker Type's implementation (`internal/impldigest`). `workertype/evidence` defines the evidence record, derives and verifies it offline, and a CI gate fails on a stale record (see *Evidence records*). No contract is published and no record exists yet, so nothing on `main` is independently verified evidence. Withdrawal records and the projection of claim states are not implemented.
 
+**First contract drafted (2026-11-10).** `io.atlas.collaboration.channel.create@1.0.0+microsoft-teams` is written and ready to publish, but deliberately not published: the maintainer has not yet put branch protection with the code owner's review in force, which *Approval authority in the initial phase* requires before the first record. What exists:
+
+- The contract, kept where the evidence tests bind unpublished contracts: `workertype/evidence/testdata/contracts/collaboration-channel-create.json`. Publishing moves the file unchanged to `workertype/contracts/`, so its digest does not change.
+- The suite `entra-create-channel` (`workertype/evidence/suites/entrachannel`). It runs Entra's `create-channel` through `entra.Run` and its `GraphClient` against an in-process fake of `POST /teams/{id}/channels`. The gate and the evidence command import it.
+- `workertype/evidence/channelrecord_test.go` derives the record and verifies it against the module. It reports 4 cases passed, 2 failed and 1 not exercised. The two failures are real: the operation ends an unknown team and a name already in use with a plain failure, not with a code a process can catch, so `SPACE_NOT_FOUND` and `CHANNEL_ALREADY_EXISTS` are not met. Until they are, the record is evidence of what the operation does and verifies no claim.
+
+Publishing then takes three steps: put the protection in force, move the file, and create the record with `go run ./workertype/evidence/cmd/evidence create`. The record is then approved by the maintainer's merge or by a comment naming the head commit.
+
 ### Initial publication and trust boundary (accepted)
 
 - A repository-reviewed publication comprises the exact canonical contract,

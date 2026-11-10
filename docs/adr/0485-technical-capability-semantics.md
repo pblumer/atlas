@@ -7,6 +7,7 @@
 - **Open question:** Which provider conformance runner and evidence format should gate verified provider mappings? The JSON Schema validator is chosen (CDA2a, PR #1357); evidence and approval follow ADR-0483.
 - **Question checked:** 2026-10
 - **Decision recorded:** 2026-10-26; accepted with a reservation. The contract identity `(id, version, profile)` and its immutability are binding. The `v1alpha1` envelope fields may still change until the first contract is published (CDA3); after that, a change needs a new `apiVersion`.
+- **Reservation resolved:** 2026-11-10, by the maintainer: the first published contract freezes the `v1alpha1` fields. The first one is drafted — `io.atlas.collaboration.channel.create@1.0.0+microsoft-teams` (`workertype/evidence/testdata/contracts/collaboration-channel-create.json`) — and waits for the trust boundary of ADR-0483 before it moves to `workertype/contracts/`; from that publication on, a change to the envelope needs a new `apiVersion`.
 
 ## Context and problem statement
 
