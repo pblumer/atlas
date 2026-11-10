@@ -30,6 +30,9 @@ MANIFEST = ROOT / "docs" / "programs" / "bpmn-conformance" / "program.json"
 SCENARIOS = ROOT / "conformance" / "scenario.go"
 TCK = ROOT / "conformance" / "tck"
 DIFFERENTIAL = ROOT / "conformance" / "differential" / "differential_test.go"
+# The catalog and gallery keep their own copy of the differential subset, because the
+# conformance package cannot import the differential test package.
+CATALOG_MIRROR = ROOT / "conformance" / "catalog_test.go"
 RECOVERY = ROOT / "conformance" / "recovery_midflight_test.go"
 RECOVERY_TEST = "conformance/recovery_midflight_test.go:TestCON3MidflightRecoveryAndContinuation"
 # Documents whose counts are generated. A marker anywhere else is not rewritten.
@@ -67,6 +70,11 @@ def suite_facts() -> dict:
                           RECOVERY.read_text(encoding="utf-8"), re.M)
     need(set(tck_cases) == set(scenarios), "TCK cases and registered scenarios differ")
     need(set(differential) <= set(scenarios), "differential subset names an unregistered scenario")
+    mirror = re.findall(r'^\s*"([a-z0-9-]+)":\s*true,',
+                        go_block(CATALOG_MIRROR.read_text(encoding="utf-8"), "var differentialSubset = map[string]bool{"), re.M)
+    need(set(mirror) == set(differential),
+         "conformance/catalog_test.go differentialSubset differs from the differential test's subset: "
+         f"missing {sorted(set(differential) - set(mirror))}, extra {sorted(set(mirror) - set(differential))}")
     need({name for name, _, _ in recovery} <= set(scenarios), "restart table names an unregistered scenario")
     return {
         "features": features, "patterns": patterns, "scenarios": scenarios, "negatives": negatives,
