@@ -70,8 +70,11 @@ func TestTheBootstrapIsFixedAndValuesAreData(t *testing.T) {
 	for i := range u {
 		u[i] = binary.LittleEndian.Uint16(raw[2*i:])
 	}
-	if string(utf16.Decode(u)) != bootstrap {
-		t.Error("the program is not the bootstrap")
+	if string(utf16.Decode(u)) != starter {
+		t.Error("the command line is not the starter")
+	}
+	if b, _ := r.value(bootstrapEnv); b != bootstrap {
+		t.Error("the program the starter runs is not the bootstrap")
 	}
 	if _, ok := r.value("ATLAS_TOKEN"); ok {
 		t.Error("the worker's token reached the child")
@@ -83,6 +86,18 @@ func TestTheBootstrapIsFixedAndValuesAreData(t *testing.T) {
 	}
 	if req.SiteURL != "http://sp01.contoso.local/sites/alpha; Remove-SPSite" || req.SitePath != "/sites/alpha; Remove-SPSite" || req.WebApplication != "http://sp01.contoso.local" {
 		t.Errorf("request = %+v", req)
+	}
+}
+
+// Windows holds at most 32,767 characters in a command line and in one environment
+// variable. The command line carries the encoded starter, the environment the bootstrap.
+func TestTheBootstrapFitsWhereItTravels(t *testing.T) {
+	const windowsLimit = 32767
+	if n := len(encodeCommand(starter)) + 100; n > windowsLimit {
+		t.Errorf("command line of %d characters", n)
+	}
+	if n := len([]rune(bootstrap)); n > windowsLimit-len(bootstrapEnv)-1 {
+		t.Errorf("the bootstrap has %d characters; an environment variable holds %d", n, windowsLimit)
 	}
 }
 
