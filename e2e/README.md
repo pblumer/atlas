@@ -1199,6 +1199,16 @@ sends one start, and a broken connection whose outcome is unknown. It runs at 32
 server allows is the Go tests' (`api/selfstart_http_test.go`); this is not device
 acceptance either.
 
+`mfe1a-start-grants.spec.mjs` ([MFE1A](../docs/planning/mfe1a-start-grant-administration.md))
+holds the administrator's Start grants page against a mocked server with revisions,
+conflicts and blockers: grants by name with the PUT body checked (ids and the revision
+read), offered or not with the reason in words, a lost race (409) shown with nothing sent
+twice, revocation only after a confirmation, the check of a person or group, the history,
+grants whose process left the application and removed accounts, untrusted grants after a
+failed save, nothing for non-administrators or an open server, 768px without sideways
+scrolling, and the read-only mark in an application's Deployments tab for administrators
+alone.
+
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
 or field conditions. Record those separately under MFE0 issue #1451.

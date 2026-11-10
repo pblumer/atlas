@@ -3695,6 +3695,38 @@ function upsertExt(modeler, element, type, props) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// rowsFromHTML renders the part of a business rule task's panel that makes it check a
+// file record by record (ADR-0548): whether it does, and if so which variable holds the
+// file, how the file is laid out, which output is the verdict, and how many failures
+// the summary carries. rf is the task's atlas:rowsFrom, or undefined.
+function rowsFromHTML(rf) {
+  const on = !!rf;
+  const r = rf || {};
+  const fields = on ? `
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows.source"))}</span>
+      <input type="text" id="f-rows-source" list="dmn-vars-dl" autocomplete="off" value="${esc(r.source || "")}" placeholder="antrag"/></label>
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows.delimiter"))}</span>
+      <input type="text" id="f-rows-delimiter" maxlength="1" value="${esc(r.delimiter || "")}" placeholder=","/></label>
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows.header"))}</span>
+      <select id="f-rows-header">
+        <option value="true" ${r.hasHeader === "false" ? "" : "selected"}>${esc(tr("pnl.main.brt.rows.headerYes"))}</option>
+        <option value="false" ${r.hasHeader === "false" ? "selected" : ""}>${esc(tr("pnl.main.brt.rows.headerNo"))}</option>
+      </select></label>
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows.columns"))}</span>
+      <input type="text" id="f-rows-columns" value="${esc(r.columns || "")}" placeholder="email,group,license"/></label>
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows.valid"))}</span>
+      <input type="text" id="f-rows-valid" value="${esc(r.validOutput || "")}" placeholder="valid"/></label>
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows.sample"))}</span>
+      <input type="number" id="f-rows-sample" min="0" max="10000" step="1" value="${esc(r.failureSample || "")}" placeholder="200"/></label>
+    <p class="muted" style="font-size:12px">${tr("pnl.main.brt.rows.hint")}</p>` : "";
+  return `<h3 data-group="Records of a file">${esc(tr("bpmn.group.rowsFrom"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.main.brt.rows"))}</span>
+      <select id="f-brt-rows">
+        <option value="" ${on ? "" : "selected"}>${esc(tr("pnl.main.brt.rows.once"))}</option>
+        <option value="file" ${on ? "selected" : ""}>${esc(tr("pnl.main.brt.rows.file"))}</option>
+      </select></label>${fields}`;
+}
+
 // calledDecisionVersion reads the atlas:version a business rule task's
 // zeebe:calledDecision names ("" when none). The attribute is Atlas's own, so bpmn-js
 // keeps it among the element's unknown attributes rather than as a property
@@ -9717,7 +9749,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="${esc(tr("pnl.main.brt.decisionIdPlaceholder"))}" readonly title="${esc(tr("pnl.main.brt.decisionIdTitle"))}"/></label>
             <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">${tr("pnl.main.brt.hint")}</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.brt.hint")}</p>${mode === "local" ? rowsFromHTML(findExt(bo, "atlas:RowsFrom")) : ""}
             <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
             <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
@@ -10838,6 +10870,39 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         });
         show(element);
       });
+    }
+    // A decision over a file (ADR-0548): the atlas:rowsFrom extension. Switching it on
+    // or off re-renders so its fields appear; each field writes the whole element, so
+    // what the panel shows is what the model holds.
+    const frows = body.querySelector("#f-brt-rows");
+    if (frows) {
+      const rowsProps = () => {
+        const v = (id) => (body.querySelector(id)?.value || "").trim() || undefined;
+        return {
+          source: v("#f-rows-source"),
+          delimiter: (body.querySelector("#f-rows-delimiter")?.value || "") || undefined,
+          hasHeader: body.querySelector("#f-rows-header")?.value === "false" ? "false" : undefined,
+          columns: v("#f-rows-columns"),
+          validOutput: v("#f-rows-valid"),
+          failureSample: v("#f-rows-sample"),
+        };
+      };
+      frows.addEventListener("change", () => {
+        savePreservingPanel(() => {
+          if (frows.value === "file") upsertExt(modeler, element, "atlas:RowsFrom", rowsProps());
+          else removeExt(modeler, element, "atlas:RowsFrom");
+        });
+        show(element);
+      });
+      for (const id of ["#f-rows-source", "#f-rows-delimiter", "#f-rows-header", "#f-rows-columns", "#f-rows-valid", "#f-rows-sample"]) {
+        const el = body.querySelector(id);
+        // A field still being edited reports its change when the panel is redrawn under
+        // it — which switching back to "once" does. It must not write the element back.
+        if (el) el.addEventListener("change", () => {
+          if (frows.value !== "file") return;
+          savePreservingPanel(() => upsertExt(modeler, element, "atlas:RowsFrom", rowsProps()));
+        });
+      }
     }
     const fconnector = body.querySelector("#f-connector");
     if (fconnector) {

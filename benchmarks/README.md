@@ -121,6 +121,18 @@ difference in `ns/op` should sit inside the run-to-run spread of the fsync itsel
 non-zero `allocs/op` delta means a metric handle is being resolved per batch instead of
 at construction, which `TestEngineMetricsReportNoAlloc` also fails on.
 
+Bulk validation ([ADR-0548](../docs/adr/0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md),
+Slice 0). Measurement for one design question, written up in
+[`results/measurement-95bce7d.md`](results/measurement-95bce7d.md). The file and
+multi-instance benchmarks run one size each unless `ATLAS_BENCH_BULK=full` is set,
+because the full multi-instance series takes minutes:
+
+| Benchmark | One op is |
+|---|---|
+| `BenchmarkBulkValidationDecisionPerRow` | one DMN evaluation, example rule and a 22-rule table, with and without the trace |
+| `BenchmarkBulkValidationStreamedFile` | one CSV file parsed, evaluated and written row by row (the core of one validation job) |
+| `BenchmarkBulkValidationMultiInstance` | one ADR-0084 instance over *n* rows through the real server |
+
 ## Running
 
 ```bash

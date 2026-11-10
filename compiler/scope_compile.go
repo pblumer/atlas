@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -27,11 +28,11 @@ func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 func compileCondition(g *feelGate, id, raw string) (*expr.Compiled, error) {
 	cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "="))
 	if cond == "" {
-		return nil, fmt.Errorf("compiler: conditional event %q has no condition", id)
+		return nil, elementErrorf(id, "compiler: conditional event %q has no condition", id)
 	}
 	ce, err := g.compileFEEL(cond)
 	if err != nil {
-		return nil, fmt.Errorf("compiler: conditional event %q condition: %w", id, err)
+		return nil, elementErrorf(id, "compiler: conditional event %q condition: %w", id, err)
 	}
 	return ce, nil
 }
@@ -66,7 +67,7 @@ func (r *registrar) node(id string, nodeID int32) {
 		return
 	}
 	if _, dup := r.ids[id]; dup {
-		r.reject(fmt.Errorf("compiler: duplicate element id %q", id))
+		r.reject(elementErrorf(id, "compiler: duplicate element id %q", id))
 		return
 	}
 	r.ids[id] = nodeID
@@ -131,10 +132,10 @@ func registerScope(
 		if s.Timer != nil {
 			schedule, err := parseTimerSchedule(b.gate(), s.Timer)
 			if err != nil {
-				return fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
+				return elementErrorf(s.Id, "compiler: start event %q timer: %w", s.Id, err)
 			}
 			if schedule.IsFeel() && len(schedule.Expr.Inputs()) > 0 {
-				return fmt.Errorf("compiler: start event %q: a timer start event's FEEL schedule must be constant (reference no variables) — a start event has no instance to evaluate against (ADR-0056)", s.Id)
+				return elementErrorf(s.Id, "compiler: start event %q: a timer start event's FEEL schedule must be constant (reference no variables) — a start event has no instance to evaluate against (ADR-0056)", s.Id)
 			}
 			reg.node(s.Id, b.AddTimerStartEvent(schedule))
 			continue
@@ -225,7 +226,7 @@ func registerScope(
 			// Fixed-width always carries a layout (checked above) and an attribute-value
 			// file names its own fields, so neither needs this.
 			if format == csvimportFormatCSV && operation == csvimportOperationRead && !hasHeader && len(cols) == 0 {
-				return fmt.Errorf("compiler: csv task %q without a header row must list its columns", st.Id)
+				return elementErrorf(st.Id, "compiler: csv task %q without a header row must list its columns", st.Id)
 			}
 			id := b.AddCsvConnectorTask(CsvConfig{
 				Source:    strings.TrimSpace(cn.Source),
@@ -246,9 +247,9 @@ func registerScope(
 			// were resolved earlier), so name every kind it could take rather than only the task
 			// definition (ADR-0112) — this is the "Message selected but no message chosen yet" state.
 			if label == "send task" {
-				return fmt.Errorf("compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a worker", st.Id)
+				return elementErrorf(st.Id, "compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a worker", st.Id)
 			}
-			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
+			return elementErrorf(st.Id, "compiler: %s %q has no task definition type", label, st.Id)
 		}
 		reg.taskNode(st.Id, plain(st.TaskDefinition.Type, retries), st.Form.FormId)
 		return nil
@@ -256,7 +257,7 @@ func registerScope(
 	for _, st := range c.ServiceTasks {
 		if st.Shop != nil {
 			// The shop states something to the order, which is a send (ADR-0429 §4).
-			return fmt.Errorf("compiler: service task %q carries a shop task; a shop task is a send task", st.Id)
+			return elementErrorf(st.Id, "compiler: service task %q carries a shop task; a shop task is a send task", st.Id)
 		}
 		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
 			return err
@@ -303,14 +304,14 @@ func registerScope(
 		if js := st.JobScript; js != nil {
 			jobType, ok := scriptJobTypes[strings.ToLower(strings.TrimSpace(js.Language))]
 			if !ok {
-				return fmt.Errorf("compiler: script task %q has unsupported script language %q", st.Id, js.Language)
+				return elementErrorf(st.Id, "compiler: script task %q has unsupported script language %q", st.Id, js.Language)
 			}
 			source := strings.TrimSpace(js.Source)
 			if source == "" {
-				return fmt.Errorf("compiler: script task %q has no script source", st.Id)
+				return elementErrorf(st.Id, "compiler: script task %q has no script source", st.Id)
 			}
 			if js.ResultVariable == "" {
-				return fmt.Errorf("compiler: script task %q has no result variable", st.Id)
+				return elementErrorf(st.Id, "compiler: script task %q has no result variable", st.Id)
 			}
 			// A script job fails like any other job, so it carries its own retry budget
 			// (ADR-0135) authored on the <atlas:jobScript> extension.
@@ -326,23 +327,23 @@ func registerScope(
 		text = strings.TrimPrefix(text, "=") // Zeebe marks expressions with a leading '='
 		text = strings.TrimSpace(text)
 		if text == "" {
-			return fmt.Errorf("compiler: script task %q has no expression", st.Id)
+			return elementErrorf(st.Id, "compiler: script task %q has no expression", st.Id)
 		}
 		if st.Script.ResultVariable == "" {
-			return fmt.Errorf("compiler: script task %q has no result variable", st.Id)
+			return elementErrorf(st.Id, "compiler: script task %q has no result variable", st.Id)
 		}
 		// FEEL is compiled once, at deploy time (ADR-0008/0015). CompileAuto
 		// discovers the process variables the expression reads; a syntax or type
 		// error fails here — i.e. fails deploy.
 		e, err := b.gate().compileFEEL(text)
 		if err != nil {
-			return fmt.Errorf("compiler: script task %q: %w", st.Id, err)
+			return elementErrorf(st.Id, "compiler: script task %q: %w", st.Id, err)
 		}
 		reg.node(st.Id, b.AddScriptTask(e, st.Script.ResultVariable))
 	}
 	for _, brt := range c.BusinessRuleTasks {
 		if brt.CalledDecision.DecisionId == "" {
-			return fmt.Errorf("compiler: business rule task %q has no calledDecision decisionId", brt.Id)
+			return elementErrorf(brt.Id, "compiler: business rule task %q has no calledDecision decisionId", brt.Id)
 		}
 		retries, err := parseRetries("business rule task", brt.Id, brt.CalledDecision.Retries)
 		if err != nil {
@@ -350,7 +351,7 @@ func registerScope(
 		}
 		inputs, err := decisionInputs(brt.Inputs)
 		if err != nil {
-			return fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
+			return elementErrorf(brt.Id, "compiler: business rule task %q: %w", brt.Id, err)
 		}
 		mappings, err := decisionInputMappings(b.gate(), brt.Id, brt.InputMappings)
 		if err != nil {
@@ -361,9 +362,22 @@ func registerScope(
 		// instead of the embedded library (ADR-0050). Authoring is otherwise
 		// identical.
 		var node int32
+		rows, err := decisionRows(brt.Id, brt.RowsFrom)
+		if err != nil {
+			return err
+		}
+		// A run over a file completes with a summary, and the summary needs a home.
+		if rows != nil && strings.TrimSpace(brt.CalledDecision.ResultVariable) == "" {
+			return fmt.Errorf("compiler: business rule task %q evaluates over a file (atlas:rowsFrom) and needs a resultVariable for its summary", brt.Id)
+		}
 		if tc := brt.TemisConnector; tc != nil {
+			// A decision over a file is evaluated in the engine, record by record; sent to
+			// a temis service it would be one network call per record (ADR-0548).
+			if rows != nil {
+				return fmt.Errorf("compiler: business rule task %q evaluates over a file (atlas:rowsFrom), which runs in the engine; it cannot also name a temis worker", brt.Id)
+			}
 			if tc.Connector == "" {
-				return fmt.Errorf("compiler: business rule task %q has a temisConnector with no worker name", brt.Id)
+				return elementErrorf(brt.Id, "compiler: business rule task %q has a temisConnector with no worker name", brt.Id)
 			}
 			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		} else {
@@ -374,6 +388,9 @@ func registerScope(
 			node, err = b.addBusinessRuleTask("", brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, binding)
 			if err == nil && version > 0 {
 				b.businessRuleTasks[len(b.businessRuleTasks)-1].Version = version
+			}
+			if err == nil {
+				b.businessRuleTasks[len(b.businessRuleTasks)-1].Rows = rows
 			}
 		}
 		if err != nil {
@@ -387,7 +404,7 @@ func registerScope(
 		if s := strings.TrimSpace(ut.Priority.Priority); s != "" {
 			p, err := strconv.ParseInt(s, 10, 32)
 			if err != nil {
-				return fmt.Errorf("compiler: user task %q priority %q: %w", ut.Id, s, err)
+				return elementErrorf(ut.Id, "compiler: user task %q priority %q: %w", ut.Id, s, err)
 			}
 			priority = int32(p)
 		}
@@ -396,7 +413,7 @@ func registerScope(
 			s = strings.TrimSpace(strings.TrimPrefix(s, "=")) // tolerate a FEEL '=' prefix
 			nanos, err := parseISO8601Duration(s)
 			if err != nil {
-				return fmt.Errorf("compiler: user task %q dueDate: %w", ut.Id, err)
+				return elementErrorf(ut.Id, "compiler: user task %q dueDate: %w", ut.Id, err)
 			}
 			dueDateNanos = nanos
 		}
@@ -425,7 +442,7 @@ func registerScope(
 		ce := ca.CalledElement
 		pid := strings.TrimSpace(ce.ProcessId)
 		if pid == "" {
-			return fmt.Errorf("compiler: call activity %q has no calledElement processId", ca.Id)
+			return elementErrorf(ca.Id, "compiler: call activity %q has no calledElement processId", ca.Id)
 		}
 		// Each propagation flag defaults to true (Zeebe): an absent or non-"false"
 		// value propagates all variables in that direction.
@@ -458,10 +475,10 @@ func registerScope(
 		case ev.Timer != nil:
 			schedule, err := parseTimerSchedule(b.gate(), ev.Timer)
 			if err != nil {
-				return fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
+				return elementErrorf(ev.Id, "compiler: intermediate catch event %q timer: %w", ev.Id, err)
 			}
 			if schedule.Repeats() {
-				return fmt.Errorf("compiler: intermediate catch event %q: timeCycle is not supported (a catch fires once); use timeDuration or timeDate", ev.Id)
+				return elementErrorf(ev.Id, "compiler: intermediate catch event %q: timeCycle is not supported (a catch fires once); use timeDuration or timeDate", ev.Id)
 			}
 			reg.node(ev.Id, b.AddTimerCatchSchedule(schedule))
 		case ev.Message != nil:
@@ -491,7 +508,7 @@ func registerScope(
 			}
 			reg.node(ev.Id, b.AddConditionalCatchEvent(cond))
 		default:
-			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, signal, link, and conditional events are supported yet", ev.Id)
+			return elementErrorf(ev.Id, "compiler: intermediate catch event %q: only timer, message, signal, link, and conditional events are supported yet", ev.Id)
 		}
 	}
 	for _, ev := range c.IntermediateThrowEvents {
@@ -536,7 +553,7 @@ func registerScope(
 			// that throws nothing, on the path, whose product is the record of having been
 			// reached. It compiles to a pass-through, like the link events above.
 			if def := unimplementedEventDefinition(ev.OtherChildren); def != "" {
-				return fmt.Errorf("compiler: intermediate throw event %q: <%s> is not supported here — a throw event may carry a message, signal, compensation, escalation, or link definition, or none at all (a milestone)", ev.Id, def)
+				return elementErrorf(ev.Id, "compiler: intermediate throw event %q: <%s> is not supported here — a throw event may carry a message, signal, compensation, escalation, or link definition, or none at all (a milestone)", ev.Id, def)
 			}
 			reg.node(ev.Id, b.AddNoneThrowEvent())
 			continue
@@ -645,7 +662,7 @@ func registerScope(
 		// parallel — which would run every activity at once, not what the model says — it is
 		// refused at deploy until the sequential driver lands.
 		if ah.Ordering == "Sequential" {
-			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which atlas can't execute yet "+
+			return elementErrorf(ah.Id, "compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which atlas can't execute yet "+
 				"(only the default parallel ordering, where every entry activity is activated at once, is supported)", ah.Id)
 		}
 		d := AdHocDetail{
@@ -663,14 +680,14 @@ func registerScope(
 		if ag := ah.Agent; ag != nil {
 			worker := strings.TrimSpace(ag.Connector)
 			if worker == "" {
-				return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q names no connector "+
+				return elementErrorf(ah.Id, "compiler: agent-driven ad-hoc subprocess %q names no connector "+
 					"(<atlas:agentConnector connector=\"…\"> must name a configured agent Worker; "+
 					"its credential is resolved from the vault, never carried in the model)", ah.Id)
 			}
 			if ah.CancelRemainingInstances == "false" {
 				// The round boundary is the scope drain: "let the rest finish" has no
 				// meaning when the next round has not been asked for yet.
-				return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q sets cancelRemainingInstances=\"false\", "+
+				return elementErrorf(ah.Id, "compiler: agent-driven ad-hoc subprocess %q sets cancelRemainingInstances=\"false\", "+
 					"which an agent-driven container can't honour — its round ends when the activated "+
 					"tools drain, and that is when the next round is asked for", ah.Id)
 			}
@@ -689,7 +706,7 @@ func registerScope(
 				{"retries", ag.Retries, "an agent round's retries are the engine's, not the model's"},
 			} {
 				if strings.TrimSpace(unsupported.value) != "" {
-					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q sets %s, which only an ai service task reads (%s)",
+					return elementErrorf(ah.Id, "compiler: agent-driven ad-hoc subprocess %q sets %s, which only an ai service task reads (%s)",
 						ah.Id, unsupported.attr, unsupported.instead)
 				}
 			}
@@ -719,7 +736,7 @@ func registerScope(
 			if re := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ag.ResultElement), "=")); re != "" {
 				ce, err := b.gate().compileFEEL(re)
 				if err != nil {
-					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q resultElement: %w", ah.Id, err)
+					return elementErrorf(ah.Id, "compiler: agent-driven ad-hoc subprocess %q resultElement: %w", ah.Id, err)
 				}
 				d.ResultElement = ce
 			}
@@ -727,7 +744,7 @@ func registerScope(
 		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
 			ce, err := b.gate().compileFEEL(cond)
 			if err != nil {
-				return fmt.Errorf("compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
+				return elementErrorf(ah.Id, "compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
 			}
 			d.CompletionCondition = ce
 		}
@@ -777,7 +794,7 @@ func registerScope(
 		if sub.TriggeredByEvent == "true" {
 			st := eventSubStart(sub)
 			if st == nil {
-				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, error, escalation, or conditional event definition", sub.Id)
+				return elementErrorf(sub.Id, "compiler: event subprocess %q must have a start event with a message, timer, signal, error, escalation, or conditional event definition", sub.Id)
 			}
 			d := EventSubProcessDetail{StartNode: reg.ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
@@ -815,7 +832,7 @@ func registerScope(
 			case st.Timer != nil:
 				schedule, err := parseTimerSchedule(b.gate(), st.Timer)
 				if err != nil {
-					return fmt.Errorf("compiler: event subprocess %q timer: %w", sub.Id, err)
+					return elementErrorf(sub.Id, "compiler: event subprocess %q timer: %w", sub.Id, err)
 				}
 				d.Kind, d.Schedule = BoundaryTimer, schedule
 			case st.Conditional != nil:
@@ -841,20 +858,20 @@ func registerScope(
 	for _, ev := range c.BoundaryEvents {
 		host, ok := reg.ids[ev.AttachedToRef]
 		if !ok {
-			return fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
+			return elementErrorf(ev.Id, "compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
 		}
 		if messageSendIDs[ev.AttachedToRef] {
-			return fmt.Errorf("compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or Worker Type, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
+			return elementErrorf(ev.Id, "compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or Worker Type, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
 		}
 		interrupting := ev.CancelActivity != "false"
 		switch {
 		case ev.Timer != nil:
 			schedule, err := parseTimerSchedule(b.gate(), ev.Timer)
 			if err != nil {
-				return fmt.Errorf("compiler: boundary event %q timer: %w", ev.Id, err)
+				return elementErrorf(ev.Id, "compiler: boundary event %q timer: %w", ev.Id, err)
 			}
 			if schedule.Repeats() && interrupting {
-				return fmt.Errorf("compiler: boundary event %q: an interrupting boundary timer does not support timeCycle (it fires once); use timeDuration or timeDate, or make the boundary non-interrupting", ev.Id)
+				return elementErrorf(ev.Id, "compiler: boundary event %q: an interrupting boundary timer does not support timeCycle (it fires once); use timeDuration or timeDate, or make the boundary non-interrupting", ev.Id)
 			}
 			reg.node(ev.Id, b.AddBoundaryTimerSchedule(host, interrupting, schedule))
 		case ev.Message != nil:
@@ -909,7 +926,7 @@ func registerScope(
 			}
 			reg.node(ev.Id, b.AddBoundaryConditionalEvent(host, cond, interrupting))
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, escalation, conditional, compensation, and cancel boundary events are supported yet", ev.Id)
+			return elementErrorf(ev.Id, "compiler: boundary event %q: only timer, message, signal, error, escalation, conditional, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
@@ -922,7 +939,7 @@ func registerScope(
 		{"complexGateway", c.ComplexGateways},
 	} {
 		if len(u.nodes) > 0 {
-			return fmt.Errorf("compiler: element %q is a <%s>, which atlas can't execute yet "+
+			return elementErrorf(u.nodes[0].Id, "compiler: element %q is a <%s>, which atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
 				"business rule, user), embedded and ad-hoc subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
@@ -981,7 +998,7 @@ func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent)
 			}
 			hNode, ok := ids[handlerID]
 			if !ok {
-				return fmt.Errorf("compiler: compensation association %q links boundary %q to unknown activity %q", a.Id, boundaryID, handlerID)
+				return elementErrorf(a.Id, "compiler: compensation association %q links boundary %q to unknown activity %q", a.Id, boundaryID, handlerID)
 			}
 			b.SetCompensationHandler(bNode, hNode)
 			resolved[boundaryID] = true
@@ -991,7 +1008,7 @@ func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent)
 	// rather than silently deploy a boundary that can never compensate anything.
 	for id := range compBoundary {
 		if !resolved[id] {
-			return fmt.Errorf("compiler: compensation boundary event %q has no <association> linking it to a compensation handler", id)
+			return elementErrorf(id, "compiler: compensation boundary event %q has no <association> linking it to a compensation handler", id)
 		}
 	}
 
@@ -1006,7 +1023,7 @@ func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent)
 		}
 		target, ok := ids[activityRef]
 		if !ok {
-			return fmt.Errorf("compiler: compensation event %q references unknown activity %q", evID, activityRef)
+			return elementErrorf(evID, "compiler: compensation event %q references unknown activity %q", evID, activityRef)
 		}
 		b.SetCompensationActivityRef(node, target)
 		return nil
@@ -1041,11 +1058,11 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 	for _, f := range c.Flows {
 		src, ok := ids[f.SourceRef]
 		if !ok {
-			return fmt.Errorf("compiler: flow %q references unknown sourceRef %q", f.Id, f.SourceRef)
+			return elementErrorf(f.Id, "compiler: flow %q references unknown sourceRef %q", f.Id, f.SourceRef)
 		}
 		tgt, ok := ids[f.TargetRef]
 		if !ok {
-			return fmt.Errorf("compiler: flow %q references unknown targetRef %q", f.Id, f.TargetRef)
+			return elementErrorf(f.Id, "compiler: flow %q references unknown targetRef %q", f.Id, f.TargetRef)
 		}
 		fid := b.Connect(src, tgt)
 		b.SetFlowBpmnId(fid, f.Id)
@@ -1054,7 +1071,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
 			ce, err := b.gate().compileFEEL(cond)
 			if err != nil {
-				return fmt.Errorf("compiler: flow %q condition: %w", f.Id, err)
+				return elementErrorf(f.Id, "compiler: flow %q condition: %w", f.Id, err)
 			}
 			b.SetFlowCondition(fid, ce)
 		}
@@ -1067,9 +1084,16 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		}
 		fid, ok := flowIdx[def]
 		if !ok {
-			return fmt.Errorf("compiler: %s gateway %q default references unknown flow %q", kind, gid, def)
+			return elementErrorf(gid, "compiler: %s gateway %q default references unknown flow %q", kind, gid, def)
 		}
+		// Mark the named flow a default exactly as before, whatever its source — a
+		// stored definition must reload and route as it always has — and record who
+		// declared it, so stage 5 refuses a default that is not this gateway's own
+		// outgoing flow at deploy (ADR-0547).
 		b.SetFlowDefault(fid)
+		if gw, ok := ids[gid]; ok {
+			b.markDefaultDeclaration(gw, fid)
+		}
 		return nil
 	}
 	for _, g := range c.ExclusiveGateways {
@@ -1095,7 +1119,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		}
 		name := strings.TrimSpace(ev.Link.Name)
 		if name == "" {
-			return fmt.Errorf("compiler: link catch event %q has no name", ev.Id)
+			return elementErrorf(ev.Id, "compiler: link catch event %q has no name", ev.Id)
 		}
 		if _, dup := linkCatch[name]; dup {
 			return fmt.Errorf("compiler: duplicate link catch name %q — a link name has at most one catch (its destination) per scope", name)
@@ -1108,11 +1132,11 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		}
 		name := strings.TrimSpace(ev.Link.Name)
 		if name == "" {
-			return fmt.Errorf("compiler: link throw event %q has no name", ev.Id)
+			return elementErrorf(ev.Id, "compiler: link throw event %q has no name", ev.Id)
 		}
 		catch, ok := linkCatch[name]
 		if !ok {
-			return fmt.Errorf("compiler: link throw event %q references link %q, which has no matching link catch in this scope", ev.Id, name)
+			return elementErrorf(ev.Id, "compiler: link throw event %q references link %q, which has no matching link catch in this scope", ev.Id, name)
 		}
 		b.Connect(ids[ev.Id], catch)
 	}
@@ -1151,7 +1175,82 @@ func clioLimit(taskID, raw string) (int32, error) {
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || n < 0 {
-		return 0, fmt.Errorf("compiler: clio read task %q has invalid limit %q", taskID, raw)
+		return 0, elementErrorf(taskID, "compiler: clio read task %q has invalid limit %q", taskID, raw)
 	}
 	return int32(n), nil
+}
+
+// decisionRows compiles <atlas:rowsFrom>, the file a business rule task evaluates its
+// decision over record by record (ADR-0548). nil when the task has none.
+//
+// Everything a run would otherwise discover on the first record is refused here, at
+// deploy: a missing source, a delimiter that is not one character, a headerless file
+// that does not say what its columns are, a sample outside its bounds.
+func decisionRows(taskID string, x *xmlRowsFrom) (*DecisionRows, error) {
+	if x == nil {
+		return nil, nil
+	}
+	fail := func(format string, a ...any) error {
+		return fmt.Errorf("compiler: business rule task %q rowsFrom: "+format, append([]any{taskID}, a...)...)
+	}
+	source := strings.TrimSpace(x.Source)
+	if source == "" {
+		return nil, fail("names no source variable")
+	}
+	if !isPlainVariableName(source) {
+		return nil, fail("source %q is not a variable name; name the variable that holds the uploaded file", source)
+	}
+	r := &DecisionRows{
+		Source:        source,
+		Delimiter:     x.Delimiter,
+		HasHeader:     true,
+		ValidOutput:   strings.TrimSpace(x.ValidOutput),
+		FailureSample: DefaultRowsFailureSample,
+	}
+	if n := len([]rune(r.Delimiter)); n > 1 {
+		return nil, fail("delimiter %q is not one character", r.Delimiter)
+	}
+	switch strings.ToLower(strings.TrimSpace(x.HasHeader)) {
+	case "", "true":
+	case "false":
+		r.HasHeader = false
+	default:
+		return nil, fail("hasHeader %q is neither true nor false", x.HasHeader)
+	}
+	seen := map[string]bool{}
+	for _, c := range strings.Split(x.Columns, ",") {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if seen[c] {
+			return nil, fail("column %q is listed twice", c)
+		}
+		seen[c] = true
+		r.Columns = append(r.Columns, c)
+	}
+	if !r.HasHeader && len(r.Columns) == 0 {
+		return nil, fail("a file without a header row must name its columns")
+	}
+	if s := strings.TrimSpace(x.FailureSample); s != "" {
+		n, err := strconv.ParseInt(s, 10, 32)
+		if err != nil || n < 0 || n > MaxRowsFailureSample {
+			return nil, fail("failureSample %q is not a number from 0 to %d", s, MaxRowsFailureSample)
+		}
+		r.FailureSample = int32(n)
+	}
+	return r, nil
+}
+
+// isPlainVariableName reports whether s is a variable name a scope can hold: a
+// letter or underscore, then letters, digits or underscores. A FEEL expression is
+// not accepted where the file is named, because the reference is read as a variable.
+func isPlainVariableName(s string) bool {
+	for i, r := range s {
+		ok := r == '_' || unicode.IsLetter(r) || (i > 0 && unicode.IsDigit(r))
+		if !ok {
+			return false
+		}
+	}
+	return s != ""
 }

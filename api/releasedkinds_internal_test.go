@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/workertype"
 )
 
 // ADR-0167's mandate — a connector kind is not released until it is in the Repository
@@ -366,4 +368,65 @@ func adrStatusesBySlug(t *testing.T) map[string]string {
 		out[m[1]] = s
 	}
 	return out
+}
+
+// TestEveryNewConnectorKindShipsAManifest holds the rule that a new built-in Worker
+// Type declares what a second delivery of each of its operations does
+// (ADR-0546).
+// Unlike packagesOwed this is not a count but a list of names, so one kind gaining a
+// manifest cannot pay for another arriving without one.
+func TestEveryNewConnectorKindShipsAManifest(t *testing.T) {
+	rows := registryByJobType(t)
+	for name := range kindsWithoutManifest {
+		row, ok := rows[name]
+		switch {
+		case !ok || row.Class != classConnector:
+			t.Errorf("kindsWithoutManifest lists %s, which is not a registered connector kind; remove it", name)
+		case row.Manifest != "":
+			t.Errorf("%s now has a manifest (%s); remove it from kindsWithoutManifest so the list holds the ground gained", name, row.Manifest)
+		}
+	}
+	for _, k := range releasedKinds {
+		if k.Class == classConnector && k.Manifest == "" && !kindsWithoutManifest[k.JobType] {
+			t.Errorf("%s ships without a Worker Type manifest. A new built-in Worker Type declares each operation's "+
+				"idempotency and effect (ADR-0538) in a manifest beside its package, named in the row's Manifest field", k.JobType)
+		}
+	}
+}
+
+// TestBuiltInManifestsAreValid: a manifest a row names parses under the same rules an
+// installed release meets, is bundled, serves the row's job type, and points at
+// configuration and a Modeler template that exist.
+func TestBuiltInManifestsAreValid(t *testing.T) {
+	for _, k := range releasedKinds {
+		if k.Manifest == "" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join("..", k.Manifest))
+		if err != nil {
+			t.Errorf("%s: %v", k.JobType, err)
+			continue
+		}
+		m, err := workertype.ParseJSON(raw)
+		if err != nil {
+			t.Errorf("%s: %s: %v", k.JobType, k.Manifest, err)
+			continue
+		}
+		if m.Spec.Runtime.Mode != workertype.RuntimeBundled {
+			t.Errorf("%s: a built-in Worker Type's runtime is %q, not %q", k.Manifest, workertype.RuntimeBundled, m.Spec.Runtime.Mode)
+		}
+		if !slices.Contains(m.Spec.JobTypes, k.JobType) {
+			t.Errorf("%s does not declare the row's job type %s", k.Manifest, k.JobType)
+		}
+		if ref := m.Spec.ConfigurationSchema; ref == "#/spec/configuration" {
+			if len(m.Spec.Configuration) == 0 {
+				t.Errorf("%s points its configurationSchema at spec.configuration, which it does not carry", k.Manifest)
+			}
+		} else if _, err := os.Stat(filepath.Join("..", ref)); err != nil {
+			t.Errorf("%s: configurationSchema %q: %v", k.Manifest, ref, err)
+		}
+		if _, err := os.Stat(filepath.Join("..", m.Spec.ModelerTemplate)); err != nil {
+			t.Errorf("%s: modelerTemplate %q: %v", k.Manifest, m.Spec.ModelerTemplate, err)
+		}
+	}
 }

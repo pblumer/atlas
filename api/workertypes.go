@@ -37,6 +37,10 @@ type WorkerTypeDefinition struct {
 	Origin       WorkerTypeOrigin  `json:"origin,omitempty"`
 	RuntimeMode  WorkerRuntimeMode `json:"runtimeMode"`
 	Placement    string            `json:"placement"`
+	// Operations are the operations whose table rows declare a technical capability
+	// (ADR-0480), each claim with its state (ADR-0483). Absent for a Worker Type that
+	// declares none, which means its capabilities are unknown, not that it has none.
+	Operations []WorkerTypeOperation `json:"operations,omitempty"`
 }
 
 // workerTypeDefinitions projects the existing placement catalog into Worker Type
@@ -60,6 +64,7 @@ func (s *Server) workerTypeDefinitions() []WorkerTypeDefinition {
 			definition.Vendor = meta.Vendor
 			definition.Origin = meta.Origin
 			definition.RuntimeMode = meta.RuntimeMode
+			definition.Operations = builtInOperationClaims(placement.ID)
 		}
 		out = append(out, definition)
 	}

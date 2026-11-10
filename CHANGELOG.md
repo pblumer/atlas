@@ -13,6 +13,119 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A business rule task can check a file record by record.** With `<atlas:rowsFrom source="antrag"/>`
+  (panel: *Over a file → Once per record of a file*) a business rule task evaluates its decision once
+  for every record of an uploaded CSV document, in one job of the in-process DMN worker, instead of
+  once over the instance's variables. Input mappings read the record as `row`; without mappings the
+  columns enter the decision by name. The result variable receives a summary — total, valid,
+  invalid and failed records, the first failures with their line, the decision deployment used — and
+  a result document with every record, its `_row`, `_valid` and the decision's other outputs. One
+  decision evaluation is recorded for the run. 50,000 records take seconds, where one
+  multi-instance iteration per record takes hours (ADR-0548).
+- **Built-in Worker Type operations declare technical capabilities.** The operation rows of the
+  Entra and Teams Phone Worker Types carry their capability claims (ADR-0480), and
+  `GET /api/v1/worker-types` lists them per operation as `candidate`: Entra's Team operations
+  under the provider-neutral `io.atlas.collaboration.*` identifiers (for example
+  `io.atlas.collaboration.channel.create`) with the profile `microsoft-teams`, the Teams Phone
+  operations under `io.atlas.telephony.*` with `microsoft-teams-phone`. A claim describes; it
+  is not verified, authorizes nothing and does not make two providers interchangeable — the
+  profile keeps it to the one provider. Tests pin the reviewed claims, hold every row to the
+  manifest's rule and refuse one contract identity on two operations.
+
+### Changed
+- **The Problems panel points at the element behind a compile error.** A fault the compiler
+  meets while building a process — a duplicate id, an unknown error, message, signal or
+  escalation reference, a link throw without its catch, a condition that does not parse, a
+  dangling flow, a boundary on an unknown host, a loop without a bound, an element atlas does
+  not run — now names its element in the problem's `element` field, so the modeler can select
+  it. The rule stays `compile` and the message is unchanged (ADR-0547).
+- **A deploy refuses the sequence-flow shapes BPMN forbids.** A start event that is the
+  target of a sequence flow (`start.incoming-flow`), an end event that is the source of one
+  (`end.outgoing-flow`), and an exclusive or inclusive gateway whose `default` names a flow
+  that does not leave it (`gateway.default-not-outgoing`) are now errors at deploy and in the
+  modeler's Problems panel. The last one matters most: a default naming *another* gateway's
+  flow made that flow the other gateway's default, which then routed there although the
+  flow's condition was false. A definition already stored keeps loading and running exactly
+  as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
+  refuses only the next deploy of an affected model (ADR-0547).
+
+## [0.25.0] — 2026-11-09
+
+**Every process, decision and form belongs to an application** (ADR-0544). Nothing new is
+created, deployed or moved outside one, and what belongs to none yet keeps running and is
+listed under "Not assigned", from where many can be assigned to an application at once.
+
+**A file a process receives is a document, not a variable** (ADR-0543). A file picked in a task
+form is stored once, outside the log and the state, and the instance holds a reference to it;
+access follows the instance, a personal document becomes unreadable with an erasure, and the
+store lives in the data directory or an S3 bucket. The CSV import, the S3 and mail tasks, the
+Worker SDK and the MCP tools read and write documents.
+
+**A process can publish an interface, not its model** (ADR-0373). A deployed definition's
+message entry points, ends and error codes are published as a small, versioned contract under
+names of its own, which a newer definition can take over without breaking a consumer. View and
+send are granted apart; a consumer can read a contract now, while sending through it waits for
+the peer endpoint of ADR-0372.
+
+**Worker Types become artifacts that are installed, configured and checked.** An administrator
+uploads a Worker Type's manifest and executable; the server verifies the executable against
+the manifest's digest, keeps it content-addressed, checks it again before every start and
+configures its Workers from the type's own JSON Schema, with secrets named as vault entries
+only. Its instance works with a credential of its own that reaches only the job types its
+manifest declares (ADR-0545). Every operation declares what a repeated delivery does, and every job carries an
+idempotency key a target can filter duplicates by (ADR-0538). Worker Instances report their
+protocol version and Worker Type identity, the Worker protocol is written down for other
+languages, the Worker SDK depends on nothing of atlas, and the release ships `atlas-workers`,
+the worker-only executable, beside `atlas`.
+
+**A SharePoint Server Worker administers team sites on an on-premises farm** (ADR-0540), and
+the M365 test environment can build a SharePoint Server Subscription Edition farm to run it
+against. The `m365-dienste` example gains an additional calendar, a visibility change for
+Teams and SharePoint team sites, and the on-premises product «Teamwebsite».
+
+**The atlas hub shows where the way to the registry ends and what a release contains.** The
+hub dialog draws the load station by station — name, TCP, TLS, index, signature — and names
+the cause where it stops; a preview, package or import that cannot reach the registry says the
+same, and the server logs it. Before a release is installed, its preview shows the
+application's architecture sketch derived from the verified package and draws its process
+models read-only (ADR-0539).
+
+**The Console arranges deployed processes by application.** The Modeler home is one table of
+applications, and each application's Deployments tab lists one row per process with its
+versions folded under it and its pause and delete actions (ADR-0541). The Instances overview
+can group its processes by application. The replay's Variables tab sorts an element's
+variables into Input, Output and Environment (ADR-0542), and a round of a multi-instance names
+what it wrote. A DMN reference is called a rule throughout, the replay names a multi-instance
+activity once, and an opened entry of "My services" is laid out in sections.
+
+Nothing in the log or the state changed; 0.25.0 replaces 0.24.0 in place, and the data
+directory gains the document store. Four changes can break what worked against 0.24.0:
+
+- **A script or agent has to name an application.** Saving a draft, form, decision draft or
+  decision reference, deploying a decision and importing a MIM model without a `projectId` are
+  refused with 400, and so is a move with an empty one; `POST /api/v1/deployments` refuses a
+  model whose draft and earlier versions name no application. The MCP tools `atlas_save_draft`,
+  `atlas_save_form`, `atlas_register_decision` and `atlas_deploy_decision` require `projectId`.
+  Deleting an application that still holds anything is refused with 409 unless `?purge=true`.
+- **A file field no longer lands in `csvText`.** A file picked in a task form is a reference
+  under the field's own key. A model whose file field has another key and whose CSV import reads
+  `csvText` stops working; rename the field to `csvText` or point the import at the field. The
+  shipped examples are not affected, and `csvText` still accepts a text.
+- **A full snapshot leaves the documents out** unless it is taken with `?documents=true`; a
+  backup that is to restore uploaded files has to ask for them.
+- **Supervised workers run `atlas-workers`** when it sits beside the server's binary, as it does
+  in the release archives and the image; `ATLAS_WORKERS_BINARY=self` keeps the earlier
+  behaviour. Workers from before this release name no protocol version and are served as
+  version 1.
+
+### Added
+- **Administrators manage start grants in the Console.** Console → Administration → Start
+  grants shows, per application, every process with who may start it themselves, whether it is
+  offered and if not why, and the last change; an administrator grants or revokes by name,
+  checks one person or group, and reads the history, without typing an id or a revision
+  (ADR-0516, MFE1A). A competing change is shown and nothing is sent twice. The grant reads
+  answer `blockers` for this, and an application's Deployments tab marks a granted process for
+  administrators, read-only.
 - **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
   lists the deployed processes, diagrams, forms, decisions, decision drafts and deployed decisions
   that belong to no application — no tag, or an application that no longer exists — and
@@ -174,6 +287,13 @@ _Changed_ / _Removed_ for each version.
   completion, and marks such a body's values `elementsRecorded`. Instances recorded before
   this keep the old reading, and only there does the Environment still explain it
   ([ADR-draft-collection-by-round](docs/adr/draft-collection-by-round.md)).
+- **A new built-in Worker Type declares what a second delivery does.** Every new built-in
+  Worker Type ships a manifest stating each operation's idempotency and effect, as an
+  installed one must; `go test ./api` refuses one without it, and the 31 kinds released
+  before are listed and owe theirs. SharePoint Server has one: its operations are safe to
+  deliver twice, with one caveat now recorded — a second `create-site` after a first that
+  finished ends in `SHAREPOINT_SERVER_SITE_EXISTS`, not in success
+  (ADR-0546).
 - **An installed Worker Type works only its own job types.** An artifact installed with
   `POST /api/v1/worker-types/installed` used to be launched with the server's internal
   worker credential, which reaches every job type. Its instance now gets a credential of
@@ -254,6 +374,19 @@ _Changed_ / _Removed_ for each version.
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **A decision model opens with its graph in view.** The decision editor left a model's graph
+  where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
+  to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
+  the canvas those two boxes leave free, centred and scaled down only as far as the window needs —
+  never enlarged past its own size.
+- **A decision's input data are drawn connected to it.** A DMN model whose requirements carry no
+  `id` (DMN allows that, and models written by hand, by an agent or by temis often omit it) was
+  drawn with its input data beside the decision and no arrow between them, because a diagram
+  edge points at its requirement by id. When Atlas draws such a model's diagram — on opening it
+  without one, or on Auto-layout — it now gives each unnamed requirement a stable id, so every
+  arrow is drawn. A model whose diagram already places every node is left as it is. The example
+  `pruefe-datensaetze.dmn` names its requirements, types its input data as `string` and gives
+  its verdict a structured type `tVerdict`.
 - **A round of a multi-instance names what it produced.** The replay's Output of one round —
   and the diagram's in/out card — now lists what the round wrote into its own scope, such as a
   script's result variable or a person's answer on the form, where it said "wrote nothing" for
@@ -18544,7 +18677,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/pblumer/atlas/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0

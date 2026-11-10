@@ -4,10 +4,10 @@
   "summary": "Normative BPMN 2.0.2 execution and import coverage, explicit unsupported/partial feature inventory, reviewed semantic tests, mid-flight recovery evidence and independently reproducible conformance reporting. No certification claim.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-11-09",
+  "last_reviewed": "2026-11-10",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Review the third CON2 increment (exact negative diagnostics, FLOW-14 downgraded to partial). Owner decision needed: whether to open an ADR-gated validation slice that refuses three spec-forbidden but currently deployable shapes (start event with incoming flow, end event with outgoing flow, default naming a non-outgoing flow) and attaches element locations to element-local compile errors. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
+  "next_action": "Merge the first CON5 increment (generated public report and count markers). Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles; the next CON6 slices (Complex Gateway, parallel/instantiating event gateways, cyclic inclusive joins) each need their own ADR and an owner priority.",
   "slices": [
     {
       "id": "CON0",
@@ -115,7 +115,7 @@
     {
       "id": "CON5",
       "title": "Public normative conformance report and documentation reconciliation",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON1",
@@ -125,12 +125,17 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Render denominator-specific report; align README, roadmap, TCK docs and conformance gallery with evidence-backed claims."
+      "note": "First increment: generated provisional report conformance/CONFORMANCE_REPORT.md (classes as separate denominators, evidence strength incl. mid-flight restart and independent reference rows, unsupported/partial/unverified/unknown lists, four ADR-backed deviations, suite assets) and generated count markers in README, ROADMAP, conformance, TCK and differential docs; scripts/conformance_report.py --check and its tests run in CI. No percentage is printed while the denominator is unapproved. Acceptance needs CON1-CON4 acceptance and the CON0 denominator; the optional UI gallery is not yet aligned.",
+      "evidence": [
+        "../../../conformance/CONFORMANCE_REPORT.md",
+        "../../../scripts/conformance_report.py",
+        "../../../scripts/test_conformance_report.py"
+      ]
     },
     {
       "id": "CON6",
       "title": "Close genuine BPMN semantics gaps via ADR-gated slices",
-      "status": "planned",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [
         "CON0",
@@ -138,7 +143,14 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. Triage candidate from CON2: deploy-time refusal of start events with incoming flows, end events with outgoing flows and defaults that are not outgoing flows, plus element locations on element-local compile diagnostics (ADR-0177/ADR-0393 already keep existing definitions reloadable)."
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First slice ADR-0547 (Accepted, Landed): part 1 refuses start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow, with stored definitions reloading and routing unchanged; part 2 gives element-local compile diagnostics their element. Next CON6 candidates need their own ADRs: Complex Gateway, parallel/instantiating event gateways, cyclic inclusive joins, sequential ad-hoc, process-level conditional start, repeatable conditional triggers.",
+      "evidence": [
+        "../../adr/0547-refuse-forbidden-sequence-flow-shapes.md",
+        "../../../compiler/forbidden_flow_shapes_test.go",
+        "../../../compiler/elementerror_test.go",
+        "../../../api/forbiddenflowshapes_test.go",
+        "../../../conformance/normative_diagnostics_test.go"
+      ]
     }
   ]
 }

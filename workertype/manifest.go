@@ -230,7 +230,7 @@ func (m Manifest) Validate() error {
 		default:
 			return fmt.Errorf("spec.operations operation %q effect %q must be reversible or irreversible", op.ID, op.Effect)
 		}
-		if err := validateCapabilityClaims(op.ID, op.Capabilities); err != nil {
+		if err := ValidateCapabilityClaims(op.ID, op.Capabilities); err != nil {
 			return err
 		}
 	}

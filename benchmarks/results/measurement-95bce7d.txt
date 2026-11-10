@@ -1,0 +1,43 @@
+# Bulk validation measurement (ADR-0548, Slice 0)
+# commit:     95bce7d (benchmarks/bulkvalidation_test.go as measured; a later commit only
+#             gates the large sizes behind ATLAS_BENCH_BULK=full for CI)
+# date:       2026-11-10
+# machine:    shared cloud VM, Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores
+# os:         Linux 6.18.44-fc-v338
+# storage:    /dev/vda ext4 (virtual disk; fsync latency not characterised)
+# go:         go1.26.0 linux/amd64, GOMAXPROCS=4
+# commands:
+#   go test -run=^$ -bench=BulkValidationDecisionPerRow -benchmem -count=3 ./benchmarks/
+#   ATLAS_BENCH_BULK=full go test -run=^$ -bench=BulkValidationStreamedFile -benchmem -benchtime=3x -count=1 ./benchmarks/
+#   go test -run=^$ -bench=BulkValidationStreamedFile/rows=50000 -benchmem -benchtime=3x -count=3 ./benchmarks/
+#   ATLAS_BENCH_BULK=full go test -run=^$ -bench=BulkValidationMultiInstance -benchmem -benchtime=1x -count=1 -timeout=120m ./benchmarks/
+#   ATLAS_BENCH_ROWS=1000 go test -run=^$ -bench=BulkValidationMultiInstance -benchmem -benchtime=1x -count=3 ./benchmarks/
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+goarch: amd64
+goos: linux
+pkg: github.com/pblumer/atlas/benchmarks
+BenchmarkBulkValidationDecisionPerRow/example/plain-4         	   93843	     12954 ns/op	    7429 B/op	      83 allocs/op
+BenchmarkBulkValidationDecisionPerRow/example/plain-4         	   89353	     12827 ns/op	    7429 B/op	      83 allocs/op
+BenchmarkBulkValidationDecisionPerRow/example/plain-4         	   93577	     12222 ns/op	    7429 B/op	      83 allocs/op
+BenchmarkBulkValidationDecisionPerRow/example/traced-4        	  104792	     13187 ns/op	       420.0 traceB/op	    7429 B/op	      83 allocs/op
+BenchmarkBulkValidationDecisionPerRow/example/traced-4        	  101197	     12699 ns/op	       420.0 traceB/op	    7429 B/op	      83 allocs/op
+BenchmarkBulkValidationDecisionPerRow/example/traced-4        	   83858	     13494 ns/op	       420.0 traceB/op	    7429 B/op	      83 allocs/op
+BenchmarkBulkValidationDecisionPerRow/quality/plain-4         	   22747	     51944 ns/op	   39362 B/op	     238 allocs/op
+BenchmarkBulkValidationDecisionPerRow/quality/plain-4         	   21628	     51915 ns/op	   39360 B/op	     238 allocs/op
+BenchmarkBulkValidationDecisionPerRow/quality/plain-4         	   23659	     54298 ns/op	   39350 B/op	     238 allocs/op
+BenchmarkBulkValidationDecisionPerRow/quality/traced-4        	   22801	     49512 ns/op	      4627 traceB/op	   39368 B/op	     238 allocs/op
+BenchmarkBulkValidationDecisionPerRow/quality/traced-4        	   22414	     53678 ns/op	      4627 traceB/op	   39403 B/op	     238 allocs/op
+BenchmarkBulkValidationDecisionPerRow/quality/traced-4        	   19830	     55997 ns/op	      4627 traceB/op	   39377 B/op	     238 allocs/op
+BenchmarkBulkValidationStreamedFile/rows=50000-4         	       3	2512531228 ns/op	  18235392 heapB	      2485 invalid	   2139518 resultB	   1525020 srcB	        50.25 µs/row	1966242981 B/op	12158697 allocs/op
+BenchmarkBulkValidationStreamedFile/rows=50000-4         	       3	2353407955 ns/op	  14172160 heapB	      2485 invalid	   2139518 resultB	   1525020 srcB	        47.07 µs/row	1966519792 B/op	12158922 allocs/op
+BenchmarkBulkValidationStreamedFile/rows=50000-4         	       3	2494235829 ns/op	  18669568 heapB	      2485 invalid	   2139518 resultB	   1525020 srcB	        49.88 µs/row	1966751258 B/op	12158833 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=1000-4         	       1	3235596875 ns/op	1381182968 allocB/op	      1000 evals/op	     22012 events/op	  15991650 stateB/op	   4484283 walB/op	      3236 µs/row	1381182968 B/op	13223208 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=1000-4         	       1	3419609498 ns/op	1377471232 allocB/op	      1000 evals/op	     22012 events/op	  15994674 stateB/op	   4484283 walB/op	      3420 µs/row	1377471232 B/op	13219761 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=1000-4         	       1	3236075731 ns/op	1372779704 allocB/op	      1000 evals/op	     22012 events/op	  15990368 stateB/op	   4484283 walB/op	      3236 µs/row	1372779704 B/op	13219435 allocs/op
+BenchmarkBulkValidationStreamedFile/rows=10000-4         	       3	 536556762 ns/op	   7536640 heapB	       497.0 invalid	    419054 resultB	    305020 srcB	        53.66 µs/row	394582842 B/op	 2432836 allocs/op
+BenchmarkBulkValidationStreamedFile/rows=50000-4         	       3	2585801573 ns/op	  18284544 heapB	      2485 invalid	   2139518 resultB	   1525020 srcB	        51.72 µs/row	1966976618 B/op	12158991 allocs/op
+BenchmarkBulkValidationStreamedFile/rows=200000-4        	       3	9286192418 ns/op	  55697408 heapB	      9939 invalid	   8691243 resultB	   6100020 srcB	        46.43 µs/row	7824447677 B/op	48613116 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=1000-4         	       1	2867906318 ns/op	1381029472 allocB/op	      1000 evals/op	     22012 events/op	  15991657 stateB/op	   4484283 walB/op	      2868 µs/row	1381029472 B/op	13222675 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=2000-4         	       1	9227915733 ns/op	5538111472 allocB/op	      2000 evals/op	     44012 events/op	  18598540 stateB/op	   9744535 walB/op	      4614 µs/row	5538111472 B/op	50557007 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=5000-4         	       1	47469186169 ns/op	35148129512 allocB/op	      5000 evals/op	    110012 events/op	  21039501 stateB/op	  30305419 walB/op	      9494 µs/row	35148129512 B/op	307919943 allocs/op
+BenchmarkBulkValidationMultiInstance/rows=10000-4        	       1	183917882538 ns/op	141862313704 allocB/op	     10000 evals/op	    220012 events/op	  39909710 stateB/op	  80423817 walB/op	     18392 µs/row	141862313704 B/op	1221299170 allocs/op
