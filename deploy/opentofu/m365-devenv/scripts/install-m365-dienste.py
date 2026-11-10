@@ -32,7 +32,9 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
      the catalogue creates lies in the shared tenant's Exchange scope and is removed by
      the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE, ORTSANGABEN (false unless --ortsangaben);
   7. installs the on-premises variant: the Exchange products when exchange_onprem is built,
-     the SharePoint Server team site when enable_sharepoint_server is on.
+     the SharePoint Server team site when enable_sharepoint_server is on;
+  8. opens the SharePoint and Exchange Workers, and the SharePoint Server Worker (configured
+     here without a credential), to forms: the order forms check a site's URL as it is typed.
 
 Re-running is safe: existing groups are kept, the application and the catalogue are updated.
 Test persons join the approver and audience groups only once they have signed in to Atlas;
@@ -402,6 +404,28 @@ def sharepoint_enabled(tofu_dir):
         return False
 
 
+def open_to_forms(atlas, name, kind=None, endpoint=None):
+    """Switches «Forms may search» (formLookups, ADR-0473) on at the configured Worker name,
+    which the catalogue's order forms ask: the URL of a team site is checked as it is typed
+    (ADR-0519). A Worker that is not configured is created when kind is given — the
+    SharePoint Server Worker runs on the farm and holds no credential in Atlas, so its
+    record only says that forms may ask it — and skipped otherwise."""
+    _, listing = atlas.call("GET", "/api/v1/configured-workers")
+    hit = next((w for w in items(listing, "connectors") if w.get("name") == name), None)
+    if hit is None:
+        if not kind:
+            log(f"worker {name} is not configured; forms cannot ask it")
+            return
+        body = {"name": name, "kind": kind, "formLookups": True}
+        if endpoint:
+            body["endpoint"] = endpoint
+        atlas.call("POST", "/api/v1/configured-workers", body)
+        log(f"worker {name} ({kind}) configured, open to forms")
+    elif not hit.get("formLookups"):
+        atlas.call("PATCH", f"/api/v1/configured-workers/{hit['id']}", {"formLookups": True})
+        log(f"worker {name} opened to forms")
+
+
 def install(atlas, pkg):
     """The steps of the package's installieren.sh, in the administrator's session.
 
@@ -547,6 +571,11 @@ def main():
     constants.append({"name": "ORTSANGABEN", "type": "json", "value": "true" if args.ortsangaben else "false"})
     atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": constants})
     log(f"constants set: NAME_PREFIX={prefix!r}, MAIL_DOMAIN={domain}, ORTSANGABEN={'true' if args.ortsangaben else 'false'}")
+    workers = tofu_output(tofu_dir, "atlas_workers")
+    for kind in ("sharepoint", "exchange"):
+        name = next((n for n, k in workers.items() if k == kind), None) if isinstance(workers, dict) else None
+        if name:
+            open_to_forms(atlas, name)
 
     if with_onprem:
         work = tempfile.mkdtemp(prefix="m365-dienste-onprem-")
@@ -572,6 +601,9 @@ def main():
             # against the Exchange Server, so the room processes skip it (raumliste.bpmn).
             {"name": "ORTSANGABEN", "type": "json", "value": "false"},
         ]})
+        if with_sharepoint:
+            sp = tofu_output(tofu_dir, "sharepoint_server")
+            open_to_forms(atlas, "ucc_sharepoint_onprem", "sharepointserver", sp.get("web_application_url"))
         log(f"on-premises variant installed: catalogue cat-m365-onprem, exchange={with_exchange}, sharepoint-server={with_sharepoint}, MAIL_DOMAIN={onprem_domain}")
     log("done")
 

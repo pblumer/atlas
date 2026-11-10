@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **An order form can check whether a SharePoint Server site name is free.** The live name
+  check of ADR-0519 gains the source `sharepointserver/sites`: the farm's Worker answers it with
+  `get-site` under its own web application and managed path, so the check names only the Worker,
+  and nothing about the site but its name leaves the Worker. The worker on the farm answers these
+  queries as it answers jobs; its Worker needs «Forms may search» (`formLookups`), which the
+  Console now offers for SharePoint Server Workers. The order form of the on-premises team site
+  (`m365-spserver-site-bestellung`) checks its URL field this way. Each check starts PowerShell
+  with the SharePoint snap-in; one that takes longer than the eight seconds a form waits only
+  loses the warning (ADR-0519, amended).
 - **Processes find free slots in a calendar and book into it, never twice.** The new calendar
   Worker Type (`atlas.calendar`, job type `io.atlas.calendar`, ADR-0552) has
   five operations: `find-free-slots` lays a grid over opening hours in local wall time and offers the
@@ -121,6 +130,13 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **The SharePoint Server team site checks its address before it creates the site.** The
+  on-premises product `m365-spserver-site` now reads the address the name rule formed with
+  `get-site` before `create-site`, as the SharePoint Online team site does. A site there that
+  carries another position's `atlas.position` (or none) refuses the order with «Die Adresse ist
+  bereits vergeben.»; a site of the same position is a second delivery and goes on to
+  `create-site`. The error boundaries on `create-site` stay for a site created between the check
+  and the creation (ADR-0540).
 - **A public wizard screen shows the options a worker found.** A choice field whose options come from
   a variable (`valuesKey`) now gets that variable on a public wizard step, as its own fields do; a
   submission naming the variable is still refused, so a visitor cannot send a list of their own

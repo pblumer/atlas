@@ -1,6 +1,6 @@
 # ADR-0519: A name field checks live whether a name is still free
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-10)
 - **Implementation:** Landed
 - **Date:** 2026-11-03
 - **Deciders:** Atlas maintainers
@@ -137,6 +137,7 @@ Worker Type's own rules:
 | `entra/deletedGroups` | the same on `/directory/deletedItems/microsoft.graph.group` | a deleted group still holds it (30 days) |
 | `exchange/recipients` | `Get-Recipient -Filter "(Alias -eq '…') -or (EmailAddresses -like 'smtp:…@*')" -ResultSize 1` | a mailbox, list, contact or group holds the alias or an address with that local part |
 | `sharepoint/sites` | `get-site` on `https://<host>/<managedPath>/<name>` | Graph answers the site |
+| `sharepointserver/sites` | `get-site` on `<web application>/<managed path>/<name>` of the Worker (amended 2026-11-10) | the farm has a site at that address |
 
 The save refuses a block this server cannot serve: an unknown source, a missing Worker
 name, a SharePoint check without a valid host, a managed path other than `sites` or
@@ -196,6 +197,37 @@ with a message; a check that could not run does not.
   became a source in the same change: a Microsoft 365 group takes the address
   `<alias>@<domain>`, which a shared mailbox or a distribution list made by hand may
   already hold, so a name Entra reports free could still fail at provisioning.
+
+## Amendment (2026-11-10): SharePoint Server sites
+
+The on-premises team site (`m365-spserver-site`, ADR-0540) needed the same warning, so the
+SharePoint Server Worker Type became a source: `sharepointserver/sites`. It differs from
+`sharepoint/sites` in one way: the check names **no host and no managed path**. A
+SharePoint Server Worker is configured with its web application and managed path, and a
+task names a site by its leaf under them; the lookup does the same. The save refuses a
+host on such a check, the query carries no filter, and the Worker refuses one
+(`connector/sharepointserver/lookup.go`), so neither a form nor a person can point the
+farm's account at another web application. The value is a leaf as `catalog.ValidSite`
+allows it.
+
+The Worker answers with `get-site`, the operation the team site's process asks before
+`create-site`, and returns only the name it was asked about: `get-site`'s answer lists
+owners and group members, and none of that leaves the Worker. A failure is
+`provider_unavailable` with no text, since PowerShell's message carries the address.
+
+That Worker is never supervised (ADR-0540): it runs on a server of the farm, installed by
+an operator. That does not stand in the way, because a query is leased over the Worker
+protocol by whatever Worker Instance reports holding the Worker, supervised or not.
+
+Two limits, accepted:
+
+- Every check starts Windows PowerShell and loads the SharePoint snap-in, which takes
+  seconds. A check that does not finish in the eight seconds a form waits reports
+  `timeout`, and a check that could not run does not stop the order; the process's own
+  check before `create-site` stays the rule.
+- Like the online form's, the check asks the URL as typed, without the `NAME_PREFIX` the
+  name rule puts in front of it. Where a prefix is set, only the process sees the real
+  address.
 
 ## Links
 
