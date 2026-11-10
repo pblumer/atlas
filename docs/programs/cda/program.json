@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks.",
+  "next_action": "Put branch protection with the code owner's review in force on main (ADR-0483's trust boundary; the maintainer decided 2026-11-10 that the first publication may freeze ADR-0485's v1alpha1 fields). Then publish the drafted io.atlas.collaboration.channel.create@1.0.0+microsoft-teams: move workertype/evidence/testdata/contracts/collaboration-channel-create.json unchanged to workertype/contracts/ and create its record with the entra-create-channel suite. After that, give Entra's create-channel codes for an unknown team and a name in use, so the record's two failed cases can pass.",
   "slices": [
     {
       "id": "CDA0",
@@ -72,11 +72,13 @@
       ],
       "issues": [],
       "prs": [
-        1656
+        1656,
+        1668
       ],
-      "note": "Candidate half started (programme owner's request, Teams as the first case instead of account/contact): the Entra Team operations and the Teams Phone operations declare claims on their own table rows — neutral io.atlas.collaboration.* and io.atlas.telephony.* identifiers, version 0.1.0, profiles microsoft-teams and microsoft-teams-phone — and GET /api/v1/worker-types projects them per operation as candidate. Tests pin the reviewed set, apply workertype.ValidateCapabilityClaims, require a profile and refuse one contract identity on two operations. Not done: verified/withdrawn states, which need CDA2's published contracts and evidence; the account/contact/entry distinction; no contract with these identifiers exists.",
+      "note": "Candidate half started (programme owner's request, Teams as the first case instead of account/contact): the Entra Team operations and the Teams Phone operations declare claims on their own table rows — neutral io.atlas.collaboration.* and io.atlas.telephony.* identifiers, version 0.1.0, profiles microsoft-teams and microsoft-teams-phone — and GET /api/v1/worker-types projects them per operation as candidate. Tests pin the reviewed set, apply workertype.ValidateCapabilityClaims, require a profile and refuse one contract identity on two operations. Not done: verified/withdrawn states, which need CDA2's published contracts and evidence; the account/contact/entry distinction; no contract with these identifiers exists. 2026-11-10: the first contract, io.atlas.collaboration.channel.create@1.0.0+microsoft-teams, is drafted with its conformance suite (workertype/evidence/suites/entrachannel) and a derived, current record (4 passed, 2 failed, 1 not exercised); publication is blocked on branch protection with code-owner review. create-channel's claim moved to 1.0.0.",
       "evidence": [
-        "../../../api/builtinclaims_internal_test.go"
+        "../../../api/builtinclaims_internal_test.go",
+        "../../../workertype/evidence/channelrecord_test.go"
       ]
     },
     {

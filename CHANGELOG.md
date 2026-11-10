@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The first technical capability contract is drafted, with its conformance suite.**
+  `io.atlas.collaboration.channel.create@1.0.0` (profile `microsoft-teams`) says what creating a
+  standard channel in a collaboration space takes, answers and refuses: an unknown space is
+  `SPACE_NOT_FOUND`, a name already in use is `CHANNEL_ALREADY_EXISTS`, and no second channel is
+  created. The suite `entra-create-channel` runs Entra's `create-channel` against a fake of Graph and
+  derives a current evidence record: four cases pass, the two refusal codes fail because the
+  operation ends both with a plain failure, and one needs a live tenant. The contract is not yet
+  published (ADR-0483): that waits for branch protection with the code owner's review. Entra's
+  `create-channel` now claims the contract's version `1.0.0`.
 - **An LDAP search and a SQL query can write their result as a document, too.** `resultAs="document"`
   now works on the LDAP search, which also gains `select`, and on the `query` of the MS SQL, MariaDB and
   PostgreSQL Worker Types. It writes the same CSV as the AD search, through one shared writer: the LDAP

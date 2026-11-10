@@ -24,7 +24,7 @@ var reviewedBuiltInCapabilityClaims = map[string]map[string][]workertype.Capabil
 		"create-team":     {{ID: "io.atlas.collaboration.space.create", Version: "0.1.0", Profile: "microsoft-teams"}},
 		"add-team-member": {{ID: "io.atlas.collaboration.space.member.add", Version: "0.1.0", Profile: "microsoft-teams"}},
 		"add-team-owner":  {{ID: "io.atlas.collaboration.space.owner.add", Version: "0.1.0", Profile: "microsoft-teams"}},
-		"create-channel":  {{ID: "io.atlas.collaboration.channel.create", Version: "0.1.0", Profile: "microsoft-teams"}},
+		"create-channel":  {{ID: "io.atlas.collaboration.channel.create", Version: "1.0.0", Profile: "microsoft-teams"}},
 		"archive-team":    {{ID: "io.atlas.collaboration.space.archive", Version: "0.1.0", Profile: "microsoft-teams"}},
 	},
 	connectorKindTeamsPhone: {

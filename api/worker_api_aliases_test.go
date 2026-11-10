@@ -149,7 +149,7 @@ func TestWorkerTypesProjectOperationCapabilityClaims(t *testing.T) {
 		t.Fatalf("decode worker types: %v (%s)", err, body)
 	}
 	want := map[string]claim{
-		"entra/create-channel":         {ID: "io.atlas.collaboration.channel.create", Version: "0.1.0", Profile: "microsoft-teams", State: "candidate"},
+		"entra/create-channel":         {ID: "io.atlas.collaboration.channel.create", Version: "1.0.0", Profile: "microsoft-teams", State: "candidate"},
 		"teamsphone/ensure-call-queue": {ID: "io.atlas.telephony.call-queue.ensure", Version: "0.1.0", Profile: "microsoft-teams-phone", State: "candidate"},
 	}
 	for _, kind := range catalog.Kinds {
