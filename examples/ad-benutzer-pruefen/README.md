@@ -45,7 +45,7 @@ Start "Prüfung angestossen"
 |---|---|
 | `kontoAktiv` | Bit 2 von `userAccountControl` ist nicht gesetzt. Ein leerer Wert gilt als nicht aktiv. |
 | `mailGesetzt` | `mail` enthält ein `@`. |
-| `abteilungBekannt` | `department` ist Buchhaltung, Informatik, Personal oder Vertrieb. |
+| `abteilungBekannt` | `department` ist Buchhaltung, Informatik, Logistik, Personal oder Vertrieb. |
 | `lizenzEindeutig` | Genau eine Gruppe in `memberOf` beginnt mit `CN=Lizenz-`. |
 | `valid` | Alle vier Regeln sind erfüllt. |
 
@@ -77,6 +77,13 @@ abgelegt*. Die sechs Befunde:
 
 Genau dieser Lauf ist als Test hinterlegt:
 `go test ./worker -run TestTheADUserCheckExampleRunsAgainstTheMockDirectory`.
+
+**50 000 Konten:** `go run ./examples/testdaten/generieren -n 50000 -out ./testdaten` schreibt
+`benutzer.ldif` mit 50 000 erfundenen Konten, davon 3 000 mit Befund (sechs je hundert, siehe
+[`testdaten`](../testdaten/)). Die Konsole nimmt einen Startbestand standardmässig bis 256 KB an;
+für diese Grösse den Server mit `ATLAS_LIMIT_SETTINGS=33554432` starten, oder einen selbst
+gestarteten Worker mit `ATLAS_AD_MOCK=1 ATLAS_AD_MOCK_SEED=./testdaten/benutzer.ldif` auf die Datei
+zeigen lassen.
 
 ## Gegen ein echtes Verzeichnis
 

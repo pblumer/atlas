@@ -1502,6 +1502,11 @@ type LdapConfig struct {
 	MaxEntries       int32
 	ClientCertSecret string
 	Retries          int32
+	// Select is a search's normalized attribute selection ("" for the server's
+	// default set); AsDocument and DocumentName write the search as a CSV document.
+	Select       string
+	AsDocument   bool
+	DocumentName string
 }
 
 // AddLdapConnectorTask adds a generic LDAP task and returns its element id.
@@ -1538,6 +1543,9 @@ func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 		LdapPageSize:         cfg.PageSize,
 		LdapMaxEntries:       cfg.MaxEntries,
 		LdapClientCertSecret: b.intern(cfg.ClientCertSecret),
+		LdapSelect:           b.intern(cfg.Select),
+		LdapAsDocument:       cfg.AsDocument,
+		LdapDocumentName:     b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1709,6 +1717,9 @@ type SqlConfig struct {
 	MaxRows   int32
 	ResultVar string
 	Retries   int32
+	// AsDocument writes a query's rows into a CSV document named DocumentName.
+	AsDocument   bool
+	DocumentName string
 }
 
 // AddSqlConnectorTask adds a SQL task of cfg's product and returns its
@@ -1721,20 +1732,22 @@ type SqlConfig struct {
 func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:      b.intern(cfg.JobType),
-		Connector:    b.intern(cfg.Connector),
-		Subject:      -1, // not a clio task
-		EventType:    -1,
-		ClioQuery:    -1,
-		ReduceSpec:   -1,
-		Method:       -1, // a SQL operation, not an HTTP method, is authored
-		Auth:         -1, // the DSN lives on the worker; there is nothing to reference
-		ResultVar:    b.intern(cfg.ResultVar),
-		Retries:      cfg.Retries,
-		SqlOp:        b.intern(cfg.Op),
-		SqlStatement: b.intern(cfg.Statement),
-		SqlParamsVar: b.intern(cfg.ParamsVar),
-		SqlMaxRows:   cfg.MaxRows,
+		JobType:         b.intern(cfg.JobType),
+		Connector:       b.intern(cfg.Connector),
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // a SQL operation, not an HTTP method, is authored
+		Auth:            -1, // the DSN lives on the worker; there is nothing to reference
+		ResultVar:       b.intern(cfg.ResultVar),
+		Retries:         cfg.Retries,
+		SqlOp:           b.intern(cfg.Op),
+		SqlStatement:    b.intern(cfg.Statement),
+		SqlParamsVar:    b.intern(cfg.ParamsVar),
+		SqlMaxRows:      cfg.MaxRows,
+		SqlAsDocument:   cfg.AsDocument,
+		SqlDocumentName: b.intern(cfg.DocumentName),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

@@ -40,6 +40,13 @@ type Job struct {
 	Named          map[string]any `json:"named,omitempty"`
 	MaxRows        int            `json:"maxRows,omitempty"`
 	ResultVariable string         `json:"resultVariable,omitempty"`
+	// AsDocument (query only) writes the rows into a CSV document named DocumentName,
+	// which the result variable then names, instead of into the variable; MaxRows is
+	// then the document's cap, 0 for none but the document limit. DocumentLimit is the
+	// activating server's document budget (docs/planning/ad-search-as-document.md, S3).
+	AsDocument    bool   `json:"asDocument,omitempty"`
+	DocumentName  string `json:"documentName,omitempty"`
+	DocumentLimit int64  `json:"documentLimit,omitempty"`
 }
 
 // Resolve turns a compiled SQL task into a [Job]: the authored statement
@@ -63,6 +70,8 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Statement:      cp.Intern(detail.SqlStatement),
 		MaxRows:        int(detail.SqlMaxRows),
 		ResultVariable: cp.Intern(detail.ResultVar),
+		AsDocument:     detail.SqlAsDocument,
+		DocumentName:   cp.Intern(detail.SqlDocumentName),
 	}
 	paramsVar := cp.Intern(detail.SqlParamsVar)
 	if paramsVar == "" {
@@ -164,14 +173,10 @@ func jsonScalar(v any) any {
 // actionable failure, and reporting it ahead of anything about the statement keeps
 // the message pointed at the fix.
 func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
-	client, ok := reg.Client(j.Connector)
-	if !ok {
-		return nil, reg.Unresolved("sqldb", j.Connector)
+	if j.AsDocument {
+		return nil, fmt.Errorf("sqldb: this query writes its result as a document, and where it runs there is no document store to write it to")
 	}
-	if got := client.Product().Name; got != j.Product {
-		return nil, fmt.Errorf("sqldb: the task is a %s task but worker %q is a %s database", j.Product, j.Connector, got)
-	}
-	args, err := bindArgs(j, client.Product())
+	client, args, err := prepare(j, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +211,22 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	default:
 		return nil, fmt.Errorf("sqldb: unknown operation %q", j.Operation)
 	}
+}
+
+// prepare finds the job's database and binds its parameters.
+func prepare(j Job, reg *Registry) (*Client, []any, error) {
+	client, ok := reg.Client(j.Connector)
+	if !ok {
+		return nil, nil, reg.Unresolved("sqldb", j.Connector)
+	}
+	if got := client.Product().Name; got != j.Product {
+		return nil, nil, fmt.Errorf("sqldb: the task is a %s task but worker %q is a %s database", j.Product, j.Connector, got)
+	}
+	args, err := bindArgs(j, client.Product())
+	if err != nil {
+		return nil, nil, err
+	}
+	return client, args, nil
 }
 
 // bindArgs turns the job's resolved parameters into database/sql arguments.

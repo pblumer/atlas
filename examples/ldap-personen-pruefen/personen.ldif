@@ -1,0 +1,2801 @@
+# Testdaten für das Beispiel LDAP-Personen prüfen (examples/testdaten). Alle Personen sind erfunden.
+
+dn: ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: organizationalUnit
+ou: Personen
+
+dn: uid=hfischer1,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hfischer1
+cn: Hans Fischer
+givenName: Hans
+sn: Fischer
+mail: hfischer1@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100001
+employeeType: extern
+
+dn: uid=okaelin2,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: okaelin2
+cn:: T2xpdmlhIEvDpGxpbg==
+givenName: Olivia
+sn:: S8OkbGlu
+mail: okaelin2@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100002
+employeeType: intern
+
+dn: uid=wschnyder3,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: wschnyder3
+cn: Walter Schnyder
+givenName: Walter
+sn: Schnyder
+mail: wschnyder3@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100003
+employeeType: extern
+
+dn: uid=dwyss4,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: dwyss4
+cn: Dominik Wyss
+givenName: Dominik
+sn: Wyss
+mail: dwyss4@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100004
+employeeType: intern
+
+dn: uid=kwidmer5,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kwidmer5
+cn: Kurt Widmer
+givenName: Kurt
+sn: Widmer
+mail: kwidmer5@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100005
+employeeType: extern
+
+dn: uid=cfelder6,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cfelder6
+cn: Claudia Felder
+givenName: Claudia
+sn: Felder
+mail: cfelder6@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100006
+employeeType: intern
+
+dn: uid=jsteiner7,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jsteiner7
+cn: Jonas Steiner
+givenName: Jonas
+sn: Steiner
+departmentNumber: Informatik
+employeeNumber: 100007
+employeeType: extern
+
+dn: uid=rbuehler8,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rbuehler8
+cn:: Uml0YSBCw7xobGVy
+givenName: Rita
+sn:: QsO8aGxlcg==
+mail: rbuehler8@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100008
+employeeType: intern
+
+dn: uid=ybosshard9,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ybosshard9
+cn: Yves Bosshard
+givenName: Yves
+sn: Bosshard
+mail: ybosshard9@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100009
+employeeType: extern
+
+dn: uid=fgraf10,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgraf10
+cn: Franziska Graf
+givenName: Franziska
+sn: Graf
+mail: fgraf10@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100010
+employeeType: intern
+
+dn: uid=mhofmann11,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: mhofmann11
+cn: Marco Hofmann
+givenName: Marco
+sn: Hofmann
+mail: mhofmann11@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100011
+employeeType: extern
+
+dn: uid=eammann12,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: eammann12
+cn: Elena Ammann
+givenName: Elena
+sn: Ammann
+mail: eammann12@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100012
+employeeType: intern
+
+dn: uid=lmoser13,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lmoser13
+cn: Lukas Moser
+givenName: Lukas
+sn: Moser
+mail: lmoser13@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100013
+employeeType: extern
+
+dn: uid=tkunz14,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: tkunz14
+cn: Tanja Kunz
+givenName: Tanja
+sn: Kunz
+mail: tkunz14@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100014
+employeeType: intern
+
+dn: uid=awenger15,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: awenger15
+cn: Andrea Wenger
+givenName: Andrea
+sn: Wenger
+mail: awenger15@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100015
+employeeType: extern
+
+dn: uid=hweber16,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hweber16
+cn: Heidi Weber
+givenName: Heidi
+sn: Weber
+mail: hweber16@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100016
+employeeType: intern
+
+dn: uid=rsuter17,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rsuter17
+cn: Reto Suter
+givenName: Reto
+sn: Suter
+mail: rsuter17@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100017
+employeeType: extern
+
+dn: uid=gluethi18,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gluethi18
+cn:: R2FicmllbGEgTMO8dGhp
+givenName: Gabriela
+sn:: TMO8dGhp
+mail: gluethi18@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100018
+employeeType: intern
+
+dn: uid=nmeier19,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nmeier19
+cn: Nico Meier
+givenName: Nico
+sn: Meier
+mail: nmeier19@gmail.com
+departmentNumber: Logistik
+employeeNumber: 100019
+employeeType: extern
+
+dn: uid=vlehmann20,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: vlehmann20
+cn: Vera Lehmann
+givenName: Vera
+sn: Lehmann
+mail: vlehmann20@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100020
+employeeType: intern
+
+dn: uid=cbachmann21,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cbachmann21
+cn: Corinne Bachmann
+givenName: Corinne
+sn: Bachmann
+mail: cbachmann21@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100021
+employeeType: extern
+
+dn: uid=jschmid22,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jschmid22
+cn: Jasmin Schmid
+givenName: Jasmin
+sn: Schmid
+mail: jschmid22@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100022
+employeeType: intern
+
+dn: uid=bbrun23,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbrun23
+cn: Beat Brun
+givenName: Beat
+sn: Brun
+mail: bbrun23@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100023
+employeeType: extern
+
+dn: uid=istuder24,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: istuder24
+cn: Ines Studer
+givenName: Ines
+sn: Studer
+mail: istuder24@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100024
+employeeType: intern
+
+dn: uid=phuber25,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: phuber25
+cn: Patrick Huber
+givenName: Patrick
+sn: Huber
+mail: phuber25@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100025
+employeeType: extern
+
+dn: uid=xzimmermann26,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: xzimmermann26
+cn: Xenia Zimmermann
+givenName: Xenia
+sn: Zimmermann
+mail: xzimmermann26@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100026
+employeeType: intern
+
+dn: uid=ehug27,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ehug27
+cn: Esther Hug
+givenName: Esther
+sn: Hug
+mail: ehug27@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100027
+employeeType: extern
+
+dn: uid=lbaumann28,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lbaumann28
+cn: Laura Baumann
+givenName: Laura
+sn: Baumann
+mail: lbaumann28@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100028
+employeeType: intern
+
+dn: uid=droth29,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: droth29
+cn: Daniel Roth
+givenName: Daniel
+sn: Roth
+mail: droth29@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100029
+employeeType: extern
+
+dn: uid=kmarti30,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kmarti30
+cn: Karin Marti
+givenName: Karin
+sn: Marti
+mail: kmarti30@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100030
+employeeType: intern
+
+dn: uid=sfrei31,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: sfrei31
+cn: Simon Frei
+givenName: Simon
+sn: Frei
+mail: sfrei31@beispiel.ch
+departmentNumber: Marketing
+employeeNumber: 100031
+employeeType: extern
+
+dn: uid=zmueller32,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: zmueller32
+cn:: Wm/DqSBNw7xsbGVy
+givenName:: Wm/DqQ==
+sn:: TcO8bGxlcg==
+mail: zmueller32@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100032
+employeeType: intern
+
+dn: uid=gsutter33,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gsutter33
+cn: Gian Sutter
+givenName: Gian
+sn: Sutter
+mail: gsutter33@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100033
+employeeType: extern
+
+dn: uid=nbrunner34,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nbrunner34
+cn: Nadine Brunner
+givenName: Nadine
+sn: Brunner
+mail: nbrunner34@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100034
+employeeType: intern
+
+dn: uid=fgerber35,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgerber35
+cn: Fabian Gerber
+givenName: Fabian
+sn: Gerber
+mail: fgerber35@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100035
+employeeType: extern
+
+dn: uid=megli36,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: megli36
+cn: Monika Egli
+givenName: Monika
+sn: Egli
+mail: megli36@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100036
+employeeType: intern
+
+dn: uid=ukeller37,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ukeller37
+cn: Urs Keller
+givenName: Urs
+sn: Keller
+mail: ukeller37@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100037
+employeeType: extern
+
+dn: uid=bbucher38,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbucher38
+cn: Bruno Bucher
+givenName: Bruno
+sn: Bucher
+mail: bbucher38@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100038
+employeeType: intern
+
+dn: uid=izuercher39,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: izuercher39
+cn:: SXZvIFrDvHJjaGVy
+givenName: Ivo
+sn:: WsO8cmNoZXI=
+mail: izuercher39@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100039
+employeeType: extern
+
+dn: uid=amaier40,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: amaier40
+cn: Anna Maier
+givenName: Anna
+sn: Maier
+mail: amaier40@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100040
+employeeType: intern
+
+dn: uid=hfischer41,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hfischer41
+cn: Hans Fischer
+givenName: Hans
+sn: Fischer
+mail: hfischer41@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100041
+employeeType: extern
+
+dn: uid=okaelin42,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: okaelin42
+cn:: T2xpdmlhIEvDpGxpbg==
+givenName: Olivia
+sn:: S8OkbGlu
+mail: okaelin42@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100042
+employeeType: intern
+
+dn: uid=wschnyder43,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: wschnyder43
+cn: Walter Schnyder
+givenName: Walter
+sn: Schnyder
+mail: wschnyder43@beispiel.ch
+departmentNumber: Vertrieb
+employeeType: extern
+
+dn: uid=dwyss44,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: dwyss44
+cn: Dominik Wyss
+givenName: Dominik
+sn: Wyss
+mail: dwyss44@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100044
+employeeType: intern
+
+dn: uid=kwidmer45,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kwidmer45
+cn: Kurt Widmer
+givenName: Kurt
+sn: Widmer
+mail: kwidmer45@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100045
+employeeType: extern
+
+dn: uid=cfelder46,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cfelder46
+cn: Claudia Felder
+givenName: Claudia
+sn: Felder
+mail: cfelder46@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100046
+employeeType: intern
+
+dn: uid=jsteiner47,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jsteiner47
+cn: Jonas Steiner
+givenName: Jonas
+sn: Steiner
+mail: jsteiner47@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100047
+employeeType: extern
+
+dn: uid=rbuehler48,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rbuehler48
+cn:: Uml0YSBCw7xobGVy
+givenName: Rita
+sn:: QsO8aGxlcg==
+mail: rbuehler48@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100048
+employeeType: intern
+
+dn: uid=ybosshard49,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ybosshard49
+cn: Yves Bosshard
+givenName: Yves
+sn: Bosshard
+mail: ybosshard49@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100049
+employeeType: extern
+
+dn: uid=fgraf50,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgraf50
+cn: Franziska Graf
+givenName: Franziska
+sn: Graf
+mail: fgraf50@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100050
+employeeType: intern
+
+dn: uid=mhofmann51,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: mhofmann51
+cn: Marco Hofmann
+givenName: Marco
+sn: Hofmann
+mail: mhofmann51@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100051
+employeeType: extern
+
+dn: uid=eammann52,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: eammann52
+cn: Elena Ammann
+givenName: Elena
+sn: Ammann
+mail: eammann52@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100052
+employeeType: intern
+
+dn: uid=lmoser53,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lmoser53
+cn: Lukas Moser
+givenName: Lukas
+sn: Moser
+mail: lmoser53@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100053
+employeeType: extern
+
+dn: uid=tkunz54,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: tkunz54
+cn: Tanja Kunz
+givenName: Tanja
+sn: Kunz
+mail: tkunz54@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100054
+employeeType: intern
+
+dn: uid=awenger55,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: awenger55
+cn: Andrea Wenger
+givenName: Andrea
+sn: Wenger
+mail: awenger55@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100055
+employeeType: extern
+
+dn: uid=hweber56,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hweber56
+cn: Heidi Weber
+givenName: Heidi
+sn: Weber
+mail: hweber56@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100056
+employeeType: intern
+
+dn: uid=rsuter57,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rsuter57
+cn: Reto Suter
+givenName: Reto
+sn: Suter
+mail: rsuter57@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100057
+employeeType: extern
+
+dn: uid=gluethi58,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gluethi58
+cn:: R2FicmllbGEgTMO8dGhp
+givenName: Gabriela
+sn:: TMO8dGhp
+mail: gluethi58@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100058
+employeeType: intern
+
+dn: uid=nmeier59,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nmeier59
+cn: Nico Meier
+givenName: Nico
+sn: Meier
+mail: nmeier59@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100059
+employeeType: praktikum
+
+dn: uid=vlehmann60,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: vlehmann60
+cn: Vera Lehmann
+givenName: Vera
+sn: Lehmann
+mail: vlehmann60@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100060
+employeeType: intern
+
+dn: uid=cbachmann61,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cbachmann61
+cn: Corinne Bachmann
+givenName: Corinne
+sn: Bachmann
+mail: cbachmann61@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100061
+employeeType: extern
+
+dn: uid=jschmid62,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jschmid62
+cn: Jasmin Schmid
+givenName: Jasmin
+sn: Schmid
+mail: jschmid62@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100062
+employeeType: intern
+
+dn: uid=bbrun63,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbrun63
+cn: Beat Brun
+givenName: Beat
+sn: Brun
+mail: bbrun63@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100063
+employeeType: extern
+
+dn: uid=istuder64,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: istuder64
+cn: Ines Studer
+givenName: Ines
+sn: Studer
+mail: istuder64@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100064
+employeeType: intern
+
+dn: uid=phuber65,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: phuber65
+cn: Patrick Huber
+givenName: Patrick
+sn: Huber
+mail: phuber65@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100065
+employeeType: extern
+
+dn: uid=xzimmermann66,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: xzimmermann66
+cn: Xenia Zimmermann
+givenName: Xenia
+sn: Zimmermann
+mail: xzimmermann66@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100066
+employeeType: intern
+
+dn: uid=ehug67,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ehug67
+cn: Esther Hug
+givenName: Esther
+sn: Hug
+mail: ehug67@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100067
+employeeType: extern
+
+dn: uid=lbaumann68,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lbaumann68
+cn: Laura Baumann
+givenName: Laura
+sn: Baumann
+mail: lbaumann68@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100068
+employeeType: intern
+
+dn: uid=droth69,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: droth69
+cn: Daniel Roth
+givenName: Daniel
+sn: Roth
+mail: droth69@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100069
+employeeType: extern
+
+dn: uid=kmarti70,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kmarti70
+cn: Karin Marti
+givenName: Karin
+sn: Marti
+mail: kmarti70@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100070
+employeeType: intern
+
+dn: uid=sfrei71,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: sfrei71
+cn: Simon Frei
+givenName: Simon
+sn: Frei
+departmentNumber: Marketing
+employeeNumber: 100071
+employeeType: extern
+
+dn: uid=zmueller72,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: zmueller72
+cn:: Wm/DqSBNw7xsbGVy
+givenName:: Wm/DqQ==
+sn:: TcO8bGxlcg==
+mail: zmueller72@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100072
+employeeType: intern
+
+dn: uid=gsutter73,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gsutter73
+cn: Gian Sutter
+givenName: Gian
+sn: Sutter
+mail: gsutter73@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100073
+employeeType: extern
+
+dn: uid=nbrunner74,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nbrunner74
+cn: Nadine Brunner
+givenName: Nadine
+sn: Brunner
+mail: nbrunner74@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100074
+employeeType: intern
+
+dn: uid=fgerber75,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgerber75
+cn: Fabian Gerber
+givenName: Fabian
+sn: Gerber
+mail: fgerber75@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100075
+employeeType: extern
+
+dn: uid=megli76,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: megli76
+cn: Monika Egli
+givenName: Monika
+sn: Egli
+mail: megli76@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100076
+employeeType: intern
+
+dn: uid=ukeller77,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ukeller77
+cn: Urs Keller
+givenName: Urs
+sn: Keller
+mail: ukeller77@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100077
+employeeType: extern
+
+dn: uid=bbucher78,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbucher78
+cn: Bruno Bucher
+givenName: Bruno
+sn: Bucher
+mail: bbucher78@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100078
+employeeType: intern
+
+dn: uid=izuercher79,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: izuercher79
+cn:: SXZvIFrDvHJjaGVy
+givenName: Ivo
+sn:: WsO8cmNoZXI=
+mail: izuercher79@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100079
+employeeType: extern
+
+dn: uid=amaier80,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: amaier80
+cn: Anna Maier
+givenName: Anna
+sn: Maier
+mail: amaier80@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100080
+employeeType: intern
+
+dn: uid=hfischer81,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hfischer81
+cn: Hans Fischer
+givenName: Hans
+sn: Fischer
+mail: hfischer81@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100081
+employeeType: extern
+
+dn: uid=okaelin82,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: okaelin82
+cn:: T2xpdmlhIEvDpGxpbg==
+givenName: Olivia
+sn:: S8OkbGlu
+mail: okaelin82@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100082
+employeeType: intern
+
+dn: uid=wschnyder83,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: wschnyder83
+cn: Walter Schnyder
+givenName: Walter
+sn: Schnyder
+mail: wschnyder83@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100083
+employeeType: extern
+
+dn: uid=dwyss84,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: dwyss84
+cn: Dominik Wyss
+givenName: Dominik
+sn: Wyss
+mail: dwyss84@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100084
+employeeType: intern
+
+dn: uid=kwidmer85,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kwidmer85
+cn: Kurt Widmer
+givenName: Kurt
+sn: Widmer
+mail: kwidmer85@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100085
+employeeType: extern
+
+dn: uid=cfelder86,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cfelder86
+cn: Claudia Felder
+givenName: Claudia
+sn: Felder
+mail: cfelder86@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100086
+employeeType: intern
+
+dn: uid=jsteiner87,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jsteiner87
+cn: Jonas Steiner
+givenName: Jonas
+sn: Steiner
+mail: jsteiner87@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100087
+employeeType: extern
+
+dn: uid=rbuehler88,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rbuehler88
+cn:: Uml0YSBCw7xobGVy
+givenName: Rita
+sn:: QsO8aGxlcg==
+mail: rbuehler88@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100088
+employeeType: intern
+
+dn: uid=ybosshard89,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ybosshard89
+cn: Yves Bosshard
+givenName: Yves
+sn: Bosshard
+mail: ybosshard89@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100089
+employeeType: extern
+
+dn: uid=fgraf90,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgraf90
+cn: Franziska Graf
+givenName: Franziska
+sn: Graf
+mail: fgraf90@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100090
+employeeType: intern
+
+dn: uid=mhofmann91,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: mhofmann91
+cn: Marco Hofmann
+givenName: Marco
+sn: Hofmann
+mail: mhofmann91@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100091
+employeeType: extern
+
+dn: uid=eammann92,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: eammann92
+cn: Elena Ammann
+givenName: Elena
+sn: Ammann
+mail: eammann92@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100092
+employeeType: intern
+
+dn: uid=lmoser93,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lmoser93
+cn: Lukas Moser
+givenName: Lukas
+sn: Moser
+mail: lmoser93@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100093
+employeeType: extern
+
+dn: uid=tkunz94,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: tkunz94
+cn: Tanja Kunz
+givenName: Tanja
+sn: Kunz
+mail: tkunz94@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100094
+employeeType: intern
+
+dn: uid=awenger95,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: awenger95
+cn: Andrea Wenger
+givenName: Andrea
+sn: Wenger
+mail: awenger95@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100095
+employeeType: extern
+
+dn: uid=hweber96,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hweber96
+cn: Heidi Weber
+givenName: Heidi
+sn: Weber
+mail: hweber96@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100096
+employeeType: intern
+
+dn: uid=rsuter97,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rsuter97
+cn: Reto Suter
+givenName: Reto
+sn: Suter
+mail: rsuter97@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100097
+employeeType: extern
+
+dn: uid=gluethi98,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gluethi98
+cn:: R2FicmllbGEgTMO8dGhp
+givenName: Gabriela
+sn:: TMO8dGhp
+mail: gluethi98@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100098
+employeeType: intern
+
+dn: uid=nmeier99,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nmeier99
+cn: Nico Meier
+givenName: Nico
+sn: Meier
+mail: nmeier99@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100099
+employeeType: extern
+
+dn: uid=vlehmann100,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: vlehmann100
+cn: Vera Lehmann
+givenName: Vera
+sn: Lehmann
+mail: vlehmann100@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100100
+employeeType: intern
+
+dn: uid=cbachmann101,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cbachmann101
+cn: Corinne Bachmann
+givenName: Corinne
+sn: Bachmann
+mail: cbachmann101@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100101
+employeeType: extern
+
+dn: uid=jschmid102,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jschmid102
+cn: Jasmin Schmid
+givenName: Jasmin
+sn: Schmid
+mail: jschmid102@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100102
+employeeType: intern
+
+dn: uid=bbrun103,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbrun103
+cn: Beat Brun
+givenName: Beat
+sn: Brun
+mail: bbrun103@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100103
+employeeType: extern
+
+dn: uid=istuder104,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: istuder104
+cn: Ines Studer
+givenName: Ines
+sn: Studer
+mail: istuder104@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100104
+employeeType: intern
+
+dn: uid=phuber105,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: phuber105
+cn: Patrick Huber
+givenName: Patrick
+sn: Huber
+mail: phuber105@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100105
+employeeType: extern
+
+dn: uid=xzimmermann106,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: xzimmermann106
+cn: Xenia Zimmermann
+givenName: Xenia
+sn: Zimmermann
+mail: xzimmermann106@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100106
+employeeType: intern
+
+dn: uid=ehug107,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ehug107
+cn: Esther Hug
+givenName: Esther
+sn: Hug
+departmentNumber: Informatik
+employeeNumber: 100107
+employeeType: extern
+
+dn: uid=lbaumann108,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lbaumann108
+cn: Laura Baumann
+givenName: Laura
+sn: Baumann
+mail: lbaumann108@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100108
+employeeType: intern
+
+dn: uid=droth109,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: droth109
+cn: Daniel Roth
+givenName: Daniel
+sn: Roth
+mail: droth109@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100109
+employeeType: extern
+
+dn: uid=kmarti110,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kmarti110
+cn: Karin Marti
+givenName: Karin
+sn: Marti
+mail: kmarti110@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100110
+employeeType: intern
+
+dn: uid=sfrei111,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: sfrei111
+cn: Simon Frei
+givenName: Simon
+sn: Frei
+mail: sfrei111@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100111
+employeeType: extern
+
+dn: uid=zmueller112,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: zmueller112
+cn:: Wm/DqSBNw7xsbGVy
+givenName:: Wm/DqQ==
+sn:: TcO8bGxlcg==
+mail: zmueller112@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100112
+employeeType: intern
+
+dn: uid=gsutter113,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gsutter113
+cn: Gian Sutter
+givenName: Gian
+sn: Sutter
+mail: gsutter113@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100113
+employeeType: extern
+
+dn: uid=nbrunner114,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nbrunner114
+cn: Nadine Brunner
+givenName: Nadine
+sn: Brunner
+mail: nbrunner114@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100114
+employeeType: intern
+
+dn: uid=fgerber115,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgerber115
+cn: Fabian Gerber
+givenName: Fabian
+sn: Gerber
+mail: fgerber115@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100115
+employeeType: extern
+
+dn: uid=megli116,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: megli116
+cn: Monika Egli
+givenName: Monika
+sn: Egli
+mail: megli116@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100116
+employeeType: intern
+
+dn: uid=ukeller117,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ukeller117
+cn: Urs Keller
+givenName: Urs
+sn: Keller
+mail: ukeller117@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100117
+employeeType: extern
+
+dn: uid=bbucher118,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbucher118
+cn: Bruno Bucher
+givenName: Bruno
+sn: Bucher
+mail: bbucher118@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100118
+employeeType: intern
+
+dn: uid=izuercher119,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: izuercher119
+cn:: SXZvIFrDvHJjaGVy
+givenName: Ivo
+sn:: WsO8cmNoZXI=
+mail: izuercher119@gmail.com
+departmentNumber: Logistik
+employeeNumber: 100119
+employeeType: extern
+
+dn: uid=amaier120,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: amaier120
+cn: Anna Maier
+givenName: Anna
+sn: Maier
+mail: amaier120@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100120
+employeeType: intern
+
+dn: uid=hfischer121,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hfischer121
+cn: Hans Fischer
+givenName: Hans
+sn: Fischer
+mail: hfischer121@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100121
+employeeType: extern
+
+dn: uid=okaelin122,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: okaelin122
+cn:: T2xpdmlhIEvDpGxpbg==
+givenName: Olivia
+sn:: S8OkbGlu
+mail: okaelin122@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100122
+employeeType: intern
+
+dn: uid=wschnyder123,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: wschnyder123
+cn: Walter Schnyder
+givenName: Walter
+sn: Schnyder
+mail: wschnyder123@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100123
+employeeType: extern
+
+dn: uid=dwyss124,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: dwyss124
+cn: Dominik Wyss
+givenName: Dominik
+sn: Wyss
+mail: dwyss124@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100124
+employeeType: intern
+
+dn: uid=kwidmer125,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kwidmer125
+cn: Kurt Widmer
+givenName: Kurt
+sn: Widmer
+mail: kwidmer125@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100125
+employeeType: extern
+
+dn: uid=cfelder126,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cfelder126
+cn: Claudia Felder
+givenName: Claudia
+sn: Felder
+mail: cfelder126@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100126
+employeeType: intern
+
+dn: uid=jsteiner127,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jsteiner127
+cn: Jonas Steiner
+givenName: Jonas
+sn: Steiner
+mail: jsteiner127@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100127
+employeeType: extern
+
+dn: uid=rbuehler128,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rbuehler128
+cn:: Uml0YSBCw7xobGVy
+givenName: Rita
+sn:: QsO8aGxlcg==
+mail: rbuehler128@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100128
+employeeType: intern
+
+dn: uid=ybosshard129,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ybosshard129
+cn: Yves Bosshard
+givenName: Yves
+sn: Bosshard
+mail: ybosshard129@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100129
+employeeType: extern
+
+dn: uid=fgraf130,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgraf130
+cn: Franziska Graf
+givenName: Franziska
+sn: Graf
+mail: fgraf130@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100130
+employeeType: intern
+
+dn: uid=mhofmann131,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: mhofmann131
+cn: Marco Hofmann
+givenName: Marco
+sn: Hofmann
+mail: mhofmann131@beispiel.ch
+departmentNumber: Marketing
+employeeNumber: 100131
+employeeType: extern
+
+dn: uid=eammann132,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: eammann132
+cn: Elena Ammann
+givenName: Elena
+sn: Ammann
+mail: eammann132@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100132
+employeeType: intern
+
+dn: uid=lmoser133,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lmoser133
+cn: Lukas Moser
+givenName: Lukas
+sn: Moser
+mail: lmoser133@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100133
+employeeType: extern
+
+dn: uid=tkunz134,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: tkunz134
+cn: Tanja Kunz
+givenName: Tanja
+sn: Kunz
+mail: tkunz134@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100134
+employeeType: intern
+
+dn: uid=awenger135,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: awenger135
+cn: Andrea Wenger
+givenName: Andrea
+sn: Wenger
+mail: awenger135@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100135
+employeeType: extern
+
+dn: uid=hweber136,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hweber136
+cn: Heidi Weber
+givenName: Heidi
+sn: Weber
+mail: hweber136@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100136
+employeeType: intern
+
+dn: uid=rsuter137,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rsuter137
+cn: Reto Suter
+givenName: Reto
+sn: Suter
+mail: rsuter137@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100137
+employeeType: extern
+
+dn: uid=gluethi138,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gluethi138
+cn:: R2FicmllbGEgTMO8dGhp
+givenName: Gabriela
+sn:: TMO8dGhp
+mail: gluethi138@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100138
+employeeType: intern
+
+dn: uid=nmeier139,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nmeier139
+cn: Nico Meier
+givenName: Nico
+sn: Meier
+mail: nmeier139@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100139
+employeeType: extern
+
+dn: uid=vlehmann140,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: vlehmann140
+cn: Vera Lehmann
+givenName: Vera
+sn: Lehmann
+mail: vlehmann140@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100140
+employeeType: intern
+
+dn: uid=cbachmann141,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cbachmann141
+cn: Corinne Bachmann
+givenName: Corinne
+sn: Bachmann
+mail: cbachmann141@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100141
+employeeType: extern
+
+dn: uid=jschmid142,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jschmid142
+cn: Jasmin Schmid
+givenName: Jasmin
+sn: Schmid
+mail: jschmid142@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100142
+employeeType: intern
+
+dn: uid=bbrun143,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbrun143
+cn: Beat Brun
+givenName: Beat
+sn: Brun
+mail: bbrun143@beispiel.ch
+departmentNumber: Vertrieb
+employeeType: extern
+
+dn: uid=istuder144,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: istuder144
+cn: Ines Studer
+givenName: Ines
+sn: Studer
+mail: istuder144@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100144
+employeeType: intern
+
+dn: uid=phuber145,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: phuber145
+cn: Patrick Huber
+givenName: Patrick
+sn: Huber
+mail: phuber145@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100145
+employeeType: extern
+
+dn: uid=xzimmermann146,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: xzimmermann146
+cn: Xenia Zimmermann
+givenName: Xenia
+sn: Zimmermann
+mail: xzimmermann146@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100146
+employeeType: intern
+
+dn: uid=ehug147,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ehug147
+cn: Esther Hug
+givenName: Esther
+sn: Hug
+mail: ehug147@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100147
+employeeType: extern
+
+dn: uid=lbaumann148,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lbaumann148
+cn: Laura Baumann
+givenName: Laura
+sn: Baumann
+mail: lbaumann148@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100148
+employeeType: intern
+
+dn: uid=droth149,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: droth149
+cn: Daniel Roth
+givenName: Daniel
+sn: Roth
+mail: droth149@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100149
+employeeType: extern
+
+dn: uid=kmarti150,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kmarti150
+cn: Karin Marti
+givenName: Karin
+sn: Marti
+mail: kmarti150@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100150
+employeeType: intern
+
+dn: uid=sfrei151,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: sfrei151
+cn: Simon Frei
+givenName: Simon
+sn: Frei
+mail: sfrei151@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100151
+employeeType: extern
+
+dn: uid=zmueller152,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: zmueller152
+cn:: Wm/DqSBNw7xsbGVy
+givenName:: Wm/DqQ==
+sn:: TcO8bGxlcg==
+mail: zmueller152@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100152
+employeeType: intern
+
+dn: uid=gsutter153,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gsutter153
+cn: Gian Sutter
+givenName: Gian
+sn: Sutter
+mail: gsutter153@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100153
+employeeType: extern
+
+dn: uid=nbrunner154,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nbrunner154
+cn: Nadine Brunner
+givenName: Nadine
+sn: Brunner
+mail: nbrunner154@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100154
+employeeType: intern
+
+dn: uid=fgerber155,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgerber155
+cn: Fabian Gerber
+givenName: Fabian
+sn: Gerber
+mail: fgerber155@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100155
+employeeType: extern
+
+dn: uid=megli156,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: megli156
+cn: Monika Egli
+givenName: Monika
+sn: Egli
+mail: megli156@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100156
+employeeType: intern
+
+dn: uid=ukeller157,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ukeller157
+cn: Urs Keller
+givenName: Urs
+sn: Keller
+mail: ukeller157@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100157
+employeeType: extern
+
+dn: uid=bbucher158,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbucher158
+cn: Bruno Bucher
+givenName: Bruno
+sn: Bucher
+mail: bbucher158@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100158
+employeeType: intern
+
+dn: uid=izuercher159,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: izuercher159
+cn:: SXZvIFrDvHJjaGVy
+givenName: Ivo
+sn:: WsO8cmNoZXI=
+mail: izuercher159@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100159
+employeeType: praktikum
+
+dn: uid=amaier160,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: amaier160
+cn: Anna Maier
+givenName: Anna
+sn: Maier
+mail: amaier160@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100160
+employeeType: intern
+
+dn: uid=hfischer161,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hfischer161
+cn: Hans Fischer
+givenName: Hans
+sn: Fischer
+mail: hfischer161@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100161
+employeeType: extern
+
+dn: uid=okaelin162,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: okaelin162
+cn:: T2xpdmlhIEvDpGxpbg==
+givenName: Olivia
+sn:: S8OkbGlu
+mail: okaelin162@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100162
+employeeType: intern
+
+dn: uid=wschnyder163,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: wschnyder163
+cn: Walter Schnyder
+givenName: Walter
+sn: Schnyder
+mail: wschnyder163@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100163
+employeeType: extern
+
+dn: uid=dwyss164,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: dwyss164
+cn: Dominik Wyss
+givenName: Dominik
+sn: Wyss
+mail: dwyss164@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100164
+employeeType: intern
+
+dn: uid=kwidmer165,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kwidmer165
+cn: Kurt Widmer
+givenName: Kurt
+sn: Widmer
+mail: kwidmer165@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100165
+employeeType: extern
+
+dn: uid=cfelder166,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cfelder166
+cn: Claudia Felder
+givenName: Claudia
+sn: Felder
+mail: cfelder166@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100166
+employeeType: intern
+
+dn: uid=jsteiner167,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jsteiner167
+cn: Jonas Steiner
+givenName: Jonas
+sn: Steiner
+mail: jsteiner167@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100167
+employeeType: extern
+
+dn: uid=rbuehler168,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rbuehler168
+cn:: Uml0YSBCw7xobGVy
+givenName: Rita
+sn:: QsO8aGxlcg==
+mail: rbuehler168@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100168
+employeeType: intern
+
+dn: uid=ybosshard169,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ybosshard169
+cn: Yves Bosshard
+givenName: Yves
+sn: Bosshard
+mail: ybosshard169@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100169
+employeeType: extern
+
+dn: uid=fgraf170,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgraf170
+cn: Franziska Graf
+givenName: Franziska
+sn: Graf
+mail: fgraf170@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100170
+employeeType: intern
+
+dn: uid=mhofmann171,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: mhofmann171
+cn: Marco Hofmann
+givenName: Marco
+sn: Hofmann
+departmentNumber: Marketing
+employeeNumber: 100171
+employeeType: extern
+
+dn: uid=eammann172,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: eammann172
+cn: Elena Ammann
+givenName: Elena
+sn: Ammann
+mail: eammann172@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100172
+employeeType: intern
+
+dn: uid=lmoser173,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lmoser173
+cn: Lukas Moser
+givenName: Lukas
+sn: Moser
+mail: lmoser173@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100173
+employeeType: extern
+
+dn: uid=tkunz174,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: tkunz174
+cn: Tanja Kunz
+givenName: Tanja
+sn: Kunz
+mail: tkunz174@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100174
+employeeType: intern
+
+dn: uid=awenger175,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: awenger175
+cn: Andrea Wenger
+givenName: Andrea
+sn: Wenger
+mail: awenger175@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100175
+employeeType: extern
+
+dn: uid=hweber176,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: hweber176
+cn: Heidi Weber
+givenName: Heidi
+sn: Weber
+mail: hweber176@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100176
+employeeType: intern
+
+dn: uid=rsuter177,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: rsuter177
+cn: Reto Suter
+givenName: Reto
+sn: Suter
+mail: rsuter177@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100177
+employeeType: extern
+
+dn: uid=gluethi178,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gluethi178
+cn:: R2FicmllbGEgTMO8dGhp
+givenName: Gabriela
+sn:: TMO8dGhp
+mail: gluethi178@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100178
+employeeType: intern
+
+dn: uid=nmeier179,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nmeier179
+cn: Nico Meier
+givenName: Nico
+sn: Meier
+mail: nmeier179@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100179
+employeeType: extern
+
+dn: uid=vlehmann180,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: vlehmann180
+cn: Vera Lehmann
+givenName: Vera
+sn: Lehmann
+mail: vlehmann180@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100180
+employeeType: intern
+
+dn: uid=cbachmann181,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cbachmann181
+cn: Corinne Bachmann
+givenName: Corinne
+sn: Bachmann
+mail: cbachmann181@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100181
+employeeType: extern
+
+dn: uid=jschmid182,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: jschmid182
+cn: Jasmin Schmid
+givenName: Jasmin
+sn: Schmid
+mail: jschmid182@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100182
+employeeType: intern
+
+dn: uid=bbrun183,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbrun183
+cn: Beat Brun
+givenName: Beat
+sn: Brun
+mail: bbrun183@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100183
+employeeType: extern
+
+dn: uid=istuder184,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: istuder184
+cn: Ines Studer
+givenName: Ines
+sn: Studer
+mail: istuder184@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100184
+employeeType: intern
+
+dn: uid=phuber185,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: phuber185
+cn: Patrick Huber
+givenName: Patrick
+sn: Huber
+mail: phuber185@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100185
+employeeType: extern
+
+dn: uid=xzimmermann186,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: xzimmermann186
+cn: Xenia Zimmermann
+givenName: Xenia
+sn: Zimmermann
+mail: xzimmermann186@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100186
+employeeType: intern
+
+dn: uid=ehug187,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ehug187
+cn: Esther Hug
+givenName: Esther
+sn: Hug
+mail: ehug187@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100187
+employeeType: extern
+
+dn: uid=lbaumann188,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: lbaumann188
+cn: Laura Baumann
+givenName: Laura
+sn: Baumann
+mail: lbaumann188@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100188
+employeeType: intern
+
+dn: uid=droth189,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: droth189
+cn: Daniel Roth
+givenName: Daniel
+sn: Roth
+mail: droth189@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100189
+employeeType: extern
+
+dn: uid=kmarti190,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: kmarti190
+cn: Karin Marti
+givenName: Karin
+sn: Marti
+mail: kmarti190@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100190
+employeeType: intern
+
+dn: uid=sfrei191,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: sfrei191
+cn: Simon Frei
+givenName: Simon
+sn: Frei
+mail: sfrei191@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100191
+employeeType: extern
+
+dn: uid=zmueller192,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: zmueller192
+cn:: Wm/DqSBNw7xsbGVy
+givenName:: Wm/DqQ==
+sn:: TcO8bGxlcg==
+mail: zmueller192@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100192
+employeeType: intern
+
+dn: uid=gsutter193,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: gsutter193
+cn: Gian Sutter
+givenName: Gian
+sn: Sutter
+mail: gsutter193@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100193
+employeeType: extern
+
+dn: uid=nbrunner194,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: nbrunner194
+cn: Nadine Brunner
+givenName: Nadine
+sn: Brunner
+mail: nbrunner194@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100194
+employeeType: intern
+
+dn: uid=fgerber195,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: fgerber195
+cn: Fabian Gerber
+givenName: Fabian
+sn: Gerber
+mail: fgerber195@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100195
+employeeType: extern
+
+dn: uid=megli196,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: megli196
+cn: Monika Egli
+givenName: Monika
+sn: Egli
+mail: megli196@beispiel.ch
+departmentNumber: Personal
+employeeNumber: 100196
+employeeType: intern
+
+dn: uid=ukeller197,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: ukeller197
+cn: Urs Keller
+givenName: Urs
+sn: Keller
+mail: ukeller197@beispiel.ch
+departmentNumber: Informatik
+employeeNumber: 100197
+employeeType: extern
+
+dn: uid=bbucher198,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: bbucher198
+cn: Bruno Bucher
+givenName: Bruno
+sn: Bucher
+mail: bbucher198@beispiel.ch
+departmentNumber: Vertrieb
+employeeNumber: 100198
+employeeType: intern
+
+dn: uid=izuercher199,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: izuercher199
+cn:: SXZvIFrDvHJjaGVy
+givenName: Ivo
+sn:: WsO8cmNoZXI=
+mail: izuercher199@beispiel.ch
+departmentNumber: Logistik
+employeeNumber: 100199
+employeeType: extern
+
+dn: uid=amaier200,ou=Personen,dc=beispiel,dc=ch
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: amaier200
+cn: Anna Maier
+givenName: Anna
+sn: Maier
+mail: amaier200@beispiel.ch
+departmentNumber: Buchhaltung
+employeeNumber: 100200
+employeeType: intern
+

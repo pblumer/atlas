@@ -255,6 +255,12 @@
       "version": "1.0.0",
       "digest": "sha256:e0e55a4c8de7a0f116ca4bf5b30ad077881d5493295e96066a871d69f8c70311",
       "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "datenqualitaet",
+      "version": "1.0.1",
+      "digest": "sha256:254f4abd1269d056ba8a4a23b0c5d68b3c021261b6788387a9145f4187842295",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }

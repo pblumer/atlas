@@ -651,17 +651,36 @@ func compileSqlConnectorTask(b *Builder, st xmlServiceTask, retries int32, p sql
 	if err != nil {
 		return 0, err
 	}
+	asDocument, documentName, err := documentResultAs(documentForm{
+		kind: p.kind, taskID: st.Id, op: op, reads: op == "query", reader: "query",
+		resultAs: cn.ResultAs, documentName: cn.DocumentName, resultVariable: result,
+		defaultName: defaultSqlDocumentName,
+	})
+	if err != nil {
+		return 0, err
+	}
+	// The document form exists for large results: its cap is the document form's
+	// default, and an authored 0 means no cap but the document limit.
+	if asDocument && strings.TrimSpace(cn.MaxRows) == "" {
+		maxRows = defaultAdDocumentMaxEntries
+	}
 	return b.AddSqlConnectorTask(SqlConfig{
-		JobType:   p.jobType,
-		Connector: strings.TrimSpace(cn.Connector),
-		Op:        op,
-		Statement: stmt,
-		ParamsVar: strings.TrimSpace(cn.ParametersVariable),
-		MaxRows:   maxRows,
-		ResultVar: result,
-		Retries:   retries,
+		JobType:      p.jobType,
+		Connector:    strings.TrimSpace(cn.Connector),
+		Op:           op,
+		Statement:    stmt,
+		ParamsVar:    strings.TrimSpace(cn.ParametersVariable),
+		MaxRows:      maxRows,
+		ResultVar:    result,
+		Retries:      retries,
+		AsDocument:   asDocument,
+		DocumentName: documentName,
 	}), nil
 }
+
+// defaultSqlDocumentName is the file a query written as a document is stored under
+// when the model names none.
+const defaultSqlDocumentName = "query.csv"
 
 // sqlMaxRows reads the authored row cap. It applies to query alone: query-one is
 // capped at one row by its own definition and execute returns a count, so a cap on
@@ -952,45 +971,74 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 
 // adResultAs reads where a search's entries go: into the result variable (the
 // default), or into a CSV document the result variable names
-// (docs/planning/ad-search-as-document.md). The document form is refused where it
-// could not be read back: on any operation but search, without a result variable to
-// name it, and without a select — a server's default attribute set differs between
-// directories, and a file whose columns depend on the server cannot be checked by a
-// rule that names them.
+// (docs/planning/ad-search-as-document.md).
 func adResultAs(taskID, op string, spec adOp, cn *xmlAdConnector, selectList string) (bool, string, error) {
-	as := strings.ToLower(strings.TrimSpace(cn.ResultAs))
-	name := strings.TrimSpace(cn.DocumentName)
+	return documentResultAs(documentForm{
+		kind: "ad", taskID: taskID, op: op, reads: spec.isSearch, reader: "a search",
+		resultAs: cn.ResultAs, documentName: cn.DocumentName, resultVariable: cn.ResultVariable,
+		directory: true, selectList: selectList, defaultName: defaultAdDocumentName,
+	})
+}
+
+// documentForm is what one task authored about writing its result as a document: the
+// AD and LDAP searches and the SQL query share the form and its refusals.
+type documentForm struct {
+	kind, taskID, op string
+	// reads says the operation is the one that can write a document; reader names it
+	// in a refusal ("a search", "query").
+	reads  bool
+	reader string
+	// The authored attributes.
+	resultAs, documentName, resultVariable string
+	// directory says the columns are a select (dn, then the attributes it names),
+	// which then has to name them; a query's columns are its statement's.
+	directory   bool
+	selectList  string
+	defaultName string
+}
+
+// documentResultAs reads where a reading operation's records go: into the result
+// variable (the default), or into a CSV document the result variable names. The
+// document form is refused where it could not be read back: on any operation but the
+// reading one, without a result variable to name it, and — for a directory — without
+// a select: a server's default attribute set differs between directories, and a file
+// whose columns depend on the server cannot be checked by a rule that names them.
+func documentResultAs(f documentForm) (bool, string, error) {
+	as := strings.ToLower(strings.TrimSpace(f.resultAs))
+	name := strings.TrimSpace(f.documentName)
 	switch as {
 	case "", "variable":
 		if name != "" {
-			return false, "", fmt.Errorf("compiler: ad task %q sets documentName, which names the document a search writes with resultAs=\"document\"", taskID)
+			return false, "", fmt.Errorf("compiler: %s task %q sets documentName, which names the document %s writes with resultAs=\"document\"", f.kind, f.taskID, f.reader)
 		}
 		return false, "", nil
 	case "document":
 	default:
-		return false, "", fmt.Errorf("compiler: ad task %q has an unknown resultAs %q (want variable or document)", taskID, cn.ResultAs)
+		return false, "", fmt.Errorf("compiler: %s task %q has an unknown resultAs %q (want variable or document)", f.kind, f.taskID, f.resultAs)
 	}
-	if !spec.isSearch {
-		return false, "", fmt.Errorf("compiler: ad task %q sets resultAs=\"document\" on operation %q; only a search writes its result as a document", taskID, op)
+	if !f.reads {
+		return false, "", fmt.Errorf("compiler: %s task %q sets resultAs=\"document\" on operation %q; only %s writes its result as a document", f.kind, f.taskID, f.op, f.reader)
 	}
-	if strings.TrimSpace(cn.ResultVariable) == "" {
-		return false, "", fmt.Errorf("compiler: ad task %q writes its search as a document and needs a resultVariable to hold the reference to it", taskID)
+	if strings.TrimSpace(f.resultVariable) == "" {
+		return false, "", fmt.Errorf("compiler: %s task %q writes its result as a document and needs a resultVariable to hold the reference to it", f.kind, f.taskID)
 	}
-	if selectList == "" {
-		return false, "", fmt.Errorf("compiler: ad task %q writes its search as a document and needs select: the document's columns are the attributes it names, and a server's default set differs between directories", taskID)
-	}
-	// Each name is a column, so it has to be one: * and + select whatever the server
-	// holds, and dn is the first column already.
-	for _, a := range strings.Split(selectList, ",") {
-		if a == "*" || a == "+" || strings.EqualFold(a, "dn") {
-			return false, "", fmt.Errorf("compiler: ad task %q writes its search as a document and selects %q; every name in select is a column, so name the attributes (dn is the first column already)", taskID, a)
+	if f.directory {
+		if f.selectList == "" {
+			return false, "", fmt.Errorf("compiler: %s task %q writes its search as a document and needs select: the document's columns are the attributes it names, and a server's default set differs between directories", f.kind, f.taskID)
+		}
+		// Each name is a column, so it has to be one: * and + select whatever the
+		// server holds, and dn is the first column already.
+		for _, a := range strings.Split(f.selectList, ",") {
+			if a == "*" || a == "+" || strings.EqualFold(a, "dn") {
+				return false, "", fmt.Errorf("compiler: %s task %q writes its search as a document and selects %q; every name in select is a column, so name the attributes (dn is the first column already)", f.kind, f.taskID, a)
+			}
 		}
 	}
 	if name == "" {
-		name = defaultAdDocumentName
+		name = f.defaultName
 	}
 	if strings.ContainsAny(name, "/\\") || name == "." || name == ".." {
-		return false, "", fmt.Errorf("compiler: ad task %q documentName %q is a path; name the file only", taskID, name)
+		return false, "", fmt.Errorf("compiler: %s task %q documentName %q is a path; name the file only", f.kind, f.taskID, name)
 	}
 	return true, name, nil
 }
@@ -1176,11 +1224,32 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if op == "modify-password" && strings.TrimSpace(cn.NewPassword) == "" {
 		return 0, fmt.Errorf("compiler: ldap task %q operation modify-password needs a newPassword", st.Id)
 	}
+	if op != "search" && strings.TrimSpace(cn.Select) != "" {
+		return 0, fmt.Errorf("compiler: ldap task %q sets select on operation %q; select narrows what a search returns and applies to search only", st.Id, op)
+	}
+	selectList, err := attributeSelection("ldap", st.Id, cn.Select)
+	if err != nil {
+		return 0, err
+	}
+	asDocument, documentName, err := documentResultAs(documentForm{
+		kind: "ldap", taskID: st.Id, op: op, reads: op == "search", reader: "a search",
+		resultAs: cn.ResultAs, documentName: cn.DocumentName, resultVariable: cn.ResultVariable,
+		directory: true, selectList: selectList, defaultName: defaultLdapDocumentName,
+	})
+	if err != nil {
+		return 0, err
+	}
 	pageSize, err := ldapSearchBound(st.Id, op, "pageSize", cn.PageSize, defaultLdapPageSize)
 	if err != nil {
 		return 0, err
 	}
-	maxEntries, err := ldapSearchBound(st.Id, op, "maxEntries", cn.MaxEntries, defaultLdapMaxEntries)
+	// The document form exists for large results, so its cap is the document
+	// form's default, as AD's is.
+	defMax := int32(defaultLdapMaxEntries)
+	if asDocument {
+		defMax = defaultAdDocumentMaxEntries
+	}
+	maxEntries, err := ldapSearchBound(st.Id, op, "maxEntries", cn.MaxEntries, defMax)
 	if err != nil {
 		return 0, err
 	}
@@ -1225,8 +1294,15 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		MaxEntries:       maxEntries,
 		ClientCertSecret: strings.TrimSpace(cn.ClientCertSecret),
 		Retries:          retries,
+		Select:           selectList,
+		AsDocument:       asDocument,
+		DocumentName:     documentName,
 	}), nil
 }
+
+// defaultLdapDocumentName is the file an LDAP search written as a document is stored
+// under when the model names none.
+const defaultLdapDocumentName = "ldap-search.csv"
 
 // ldapOpNames lists the directory operations, sorted, for the error messages.
 func ldapOpNames() []string {

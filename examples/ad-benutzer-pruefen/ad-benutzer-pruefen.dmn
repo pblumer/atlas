@@ -65,9 +65,9 @@
         <inputEntry id="e4"><text>-</text></inputEntry>
         <outputEntry id="oe1"><text>modulo(floor(number(userAccountControl) / 2), 2) = 0</text></outputEntry>
         <outputEntry id="oe2"><text>contains(mail, "@")</text></outputEntry>
-        <outputEntry id="oe3"><text>list contains(["Buchhaltung", "Informatik", "Personal", "Vertrieb"], department)</text></outputEntry>
+        <outputEntry id="oe3"><text>list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], department)</text></outputEntry>
         <outputEntry id="oe4"><text>count(split(memberOf, "[|]")[starts with(item, "CN=Lizenz-")]) = 1</text></outputEntry>
-        <outputEntry id="oe5"><text>modulo(floor(number(userAccountControl) / 2), 2) = 0 and contains(mail, "@") and list contains(["Buchhaltung", "Informatik", "Personal", "Vertrieb"], department) and count(split(memberOf, "[|]")[starts with(item, "CN=Lizenz-")]) = 1</text></outputEntry>
+        <outputEntry id="oe5"><text>modulo(floor(number(userAccountControl) / 2), 2) = 0 and contains(mail, "@") and list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], department) and count(split(memberOf, "[|]")[starts with(item, "CN=Lizenz-")]) = 1</text></outputEntry>
       </rule>
     </decisionTable>
   </decision>

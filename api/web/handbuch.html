@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">49</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">51</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">49</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">51</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2872,6 +2872,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">Jedes Konto des Verzeichnisses an DMN-Regeln messen</td><td data-l="en">Measure every account of the directory against DMN rules</td>
             <td><span class="tag err">AD</span></td>
             <td data-l="de">Suche als Dokument, dann ein Business-Rule-Task über die Datei</td><td data-l="en">Search as a document, then a business rule task over the file</td></tr>
+          <tr><td><a href="#bsp-mitarbeitende-pruefen" data-l="de">Mitarbeitende prüfen</a><a href="#bsp-mitarbeitende-pruefen" data-l="en">Check employees</a></td>
+            <td data-l="de">Personalstamm aus einer Datei oder dem SQL Server an DMN-Regeln messen</td><td data-l="en">Measure HR records from a file or SQL Server against DMN rules</td>
+            <td><span class="tag err">MS&nbsp;SQL</span></td>
+            <td data-l="de">Zwei Quellen, eine Entscheidung; Testdaten bis 50&nbsp;000</td><td data-l="en">Two sources, one decision; test data up to 50,000</td></tr>
+          <tr><td><a href="#bsp-ldap-personen-pruefen" data-l="de">LDAP-Personen prüfen</a><a href="#bsp-ldap-personen-pruefen" data-l="en">Check LDAP people</a></td>
+            <td data-l="de">Jede Person eines LDAP-Verzeichnisses an DMN-Regeln messen</td><td data-l="en">Measure every person of an LDAP directory against DMN rules</td>
+            <td><span class="tag err">LDAP</span></td>
+            <td data-l="de">Suche als Dokument mit select; kein Mockup</td><td data-l="en">Search as a document with select; no mockup</td></tr>
           <tr><td><a href="#bsp-galsync">GALSync</a></td>
             <td data-l="de">Adressbuch zweier getrennter Welten synchron halten</td><td data-l="en">Keep the address book of two separate worlds in step</td>
             <td><span class="tag err">AD ×2</span></td>
@@ -3948,7 +3956,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               enthält. 50&nbsp;000 Datensätze brauchen so Sekunden statt Stunden (ADR-0548). Die ersten fehlerhaften
               Datensätze lassen sich anschliessend wie oben mit einem Korrektur-User-Task pro Datensatz bearbeiten.
               Die Quelle darf auch ein Feld in einer Variable sein: <code>source="benutzer.document"</code> liest die
-              Datei, die eine <a href="#bsp-ad-benutzer-pruefen">AD-Suche als Dokument</a> geschrieben hat.</p>
+              Datei, die eine <a href="#bsp-ad-benutzer-pruefen">AD-Suche als Dokument</a> geschrieben hat. Für jede
+              Quelle gibt es ein Beispiel mit Testdaten bis 50&nbsp;000 Datensätze: eine hochgeladene Datei und eine
+              Tabelle eines SQL Servers (<a href="#bsp-mitarbeitende-pruefen">Mitarbeitende prüfen</a>), ein Active
+              Directory (<a href="#bsp-ad-benutzer-pruefen">AD-Benutzer prüfen</a>) und ein LDAP-Verzeichnis
+              (<a href="#bsp-ldap-personen-pruefen">LDAP-Personen prüfen</a>).</p>
             <p data-l="en"><b>For large files</b> – thousands to hundreds of thousands of records – one row per
               iteration does not carry: every iteration is engine work, and the collected output gets dearer with
               every row. For those, a <b>business rule task over a file</b> (panel: <i>Over a file → Once per record
@@ -3960,7 +3972,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               seconds rather than hours this way (ADR-0548). The first failed records can then be corrected as above,
               one correction user task per record. The source may also be a field inside a variable:
               <code>source="benutzer.document"</code> reads the file an <a href="#bsp-ad-benutzer-pruefen">AD search
-              written as a document</a> stored.</p>
+              written as a document</a> stored. There is an example for each source, with test data up to 50,000
+              records: an uploaded file and a SQL Server table (<a href="#bsp-mitarbeitende-pruefen">Check
+              employees</a>), an Active Directory (<a href="#bsp-ad-benutzer-pruefen">Check AD users</a>) and an LDAP
+              directory (<a href="#bsp-ldap-personen-pruefen">Check LDAP people</a>).</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -4932,6 +4947,160 @@ carla@example.org,admins,GOLD</code></pre></li>
             service account may not read then arrives as an empty cell – the rule reports missing data where the
             problem is a missing right. How mockup mode works is under <a href="#testen">Test &amp;
             simulate</a>.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-mitarbeitende-pruefen">
+        <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
+          <span data-l="de">Mitarbeitende prüfen: Datei oder SQL Server</span><span data-l="en">Check employees: a file or SQL Server</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Upload</span><span class="tag" data-l="en">upload</span>
+          <span class="tag err">MS&nbsp;SQL</span>
+          <span class="tag" data-l="de">Mockup-Modus</span><span class="tag" data-l="en">mockup mode</span>
+          <span class="tag" data-l="de">Ergebnis als Dokument</span><span class="tag" data-l="en">result as a document</span>
+          <span class="tag">DMN</span>
+          <span class="tag">examples/mitarbeitende-pruefen/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">„Stimmt der Personalstamm?“ – jede Adresse in der eigenen Domain, jede Abteilung bekannt, jedes
+              Pensum zwischen 10 und 100, kein Austritt vor dem Eintritt. Dieselben Regeln, zwei Quellen: ein Export,
+              den die Qualitätsverantwortliche als Datei hochlädt, oder die Tabelle im SQL Server, aus der der Export
+              stammt. <b>Eine</b> DMN-Entscheidung prüft beide, und jeder Befund nennt die Regel, die er verletzt.</p>
+            <p data-l="en">"Are the HR master records right?" – every address in the organisation's domain, every
+              department known, every work percentage between 10 and 100, no exit before the entry. The same rules,
+              two sources: an export the quality manager uploads as a file, or the SQL Server table the export comes
+              from. <b>One</b> DMN decision checks both, and each finding names the rule it breaks.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de"><code>mitarbeitende-datei-pruefen.bpmn</code> parkt auf einem User-Task, dessen Formular die
+              Datei als <b>Dokument</b> hochlädt; <code>mitarbeitende</code> hält den Verweis.
+              <code>mitarbeitende-sql-pruefen.bpmn</code> liest stattdessen <code>dbo.Mitarbeitende</code> mit einem
+              <code>atlas:mssqlConnector</code>, <code>operation="query"</code> und <code>resultAs="document"</code>:
+              eine CSV-Zeile pro Zeile der Tabelle, die Spalten der Anweisung in ihrer Reihenfolge, NULL als leere
+              Zelle. In beiden Fällen prüft ein Business-Rule-Task über die Datei mit
+              <code>MitarbeitendeGueltig</code> – <code>source="mitarbeitende"</code> bzw.
+              <code>source="mitarbeitende.document"</code>. Die Anweisung bleibt wörtlich; ein Wert aus dem Prozess
+              erreicht sie nur als Parameter.</p>
+            <p data-l="en"><code>mitarbeitende-datei-pruefen.bpmn</code> parks on a user task whose form uploads the
+              file as a <b>document</b>; <code>mitarbeitende</code> holds the reference.
+              <code>mitarbeitende-sql-pruefen.bpmn</code> reads <code>dbo.Mitarbeitende</code> instead, with an
+              <code>atlas:mssqlConnector</code>, <code>operation="query"</code> and <code>resultAs="document"</code>:
+              one CSV row per row of the table, the statement's columns in their order, NULL as an empty cell. Either
+              way a business rule task over the file checks with <code>MitarbeitendeGueltig</code> –
+              <code>source="mitarbeitende"</code> or <code>source="mitarbeitende.document"</code>. The statement stays
+              literal; a value from the process reaches it only as a parameter.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Testdaten und vier Quellen</span><span data-l="en">Test data and four sources</span></summary>
+          <p data-l="de">Jede Qualitätsprüfung folgt demselben Muster: die Quelle als <b>Dokument</b> lesen, dann ein
+            Business-Rule-Task über die Datei. Die Beispiele decken vier Quellen ab:</p>
+          <p data-l="en">Every quality check follows the same pattern: read the source as a <b>document</b>, then a
+            business rule task over the file. The examples cover four sources:</p>
+          <table>
+            <tr><th data-l="de">Quelle</th><th data-l="en">Source</th><th data-l="de">Lesen</th><th data-l="en">Read</th><th data-l="de">Ohne Umsystem</th><th data-l="en">Without the system</th></tr>
+            <tr><td data-l="de">Datei</td><td data-l="en">file</td><td data-l="de">Formular mit Datei-Upload</td><td data-l="en">form with a file upload</td><td data-l="de">läuft immer</td><td data-l="en">always runs</td></tr>
+            <tr><td>SQL Server</td><td><code>mssqlConnector</code>, <code>query</code></td><td data-l="de">Mockup des MS-SQL-Workers</td><td data-l="en">MS SQL worker's mockup</td></tr>
+            <tr><td>Active Directory</td><td><code>adConnector</code>, <code>search</code></td><td data-l="de">Mockup des AD-Workers</td><td data-l="en">AD worker's mockup</td></tr>
+            <tr><td>LDAP</td><td><code>ldapConnector</code>, <code>search</code></td><td data-l="de">kein Mockup – ein LDAP-Server nötig</td><td data-l="en">no mockup – needs an LDAP server</td></tr>
+          </table>
+          <p data-l="de">Die Testdaten erzeugt ein Generator im Repository, für jede Quelle aus derselben erfundenen
+            Belegschaft und bei gleichem <code>-n</code> Byte für Byte gleich:</p>
+          <p data-l="en">A generator in the repository writes the test data, for every source from the same made-up
+            workforce, and byte for byte the same for the same <code>-n</code>:</p>
+          <pre><code>go run ./examples/testdaten/generieren -n 50000 -out ./testdaten</code></pre>
+          <p data-l="de">Er schreibt <code>mitarbeitende.csv</code> (Upload), <code>mssql-seed.json</code>
+            (MS-SQL-Mockup), <code>personen.ldif</code> (LDAP-Server) und <code>benutzer.ldif</code> (AD-Mockup). In
+            jeder Quelle tragen <b>sechs von hundert</b> Datensätzen einen Befund – bei 50&nbsp;000 also 3&nbsp;000,
+            47&nbsp;000 sind in Ordnung. Die Beispiele liefern je 200 Datensätze mit 12 Befunden mit. Gegen die
+            Mockups dauert die Prüfung von 50&nbsp;000 Datensätzen je Quelle zwei bis drei Sekunden vom Start bis zum
+            Ende. <b>Grösse beachten:</b> Die Konsole nimmt einen Mockup-Startbestand standardmässig bis 256&nbsp;KB
+            an, etwa tausend Datensätze. Für 50&nbsp;000 den Server mit
+            <code>ATLAS_LIMIT_SETTINGS=33554432</code> (32&nbsp;MB) starten, oder einen Worker selbst mit
+            <code>ATLAS_MSSQL_MOCK_SEED</code> bzw. <code>ATLAS_AD_MOCK_SEED</code> auf die Datei zeigen lassen (siehe
+            <a href="#testen">Testen &amp; Simulieren</a>).</p>
+          <p data-l="en">It writes <code>mitarbeitende.csv</code> (upload), <code>mssql-seed.json</code> (MS SQL
+            mockup), <code>personen.ldif</code> (LDAP server) and <code>benutzer.ldif</code> (AD mockup). In every
+            source <b>six in a hundred</b> records carry a finding – 3,000 of 50,000, with 47,000 in order. The examples
+            ship 200 records each, 12 with a finding. Against the mockups a check of 50,000 records takes two to
+            three seconds per source from start to end. <b>Mind the size:</b> the Console takes a mockup seed of up to
+            256&nbsp;KB by default, about a thousand records. For 50,000 start the server with
+            <code>ATLAS_LIMIT_SETTINGS=33554432</code> (32&nbsp;MB), or point a worker you start yourself at the file
+            with <code>ATLAS_MSSQL_MOCK_SEED</code> or <code>ATLAS_AD_MOCK_SEED</code> (see <a href="#testen">Test
+            &amp; simulate</a>).</p>
+          <p data-l="de"><b>SQL Server ohne Datenbank:</b> unter <a href="/#/console/workers">Workers</a> einen MS-SQL-Worker
+            <code>hr</code> anlegen, den Mockup einschalten und <code>mssql-seed.json</code> als Seed hinterlegen;
+            eine Verbindungszeichenfolge braucht es im Mockup nicht. Der Seed beantwortet genau die Anweisung des
+            Tasks.</p>
+          <p data-l="en"><b>SQL Server without a database:</b> under <a href="/#/console/workers">Workers</a> create an
+            MS SQL worker <code>hr</code>, switch its mockup on and store <code>mssql-seed.json</code> as the seed; the
+            mockup needs no connection string. The seed answers exactly the task's statement.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-ldap-personen-pruefen">
+        <h4><span class="rz-emoji" aria-hidden="true">📇</span>
+          <span data-l="de">LDAP-Personen prüfen: ein Verzeichnis gegen die Regeln</span><span data-l="en">Check LDAP people: a directory against the rules</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">LDAP</span>
+          <span class="tag" data-l="de">Ergebnis als Dokument</span><span class="tag" data-l="en">result as a document</span>
+          <span class="tag">DMN</span>
+          <span class="tag">examples/ldap-personen-pruefen/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Dieselbe Frage wie bei <a href="#bsp-ad-benutzer-pruefen">AD-Benutzer prüfen</a>, an ein
+              Verzeichnis, das kein Active Directory ist – OpenLDAP, 389 Directory Server oder ein anderes nach LDAP v3:
+              Hat jede Person eine Adresse in der eigenen Domain, eine bekannte Abteilung, eine Personalnummer und einen
+              bekannten Personentyp?</p>
+            <p data-l="en">The same question as in <a href="#bsp-ad-benutzer-pruefen">Check AD users</a>, put to a
+              directory that is not Active Directory – OpenLDAP, 389 Directory Server or another LDAP v3 server: does
+              every person have an address in the organisation's domain, a known department, an employee number and a
+              known person type?</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein <code>atlas:ldapConnector</code> mit <code>operation="search"</code>,
+              <code>select="uid,mail,departmentNumber,employeeNumber,employeeType"</code> und
+              <code>resultAs="document"</code> liest <code>ou=Personen</code> seitenweise (RFC&nbsp;2696) in
+              <code>personen.csv</code>; der Business-Rule-Task prüft mit <code>PersonGueltig</code> über
+              <code>source="personen.document"</code>. Die Personalnummer prüft
+              <code>matches(employeeNumber, "^[0-9]{6}$")</code> – ein Muster ohne Backslash, das im FEEL-String keine
+              Maskierung braucht.</p>
+            <p data-l="en">An <code>atlas:ldapConnector</code> with <code>operation="search"</code>,
+              <code>select="uid,mail,departmentNumber,employeeNumber,employeeType"</code> and
+              <code>resultAs="document"</code> reads <code>ou=Personen</code> a page at a time (RFC&nbsp;2696) into
+              <code>personen.csv</code>; the business rule task checks with <code>PersonGueltig</code> over
+              <code>source="personen.document"</code>. The employee number is checked with
+              <code>matches(employeeNumber, "^[0-9]{6}$")</code> – a pattern without a backslash, which needs no
+              escaping in a FEEL string.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Mit einem eigenen LDAP-Server ausprobieren</span><span data-l="en">Try it with an LDAP server of your own</span></summary>
+          <p data-l="de">Der LDAP-Worker hat <b>keinen Mockup-Modus</b>. Das Beispiel braucht einen LDAP-Server mit dem
+            Suffix <code>dc=beispiel,dc=ch</code>, in den <code>personen.ldif</code> geladen ist – die Datei beginnt
+            mit dem Eintrag <code>ou=Personen</code> und lässt sich mit <code>ldapadd</code> in einen leeren Server
+            laden. Im Task sind Server-URL, Bind-DN und Base-DN anzupassen; das Bind-Passwort liegt als Secret
+            <code>LDAP_BIND</code> unter <a href="/#/console/secrets">Secrets</a>. Erwartet werden bei den
+            mitgelieferten 200 Personen 12 Befunde, bei 50&nbsp;000 generierten 3&nbsp;000. Ein Attribut, das das
+            Bind-Konto nicht lesen darf, kommt als leere Zelle an.</p>
+          <p data-l="en">The LDAP worker has <b>no mockup mode</b>. The example needs an LDAP server with the suffix
+            <code>dc=beispiel,dc=ch</code> that <code>personen.ldif</code> has been loaded into – the file starts with
+            the <code>ou=Personen</code> entry and loads into an empty server with <code>ldapadd</code>. Adjust the
+            server URL, bind DN and base DN in the task; the bind password is the secret <code>LDAP_BIND</code> under
+            <a href="/#/console/secrets">Secrets</a>. Expect 12 findings for the 200 people shipped, 3,000 for 50,000
+            generated. An attribute the bind account may not read arrives as an empty cell.</p>
         </details>
       </div>
 
@@ -8826,6 +8995,19 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           answers in memory; what a run asked for is listed under
           <a href="/#/operations/sql-mock">Operations ▸ Diagnostics ▸ Mock database</a>. Example:
           <a href="#bsp-mssql-eintrittsmeldung">Joiner notification</a>.</p>
+        <p data-l="de"><b>Eine ganze Tabelle als Datei.</b> Mit <i>Ergebnis als → Dokument</i> (<code>resultAs="document"</code>)
+          schreibt eine Abfrage ihre Zeilen in eine CSV-Datei statt in die Ergebnisvariable: die Spalten der Anweisung in ihrer
+          Reihenfolge, NULL als leere Zelle. Die Variable erhält <code>{found, count, document}</code>, ein Business-Rule-Task
+          über eine Datei liest das Dokument direkt. <code>maxRows</code> ist dann standardmässig 100&nbsp;000, und die
+          Dokumentgrenze des Servers gilt immer. Unterscheidet eine Regel NULL von einer leeren Zeichenkette, muss die
+          Anweisung es ausdrücken (<code>COALESCE</code>, eine Kennzeichenspalte). Beispiel:
+          <a href="#bsp-mitarbeitende-pruefen">Mitarbeitende prüfen</a>.</p>
+        <p data-l="en"><b>A whole table as a file.</b> With <i>Result as → Document</i> (<code>resultAs="document"</code>) a
+          query writes its rows into a CSV file instead of into the result variable: the statement's columns in their order,
+          NULL as an empty cell. The variable receives <code>{found, count, document}</code>, and a business rule task over a
+          file reads the document directly. <code>maxRows</code> then defaults to 100,000, and the server's document limit
+          always applies. If a rule tells NULL from an empty string, the statement has to say so (<code>COALESCE</code>, a flag
+          column). Example: <a href="#bsp-mitarbeitende-pruefen">Check employees</a>.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
@@ -9284,6 +9466,16 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             <code>ldap://</code> with STARTTLS. For Active&nbsp;Directory take the specialised type – it knows the
             quirks a generic call leaves to you. <b>Careful:</b> a search without permission answers "nothing found"
             rather than failing.</p>
+          <p data-l="de"><b>Ein ganzes Verzeichnis als Datei.</b> Eine Suche nimmt mit <i>Gelieferte Attribute</i>
+            (<code>select</code>) die Attribute, die sie liefern soll, und schreibt mit <i>Ergebnis als → Dokument</i> eine
+            CSV-Datei in derselben Form wie die AD-Suche: zuerst <code>dn</code>, dann die Attribute aus <code>select</code>,
+            mehrere Werte in einer Zelle durch <code>|</code> getrennt. Gelesen wird seitenweise (RFC&nbsp;2696), was OpenLDAP
+            und 389 Directory Server unterstützen. Beispiel: <a href="#bsp-ldap-personen-pruefen">LDAP-Personen prüfen</a>.</p>
+          <p data-l="en"><b>A whole directory as a file.</b> A search takes the attributes it should return in <i>Attributes
+            returned</i> (<code>select</code>), and with <i>Result as → Document</i> writes a CSV file in the same form as the AD
+            search: <code>dn</code> first, then the attributes in <code>select</code>, several values in one cell separated by
+            <code>|</code>. It reads a page at a time (RFC&nbsp;2696), which OpenLDAP and 389 Directory Server support. Example:
+            <a href="#bsp-ldap-personen-pruefen">Check LDAP people</a>.</p>
           <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
         </div>
         <div class="card" id="runbook-scim">
@@ -14569,7 +14761,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">49</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">49</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">51</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">51</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

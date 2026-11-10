@@ -214,6 +214,13 @@ var catalogSources = []catalogSource{
 	// for an AD worker, which a bare start would leave hanging.
 	{ID: "ad-benutzer-pruefen", App: "Beispiel: AD-Benutzer prüfen", Dir: "ad-benutzer-pruefen",
 		Main: "ad-benutzer-pruefen/ad-benutzer-pruefen.bpmn"},
+	// The same check for the other sources: an uploaded file and a SQL Server table,
+	// which share one decision, and an LDAP directory (S3). No Start button: the file
+	// variant parks on its upload task, the others for a worker.
+	{ID: "mitarbeitende-pruefen", App: "Beispiel: Mitarbeitende prüfen", Dir: "mitarbeitende-pruefen",
+		Main: "mitarbeitende-pruefen/mitarbeitende-datei-pruefen.bpmn"},
+	{ID: "ldap-personen-pruefen", App: "Beispiel: LDAP-Personen prüfen", Dir: "ldap-personen-pruefen",
+		Main: "ldap-personen-pruefen/ldap-personen-pruefen.bpmn"},
 	{ID: "galsync", App: "Beispiel: GALSync", Files: []string{"galsync.bpmn"}},
 	{
 		ID: "entra-team-onboarding", App: "Beispiel: Team-Onboarding (Entra)",

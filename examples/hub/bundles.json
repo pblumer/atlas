@@ -14,8 +14,9 @@
     },
     {
       "id": "datenqualitaet",
+      "name": "Beispiele: Datenqualität",
       "tags": ["datenqualitaet", "dmn"],
-      "examples": ["ad-benutzer-pruefen"]
+      "examples": ["mitarbeitende-pruefen", "ad-benutzer-pruefen", "ldap-personen-pruefen"]
     },
     {
       "id": "personal",

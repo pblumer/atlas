@@ -3885,12 +3885,35 @@ function sqlServiceTaskKind(p) {
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
-        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+        // The document form (docs/planning/ad-search-as-document.md, S3): the rows go
+        // into a CSV file, which a business rule task over a file then checks.
+        key: "resultAs", label: "Result as", type: "select", reRender: true,
+        showIf: (v) => !v.operation || v.operation === "query",
+        options: [
+          { v: "", l: "Variable — the rows in the result variable" },
+          { v: "document", l: "Document — a CSV file the result variable names" },
+        ],
+        hint: (v) => v.resultAs === "document"
+          ? "One CSV row per row of the result, the statement's columns in their order. NULL is an empty cell, so a rule that must tell NULL from an empty string needs the statement to say so (COALESCE, a flag column). A business rule task over a file reads the result directly (Source variable mitarbeitende.document)."
+          : "The variable form suits a few rows — the person for this personnel number, the open orders of this customer. A whole table to check belongs in a document: the variable budget would refuse it, and a document keeps it out of the log and the history.",
       },
       {
-        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
-        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+        key: "documentName", label: "File name", placeholder: "query.csv",
+        showIf: (v) => (!v.operation || v.operation === "query") && v.resultAs === "document",
+        hint: "The name the file is stored under, without a path — e.g. mitarbeitende.csv. Empty uses query.csv. The file belongs to the instance, and whoever may read the instance may read it.",
+      },
+      {
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" || v.resultAs === "document" ? "object" : v.operation === "execute" ? "number" : "array"),
+        placeholder: (v) => (v.resultAs === "document" ? "mitarbeitende" : "zeilen"),
+        hint: (v) => (v.resultAs === "document"
+          ? "Receives {found, count, document}: found and count as for a query into a variable, and the reference to the file. Required in the document form."
+          : "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count."),
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: (v) => (v.resultAs === "document" ? "100000" : "1000"), showIf: (v) => !v.operation || v.operation === "query",
+        hint: (v) => (v.resultAs === "document"
+          ? "Caps what the query may write. Exceeding it fails the task rather than storing a cut file that looks complete. Empty uses 100000; 0 leaves only the document limit of the server (ATLAS_LIMIT_DOCUMENT), which always applies."
+          : "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000."),
       },
     ],
   };
@@ -4060,6 +4083,13 @@ const SERVICE_TASK_KINDS = [
         options: [{ v: "", l: "Subtree (default)" }, { v: "base", l: "Base object only" }, { v: "one", l: "One level" }, { v: "sub", l: "Subtree" }],
       },
       {
+        key: "select", label: "Attributes returned", placeholder: "uid,mail,memberOf",
+        showIf: (v) => v.operation === "search",
+        hint: (v) => v.resultAs === "document"
+          ? "The columns of the file, comma-separated, in the order written — e.g. uid,mail,memberOf. Required here: a rule that checks the file names its columns, so the columns cannot depend on what the server returns by default. The first column is always dn; do not list it, nor * or +."
+          : "The attributes the search returns, comma-separated, e.g. cn,mail. Empty returns the server's default set: every attribute the account may read.",
+      },
+      {
         key: "dn", label: "Entry DN", placeholder: "uid=arno,ou=users,dc=example,dc=com", fx: true,
         showIf: (v) => v.operation && v.operation !== "search",
         hint: "The entry the operation acts on. May be a FEEL expression (fx).",
@@ -4079,11 +4109,37 @@ const SERVICE_TASK_KINDS = [
         hint: "Fetches the search in pages (RFC 2696), so a directory's administrative size limit does not refuse it. Empty uses 500; 0 asks for one unpaged search.",
       },
       {
-        key: "maxEntries", label: "Maximum entries", placeholder: "1000", showIf: (v) => v.operation === "search",
-        hint: "Caps what may land in the result variable. A search returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
+        key: "maxEntries", label: "Maximum entries", placeholder: (v) => (v.resultAs === "document" ? "100000" : "1000"), showIf: (v) => v.operation === "search",
+        hint: (v) => (v.resultAs === "document"
+          ? "Caps what the search may write. Exceeding it fails the task rather than storing a cut file that looks complete. Empty uses 100000; 0 leaves only the document limit of the server (ATLAS_LIMIT_DOCUMENT), which always applies."
+          : "Caps what may land in the result variable. A search returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded."),
       },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "search" ? "array" : ""), placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },
+      {
+        key: "resultAs", label: "Result as", type: "select", reRender: true,
+        showIf: (v) => v.operation === "search",
+        options: [
+          { v: "", l: "Variable — the entries in the result variable" },
+          { v: "document", l: "Document — a CSV file the result variable names" },
+        ],
+        hint: (v) => v.resultAs === "document"
+          // The FEEL example stays outside the translated text, as on the AD panel.
+          ? kindText("One row per entry: dn, then the attributes in the order of 'Attributes returned'. An attribute with several values — memberOf, mail — is one cell, its values joined by |; a | or a backslash inside a value is escaped with a backslash. A business rule task over a file reads the result directly (Source variable personen.document) and tests membership on the split cell, e.g.:") +
+            ' list contains(split(row.memberOf, "[|]"), "cn=vertrieb,ou=groups,dc=example,dc=com")'
+          : "The variable form suits a question about a few entries. A whole directory to check belongs in a document: the variable budget would refuse it, and a document keeps it out of the log and the history.",
+      },
+      {
+        key: "documentName", label: "File name", placeholder: "ldap-search.csv",
+        showIf: (v) => v.operation === "search" && v.resultAs === "document",
+        hint: "The name the file is stored under, without a path — e.g. personen.csv. Empty uses ldap-search.csv. The file belongs to the instance, and whoever may read the instance may read it.",
+      },
+      {
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "search" ? (v.resultAs === "document" ? "object" : "array") : ""),
+        placeholder: (v) => (v.resultAs === "document" ? "personen" : "ldapResult"),
+        hint: (v) => (v.resultAs === "document"
+          ? "Receives {found, count, dn, document}: found and count as for a search into a variable, dn the smallest DN, and the reference to the file. Required in the document form."
+          : "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)."),
+      },
     ],
   },
   {

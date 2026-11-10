@@ -1,7 +1,8 @@
 # AD search as a document — delivery plan
 
-**Status of this plan:** S0, S1 and S2 done (2026-11-10). D1–D4 were confirmed as proposed;
-D5 was answered with option 1. S3 is open and optional.
+**Status of this plan:** S0–S3 done (2026-11-10). D1–D4 were confirmed as proposed; D5 was
+answered with option 1. S3 was asked for: an example of a quality check for every source, with test
+data of 50,000 records.
 
 **Builds on:** [ADR-0543](../adr/0543-a-file-is-a-document-not-a-variable.md) (documents),
 [ADR-0548](../adr/0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md)
@@ -211,11 +212,50 @@ Planned, for reference:
   licence group consistent). Runs against the mock directory.
 - Handbook (de/en), CHANGELOG.
 
-### S3 — The same for LDAP and Entra (optional)
+### S3 — LDAP and SQL, an example per source, test data (done)
 
-The LDAP Worker Type's `search` and the Entra Worker Type's user listing produce the same
-`{dn, attributes}` shape. The CSV writer is shared; each gains the same two attributes.
-Only if a process needs it.
+Asked for after S2: an example of a quality check for every source a check reads, LDAP and SQL
+Server included, in the handbook and in the hub, with test data of 50,000 records.
+
+As built:
+
+- **One writer** (`connector/csvdoc`): the CSV dialect, the escaping of a multi-valued cell, the
+  bounds (cap and document limit, both checked as rows are written) and the limit's precedence (the
+  job's, the store's, the default). AD moved onto it unchanged.
+- **LDAP** (`connector/ldap/document.go`): the search gains `select` (also in the variable form)
+  and `resultAs`/`documentName`; the go-ldap adapter pages with RFC 2696 and the pool lends its
+  connection through (a refusal of the writer does not poison it). In process and on a Worker
+  Instance, with the server's document limit on the job.
+- **SQL** (`connector/sqldb/document.go`): `resultAs="document"` on `query` for all three
+  products; `Client.QueryEach` reads row by row. Columns are the statement's in their order; NULL is
+  an empty cell, which the panel and the runbook say. `maxRows` defaults to 100,000 in this form; an
+  authored 0 leaves only the document limit.
+- **Compiler**: one `documentResultAs` for the three kinds, with the same refusals in each kind's
+  name; a directory needs `select`, a query does not.
+- **Panels** (LDAP, the three SQL kinds): the same two fields and form-aware hints as AD's; e2e
+  `document-sources-modeler.spec.mjs`.
+- **Test data** (`examples/testdaten`, `go run ./examples/testdaten/generieren -n 50000`): one
+  made-up workforce written as an upload CSV, an MS SQL mock seed, an LDAP LDIF and an AD mock LDIF.
+  Deterministic; the defects follow i % 100, six per hundred, each naming the rule it breaks. The
+  examples ship 200 records each; a test holds them to the generator's output.
+- **Examples**: `mitarbeitende-pruefen` (a file upload and a SQL Server table, one decision) and
+  `ldap-personen-pruefen`, with handbook cards, runbook sections and the hub bundle
+  `datenqualitaet` (now named *Beispiele: Datenqualität*, three examples).
+  `worker/quality_examples_test.go` runs each as shipped and checks every finding's rules.
+- **Measured** with `ATLAS_BENCH_BULK=full go test ./worker -run TestTheQualityChecksAt50000Records`:
+  50,000 records per source, from deploy to the instance's end, against the mock sources: file
+  2.2 s, SQL 2.0 s, LDAP 2.9 s, AD 2.9 s. Against a real database or directory the network adds to
+  this; not measured.
+
+Not built, and why:
+
+- **No LDAP mock mode.** The LDAP example needs a server of its own (the README says how to load the
+  LDIF). The test runs it against the AD mock behind an LDAP dialer. A mock mode would be the AD
+  worker's switch, seed and Console card again; worth it only if LDAP processes are tried out often.
+- **The Console's seed limit stays 256 KB** (`ATLAS_LIMIT_SETTINGS`), about a thousand records. A
+  50,000-record seed is accepted with the limit raised to 32 MB, tested through the API, not through
+  the browser.
+- **Entra** is not covered: its user listing has no document form yet.
 
 ## Ground rules
 

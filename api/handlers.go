@@ -7329,6 +7329,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "product": j.Product, "operation": j.Operation,
 			"statement": j.Statement, "params": j.Params, "named": j.Named,
 			"maxRows": j.MaxRows, "resultVariable": j.ResultVariable,
+			// A query written as a document, with this server's document budget
+			// (docs/planning/ad-search-as-document.md, S3).
+			"asDocument": j.AsDocument, "documentName": j.DocumentName,
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.AdJobTypeIndex:
 		// AD authors its own server (ADR-0166), so unlike mail the endpoint travels.
@@ -7380,6 +7384,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"newPassword": j.NewPassword, "baseDN": j.BaseDN, "scope": j.Scope,
 			"filter": j.Filter, "pageSize": j.PageSize, "maxEntries": j.MaxEntries,
 			"resultVariable": j.ResultVariable,
+			// A search's attribute selection, and the search written as a document with
+			// this server's document budget (docs/planning/ad-search-as-document.md, S3).
+			"select": j.Select, "asDocument": j.AsDocument, "documentName": j.DocumentName,
+			"documentLimit": s.budgets().Document,
 		}}
 	case compiler.SoapJobTypeIndex:
 		// REST's arm exactly, and for REST's reason: everything about the call is model

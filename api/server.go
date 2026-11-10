@@ -2472,7 +2472,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// a job asking for another, and Close releases what it holds at shutdown.
 	s.ldapPool = ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
 	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-		return ldap.Handler(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret)
+		return ldap.HandlerWithDocuments(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret, jobDocuments{s: s})
 	})
 	// A SOAP / Web Services (WSDL) task invokes an operation against a
 	// model-authored web-service endpoint (ADR-0165) — reading identities (import) or

@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **An LDAP search and a SQL query can write their result as a document, too.** `resultAs="document"`
+  now works on the LDAP search, which also gains `select`, and on the `query` of the MS SQL, MariaDB and
+  PostgreSQL Worker Types. It writes the same CSV as the AD search, through one shared writer: the LDAP
+  form is `dn`, then the selected attributes; the SQL form is the statement's columns in their order,
+  with NULL as an empty cell. The result variable holds `{found, count, document}` (the LDAP form adds
+  `dn`), and the caps and the server's document limit are checked while the rows are written. Three
+  new examples check every record of a source against DMN rules: an uploaded file and a SQL Server
+  table with one decision (*Mitarbeitende prüfen*), and an LDAP directory (*LDAP-Personen prüfen*).
+  They join the AD example in the hub bundle *Beispiele: Datenqualität*. `go run
+  ./examples/testdaten/generieren -n 50000` writes deterministic test data for all four sources, six
+  findings in every hundred records. Against the mock sources, 50,000 records take two to three seconds
+  per source.
 - **An Active Directory search can write its result as a document.** With `resultAs="document"` an
   AD `search` writes its entries into a CSV document — the DN, then the attributes named in `select`,
   a multi-valued attribute joined by `|` with `\|` and `\\` escaped — instead of into the result
