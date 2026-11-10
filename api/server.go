@@ -2477,7 +2477,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// a job asking for another, and Close releases what it holds at shutdown.
 	s.ldapPool = ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
 	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-		return ldap.Handler(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret)
+		return ldap.HandlerWithDocuments(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret, jobDocuments{s: s})
 	})
 	// A SOAP / Web Services (WSDL) task invokes an operation against a
 	// model-authored web-service endpoint (ADR-0165) — reading identities (import) or
@@ -2513,7 +2513,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// No directory registry in-process: a task naming a Console-configured
 		// directory is served by the worker that holds it (ADR-0164/0168), and this
 		// path exists only for a task that carries its own url.
-		return ad.Handler(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret, nil)
+		// A search may write its result as a document, for the job's own instance
+		// (docs/planning/ad-search-as-document.md).
+		return ad.HandlerWithDocuments(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret, nil, jobDocuments{s: s})
 	})
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of

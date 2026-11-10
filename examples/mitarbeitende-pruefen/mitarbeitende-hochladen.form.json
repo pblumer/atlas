@@ -1,0 +1,17 @@
+{
+  "type": "default",
+  "id": "mitarbeitende-hochladen",
+  "components": [
+    {
+      "type": "text",
+      "text": "Laden Sie den Export des Personalstamms als CSV-Datei hoch. Die erste Zeile nennt die Spalten: personalnummer, vorname, name, mail, abteilung, eintritt, austritt, pensum. Jeder Datensatz wird an den Regeln der Entscheidung MitarbeitendeGueltig gemessen."
+    },
+    {
+      "key": "mitarbeitende",
+      "type": "filepicker",
+      "label": "Personalstamm (CSV)",
+      "accept": ".csv,text/csv",
+      "validate": { "required": true }
+    }
+  ]
+}

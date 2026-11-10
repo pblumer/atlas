@@ -249,13 +249,29 @@ func TestBusinessRuleTaskOverAFileFails(t *testing.T) {
 		{"no store", docVar("a.csv"), nil, "no document store"},
 		{"no variable", model.VariableValue{Name: "other", Kind: model.VarString, Text: "x"}, good(), `"antrag" is missing`},
 		{"not a document", model.VariableValue{Name: "antrag", Kind: model.VarString, Text: "a,b"}, good(), "holds no document"},
+		{"no document at the path", model.VariableValue{Name: "antrag", Kind: model.VarJSON, Text: `{"$document":"doc_src"}`}, good(), "holds no document"},
 		{"unreadable", docVar("a.csv"), &fakeRowDocs{readErr: errors.New("gone")}, "gone"},
 		{"not CSV for the layout", docVar("a.csv"), &fakeRowDocs{files: map[string]string{"doc_src": ""}}, "CSV is empty"},
 		{"cannot store", docVar("a.csv"), &fakeRowDocs{files: map[string]string{"doc_src": rowsCSV}, storeErr: errors.New("disk full")}, "disk full"},
 	} {
-		run := runRows(t, `source="antrag"`, "", tc.source, tc.docs, nil)
+		attrs := `source="antrag"`
+		if tc.name == "no document at the path" {
+			attrs = `source="antrag.document"`
+		}
+		run := runRows(t, attrs, "", tc.source, tc.docs, nil)
 		if run.summary != nil || !strings.Contains(run.message, tc.want) {
 			t.Errorf("%s: summary=%v incident=%q, want %q", tc.name, run.summary, run.message, tc.want)
 		}
+	}
+}
+
+// The file can be named at a field inside a variable — where an AD search written as a
+// document puts its reference (docs/planning/ad-search-as-document.md).
+func TestBusinessRuleTaskOverAFileAtAPath(t *testing.T) {
+	docs := &fakeRowDocs{files: map[string]string{"doc_src": rowsCSV}}
+	source := model.VariableValue{Name: "benutzer", Kind: model.VarJSON, Text: `{"found":true,"count":4,"document":{"$document":"doc_src","name":"ad-search.csv"}}`}
+	run := runRows(t, `source="benutzer.document"`, "", source, docs, nil)
+	if run.message != "" || run.summary["total"] != 4.0 || docs.name != "ad-search.result.csv" {
+		t.Fatalf("summary = %v, incident %q, stored %q", run.summary, run.message, docs.name)
 	}
 }

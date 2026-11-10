@@ -90,11 +90,12 @@ func evaluateRows(ctx context.Context, store state.Reader, j job.Job, ei *model.
 	if err != nil {
 		return job.Completion{}, fmt.Errorf("dmn: read variables: %w", err)
 	}
-	src, ok := vars[rows.Source]
+	name, path, _ := strings.Cut(rows.Source, ".")
+	src, ok := vars[name]
 	if !ok {
-		return job.Completion{}, fmt.Errorf("dmn: the file variable %q is missing", rows.Source)
+		return job.Completion{}, fmt.Errorf("dmn: the file variable %q is missing", name)
 	}
-	ref, id := documentRef(src)
+	ref, id := documentRefAt(src, path)
 	if id == "" {
 		return job.Completion{}, fmt.Errorf("dmn: variable %q holds no document; a business rule task over a file reads an uploaded document", rows.Source)
 	}
@@ -443,15 +444,25 @@ func cellText(v any) string {
 	}
 }
 
-// documentRef reads a variable holding a document reference: the reference itself and
-// its id, or "" for a variable that holds no reference.
-func documentRef(v model.VariableValue) (map[string]any, string) {
+// documentRefAt reads a document reference out of a variable, at a dotted path of field
+// names inside it ("" for the variable itself): the reference and its id, or "" where
+// there is none.
+func documentRefAt(v model.VariableValue, path string) (map[string]any, string) {
 	if v.Kind != model.VarJSON {
 		return nil, ""
 	}
 	var ref map[string]any
 	if json.Unmarshal([]byte(v.Text), &ref) != nil {
 		return nil, ""
+	}
+	if path != "" {
+		for _, field := range strings.Split(path, ".") {
+			next, ok := ref[field].(map[string]any)
+			if !ok {
+				return nil, ""
+			}
+			ref = next
+		}
 	}
 	id, _ := ref["$document"].(string)
 	if !strings.HasPrefix(id, "doc_") {

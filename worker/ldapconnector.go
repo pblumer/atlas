@@ -52,7 +52,9 @@ func RunLdapJob(ctx context.Context, j Job, dialer ldap.Dialer, secret ldap.Secr
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("ldap: cannot read the resolved detail: %w", err)
 	}
-	res, err := ldap.Run(ctx, task, dialer, secret)
+	// A search written as a document stores it through the job's lease, as every
+	// document a Worker Instance writes (ADR-0543).
+	res, err := ldap.RunWithDocuments(ctx, task, dialer, secret, sdkDocuments{})
 	if err != nil {
 		return nil, err
 	}

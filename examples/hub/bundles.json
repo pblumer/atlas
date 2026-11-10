@@ -13,6 +13,12 @@
       "examples": ["mahnwesen", "preisaenderung", "produkt-erfassung", "order-to-cash", "pruefe-datensaetze"]
     },
     {
+      "id": "datenqualitaet",
+      "name": "Beispiele: Datenqualität",
+      "tags": ["datenqualitaet", "dmn"],
+      "examples": ["mitarbeitende-pruefen", "ad-benutzer-pruefen", "ldap-personen-pruefen"]
+    },
+    {
       "id": "personal",
       "name": "Beispiele: Personal & Mitarbeitende",
       "tags": ["personal"],

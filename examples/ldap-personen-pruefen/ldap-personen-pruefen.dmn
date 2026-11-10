@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PersonGueltig: die Regeln, an denen eine Person eines LDAP-Verzeichnisses gemessen
+  wird (docs/planning/ad-search-as-document.md, S3).
+
+  Der Business-Rule-Task "Personen prüfen" wertet diese Entscheidung einmal je Zeile
+  der Datei aus, die die LDAP-Suche geschrieben hat. Die Spalten treten unter ihrem
+  Namen in die Entscheidung ein: mail, departmentNumber, employeeNumber, employeeType
+  (dazu dn und uid, die hier keine Regel braucht). Jede Zelle ist Text; ein Attribut,
+  das ein Eintrag nicht hat, ist eine leere Zelle.
+
+    * mailGueltig            die Adresse endet auf @beispiel.ch.
+    * abteilungBekannt       departmentNumber ist eine der Abteilungen der Liste.
+    * personalnummerGueltig  employeeNumber hat genau sechs Ziffern. Das Muster
+                             enthält keinen Backslash und braucht im FEEL-String daher
+                             keine Maskierung.
+    * typBekannt             employeeType ist intern oder extern.
+    * valid                  alle vier Regeln erfüllt.
+
+  Abteilungen, Domain und Personentypen sind Annahmen dieses Beispiels.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_person" name="ldap-personen-pruefen" namespace="http://atlas/dmn">
+  <itemDefinition id="tBefund" name="tBefund">
+    <itemComponent id="tBefund_mailGueltig" name="mailGueltig"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_abteilungBekannt" name="abteilungBekannt"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_personalnummerGueltig" name="personalnummerGueltig"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_typBekannt" name="typBekannt"><typeRef>boolean</typeRef></itemComponent>
+    <itemComponent id="tBefund_valid" name="valid"><typeRef>boolean</typeRef></itemComponent>
+  </itemDefinition>
+  <inputData id="id_mail" name="mail"><variable id="var_mail" name="mail" typeRef="string"/></inputData>
+  <inputData id="id_department" name="departmentNumber"><variable id="var_department" name="departmentNumber" typeRef="string"/></inputData>
+  <inputData id="id_number" name="employeeNumber"><variable id="var_number" name="employeeNumber" typeRef="string"/></inputData>
+  <inputData id="id_type" name="employeeType"><variable id="var_type" name="employeeType" typeRef="string"/></inputData>
+  <decision id="PersonGueltig" name="PersonGueltig">
+    <variable id="var_PersonGueltig" name="PersonGueltig" typeRef="tBefund"/>
+    <informationRequirement id="ir_mail"><requiredInput href="#id_mail"/></informationRequirement>
+    <informationRequirement id="ir_department"><requiredInput href="#id_department"/></informationRequirement>
+    <informationRequirement id="ir_number"><requiredInput href="#id_number"/></informationRequirement>
+    <informationRequirement id="ir_type"><requiredInput href="#id_type"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in_mail" label="mail"><inputExpression id="ie_mail" typeRef="string"><text>mail</text></inputExpression></input>
+      <input id="in_department" label="departmentNumber"><inputExpression id="ie_department" typeRef="string"><text>departmentNumber</text></inputExpression></input>
+      <input id="in_number" label="employeeNumber"><inputExpression id="ie_number" typeRef="string"><text>employeeNumber</text></inputExpression></input>
+      <input id="in_type" label="employeeType"><inputExpression id="ie_type" typeRef="string"><text>employeeType</text></inputExpression></input>
+      <output id="o_mail" label="mailGueltig" name="mailGueltig" typeRef="boolean"/>
+      <output id="o_department" label="abteilungBekannt" name="abteilungBekannt" typeRef="boolean"/>
+      <output id="o_number" label="personalnummerGueltig" name="personalnummerGueltig" typeRef="boolean"/>
+      <output id="o_type" label="typBekannt" name="typBekannt" typeRef="boolean"/>
+      <output id="o_valid" label="valid" name="valid" typeRef="boolean"/>
+      <rule id="r1">
+        <inputEntry id="e1"><text>-</text></inputEntry>
+        <inputEntry id="e2"><text>-</text></inputEntry>
+        <inputEntry id="e3"><text>-</text></inputEntry>
+        <inputEntry id="e4"><text>-</text></inputEntry>
+        <outputEntry id="oe1"><text>ends with(mail, "@beispiel.ch")</text></outputEntry>
+        <outputEntry id="oe2"><text>list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], departmentNumber)</text></outputEntry>
+        <outputEntry id="oe3"><text>matches(employeeNumber, "^[0-9]{6}$")</text></outputEntry>
+        <outputEntry id="oe4"><text>list contains(["intern", "extern"], employeeType)</text></outputEntry>
+        <outputEntry id="oe5"><text>ends with(mail, "@beispiel.ch") and list contains(["Buchhaltung", "Informatik", "Logistik", "Personal", "Vertrieb"], departmentNumber) and matches(employeeNumber, "^[0-9]{6}$") and list contains(["intern", "extern"], employeeType)</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

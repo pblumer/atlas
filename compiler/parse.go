@@ -2663,6 +2663,12 @@ type xmlAdConnector struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	MaxEntries     string `xml:"maxEntries,attr"`
 	ObjectSecurity string `xml:"objectSecurity,attr"`
+	// ResultAs (search only) is "variable" (the default) or "document": the entries go
+	// into a CSV document the result variable names, rather than into the variable
+	// itself, so a whole directory can be read (docs/planning/ad-search-as-document.md).
+	// DocumentName is that document's file name.
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2684,6 +2690,11 @@ type xmlSqlConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	MaxRows            string `xml:"maxRows,attr"`
+	// ResultAs and DocumentName write a query's rows into a CSV document the result
+	// variable names, instead of into the variable
+	// (docs/planning/ad-search-as-document.md, S3).
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2881,6 +2892,13 @@ type xmlLdapConnector struct {
 	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
 	// reference, never a value (ADR-0041).
 	ClientCertSecret string `xml:"clientCertSecret,attr"`
+	// Select (search only) is the attribute selection the search asks for, as AD's
+	// select; empty asks for the server's default set. ResultAs and DocumentName write
+	// a search's entries into a CSV document instead of into the result variable
+	// (docs/planning/ad-search-as-document.md, S3).
+	Select       string `xml:"select,attr"`
+	ResultAs     string `xml:"resultAs,attr"`
+	DocumentName string `xml:"documentName,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

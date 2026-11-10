@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mitarbeitende prüfen: Datei (docs/planning/ad-search-as-document.md, S3).
+
+  Ein Export des Personalstamms als CSV-Datei, Datensatz für Datensatz gemessen:
+
+    Start
+     -> [User-Task]                     Datei hochladen  -> mitarbeitende = {$document, name, ...}
+     -> [Business-Rule-Task über Datei] Datensätze prüfen -> pruefung = {total, valid, invalid, errors, failures, result, ...}
+     -> <Befunde?>  ja   -> Ende "Befunde abgelegt"
+                    nein -> Ende "Alle Datensätze in Ordnung"
+
+  Das Formular lädt die Datei als Dokument hoch und schliesst den Task mit dem Verweis
+  ab; die Datei selbst tritt nie in eine Variable ein (ADR-0543). Dieselbe Entscheidung
+  prüft im Schwesterprozess mitarbeitende-sql-pruefen.bpmn die Tabelle des SQL Servers.
+
+  Testdaten: mitarbeitende.csv in diesem Verzeichnis (200 Datensätze, 12 mit Befund),
+  oder 50 000 mit go run ./examples/testdaten/generieren.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="Definitions_mitarbeitende_datei_pruefen" targetNamespace="http://atlas/examples">
+  <bpmn:process id="mitarbeitende-datei-pruefen" name="Mitarbeitende prüfen (Datei)" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Prüfung angestossen">
+      <bpmn:outgoing>f_start</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:userTask id="lesen" name="Datei hochladen">
+      <bpmn:documentation>Die Qualitätsverantwortliche lädt den Export des Personalstamms hoch. Die Datei wird als Dokument abgelegt; mitarbeitende hält den Verweis.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="quality"/>
+        <zeebe:formDefinition formId="mitarbeitende-hochladen"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start</bpmn:incoming>
+      <bpmn:outgoing>f_lesen</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:businessRuleTask id="pruefen" name="Datensätze prüfen">
+      <bpmn:documentation>Wertet die Entscheidung MitarbeitendeGueltig für jeden Datensatz der Datei aus, in einem Job. Die Spalten treten unter ihrem Namen in die Entscheidung ein. pruefung erhält die Zusammenfassung (total, valid, invalid, errors), die ersten 100 Befunde mit Zeilennummer und verletzten Regeln, und den Verweis auf die Ergebnisdatei mit allen Datensätzen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="MitarbeitendeGueltig" resultVariable="pruefung"/>
+        <atlas:rowsFrom source="mitarbeitende" failureSample="100"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_pruefen</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+
+    <bpmn:exclusiveGateway id="befunde" name="Befunde?" default="f_keine">
+      <bpmn:documentation>Verzweigt auf die Zahl der Datensätze mit Befund. Ein Datensatz, den die Entscheidung nicht auswerten konnte (errors), zählt als Befund.</bpmn:documentation>
+      <bpmn:incoming>f_pruefen</bpmn:incoming>
+      <bpmn:outgoing>f_befunde</bpmn:outgoing>
+      <bpmn:outgoing>f_keine</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="ende_befunde" name="Befunde abgelegt">
+      <bpmn:documentation>Die Befunde stehen in pruefung.failures und vollständig in pruefung.result. Eine Korrektur im Personalsystem ist ein eigener Prozess und nicht Teil dieser Prüfung.</bpmn:documentation>
+      <bpmn:incoming>f_befunde</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_ok" name="Alle Datensätze in Ordnung">
+      <bpmn:incoming>f_keine</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start" sourceRef="start" targetRef="lesen"/>
+    <bpmn:sequenceFlow id="f_lesen" sourceRef="lesen" targetRef="pruefen"/>
+    <bpmn:sequenceFlow id="f_pruefen" sourceRef="pruefen" targetRef="befunde"/>
+    <bpmn:sequenceFlow id="f_befunde" name="ja" sourceRef="befunde" targetRef="ende_befunde">
+      <bpmn:conditionExpression>=pruefung.invalid + pruefung.errors &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_keine" name="nein" sourceRef="befunde" targetRef="ende_ok"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagram_mitarbeitende_datei_pruefen">
+    <bpmndi:BPMNPlane id="Plane_mitarbeitende_datei_pruefen" bpmnElement="mitarbeitende-datei-pruefen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="152" y="122" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="125" y="165" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lesen_di" bpmnElement="lesen"><dc:Bounds x="240" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen"><dc:Bounds x="400" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="befunde_di" bpmnElement="befunde" isMarkerVisible="true"><dc:Bounds x="565" y="115" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="550" y="92" width="80" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_befunde_di" bpmnElement="ende_befunde"><dc:Bounds x="682" y="122" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="655" y="165" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_ok_di" bpmnElement="ende_ok"><dc:Bounds x="682" y="232" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="655" y="275" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start"><di:waypoint x="188" y="140"/><di:waypoint x="240" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_lesen_di" bpmnElement="f_lesen"><di:waypoint x="340" y="140"/><di:waypoint x="400" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_pruefen_di" bpmnElement="f_pruefen"><di:waypoint x="500" y="140"/><di:waypoint x="565" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_befunde_di" bpmnElement="f_befunde"><di:waypoint x="615" y="140"/><di:waypoint x="682" y="140"/><bpmndi:BPMNLabel><dc:Bounds x="638" y="122" width="16" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_keine_di" bpmnElement="f_keine"><di:waypoint x="590" y="165"/><di:waypoint x="590" y="250"/><di:waypoint x="682" y="250"/><bpmndi:BPMNLabel><dc:Bounds x="596" y="201" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

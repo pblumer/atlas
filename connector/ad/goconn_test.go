@@ -2,6 +2,7 @@ package ad
 
 import (
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
@@ -417,5 +418,43 @@ func TestGoConnSearchEncodesBinaryAttributes(t *testing.T) {
 	}
 	if got := a["cn"]; len(got) != 1 || got[0] != "Arno" {
 		t.Errorf("cn = %q, want the text untouched", got)
+	}
+}
+
+// SearchPages follows the server's paging cookie until it comes back empty, handing
+// each page over before asking for the next, and stops where the caller says to.
+func TestGoConnSearchPages(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{searchDN: "cn=Arno,ou=users,dc=x", searchAttrs: map[string][]string{"mail": {"arno@x.ch"}}, pages: 3})
+	conn, err := NewDialer().Dial(d.URL, "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	pager := conn.(*goConn)
+	var got []Entry
+	if err := pager.SearchPages(SearchRequest{BaseDN: "ou=users,dc=x", Attributes: []string{"mail"}}, func(page []Entry) error {
+		got = append(got, page...)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[2].Attributes["mail"][0] != "arno@x.ch" {
+		t.Fatalf("pages = %+v", got)
+	}
+	if ops, _ := d.seen(); len(ops) != 3 { // three pages; an anonymous dial sends no bind
+		t.Fatalf("ops = %v", ops)
+	}
+	stop := errors.New("stop")
+	if err := pager.SearchPages(SearchRequest{BaseDN: "ou=users,dc=x", PageSize: 10}, func([]Entry) error { return stop }); !errors.Is(err, stop) {
+		t.Fatalf("a caller that stops = %v", err)
+	}
+	refused := startTestDirectory(t, &testDirectory{result: 32})
+	rc, err := NewDialer().Dial(refused.URL, "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	if err := rc.(*goConn).SearchPages(SearchRequest{BaseDN: "dc=x"}, func([]Entry) error { return nil }); err == nil {
+		t.Fatal("a refused search answered")
 	}
 }

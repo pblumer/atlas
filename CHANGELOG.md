@@ -22,6 +22,30 @@ _Changed_ / _Removed_ for each version.
   operation ends both with a plain failure, and one needs a live tenant. The contract is not yet
   published (ADR-0483): that waits for branch protection with the code owner's review. Entra's
   `create-channel` now claims the contract's version `1.0.0`.
+- **An LDAP search and a SQL query can write their result as a document, too.** `resultAs="document"`
+  now works on the LDAP search, which also gains `select`, and on the `query` of the MS SQL, MariaDB and
+  PostgreSQL Worker Types. It writes the same CSV as the AD search, through one shared writer: the LDAP
+  form is `dn`, then the selected attributes; the SQL form is the statement's columns in their order,
+  with NULL as an empty cell. The result variable holds `{found, count, document}` (the LDAP form adds
+  `dn`), and the caps and the server's document limit are checked while the rows are written. Three
+  new examples check every record of a source against DMN rules: an uploaded file and a SQL Server
+  table with one decision (*Mitarbeitende prüfen*), and an LDAP directory (*LDAP-Personen prüfen*).
+  They join the AD example in the hub bundle *Beispiele: Datenqualität*. `go run
+  ./examples/testdaten/generieren -n 50000` writes deterministic test data for all four sources, six
+  findings in every hundred records. Against the mock sources, 50,000 records take two to three seconds
+  per source.
+- **An Active Directory search can write its result as a document.** With `resultAs="document"` an
+  AD `search` writes its entries into a CSV document — the DN, then the attributes named in `select`,
+  a multi-valued attribute joined by `|` with `\|` and `\\` escaped — instead of into the result
+  variable, which then holds `{found, count, dn, document}`. The directory is read page by page and
+  written as it arrives; `maxEntries` defaults to 100,000 in this form, and the document budget is the
+  hard ceiling, also on a Worker Instance, which is handed the server's limit with the job. It runs in
+  process and on a Worker Instance. A business rule task over a file can read it directly with
+  `<atlas:rowsFrom source="benutzer.document"/>`, so a whole directory is checked against DMN rules in
+  two tasks. The AD panel has the fields (*Result as*, *File name*) and explains the file's layout and
+  how a rule tests a multi-valued cell; the example *AD-Benutzer prüfen* reads 24 accounts from the
+  mock directory and reports six findings with the rules they break
+  (docs/planning/ad-search-as-document.md).
 - **The shop over MCP, as the connected person.** An agent connected as a person — with
   their OAuth grant or session on `/mcp`, or their API token over `atlas mcp` — can now act
   as that person in the shop: `atlas_shop_catalogs` and `atlas_shop_catalog`,
