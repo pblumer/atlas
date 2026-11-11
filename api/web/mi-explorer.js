@@ -18,8 +18,23 @@ import { fmtCount } from "./numfmt.js";
 // BOUNDED_HISTORY_THRESHOLD is the iteration count above which the replay does not
 // load the full timeline. The legacy timeline grows with the square of the
 // iteration count (139 MB at 1,000 iterations, 2.2 GB at 4,000 — ADR-0517), so this
-// is a ceiling on harm, not a tuning knob.
+// is a ceiling on harm, not a tuning knob: an operator may lower the line with
+// --replay-full-max-iterations, never raise it (boundedThreshold).
 export const BOUNDED_HISTORY_THRESHOLD = 500;
+
+// boundedThreshold is the line this server draws, read from /api/v1/info
+// (fullReplayMaxIterations). A server that does not say, an answer that is not a
+// whole number, or a failed read keeps the default; a value above the ceiling is held
+// to it, so no answer can make the browser load a timeline the ceiling exists to
+// keep out.
+export async function boundedThreshold(api) {
+  try {
+    const info = await api("GET", "/api/v1/info");
+    const n = info && info.fullReplayMaxIterations;
+    if (Number.isInteger(n) && n >= 0) return Math.min(n, BOUNDED_HISTORY_THRESHOLD);
+  } catch { /* the default stands */ }
+  return BOUNDED_HISTORY_THRESHOLD;
+}
 
 export const PAGE_SIZE = 100;
 

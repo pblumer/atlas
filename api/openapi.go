@@ -139,6 +139,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
 				"docs": tBool(), "catalogue": tBool(),
+				"fullReplayMaxIterations": tInteger(),
 			}))}},
 		// What switching the catalogue off strands, for the Console's dashboard
 		// (ADR-0434). System, not Catalogue: it is the route that has something to say

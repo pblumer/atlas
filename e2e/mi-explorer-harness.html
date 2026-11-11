@@ -108,8 +108,12 @@
             step(300001, "End_1", "501", "activated"), step(300002, "End_1", "501", "completed"),
           ] };
         }
+        // What the server says about where the full replay ends (--replay-full-max-iterations).
+        if (u.pathname === "/api/v1/info") return window.__scenario.info || {};
         if (/\/instances\/\d+\/multi-instances$/.test(u.pathname)) {
-          return { instanceKey: KEY, processDefinitionKey: "7", instanceState: "completed", highWaterPosition: 300100, bodies: [body] };
+          // A scenario may shrink the body, to stand on either side of the line.
+          const sized = window.__scenario.iterations ? { ...body, iterations: window.__scenario.iterations } : body;
+          return { instanceKey: KEY, processDefinitionKey: "7", instanceState: "completed", highWaterPosition: 300100, bodies: [sized] };
         }
         if (/\/multi-instances\/\d+\/iterations$/.test(u.pathname)) {
           if (window.__scenario.failNext > 0) { window.__scenario.failNext--; fail(500, "internal", "disk on fire"); }
