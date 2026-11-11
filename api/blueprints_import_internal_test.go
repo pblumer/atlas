@@ -19,11 +19,35 @@ import (
 // release: an application with one process, and a catalogue beside it.
 func hubImportServer(t *testing.T) (*httptest.Server, *fakeBlueprintSource) {
 	t.Helper()
-	srv, _ := openAt(t, t.TempDir())
+	_, ts, f, _ := hubImportServerAt(t, t.TempDir())
+	return ts, f
+}
+
+// hubImportServerAt is hubImportServer over dir, answering the server and a stop
+// func too, so a test can reach the server's stores or start another over the same
+// data.
+func hubImportServerAt(t *testing.T, dir string) (*Server, *httptest.Server, *fakeBlueprintSource, func()) {
+	t.Helper()
+	srv, stop := openAt(t, dir)
+	f := &fakeBlueprintSource{origin: blueprintregistry.Origin{
+		RegistryID: "org.example.hub", IndexURL: "https://hub.example.org/index.json",
+		SignedBy: "sha256:" + strings.Repeat("ab", 32),
+	}}
+	f.offer(t, waitingProcess("proc_hub_sample"))
+	srv.blueprints = f
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+	return srv, ts, f, stop
+}
+
+// offer makes the registry serve release 1.0.0 of org.example.hub-sample as an
+// application whose one process is processXML.
+func (f *fakeBlueprintSource) offer(t *testing.T, processXML string) {
+	t.Helper()
 	var archive bytes.Buffer
 	if err := writeSourceArchive(&archive, []sourceFile{
 		{Path: "atlas.json", Data: []byte(`{"formatVersion":1,"key":"hub-sample","name":"Hub sample","processes":[{"id":"proc_hub_sample","name":"Hub sample","path":"processes/hub.bpmn"}],"forms":[],"decisions":[]}`)},
-		{Path: "processes/hub.bpmn", Data: []byte(waitingProcess("proc_hub_sample"))},
+		{Path: "processes/hub.bpmn", Data: []byte(processXML)},
 		{Path: "katalog.json", Data: []byte(`{"catalogs":[{"id":"cat-hub","items":[]}],"products":[]}`)},
 	}); err != nil {
 		t.Fatal(err)
@@ -38,14 +62,8 @@ func hubImportServer(t *testing.T) (*httptest.Server, *fakeBlueprintSource) {
 			Digest: "sha256:" + hex.EncodeToString(sum[:])},
 		Needs: blueprintregistry.Needs{WorkerTypes: []string{}, ServerConstants: []string{}},
 	}
-	f := &fakeBlueprintSource{
-		index:   blueprintregistry.Index{SchemaVersion: 1, RegistryID: "org.example.hub", Releases: []blueprintregistry.Release{release}},
-		release: release, packageBytes: payload,
-	}
-	srv.blueprints = f
-	ts := httptest.NewServer(srv.Handler())
-	t.Cleanup(ts.Close)
-	return ts, f
+	f.index = blueprintregistry.Index{SchemaVersion: 1, RegistryID: f.origin.RegistryID, Releases: []blueprintregistry.Release{release}}
+	f.release, f.packageBytes = release, payload
 }
 
 func hubPost(t *testing.T, ts *httptest.Server, query string) (int, map[string]any) {

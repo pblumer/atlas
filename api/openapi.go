@@ -1824,8 +1824,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
-		// The current atlas hub Blueprint Registry API is read-only here. Import remains behind
-		// the existing application source/plan/publish routes, not a new write API.
+		// The atlas hub Blueprint Registry is read through these routes; the one write,
+		// the server-side import, goes through the application source import and
+		// records where the application came from (ADR-0499 amendment g).
+		{"GET", "/api/v1/blueprints/installations", s.handleListHubInstallations, apiOp{
+			summary: "Where each application installed through the server-side atlas hub import came from, read from this server's own disk and so answered with the registry unreachable: the registry ID, the configured index URL, the fingerprint of the pinned key that signed the index, the publisher, Blueprint, version and exact digest, the catalogues the import left to the Console, who installed it and when. state is installed once the import finished, and pending when the server stopped between recording and finishing it, so what the application holds is not known. Administrator only (ADR-0499)", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("atlas hub installation records, by application key", tArray())}},
 		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
 			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Trusted Blueprint index", tObject())}},
@@ -1853,7 +1857,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},
 		{"POST", "/api/v1/blueprints/{id}/releases/{version}/import", s.handleBlueprintImport, apiOp{
-			summary: "Install the application of a signed atlas hub release: the server fetches it from its operator-pinned registry, refuses it unless ?digest= equals the digest the preview reported, inspects it and imports it through the same source import POST /api/v1/applications/source performs — the same plan, ?dryRun=true, ?overwrite= and ?keep= decisions (undecided stops with 409 and the plan), editor rule and needs. The package's catalogues are named under cataloguesNotImported and imported in the Console, where a person answers their questions (ADR-0499, ADR-0467).", tag: "Applications", role: RoleModeler,
+			summary: "Install the application of a signed atlas hub release: the server fetches it from its operator-pinned registry, refuses it unless ?digest= equals the digest the preview reported, inspects it and imports it through the same source import POST /api/v1/applications/source performs — the same plan, ?dryRun=true, ?overwrite= and ?keep= decisions (undecided stops with 409 and the plan), editor rule and needs. The package's catalogues are named under cataloguesNotImported and imported in the Console, where a person answers their questions. Before it writes, a real import records the release as pending under the application's key, and records it installed when it finishes; when the record cannot be written, nothing is imported (GET /api/v1/blueprints/installations; ADR-0499, ADR-0467).", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Import result with the release it came from", tObject())}},
 
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the

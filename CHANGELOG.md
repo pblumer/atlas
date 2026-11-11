@@ -13,6 +13,17 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **atlas hub records where an installed application came from.** The server-side hub import
+  records, under the application's key, the registry, the configured index URL, the fingerprint
+  of the pinned key that signed the index, the release and its exact digest, the catalogues it
+  left to the Console, who installed it and when. The record is written as pending before the
+  import writes anything, so an import whose record cannot be written installs nothing, and
+  becomes installed when the import finishes; an import that stops leaves the earlier record as
+  it was. The Console's atlas hub dialog now installs the application through this import, so a
+  person's install is recorded like an agent's. Administrators read the records with
+  `GET /api/v1/blueprints/installations` or the MCP tool `atlas_hub_installations`, with the
+  registry unreachable. The record covers the application only, not its catalogues, constants
+  or publishing (ADR-0499 amendment g).
 - **The calendar Worker Type books into Exchange Server too.** A calendar Worker whose bundle
   names `"provider": "exchange-ews"` books into Exchange Server 2016, 2019 or Subscription
   Edition on premises through Exchange Web Services, which Microsoft Graph does not reach. A

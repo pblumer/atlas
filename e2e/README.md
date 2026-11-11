@@ -126,8 +126,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   the atlas hub Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,
   performs no write on preview or cancellation, sends the reviewed `If-Match` digest
-  on download, and hands the package to the existing dry-run and authorized import
-  flow; mismatched digests and an absent registry fail closed.
+  on download, and installs the application through the server's hub import — dry run
+  first, then the import, both carrying the previewed digest and no package bytes, so the
+  server records where the application came from (ADR-0499 amendment g); mismatched digests
+  and an absent registry fail closed.
 
 - **`application-delete.spec.mjs`**
   ([ADR-0468](../docs/adr/0468-deleting-an-application-with-its-contents.md)):

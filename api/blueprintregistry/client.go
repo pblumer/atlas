@@ -99,7 +99,8 @@ const dialTimeout = 5 * time.Second
 func (c *PublicClient) LoadIndex(ctx context.Context) (Index, error) {
 	tr := newTracer(nil)
 	defer tr.close()
-	return c.loadIndex(ctx, tr)
+	index, _, err := c.loadIndex(ctx, tr)
+	return index, err
 }
 
 // LoadIndexTraced is LoadIndex reporting each station of the way as it is passed
@@ -111,12 +112,14 @@ func (c *PublicClient) LoadIndex(ctx context.Context) (Index, error) {
 func (c *PublicClient) LoadIndexTraced(ctx context.Context, report func(Step)) (Index, error) {
 	tr := newTracer(report)
 	defer tr.close()
-	return c.loadIndex(ctx, tr)
+	index, _, err := c.loadIndex(ctx, tr)
+	return index, err
 }
 
-func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (_ Index, err error) {
+// loadIndex answers the verified index and the pinned key whose signature it carries.
+func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (_ Index, _ ed25519.PublicKey, err error) {
 	if c == nil || c.httpClient == nil || c.indexURL == nil {
-		return Index{}, errors.New("registry client is not configured")
+		return Index{}, nil, errors.New("registry client is not configured")
 	}
 	defer func() { err = tr.wrap(err) }()
 	// Only the index request is traced station by station; the signature request
@@ -124,7 +127,7 @@ func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (_ Index, err 
 	raw, err := c.readBounded(withTracer(ctx, tr), c.indexURL, MaxIndexBytes)
 	if err != nil {
 		tr.failRequest(StageIndex, err)
-		return Index{}, fmt.Errorf("load registry index: %w", err)
+		return Index{}, nil, fmt.Errorf("load registry index: %w", err)
 	}
 	tr.passIndex(len(raw))
 	signatureURL := *c.indexURL
@@ -132,7 +135,7 @@ func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (_ Index, err 
 	signature, err := c.readBounded(ctx, &signatureURL, maxSignatureBytes)
 	if err != nil {
 		tr.fail(Step{Stage: StageSignature, Cause: CauseSignatureUnavailable, Status: httpStatusOf(err), Err: err})
-		return Index{}, fmt.Errorf("load registry signature: %w", err)
+		return Index{}, nil, fmt.Errorf("load registry signature: %w", err)
 	}
 	index, key, err := VerifySignedIndexWithAny(raw, signature, c.publicKeys)
 	if err != nil {
@@ -141,10 +144,10 @@ func (c *PublicClient) loadIndex(ctx context.Context, tr *tracer) (_ Index, err 
 			cause = CauseNoPinnedKey
 		}
 		tr.fail(Step{Stage: StageSignature, Cause: cause, Err: err})
-		return Index{}, fmt.Errorf("verify registry: %w", err)
+		return Index{}, nil, fmt.Errorf("verify registry: %w", err)
 	}
 	tr.pass(Step{Stage: StageSignature, Key: KeyFingerprint(key)})
-	return index, nil
+	return index, key, nil
 }
 
 // Fingerprints names the pinned keys, in the order the operator gave them.
@@ -173,10 +176,32 @@ func (c *PublicClient) Download(ctx context.Context, blueprintID, version string
 // that fails at a station — of the index load, or the package's own
 // (StagePackage) — returns a *StopError naming it.
 func (c *PublicClient) Fetch(ctx context.Context, blueprintID, version string) (Release, []byte, error) {
-	index, err := c.LoadIndex(ctx)
+	release, _, data, err := c.FetchOrigin(ctx, blueprintID, version)
+	return release, data, err
+}
+
+// Origin is where a fetched release came from: the registry the signed index names,
+// the index URL the operator configured, and the fingerprint (KeyFingerprint) of the
+// pinned key whose signature verified that index. During a key rotation two keys are
+// pinned and SignedBy is the one that signed, so an installation records which key
+// vouched for its package (ADR-0499).
+type Origin struct {
+	RegistryID string `json:"registryId"`
+	IndexURL   string `json:"indexUrl"`
+	SignedBy   string `json:"signedBy"`
+}
+
+// FetchOrigin is Fetch answering also the Origin of the index snapshot the release
+// and its bytes were checked against. The release, the bytes and the origin always
+// come from that one snapshot.
+func (c *PublicClient) FetchOrigin(ctx context.Context, blueprintID, version string) (Release, Origin, []byte, error) {
+	indexTrace := newTracer(nil)
+	defer indexTrace.close()
+	index, key, err := c.loadIndex(ctx, indexTrace)
 	if err != nil {
-		return Release{}, nil, err
+		return Release{}, Origin{}, nil, err
 	}
+	origin := Origin{RegistryID: index.RegistryID, IndexURL: c.indexURL.String(), SignedBy: KeyFingerprint(key)}
 	for _, release := range index.Releases {
 		if release.BlueprintID != blueprintID || release.Version != version {
 			continue
@@ -184,7 +209,7 @@ func (c *PublicClient) Fetch(ctx context.Context, blueprintID, version string) (
 		location := *c.indexURL
 		location.Path = path.Join(path.Dir(location.Path), release.Artifact.Path)
 		if err := validateDerivedArtifactURL(c.indexURL, &location); err != nil {
-			return Release{}, nil, err
+			return Release{}, Origin{}, nil, err
 		}
 		// The download takes the way again, so it may stop at a network station
 		// as well as at the package's own.
@@ -193,15 +218,15 @@ func (c *PublicClient) Fetch(ctx context.Context, blueprintID, version string) (
 		data, err := c.readBounded(withTracer(ctx, tr), &location, release.Artifact.SizeBytes)
 		if err != nil {
 			tr.failRequest(StagePackage, err)
-			return Release{}, nil, tr.wrap(fmt.Errorf("download signed registry release: %w", err))
+			return Release{}, Origin{}, nil, tr.wrap(fmt.Errorf("download signed registry release: %w", err))
 		}
 		if err := VerifyArchive(release, data); err != nil {
 			tr.fail(Step{Stage: StagePackage, Cause: CausePackageMismatch, Err: err})
-			return Release{}, nil, tr.wrap(fmt.Errorf("verify signed registry release: %w", err))
+			return Release{}, Origin{}, nil, tr.wrap(fmt.Errorf("verify signed registry release: %w", err))
 		}
-		return release, data, nil
+		return release, origin, data, nil
 	}
-	return Release{}, nil, fmt.Errorf("Blueprint %q release %q not listed in verified registry", blueprintID, version)
+	return Release{}, Origin{}, nil, fmt.Errorf("Blueprint %q release %q not listed in verified registry", blueprintID, version)
 }
 
 func (c *PublicClient) readBounded(ctx context.Context, location *url.URL, size int64) ([]byte, error) {

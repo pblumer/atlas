@@ -14,10 +14,11 @@
       window.__open = () => openBlueprintMarketplace({
         call: async (method, path, body) => {
           window.__calls.push({ method, path, body: body instanceof Uint8Array ? "<archive>" : body });
-          if (path === "/api/v1/applications/source?dryRun=true") {
-            return { status: 200, data: { created: true, artifacts: [] } };
+          // The application step of a hub install is the server's hub import.
+          if (/^\/api\/v1\/blueprints\/[^/]+\/releases\/[^/]+\/import\?digest=[^&]+&dryRun=true$/.test(path)) {
+            return { status: 200, data: { created: true, dryRun: true, artifacts: [] } };
           }
-          if (path === "/api/v1/applications/source") {
+          if (/^\/api\/v1\/blueprints\/[^/]+\/releases\/[^/]+\/import\?digest=[^&]+$/.test(path)) {
             return { status: 200, data: { created: true, applicationId: "new", name: "Purchase", artifacts: [] } };
           }
           return { status: 404, data: { error: "unexpected API call" } };
