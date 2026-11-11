@@ -58,22 +58,27 @@ test("the Variables tab keeps a structure with a long line inside its panel", as
   expect(page.__errors).toEqual([]);
 });
 
-// The Console pages below are the real ones, against a mocked /api/v1.
-function installMock(page, answers) {
-  page.route("**/api/v1/**", async (route) => {
+// The Console pages below are the real ones, against a mocked /api/v1, on a desktop
+// window. At the suite's 900px the decision table is at its own minimum width with short
+// values too (six columns; about 825px with this machine's fonts, more on CI's), and its
+// card then scrolls it as every card does (ADR-0163) — which would measure the fonts,
+// not the long value. A wide window leaves room, so only the value can overreach.
+async function openConsole(page, hash, answers) {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     for (const [suffix, json] of answers) if (path.endsWith(suffix)) return route.fulfill({ json });
     return route.fulfill({ json: [] });
   });
+  await page.goto("/index.html" + hash);
 }
 
 test("a decision's evaluations keep a long input and result inside the card", async ({ page }) => {
-  installMock(page, [["/decisions/Probe/evaluations", [
+  await openConsole(page, "#/operations/decisions/Probe", [["/decisions/Probe/evaluations", [
     { at: 1794395600000000000, atKey: "1794395600000000000", instanceKey: 281474976710657, elementId: "decide",
       inputs: { link: LINK, n: 1 }, outputs: { next: LINK } },
   ]]]);
-  await page.goto("/index.html#/operations/decisions/Probe");
   const row = page.locator("tr", { hasText: "281474976710657" });
   await expect(row).toBeVisible();
   const table = row.locator("xpath=ancestor::table[1]");
@@ -92,12 +97,11 @@ test("a decision's evaluations keep a long input and result inside the card", as
 });
 
 test("a buffered message with a long correlation key, id and payload stays inside the card", async ({ page }) => {
-  installMock(page, [["/messages/buffered", {
+  await openConsole(page, "#/operations/messages", [["/messages/buffered", {
     messages: [{ key: "281474976710677", name: "probe.delta", correlationKey: LINK, messageId: "msg-" + LINK.slice(60),
       bufferedAt: 1794395600000000000, expiresAt: 1794399200000000000, variables: [{ name: "deltaLink", value: LINK }] }],
     total: 1,
   }]]);
-  await page.goto("/index.html#/operations/messages");
   const row = page.locator("#bm-list tbody tr", { hasText: "probe.delta" });
   await expect(row).toBeVisible();
   const table = page.locator("#bm-list table");
@@ -109,12 +113,11 @@ test("a buffered message with a long correlation key, id and payload stays insid
 });
 
 test("the event log keeps a long correlation key inside the card", async ({ page }) => {
-  installMock(page, [["/event-log", {
+  await openConsole(page, "#/operations/event-log", [["/event-log", {
     rows: [{ position: "40", cause: "39", at: "2026-10-22T10:00:04Z", kind: "message.sent", channel: "message", name: "probe.delta",
       correlationKey: LINK, source: "publish", reached: 0, started: 0 }],
     next: "40", latest: "40", more: false, prunedThrough: "0",
   }]]);
-  await page.goto("/index.html#/operations/event-log");
   const row = page.locator('#el-rows tr[data-pos="40"]');
   await expect(row).toBeVisible();
   const table = row.locator("xpath=ancestor::table[1]");
