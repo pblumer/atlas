@@ -449,6 +449,16 @@ var (
 	// attempt (ADR-0429 §3). The first ending stands; the second is reported here
 	// rather than written, because an action ends once.
 	OrderOutcomeConflict = newEvent("order.outcome_conflict")
+	// OrderLineInstanceEnded: an instance an order line was waiting on ended without
+	// reporting — an operator cancelled or terminated it — and the line was settled
+	// as a failed report would have settled it
+	// (ADR-draft-a-cancelled-line-instance-settles-its-line). A warning, because a
+	// line somebody has to look at is the consequence.
+	OrderLineInstanceEnded = newEvent("order.line_instance_ended")
+	// OrderLineUnsettled: an instance an order line was waiting on ended, and the
+	// line could not be settled. The line still waits; the fulfilment repair
+	// (POST /api/v1/orders/fulfilment/repair) finds and settles it.
+	OrderLineUnsettled = newEvent("order.line_unsettled")
 )
 
 // Wizards (ADR-0449).

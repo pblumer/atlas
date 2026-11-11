@@ -203,6 +203,18 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **An order line whose process an operator cancelled no longer waits for ever.** Cancelling
+  the instance working a line — `DELETE /api/v1/instances/{key}`, the bulk terminate, a
+  definition's drain, deleting a process with its instances, or the MCP tools that call them —
+  left the line `running` and the fulfilment orchestration waiting on an `atlas.order.advanced`
+  nobody would publish. The line now settles as a failed report would: a cancelled
+  provisioning or approval leaves it `failed`, a cancelled return `returnFailed`; the failed
+  outcome records which instance ended and how, the inventory is told, and the orchestration
+  is woken. A line that already reported, and one the shop withdrew, are left alone. The
+  fulfilment repair (`POST /api/v1/orders/fulfilment/repair`) lists every line still waiting on
+  an instance that is no longer active under `orphanedLines`, no longer counts its
+  orchestration healthy, and settles it when run without `dryRun`
+  (ADR-draft-a-cancelled-line-instance-settles-its-line).
 - **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
   worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
   is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
