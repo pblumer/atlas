@@ -252,7 +252,10 @@ known condition with a plain failure instead of a code a process can catch.)
   therefore either needs delegation (`subject` in the bundle) or the confirmation mail
   comes from atlas.
 - **CalDAV:** user name and an app password over TLS, as the CardDAV Worker does
-  (`connector/carddav`), whose WebDAV client the CalDAV backend reuses.
+  (`connector/carddav`). As built, the CalDAV backend has its own small WebDAV client
+  rather than the CardDAV one (see phase 3). The account reaches what the server lets it
+  reach; scoping is the server's: a dedicated booking account with only the booking
+  calendars shared to it.
 - **EWS:** a service account with delegate access to the booking mailboxes. The first
   version supports what the Exchange Worker's on-premises backend already supports.
 
@@ -449,6 +452,49 @@ a tenant, and published contracts with written evidence records.
 
 Not built: CalDAV and EWS (phases 3 and 4), a live run against a tenant or a domain, and
 published contracts with written evidence records.
+
+### As built: phase 3 (2026-11-11)
+
+- **CalDAV** (`connector/calendar/caldav.go`, `ical.go`), provider `caldav`. The bundle
+  is `username`, `password` and an optional `timeZone`; the Worker's endpoint is required
+  and is the **calendar home** (`https://…/remote.php/dav/calendars/verkauf/` on
+  Nextcloud), https unless it is loopback. A redirect to another host or down to http is
+  refused, so the password never leaves the server it was written for. A calendar is a
+  collection name below the home, or a full collection URL on the same host and scheme.
+- **Reading.** One `REPORT` calendar-query with a time-range filter, `<C:expand>` so the
+  server answers each occurrence of a recurring appointment, and calendar-data narrowed to
+  UID, DTSTART, DTEND, DURATION, TRANSP, STATUS and RECURRENCE-ID — no titles or
+  descriptions are read. A series that comes back unexpanded (RRULE or RDATE in the
+  answer) is refused with that reason rather than read as its first occurrence. Times in
+  UTC and with an IANA TZID are read as written; floating and all-day times are read in the
+  bundle's `timeZone`, UTC when empty. Busy is every event not `TRANSPARENT` and not
+  `CANCELLED`; at most 5000 events per window.
+- **Idempotent creation by the resource name.** The event's UID is `atlas-` followed by
+  the create key, its resource `atlas-<hex(key)>.ics`, written with `If-None-Match: *`. A
+  repeated delivery that meets `412` reads the existing event; the conflict rule then runs
+  on it as on the other backends. `confirm-booking` reads the event with its ETag, replaces
+  only SUMMARY, DESCRIPTION and ATTENDEE and writes with `If-Match`, once more on `412`.
+- **A missing calendar is told from a missing booking.** On a 404 or 410 for an event the
+  backend asks for the collection (`PROPFIND`, depth 0) and reports whichever is missing.
+- **Attendees.** Whether a server invites the attendees written into the event is its own
+  scheduling (RFC 6638): by their documentation Nextcloud (with mail configured), iCloud
+  and Fastmail do and Radicale does not; none of this has been observed yet. The backend
+  writes them and does not throw `CALENDAR_ATTENDEES_NOT_ALLOWED`; a process that must
+  be sure an invitation goes out sends the confirmation mail itself.
+- **Deviation from this record.** The CardDAV client (`connector/carddav`) was not
+  reused: it is unexported and shaped for address books (vCard, addressbook-query), and
+  what calendars need of WebDAV here — one REPORT, PUT with preconditions, GET with ETag,
+  DELETE and a depth-0 PROPFIND — is small. Two clients of that size are cheaper than an
+  exported one both connectors must agree on.
+- **Evidence.** `connector/calendar/caldavfake` stands in for a CalDAV server; it refuses
+  a query without a time-range or one asking for SUMMARY or DESCRIPTION, expands a weekly
+  series only when asked, and enforces both preconditions. Every suite case passes on the
+  mock, Graph, Google and CalDAV except read-after-write visibility.
+
+Not built: the phasing's "tried against at least two servers" — no run against Nextcloud
+or another real server has been made, so server quirks (iCloud's discovery, servers that
+ignore `expand`) are known only from their documentation. EWS (phase 4), live runs, and
+published contracts with written evidence records remain.
 
 ### Consequences
 
