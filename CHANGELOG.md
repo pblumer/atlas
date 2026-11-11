@@ -203,6 +203,11 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **A long value no longer stretches the Variables table past its panel.** A structure holding
+  an unbroken line — a Graph delta link, a token — made the table in the replay's Variables tab
+  thousands of pixels wide, so the filter, Copy all and every Copy button slid off screen. The
+  value column now takes the width the other columns leave: the one-line preview is cut with an
+  ellipsis, and the opened structure scrolls sideways inside its own box.
 - **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
   worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
   is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
