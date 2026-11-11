@@ -57,6 +57,7 @@ var mcpShopRoutes = map[string]bool{
 	"GET /api/v1/orders":                                     true,
 	"GET /api/v1/orders/{id}":                                true,
 	"GET /api/v1/orders/{id}/next":                           true,
+	"GET /api/v1/orders/{id}/round":                          true,
 	"GET /api/v1/shop/tasks":                                 true,
 	"GET /api/v1/shop/orders/{id}/lines/{position}/progress": true,
 	"POST /api/v1/orders/{id}/cancel":                        true,

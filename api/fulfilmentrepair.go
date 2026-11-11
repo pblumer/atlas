@@ -47,9 +47,34 @@ type fulfilmentRepairResp struct {
 	Cancelled []orphanedOrchestration `json:"cancelled"`
 	// Restarted names the orders an orchestration was started for again.
 	Restarted []string `json:"restarted"`
-	// Healthy counts the orchestrations left alone: they name an order that exists,
-	// so they are working or waiting, and neither is this route's business.
+	// Healthy counts the orchestrations left alone: they name an order that exists
+	// and none of whose lines waits on an instance that has ended, so they are
+	// working or waiting, and neither is this route's business.
 	Healthy int `json:"healthy"`
+	// OrphanedLines are the lines waiting on an instance that is no longer active,
+	// settled by the repair as a failed report would have settled them — or, in a
+	// dry run, that it would settle
+	// (ADR-0558). An orchestration
+	// waiting on such a line is not counted healthy: it waits for a message that
+	// nothing is left to publish.
+	OrphanedLines []orphanedLine `json:"orphanedLines"`
+}
+
+// orphanedLine is one order line waiting on an instance that has ended, and what
+// the repair settles it to.
+type orphanedLine struct {
+	OrderID  string `json:"orderId"`
+	Line     string `json:"line"`
+	Instance uint64 `json:"instance"`
+	// Operation is what the instance was doing for the line: provision, approval,
+	// deprovision.
+	Operation string `json:"operation,omitempty"`
+	// InstanceState is how the instance ended as far as this server knows:
+	// terminated, completed — a process that ended without reporting — or gone, for
+	// one whose history was deleted.
+	InstanceState string `json:"instanceState"`
+	// Settles is the status the line is (or would be) settled to.
+	Settles order.LineStatus `json:"settles"`
 }
 
 // handleRepairFulfilment ends the fulfilment orchestrations that cannot work and
@@ -110,7 +135,22 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 		known[o.ID] = o
 	}
 
-	out := fulfilmentRepairResp{DryRun: dryRun, Cancelled: []orphanedOrchestration{}, Restarted: []string{}}
+	orphans, scanErr := s.orphanedLinesOf(orders)
+	switch {
+	case errors.Is(scanErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
+		return
+	case scanErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read the instances order lines wait on: "+scanErr.Error())
+		return
+	}
+	stalled := make(map[string]bool, len(orphans))
+	for _, l := range orphans {
+		stalled[l.OrderID] = true
+	}
+
+	out := fulfilmentRepairResp{DryRun: dryRun, Cancelled: []orphanedOrchestration{},
+		Restarted: []string{}, OrphanedLines: orphans}
 	worked := map[string]bool{}
 	for _, inst := range running {
 		switch {
@@ -129,6 +169,10 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 				Instance: inst.key, OrderID: inst.orderID,
 				Reason: "names an order this server no longer holds",
 			})
+		case stalled[inst.orderID]:
+			// Working an order whose line waits on an ended instance: left running,
+			// because settling the line below wakes it.
+			worked[inst.orderID] = true
 		default:
 			out.Healthy++
 			worked[inst.orderID] = true
@@ -159,6 +203,15 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+	// Settle the orphaned lines before starting anything: a restarted orchestration
+	// asks what may start, and should be told by an order that no longer waits on
+	// instances that ended. Each settlement wakes the order's orchestration.
+	for _, l := range orphans {
+		if _, _, err := s.orders.InstanceEnded(l.OrderID, l.Instance, l.InstanceState); err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "settle order "+l.OrderID+" line "+l.Line+": "+err.Error())
+			return
+		}
+	}
 	for _, id := range out.Restarted {
 		o := known[id]
 		start := order.PlacedVariables(o, s.externalURL, s.selfURL)
@@ -177,4 +230,51 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// orphanedLinesOf finds the lines of open orders that wait on an instance that is no
+// longer active — the state a cancel leaves behind when the server stopped between
+// ending the instance and settling the line, and the state a process leaves that
+// ended without reporting.
+//
+// Off the loop, and point lookups only: the cost is the open lines, one instance
+// read each, not the instance population.
+func (s *Server) orphanedLinesOf(orders []order.Order) ([]orphanedLine, error) {
+	type waiting struct {
+		orderID string
+		line    order.Line
+		inst    order.LineInstance
+		settle  order.LineStatus
+	}
+	var candidates []waiting
+	for _, o := range orders {
+		for _, l := range o.Lines {
+			if inst, settle, ok := l.WaitsOn(); ok {
+				candidates = append(candidates, waiting{orderID: o.ID, line: l, inst: inst, settle: settle})
+			}
+		}
+	}
+	out := []orphanedLine{}
+	if len(candidates) == 0 {
+		return out, nil
+	}
+	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		for _, c := range candidates {
+			pi, ok, err := rv.ProcessInstance(c.inst.Key)
+			if err != nil {
+				return err
+			}
+			if ok && pi.State == model.PIActive {
+				continue
+			}
+			ended := "gone"
+			if ok {
+				ended = pi.State.String()
+			}
+			out = append(out, orphanedLine{OrderID: c.orderID, Line: c.line.Key(), Instance: c.inst.Key,
+				Operation: c.inst.Operation, InstanceState: ended, Settles: c.settle})
+		}
+		return nil
+	})
+	return out, err
 }

@@ -864,8 +864,13 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 // process that provisions it and the variant that was chosen — everything an
 // orchestrator needs to act, from one call.
 //
-// This and [Service.HandleReport] are the orchestrator's two calls, and they are
-// operator work rather than the orderer's: nobody reports the result of their own
+// The fulfilment model reads it through [Service.HandleRound] now, which carries
+// this answer and what is still running; this route stays, answering the list it
+// always answered, for the orchestrations of the earlier model still running and for
+// any other model built against it.
+//
+// This, the round and [Service.HandleReport] are the orchestrator's calls, and they
+// are operator work rather than the orderer's: nobody reports the result of their own
 // provisioning, and an operator works orders that are not theirs. The route's
 // role says so; there is no object gate here, deliberately.
 func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
@@ -882,17 +887,68 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no order "+id)
 	default:
-		ready := Ready(got)
-		out := make([]readyLine, 0, len(ready))
-		for _, l := range ready {
-			// Without the answers: the orchestration keeps what it reads here as
-			// variables, in its history and in the clear, and it starts processes
-			// rather than reading forms. The processes it starts are given the answers
-			// by the order (ADR-0441).
-			l.Config, l.Amendments = nil, nil
-			out = append(out, readyLine{ID: l.Key(), Line: l, ApprovalProcess: l.ApprovalProcess()})
+		httpapi.JSON(w, http.StatusOK, readyLines(got))
+	}
+}
+
+// readyLines is [Ready] as the orchestration reads it.
+func readyLines(o Order) []readyLine {
+	ready := Ready(o)
+	out := make([]readyLine, 0, len(ready))
+	for _, l := range ready {
+		// Without the answers: the orchestration keeps what it reads here as
+		// variables, in its history and in the clear, and it starts processes
+		// rather than reading forms. The processes it starts are given the answers
+		// by the order (ADR-0441).
+		l.Config, l.Amendments = nil, nil
+		out = append(out, readyLine{ID: l.Key(), Line: l, ApprovalProcess: l.ApprovalProcess()})
+	}
+	return out
+}
+
+// round is what the fulfilment process reads to decide its next step: what may
+// start now, and what is still coming back. See [Service.HandleRound].
+type round struct {
+	// Ready is exactly what /next answers.
+	Ready []readyLine `json:"ready"`
+	// Outstanding names the positions whose outcome is still coming ([Outstanding]).
+	// Never null, so the model counts an empty list rather than comparing a null.
+	Outstanding []string `json:"outstanding"`
+}
+
+// HandleRound answers the orchestration's one question per round: which lines may
+// start now, and which are still running and will report.
+//
+// /next alone cannot say when to stop. Its empty answer is the same when the order
+// is finished and when the rest waits on a line still being provisioned, and the
+// orchestration that ended on it left a bundle's memberships pending forever
+// (2026-11-11). The two halves are answered from one read of the order, because
+// asked in two calls a line could report between them: the first would say nothing
+// is ready, the second that nothing is running, and the line it unblocked would
+// never be started.
+//
+// A route of its own rather than a field on /next: /next answers a list, and the
+// orchestrations already running on the model that reads it keep reading a list
+// until they end.
+func (s *Service) HandleRound(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var (
+		got     Order
+		found   bool
+		loadErr error
+	)
+	s.loop.Do(func() { got, found, loadErr = s.store.Get(id) })
+	switch {
+	case loadErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read order: "+loadErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no order "+id)
+	default:
+		outstanding := Outstanding(got)
+		if outstanding == nil {
+			outstanding = []string{}
 		}
-		httpapi.JSON(w, http.StatusOK, out)
+		httpapi.JSON(w, http.StatusOK, round{Ready: readyLines(got), Outstanding: outstanding})
 	}
 }
 
@@ -1018,6 +1074,12 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 // here on purpose, and a switch that fell through a default would quietly decide
 // for it.
 func (s *Service) recordInventory(o Order, ref string, status LineStatus) error {
+	return s.recordInventoryWith(o, ref, status, "")
+}
+
+// recordInventoryWith is [Service.recordInventory] with the result a failed
+// outcome carries: why it failed, where the server knows and no reporter said.
+func (s *Service) recordInventoryWith(o Order, ref string, status LineStatus, result string) error {
 	key, err := ResolveLine(o, ref)
 	if err != nil {
 		return err
@@ -1060,9 +1122,13 @@ func (s *Service) recordInventory(o Order, ref string, status LineStatus) error 
 			ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeCompleted))
 	case StatusFailed:
 		// Nothing changed hands, so the outcome is the only fact (ADR-0429 §3).
-		return s.reportOutcome(ownOutcome(o, key, line, catalog.EffectProvision, catalog.OutcomeFailed))
+		out := ownOutcome(o, key, line, catalog.EffectProvision, catalog.OutcomeFailed)
+		out.Result = result
+		return s.reportOutcome(out)
 	case StatusReturnFailed:
-		return s.reportOutcome(ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeFailed))
+		out := ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeFailed)
+		out.Result = result
+		return s.reportOutcome(out)
 	}
 	return nil
 }

@@ -135,6 +135,44 @@ func Ready(o Order) []Line {
 	return out
 }
 
+// Outstanding reports the lines whose outcome is still coming, sorted: those a
+// provisioning process is working on now. Each of them reports through
+// [Service.HandleReport], and that report publishes [AdvancedMessage] — so while one
+// is here, an orchestrator that is told nothing may start must wait rather than end.
+//
+// An empty [Next] alone cannot tell "finished" from "not yet". It is the same answer
+// when everything is provisioned, when the rest is stuck behind a rejection, and
+// when the rest waits on a precondition that is still running — and the third is
+// the one the orchestration took for the first two, ending while the licence a
+// bundle's memberships need was still being provisioned (2026-11-11).
+//
+// Running is the whole list, and the statuses left out are left out on purpose:
+//
+//   - Pending with its approval open is not here because it is in [Next]: a gated
+//     line nobody approved is still waiting, so it is offered, and the start answers
+//     with the approval instance already running. The orchestration waits on it
+//     through the ready list.
+//   - Failed is an incident that was reported, and the process that reported it
+//     goes on to its end in every model that reports one. Nothing reports on that
+//     line again by itself, and waiting on it would park the orchestration on a
+//     message nobody publishes. An order left open by one is the
+//     repair route's case: an open order with nothing working it
+//     (api/fulfilmentrepair.go).
+//   - Returning reports too, but a return never makes another line startable —
+//     returned does not satisfy a precondition — so there is nothing to wait for it
+//     for.
+//   - Blocked is a consequence of a failure or a decision; it follows its cause.
+func Outstanding(o Order) []string {
+	var out []string
+	for _, l := range o.Lines {
+		if l.Status == StatusRunning {
+			out = append(out, l.Key())
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // MarkStarted records that a line's provisioning process was started: running, but
 // only while the line is still where a provisioning starts from (pending or blocked).
 //

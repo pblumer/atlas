@@ -1711,7 +1711,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order", tObject())}},
 		{"POST", "/api/v1/orders/fulfilment/repair", s.handleRepairFulfilment, apiOp{
-			summary: "End the fulfilment orchestrations that cannot do their work — one that names no order builds every request from nothing — and start one again for every open order left without one. Idempotent: an installation with nothing broken is answered with two empty lists. ?dryRun=true reports what it would do and changes nothing, which is what to run first", tag: "Order", role: RoleOperator,
+			summary: "End the fulfilment orchestrations that cannot do their work — one that names no order builds every request from nothing — and start one again for every open order left without one; and settle every order line still waiting on an instance that is no longer active — cancelled, terminated, or ended without reporting — as a failed report would (orphanedLines). Idempotent: an installation with nothing broken is answered with three empty lists. ?dryRun=true reports what it would do and changes nothing, which is what to run first", tag: "Order", role: RoleOperator,
 			resp: jsonBody("What was ended and what was started again", tObject())}},
 		{"GET", "/api/v1/shop/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
 			summary: "Where one of your own positions stands: the steps the process working on it is sitting on right now, by the names its model gives them. Gated on owning the order rather than on a role — somebody else's order answers 404, because whether it exists is not something this confirms — and it carries no process variable, because the caller already knows their own order and this says where, not what. A position nothing is running for answers state \"none\"", tag: "Order", role: RoleUser,
@@ -1727,6 +1727,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/orders/{id}/next", s.orders.HandleNext, apiOp{
 			summary: "Which of an order's lines may be started now, each with the process that provisions it and the variant chosen: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
 			resp: jsonBody("Lines ready to start", tArray())}},
+		{"GET", "/api/v1/orders/{id}/round", s.orders.HandleRound, apiOp{
+			summary: "What the fulfilment orchestration decides its next step on, from one read of the order: ready, the lines that may start now exactly as /next answers them, and outstanding, the positions still running whose outcome will be reported. Nothing ready and nothing outstanding is the one answer on which the orchestration ends", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Ready lines and outstanding positions", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}", s.orders.HandleReport, apiOp{
 			summary: "Record one line's provisioning outcome (done, skipped, failed or running) and propagate what it stopped", tag: "Order", role: RoleOperator,
 			req: jsonBody("Outcome", schemaObj(map[string]any{

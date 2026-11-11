@@ -106,6 +106,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_orders":         "GET /api/v1/orders",
 	"atlas_get_order":           "GET /api/v1/orders/{id}",
 	"atlas_order_ready_lines":   "GET /api/v1/orders/{id}/next",
+	"atlas_order_round":         "GET /api/v1/orders/{id}/round",
 	"atlas_shop_tasks":          "GET /api/v1/shop/tasks",
 	"atlas_order_line_progress": "GET /api/v1/shop/orders/{id}/lines/{position}/progress",
 	"atlas_cancel_order":        "POST /api/v1/orders/{id}/cancel",
