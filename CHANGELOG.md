@@ -280,6 +280,14 @@ _Changed_ / _Removed_ for each version.
   view, `POST /api/v1/workers/breakers/close` and `atlas_close_breaker` name it as `endpoint`. A
   worker reports a refused request with `"rejected": true` on the fail call (`workersdk.Rejected`);
   a worker that does not send it is counted as before (ADR-0340, amended 2026-11-11).
+- **The examples address a position with a variant correctly.** A product with variants names
+  its position `<product>#<variant>` (ADR-0384), and the examples put that id into the address
+  of their calls to Atlas unencoded. The `#` turned the rest of the address into a fragment, so
+  reporting `done`, refusing through `…/decision` and returning reached the wrong route and were
+  answered 400; a transfer in `examples/informationstransfer` (every one has a variant) could
+  neither finish nor be refused. All 93 such addresses in `ad-dienste`, `informationstransfer`,
+  `lizenzmanagement`, `m365-dienste` and `verwaltung-dienstleistungen` now encode it, as the
+  shop's fulfilment process does, and a test keeps them so.
 - **The fulfilment repair no longer starts orchestrations that can do nothing.** An order whose
   lines failed stays open, with nothing ready and no outcome coming. `POST
   /api/v1/orders/fulfilment/repair` started an orchestration for it on every run, which asked,

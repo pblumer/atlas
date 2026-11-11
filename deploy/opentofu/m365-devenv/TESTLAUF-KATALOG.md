@@ -283,7 +283,7 @@ Management), genehmigt von Carla (`GRUPPE_IDENTITY_MANAGEMENT`).
 |---|---|---|---|---|
 | T0 | Anna | `ad-externes-konto` `HW<RUN> Erika Extern` (Max genehmigt als Vorgesetzter des Sponsors), drei `ad-testkonto` `HW<RUN>-T1`, `HW<RUN>-T2`, `HW<RUN>-T3` mit Ablaufdatum in 30 Tagen; Initialpasswörter wie in E2, nie im Protokoll | vier Konten unter der Test-OU, in `atlas_shop_form_query` des Feldes `quelle` von `it-informationstransfer` auffindbar | Zusammenspiel der Kataloge |
 | T0b | Anna | G16 Gruppe: `mitglied` Erika Extern | Erika ist Mitglied von `HW<RUN> Projekte` | Vorbereitung |
-| T1 | Anna, Carla | Variante `internalisierung`: Quelle Erika Extern, Ziel T1; `optRechte`, `optKuerzel`, `optTelefon` = ja, alle anderen nein; Carla genehmigt | Genehmigung zeigt die Hinweise der Regel; T1 ist Mitglied von `HW<RUN> Projekte`; Kürzel auf T1; Aufgabe «Telefonie» an `M365-Telefonie`, Carla erledigt sie; Quelle trägt «Ressourcen transferiert»; Position `done`, danach selbst zurückgegeben | Szenario, Aufgabe ohne Worker |
+| T1 | Anna, Carla | Variante `internalisierung`: Quelle Erika Extern, Ziel T1; `optRechte` und `optKuerzel` = ja, alle anderen nein; Carla genehmigt | Genehmigung zeigt die Hinweise der Regel; T1 ist Mitglied von `HW<RUN> Projekte`; Kürzel auf T1; Quelle trägt «Ressourcen transferiert»; Position `done`, danach selbst zurückgegeben | Szenario |
 | T2 | Anna, Carla | Variante `externalisierung`: Quelle T2, Ziel Erika Extern, `optRechte` = ja | wie T1 für die Rechte, ohne Telefonie-Aufgabe | Szenario |
 | T3 | Anna, Carla | Variante `amtswechsel`: Quelle T3, Ziel T1, `optKuerzel` = ja | Kürzel übertragen, Quelle vermerkt | Szenario |
 | T4 | Anna, Carla | Variante `abteilungswechsel` (früher M1): Quelle T1, Ziel T2, `optRechte` = ja | Rechte von T1 auf T2, Quelle vermerkt; `ENTRA_TRANSFER` bleibt aus | Szenario |
@@ -328,7 +328,7 @@ Nicht Teil eines echten Hochlaufs, aber Pflicht im Test: Die Umgebung ist danach
 | Active Directory | G16, A8–A10 |
 | Exchange und SharePoint Server (On-Premises) | G15, G17 |
 | Atlas hub: Applikation installieren | H1–H5 |
-| Informationstransfer: vier Szenarien, Regel, Genehmigung und Ablehnung, Aufgabe ohne Worker | T0–T5, R1–R5 |
+| Informationstransfer: vier Szenarien, Regel, Genehmigung und Ablehnung | T0–T5, R1–R5 |
 | Rückgabe und Abhängigkeiten | M7, M8, Z2 |
 
 ## Protokoll
@@ -370,5 +370,10 @@ ein Unternehmen einführt, kann sie als Leitfaden nehmen:
 - Informationstransfer: Die Transferkonten haben kein Postfach, darum prüft der Lauf Adresse,
   Inhalt und Kontingent nur als Ablehnung der Regel. Den Entra-Transfer und die Freigabe der
   Informationssicherheit prüft er nicht (`ENTRA_TRANSFER` bleibt `aus`, kein Entra Connect).
+  Auch die Telefonnummer nicht: Der Teilprozess ruft zuerst Teams Phone auf und gibt erst danach
+  der Telefonie eine Aufgabe. Ohne Teams-Phone-Worker wartet der Job ohne Incident, und der
+  Transfer bleibt stehen.
+- Gasteinladungen (A7) lehnt dieser Tenant ab, solange er nur ein Testabonnement hat
+  (Graph 403 «Guest invitations not allowed for your company»); A7 scheitert darum hier.
 - Ein Lauf braucht je nach Exchange-Antwortzeiten drei bis fünf Stunden. Die VMs fahren um
   22:00 UTC herunter; ein Lauf sollte bis 16:00 UTC begonnen haben.

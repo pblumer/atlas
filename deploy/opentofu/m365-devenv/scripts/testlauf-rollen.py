@@ -13,8 +13,10 @@ Atlas group memberships of the four test persons to the roles of the test run:
                   AD, identity, mainframe and licence management
   Max Vorgesetzt  manager of the three (Entra manager): the M365 audiences, Lizenz-Chef
 
-Only these four persons' memberships change; the administrator and anybody else keep
-theirs. A group that does not exist is reported and skipped. Re-run it after every run of
+Every other account with the environment's prefix (tofu output shared_tenant) is an
+employee who entered through the HR event and was mirrored from Entra: it gets the M365
+audiences and nothing else, so an installer run after the mirroring does not make the
+staff approvers. The administrator and accounts without the prefix keep theirs. A group that does not exist is reported and skipped. Re-run it after every run of
 an installer. It changes nothing in Azure or in the tenant: Atlas groups only.
 """
 import argparse
@@ -63,11 +65,19 @@ def main():
     _, users = atlas.call("GET", "/api/v1/users")
     users = m365.items(users, "users")
     person = {}
+    roles = dict(ROLES)
     for key in ROLES:
         hit = [u for u in users if u.get("username", "").endswith("-" + key)]
         if len(hit) != 1:
             sys.exit(f"test person {key}: {len(hit)} Atlas accounts match; sign in once, or check the names")
         person[key] = hit[0]["id"]
+    prefix = ((m365.tofu_output(tofu_dir, "shared_tenant") or {}).get("prefix") or "")
+    if prefix:
+        for u in users:
+            name = u.get("username", "")
+            if name.startswith(prefix + "-") and u["id"] not in person.values():
+                key = name[len(prefix) + 1:]
+                person[key], roles[key] = u["id"], AUDIENCES_M365
 
     _, groups = atlas.call("GET", "/api/v1/groups")
     groups = {g["name"]: g for g in m365.items(groups, "groups")}
@@ -79,7 +89,7 @@ def main():
             continue
         members = set(g.get("members") or [])
         for key, uid in person.items():
-            want = name in ROLES[key]
+            want = name in roles[key]
             if want and uid not in members:
                 verb, method = "joins", "PUT"
             elif not want and uid in members:
