@@ -2068,7 +2068,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			// A map has no order and start variables are written in the order given,
 			// so sort: the same order must produce the same log, live and on replay.
 			sort.Slice(start, func(i, j int) bool { return start[i].Name < start[j].Name })
-			s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			if message == order.AdvancedMessage {
+				s.do(func() { s.publishOrderAdvanced(orderID, start...) })
+			} else {
+				s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			}
 			return s.drive()
 		},
 		// The notification's link is built on the operator's configured origin and

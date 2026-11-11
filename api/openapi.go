@@ -1723,6 +1723,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/orders/{id}/next", s.orders.HandleNext, apiOp{
 			summary: "Which of an order's lines may be started now, each with the process that provisions it and the variant chosen: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
 			resp: jsonBody("Lines ready to start", tArray())}},
+		{"GET", "/api/v1/orders/{id}/round", s.orders.HandleRound, apiOp{
+			summary: "What the fulfilment orchestration decides its next step on, from one read of the order: ready, the lines that may start now exactly as /next answers them, and outstanding, the positions still running whose outcome will be reported. Nothing ready and nothing outstanding is the one answer on which the orchestration ends", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Ready lines and outstanding positions", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}", s.orders.HandleReport, apiOp{
 			summary: "Record one line's provisioning outcome (done, skipped, failed or running) and propagate what it stopped", tag: "Order", role: RoleOperator,
 			req: jsonBody("Outcome", schemaObj(map[string]any{
