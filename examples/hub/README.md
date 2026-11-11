@@ -30,6 +30,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `mitarbeitereintritt` | Lehrgang: Mitarbeitereintritt | the handbook's guiding case |
 | `onboarding-tutorial` | Onboarding | the handbook's end-to-end tutorial |
 | `terminbuchung` | Beispiel: Terminbuchung | an appointment booked into a calendar through a public wizard; needs a calendar Worker, the mock will do |
+| `monatsbericht` | Beispiel: Monatsbericht | Atlas's own figures as a snapshot report to a distribution list, with a deadline and an adjusted list; needs an Atlas report Worker |
 | `verwaltung-dienstleistungen` | Beispiel: Dienstleistungen der Verwaltung | shop package with two catalogues |
 | `m365-dienste` | Beispiel: Microsoft-365-Dienste | shop package |
 | `ad-dienste` | Beispiel: Active-Directory-Dienste | shop package |

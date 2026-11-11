@@ -219,48 +219,178 @@
     </sequenceFlow>
     <sequenceFlow id="f_nachfassen" name="erneut zustellen" sourceRef="gw_abschliessen" targetRef="gw_runde"/>
   </process>
-  <bpmndi:BPMNDiagram id="diagram">
-    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_monatsbericht">
-      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="100" y="182" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="instanzen_lesen_di" bpmnElement="instanzen_lesen"><dc:Bounds x="180" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="incidents_lesen_di" bpmnElement="incidents_lesen"><dc:Bounds x="320" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_runde_di" bpmnElement="gw_runde"><dc:Bounds x="465" y="175" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="verteiler_lesen_di" bpmnElement="verteiler_lesen"><dc:Bounds x="560" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="zustellen_di" bpmnElement="zustellen" isExpanded="true"><dc:Bounds x="710" y="90" width="520" height="260"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="z_start_di" bpmnElement="z_start"><dc:Bounds x="740" y="182" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="lesen_di" bpmnElement="lesen"><dc:Bounds x="810" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="frist_di" bpmnElement="frist"><dc:Bounds x="842" y="222" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="quittung_gelesen_di" bpmnElement="quittung_gelesen"><dc:Bounds x="960" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="quittung_offen_di" bpmnElement="quittung_offen"><dc:Bounds x="960" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="z_gelesen_di" bpmnElement="z_gelesen"><dc:Bounds x="1110" y="182" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="z_offen_di" bpmnElement="z_offen"><dc:Bounds x="1110" y="282" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="nicht_gelesene_di" bpmnElement="nicht_gelesene"><dc:Bounds x="1280" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_alle_di" bpmnElement="gw_alle"><dc:Bounds x="1425" y="175" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ende_alle_di" bpmnElement="ende_alle"><dc:Bounds x="1530" y="182" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="hinweis_di" bpmnElement="hinweis"><dc:Bounds x="1400" y="420" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="vorschlag_di" bpmnElement="vorschlag"><dc:Bounds x="1250" y="420" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="anpassen_di" bpmnElement="anpassen"><dc:Bounds x="1100" y="420" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_abschliessen_di" bpmnElement="gw_abschliessen"><dc:Bounds x="975" y="435" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ende_abgeschlossen_di" bpmnElement="ende_abgeschlossen"><dc:Bounds x="982" y="560" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start"><di:waypoint x="136" y="200"/><di:waypoint x="180" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_instanzen_di" bpmnElement="f_instanzen"><di:waypoint x="280" y="200"/><di:waypoint x="320" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_incidents_di" bpmnElement="f_incidents"><di:waypoint x="420" y="200"/><di:waypoint x="465" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_runde_di" bpmnElement="f_runde"><di:waypoint x="515" y="200"/><di:waypoint x="560" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_verteiler_di" bpmnElement="f_verteiler"><di:waypoint x="660" y="200"/><di:waypoint x="710" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_z1_di" bpmnElement="f_z1"><di:waypoint x="776" y="200"/><di:waypoint x="810" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_z2_di" bpmnElement="f_z2"><di:waypoint x="910" y="200"/><di:waypoint x="960" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_z3_di" bpmnElement="f_z3"><di:waypoint x="860" y="258"/><di:waypoint x="860" y="300"/><di:waypoint x="960" y="300"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_z4_di" bpmnElement="f_z4"><di:waypoint x="1060" y="200"/><di:waypoint x="1110" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_z5_di" bpmnElement="f_z5"><di:waypoint x="1060" y="300"/><di:waypoint x="1110" y="300"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_zugestellt_di" bpmnElement="f_zugestellt"><di:waypoint x="1230" y="200"/><di:waypoint x="1280" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_ausgewertet_di" bpmnElement="f_ausgewertet"><di:waypoint x="1380" y="200"/><di:waypoint x="1425" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_alle_di" bpmnElement="f_alle"><di:waypoint x="1475" y="200"/><di:waypoint x="1530" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_nachverfolgen_di" bpmnElement="f_nachverfolgen"><di:waypoint x="1450" y="225"/><di:waypoint x="1450" y="420"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_hinweis_di" bpmnElement="f_hinweis"><di:waypoint x="1400" y="460"/><di:waypoint x="1350" y="460"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_vorschlag_di" bpmnElement="f_vorschlag"><di:waypoint x="1250" y="460"/><di:waypoint x="1200" y="460"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_angepasst_di" bpmnElement="f_angepasst"><di:waypoint x="1100" y="460"/><di:waypoint x="1025" y="460"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_abschliessen_di" bpmnElement="f_abschliessen"><di:waypoint x="1000" y="485"/><di:waypoint x="1000" y="560"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_nachfassen_di" bpmnElement="f_nachfassen"><di:waypoint x="975" y="460"/><di:waypoint x="490" y="460"/><di:waypoint x="490" y="225"/></bpmndi:BPMNEdge>
+  
+
+  <bpmndi:BPMNDiagram xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" id="BPMNDiagram_atlas">
+    <bpmndi:BPMNPlane id="BPMNPlane_atlas" bpmnElement="proc_monatsbericht">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="150" y="313" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="123" y="355" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_alle_di" bpmnElement="ende_alle">
+        <omgdc:Bounds x="1600" y="90" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1573" y="132" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_abgeschlossen_di" bpmnElement="ende_abgeschlossen">
+        <omgdc:Bounds x="2118" y="313" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="2160" y="317" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="instanzen_lesen_di" bpmnElement="instanzen_lesen">
+        <omgdc:Bounds x="236" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="incidents_lesen_di" bpmnElement="incidents_lesen">
+        <omgdc:Bounds x="386" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verteiler_lesen_di" bpmnElement="verteiler_lesen">
+        <omgdc:Bounds x="636" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="nicht_gelesene_di" bpmnElement="nicht_gelesene">
+        <omgdc:Bounds x="1318" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="hinweis_di" bpmnElement="hinweis">
+        <omgdc:Bounds x="1568" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="vorschlag_di" bpmnElement="vorschlag">
+        <omgdc:Bounds x="1718" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anpassen_di" bpmnElement="anpassen">
+        <omgdc:Bounds x="1868" y="291" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_runde_di" bpmnElement="gw_runde">
+        <omgdc:Bounds x="536" y="306" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="516" y="362" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_alle_di" bpmnElement="gw_alle">
+        <omgdc:Bounds x="1468" y="306" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1448" y="362" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_abschliessen_di" bpmnElement="gw_abschliessen">
+        <omgdc:Bounds x="2018" y="306" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1998" y="362" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zustellen_di" bpmnElement="zustellen" isExpanded="true">
+        <omgdc:Bounds x="786" y="186" width="482" height="290"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="z_start_di" bpmnElement="z_start">
+        <omgdc:Bounds x="816" y="388" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="z_gelesen_di" bpmnElement="z_gelesen">
+        <omgdc:Bounds x="1202" y="388" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1175" y="430" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="z_offen_di" bpmnElement="z_offen">
+        <omgdc:Bounds x="1202" y="248" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1175" y="290" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="quittung_gelesen_di" bpmnElement="quittung_gelesen">
+        <omgdc:Bounds x="1052" y="366" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="quittung_offen_di" bpmnElement="quittung_offen">
+        <omgdc:Bounds x="1052" y="226" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lesen_di" bpmnElement="lesen">
+        <omgdc:Bounds x="902" y="366" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="frist_di" bpmnElement="frist">
+        <omgdc:Bounds x="934" y="348" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="864" y="330" width="66" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_z1_di" bpmnElement="f_z1">
+        <omgdi:waypoint x="852" y="406"/>
+        <omgdi:waypoint x="902" y="406"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z2_di" bpmnElement="f_z2">
+        <omgdi:waypoint x="1002" y="406"/>
+        <omgdi:waypoint x="1052" y="406"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z3_di" bpmnElement="f_z3">
+        <omgdi:waypoint x="952" y="348"/>
+        <omgdi:waypoint x="952" y="266"/>
+        <omgdi:waypoint x="1052" y="266"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z4_di" bpmnElement="f_z4">
+        <omgdi:waypoint x="1152" y="406"/>
+        <omgdi:waypoint x="1202" y="406"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z5_di" bpmnElement="f_z5">
+        <omgdi:waypoint x="1152" y="266"/>
+        <omgdi:waypoint x="1202" y="266"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start">
+        <omgdi:waypoint x="186" y="331"/>
+        <omgdi:waypoint x="236" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_instanzen_di" bpmnElement="f_instanzen">
+        <omgdi:waypoint x="336" y="331"/>
+        <omgdi:waypoint x="386" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_incidents_di" bpmnElement="f_incidents">
+        <omgdi:waypoint x="486" y="331"/>
+        <omgdi:waypoint x="536" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_runde_di" bpmnElement="f_runde">
+        <omgdi:waypoint x="586" y="331"/>
+        <omgdi:waypoint x="636" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_verteiler_di" bpmnElement="f_verteiler">
+        <omgdi:waypoint x="736" y="331"/>
+        <omgdi:waypoint x="786" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_zugestellt_di" bpmnElement="f_zugestellt">
+        <omgdi:waypoint x="1268" y="331"/>
+        <omgdi:waypoint x="1318" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ausgewertet_di" bpmnElement="f_ausgewertet">
+        <omgdi:waypoint x="1418" y="331"/>
+        <omgdi:waypoint x="1468" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_alle_di" bpmnElement="f_alle">
+        <omgdi:waypoint x="1493" y="306"/>
+        <omgdi:waypoint x="1493" y="108"/>
+        <omgdi:waypoint x="1600" y="108"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1497" y="200" width="66" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nachverfolgen_di" bpmnElement="f_nachverfolgen">
+        <omgdi:waypoint x="1518" y="331"/>
+        <omgdi:waypoint x="1568" y="331"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1525" y="299" width="36" height="28"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_hinweis_di" bpmnElement="f_hinweis">
+        <omgdi:waypoint x="1668" y="331"/>
+        <omgdi:waypoint x="1718" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_vorschlag_di" bpmnElement="f_vorschlag">
+        <omgdi:waypoint x="1818" y="331"/>
+        <omgdi:waypoint x="1868" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_angepasst_di" bpmnElement="f_angepasst">
+        <omgdi:waypoint x="1968" y="331"/>
+        <omgdi:waypoint x="2018" y="331"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abschliessen_di" bpmnElement="f_abschliessen">
+        <omgdi:waypoint x="2068" y="331"/>
+        <omgdi:waypoint x="2118" y="331"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="2075" y="299" width="36" height="28"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nachfassen_di" bpmnElement="f_nachfassen">
+        <omgdi:waypoint x="2068" y="331"/>
+        <omgdi:waypoint x="2093" y="331"/>
+        <omgdi:waypoint x="2093" y="536"/>
+        <omgdi:waypoint x="511" y="536"/>
+        <omgdi:waypoint x="511" y="331"/>
+        <omgdi:waypoint x="536" y="331"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="2097" y="426" width="88" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

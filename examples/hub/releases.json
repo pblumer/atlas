@@ -339,6 +339,12 @@
       "version": "1.0.1",
       "digest": "sha256:0a76abc5e38a26a8894ca9d33f559378a8177795a9f8fe01cebf6a5b1bfb46e0",
       "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "monatsbericht",
+      "version": "1.0.0",
+      "digest": "sha256:10e81d8ac525e79d859ca83b4e33979f0c06bb7916569d4e4fad4cca3bc2cae3",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }
