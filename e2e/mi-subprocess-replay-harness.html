@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas multi-instance subprocess replay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`, for
+         the token row under the diagram while a multi-instance subprocess runs: the
+         subprocess holds its body's token and one per iteration, and every iteration walks
+         its own token through the inner task (ADR-0077). bpmn assets are the production
+         ones, served at root. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000; // fixed wall-clock (ms) so timestamps are deterministic
+      const ns = (ms) => ms * 1e6;
+
+      // Start, a parallel multi-instance subprocess around one user task, a task after
+      // it and Ende — the shape of the model whose replay this covers.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_misub" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="misub" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:subProcess id="Korrigieren_1" name="Datensatz korrigieren">
+      <bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false"><bpmn:loopCardinality>3</bpmn:loopCardinality></bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="SubStart_1"><bpmn:outgoing>s_0</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:userTask id="Bearbeiten_1" name="Datensatz bearbeiten"><bpmn:incoming>s_0</bpmn:incoming><bpmn:outgoing>s_1</bpmn:outgoing></bpmn:userTask>
+      <bpmn:endEvent id="SubEnd_1"><bpmn:incoming>s_1</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="s_0" sourceRef="SubStart_1" targetRef="Bearbeiten_1"/>
+      <bpmn:sequenceFlow id="s_1" sourceRef="Bearbeiten_1" targetRef="SubEnd_1"/>
+    </bpmn:subProcess>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Korrigieren_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Korrigieren_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="misub">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="100" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Korrigieren_1_di" bpmnElement="Korrigieren_1" isExpanded="true"><dc:Bounds x="190" y="100" width="400" height="200"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="SubStart_1_di" bpmnElement="SubStart_1"><dc:Bounds x="220" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Bearbeiten_1_di" bpmnElement="Bearbeiten_1"><dc:Bounds x="320" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="SubEnd_1_di" bpmnElement="SubEnd_1"><dc:Bounds x="500" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="650" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="136" y="200"/><di:waypoint x="190" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="s_0_di" bpmnElement="s_0"><di:waypoint x="256" y="200"/><di:waypoint x="320" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="s_1_di" bpmnElement="s_1"><di:waypoint x="420" y="200"/><di:waypoint x="500" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="590" y="200"/><di:waypoint x="650" y="200"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const LOOP = { kind: "multi-instance", collection: "3" };
+      const step = (elementId, key, type, position, tokenId, extra) =>
+        ({ elementId, elementInstanceKey: key, type, position, tokenId, ...extra });
+      const steps = [
+        step("Start_1", "1000", "bpmn:startEvent", 1, "1"),
+        step("Korrigieren_1", "1001", "bpmn:subProcess", 2, "1", { loop: { ...LOOP, rounds: 3 } }),
+        ...[1, 2, 3].map((n) => step("Korrigieren_1", String(1001 + n), "bpmn:subProcess", 2 + n, String(1 + n),
+          { parentTokenId: "1", iteration: n, loop: { ...LOOP, round: n } })),
+        // The iterations run interleaved, as a parallel body does: every inner start
+        // first, then every inner task. inIteration is what the server says each inner
+        // step ran inside; the inner start's token has no lineage to say it.
+        ...[1, 2, 3].map((n) => step("SubStart_1", String(1010 + n), "bpmn:startEvent", 5 + n, String(4 + n),
+          { inIteration: String(1001 + n), done: true })),
+        ...[1, 2, 3].map((n) => step("Bearbeiten_1", String(1020 + n), "bpmn:userTask", 8 + n, String(4 + n),
+          { inIteration: String(1001 + n) })),
+      ].map(({ done, ...s }, i) => ({ ...s, at: ns(T + i * 1000), endAt: done || s.elementId === "Start_1" ? ns(T + i * 1000 + 500) : 0, variables: [] }));
+
+      const on = (elementId, tokenId) => ({ elementId, tokenId: String(tokenId), state: "active" });
+      // Frame 2 is the crowded one the token row has to keep short: the subprocess holds
+      // its body and three iterations, and each iteration waits on the inner task. Frame 1
+      // has the iterations running but only one of them already on the inner task.
+      const frames = [
+        { position: 9, at: ns(T + 8000), tokens: [on("Korrigieren_1", 1), on("Korrigieren_1", 2), on("Korrigieren_1", 3),
+          on("Korrigieren_1", 4), on("Bearbeiten_1", 5), on("SubStart_1", 6), on("SubStart_1", 7)] },
+        { position: 11, at: ns(T + 10000), tokens: [on("Korrigieren_1", 1), on("Korrigieren_1", 2), on("Korrigieren_1", 3),
+          on("Korrigieren_1", 4), on("Bearbeiten_1", 5), on("Bearbeiten_1", 6), on("Bearbeiten_1", 7)] },
+      ];
+
+      const TIMELINE = { processDefKey: "7", processId: "misub", version: 1, state: "active", steps, frames };
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
+        return {};
+      };
+
+      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

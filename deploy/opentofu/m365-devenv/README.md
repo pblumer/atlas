@@ -263,7 +263,7 @@ gesetzt wird nichts. Nach `tofu apply` (alle `enable_*` wie gewünscht):
 python3 scripts/install-m365-dienste.py --site-inventory <host>:/sites/<test-site>
 python3 scripts/install-lizenzmanagement.py
 python3 scripts/install-ad-dienste.py         # mit enable_ad_dc
-python3 scripts/install-informationstransfer.py
+python3 scripts/install-informationstransfer.py   # ausser vor einem Testlauf: der installiert ihn aus dem hub
 python3 scripts/install-verzeichnisabgleich.py   # Trockenlauf; --apply erst nach dem Bericht
 python3 scripts/testlauf-rollen.py            # nach jedem Installationsskript
 ./scripts/mssql-testdb.sh                     # mit enable_sharepoint_server
@@ -475,7 +475,15 @@ Berechtigungen kopiert:
 ```bash
 python3 scripts/install-informationstransfer.py --cafile out/caddy-root.crt
 python3 scripts/install-informationstransfer.py --dry-run   # nur anpassen und zeigen, was hochginge
+python3 scripts/install-informationstransfer.py --nach-hub  # nach dem Import aus dem atlas hub
 ```
+
+Mit `--nach-hub` ist die Applikation schon aus dem atlas hub importiert (Console, «atlas hub»,
+oder `atlas_hub_import_release`, wie im Testlauf, `TESTLAUF-KATALOG.md`, Phase 0). Das Skript
+lädt dann kein Paket hoch: Es veröffentlicht die Applikation, importiert den Katalog mit seiner
+Zielgruppe und setzt Konstanten, Gruppen und die Formularsuche wie unten. Ein Import aus dem hub
+tut beides nicht selbst. Alle Konstanten der Prozesse sind an die Applikation gebunden, darum
+reichen die gesetzten Werte; die Rückfallwerte im Paket bleiben die des Beispiels.
 
 | Option | Vorgabe | Wirkung |
 |---|---|---|
@@ -483,6 +491,7 @@ python3 scripts/install-informationstransfer.py --dry-run   # nur anpassen und z
 | `--test-ou` | `tofu output -json ad_test_ou` | `AD_PERSONEN_OU`; `AD_GRUPPEN_OU` ist `OU=Gruppen,OU=Atlas,<Test-OU>` |
 | `--postfach` | `exchange-server`, wenn `exchange_onprem` gebaut ist, sonst `exchange-online` | `POSTFACH_SYSTEM` |
 | `--dry-run` | – | passt das Paket an und gibt Dateien, Konstanten und Gruppen aus; meldet sich nirgends an |
+| `--nach-hub` | – | die Applikation kommt aus dem atlas hub: kein Upload, nur Veröffentlichen, Katalog, Konstanten, Gruppen, Formularsuche |
 | `--tofu-dir`, `--example` | dieses Verzeichnis, `examples/informationstransfer` | woher die Ausgaben und das Paket kommen |
 
 Es legt die Atlas-Gruppen `Identity Management` (Zielgruppe und Genehmigung),

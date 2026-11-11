@@ -159,7 +159,7 @@ test("cancelled operator confirmation never downloads or imports", async ({ page
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
 });
 
-test("explicit confirmation and matching digest reuses existing dry-run and import", async ({ page }) => {
+test("explicit confirmation and matching digest installs through the server's hub import, dry run first", async ({ page }) => {
   const requests = await stubRegistry(page);
   await page.evaluate(() => window.__open());
   await page.locator('[data-preview="0"]').click();
@@ -171,10 +171,12 @@ test("explicit confirmation and matching digest reuses existing dry-run and impo
   expect(downloaded).toHaveLength(1);
   expect(downloaded[0].ifMatch).toBe('"' + digest + '"');
   const calls = await page.evaluate(() => window.__calls);
-  expect(calls.map((x) => x.path)).toEqual([
-    "/api/v1/applications/source?dryRun=true",
-    "/api/v1/applications/source",
-  ]);
+  // The application is installed by the server, which fetches the release again,
+  // holds it to the previewed digest and records where it came from (ADR-0499 g):
+  // no package bytes are uploaded back.
+  const hubImport = "/api/v1/blueprints/org.example.purchase/releases/1.0.0/import?digest=" + encodeURIComponent(digest);
+  expect(calls.map((x) => x.path)).toEqual([hubImport + "&dryRun=true", hubImport]);
+  expect(calls.every((x) => x.method === "POST" && x.body === undefined)).toBe(true);
   expect(await page.evaluate(() => window.__reloads)).toBe(1);
   await expect(page.locator(".modal-ov")).toHaveCount(0);
 });

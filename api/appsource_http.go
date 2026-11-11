@@ -194,7 +194,7 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	status, body := s.importSourceFiles(r, files, decide)
+	status, body := s.importSourceFiles(r, files, decide, nil)
 	httpapi.JSON(w, status, body)
 }
 
@@ -204,7 +204,11 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 // same way whichever way it arrived. It answers the status and the body to write —
 // the import result, or the error envelope ({"error"}, with "undecided" and "plan"
 // when a changed artifact needs a decision).
-func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide importplan.Decisions) (int, any) {
+//
+// journal, when not nil, records where the tree came from (the hub import's): its
+// pending record is written in the same run-loop turn before anything else, and
+// replaced by the outcome before the turn ends. A dry run records nothing.
+func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide importplan.Decisions, journal *hubJournal) (int, any) {
 	fail := func(status int, msg string) (int, any) { return status, map[string]any{"error": msg} }
 	man, byPath, err := parseSourceTree(files)
 	if err != nil {
@@ -251,10 +255,22 @@ func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide i
 		caller.ownerID = p.UserID
 	}
 	var (
-		res      sourceImportResult
-		applyErr error
+		res        sourceImportResult
+		applyErr   error
+		journalErr error
+		begun      bool
 	)
+	if journal != nil {
+		journal.rec.ApplicationKey = man.Key // the key the import writes, whatever the package's index said
+	}
 	s.do(func() {
+		if journal != nil && !decide.DryRun {
+			if journalErr = journal.begin(); journalErr != nil {
+				return
+			}
+			begun = true
+			defer func() { journalErr = journal.end(res, hubOutcomeOf(applyErr)) }()
+		}
 		res, applyErr = s.applySourceTree(man, byPath, caller, decide)
 		answer := func(plan *sourceImportResult) {
 			plan.Needs = s.answerNeedsOnLoop(plan.ApplicationID, needs, pendingConstants(*plan, offered))
@@ -274,6 +290,14 @@ func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide i
 		undecided sourceUndecided
 	)
 	switch {
+	case journalErr != nil && !begun:
+		return fail(http.StatusInternalServerError, journalErr.Error()+"; nothing was imported")
+	case journalErr != nil && applyErr == nil:
+		// The import is in, its record is not: a repeat of the same import changes
+		// nothing else and writes the record.
+		return fail(http.StatusInternalServerError, "the application was imported, but its atlas hub installation record was not written; import it again: "+journalErr.Error())
+	case journalErr != nil:
+		return fail(http.StatusInternalServerError, "the import stopped, and the earlier atlas hub installation record could not be restored: "+journalErr.Error())
 	case errors.As(applyErr, &refusal):
 		return fail(refusal.status, refusal.msg)
 	case errors.As(applyErr, &undecided):
@@ -284,6 +308,24 @@ func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide i
 		return fail(http.StatusInternalServerError, "import source: "+applyErr.Error())
 	default:
 		return http.StatusOK, res
+	}
+}
+
+// hubOutcomeOf says what an import's error means for its hub record: none is a
+// finished import; a refusal or an undecided change come before the importer writes
+// anything (applySourceTree); anything else may have come after.
+func hubOutcomeOf(applyErr error) hubOutcome {
+	var (
+		refusal   sourceRefusal
+		undecided sourceUndecided
+	)
+	switch {
+	case applyErr == nil:
+		return hubFinished
+	case errors.As(applyErr, &refusal), errors.As(applyErr, &undecided):
+		return hubStopped
+	default:
+		return hubUnknown
 	}
 }
 

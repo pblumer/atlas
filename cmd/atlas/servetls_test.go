@@ -236,7 +236,8 @@ func serveBehindForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsCon
 		logging.FormatText, logging.DefaultLevel, tracing.Config{}, superviseFlag{}, nil, nil,
 		api.DefaultSupervisedWorkerMaxJobs,
 		true, // inProcessConnectors: no worker subprocesses out of a test binary
-		"", api.HistoryScopeAll, "", limits.Default(), false)
+		"", api.HistoryScopeAll, "", limits.Default(), false,
+		api.DefaultFullReplayMaxIterations)
 }
 
 // freeAddr picks a loopback address nothing is listening on. --addr cannot be port

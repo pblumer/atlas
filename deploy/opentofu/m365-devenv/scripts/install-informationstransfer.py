@@ -2,7 +2,15 @@
 """Installs examples/informationstransfer into the Atlas server of this environment, ready to order.
 
     python3 scripts/install-informationstransfer.py --cafile out/caddy-root.crt
+    python3 scripts/install-informationstransfer.py --nach-hub --cafile out/caddy-root.crt
     python3 scripts/install-informationstransfer.py --dry-run [--test-ou OU=AtlasTest,DC=atlastest,DC=internal]
+
+With --nach-hub the application must already have been imported from the atlas hub (the
+Console's hub dialog, or atlas_hub_import_release as in TESTLAUF-KATALOG.md, Phase 0). Steps 3
+and the import of step 5 are then left out: the hub's package is installed as published, and
+every constant the processes read is bound to the application, so step 6 is what gives them
+this environment's values. A hub import neither publishes nor imports the catalogue; this does
+both, and the rest as below.
 
 Run from deploy/opentofu/m365-devenv after `tofu apply` (with enable_ad_dc) and
 scripts/wait-atlas.sh, ideally after install-ad-dienste.py (whose groups the transfer of access
@@ -113,7 +121,14 @@ def adapt(src, dst, constants):
         sys.exit("a contoso DN is left in what would be uploaded:\n  " + "\n  ".join(left))
 
 
-def install(atlas, pkg):
+def install(atlas, pkg, from_hub=False):
+    if from_hub:
+        _, apps = atlas.call("GET", "/api/v1/applications")
+        app = next((a for a in m365.items(apps, "applications") if a.get("key") == APP_KEY), None)
+        if not app:
+            sys.exit(f"--nach-hub: the application {APP_KEY} is not on this server; import it from the "
+                     "atlas hub first (Console, atlas hub, or atlas_hub_import_release)")
+        return publish_with_catalogue(atlas, pkg, app["id"], "imported from the atlas hub")
     for m in MODELS:
         atlas.call("POST", f"/api/v1/dmn-models?handle={m}", raw=open(os.path.join(pkg, m + ".dmn"), "rb").read(),
                    ctype="application/xml")
@@ -126,9 +141,12 @@ def install(atlas, pkg):
     tree = buf.getvalue()
     _, plan = atlas.call("POST", "/api/v1/applications/source?dryRun=true", raw=tree, ctype="application/gzip")
     _, res = atlas.call("POST", "/api/v1/applications/source" + m365.gap_decisions(plan), raw=tree, ctype="application/gzip")
-    app_id = res["applicationId"]
+    return publish_with_catalogue(atlas, pkg, res["applicationId"], "imported")
+
+
+def publish_with_catalogue(atlas, pkg, app_id, how):
     _, pub = atlas.call("POST", f"/api/v1/applications/{app_id}/publish", {"note": "install-informationstransfer.py"})
-    log(f"application {app_id} imported and published, release {(pub.get('release') or {}).get('version')}")
+    log(f"application {app_id} {how} and published, release {(pub.get('release') or {}).get('version')}")
 
     _, principals = atlas.call("GET", "/api/v1/principals")
     fragen = json.load(open(os.path.join(pkg, "fragen.json"), encoding="utf-8"))
@@ -157,6 +175,9 @@ def main():
     ap.add_argument("--postfach", choices=SYSTEMS,
                     help="POSTFACH_SYSTEM (default: exchange-server when exchange_onprem is built, else exchange-online)")
     ap.add_argument("--dry-run", action="store_true", help="adapt the package and print what would be uploaded; sign in nowhere")
+    ap.add_argument("--nach-hub", action="store_true",
+                    help="the application was imported from the atlas hub: publish it, import the catalogue, "
+                         "set constants, groups and the form search; upload no package")
     args = ap.parse_args()
     tofu_dir = os.path.abspath(args.tofu_dir)
 
@@ -211,7 +232,7 @@ def main():
                     atlas.call("PUT", f"/api/v1/groups/{have[name]}/members/{u['id']}")
                 log(f"{u['username']} joins the transfer groups")
 
-        app_id = install(atlas, pkg)
+        app_id = install(atlas, pkg, from_hub=args.nach_hub)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

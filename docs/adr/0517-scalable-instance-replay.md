@@ -306,6 +306,36 @@ acceptance fixture therefore uses a multi-instance script task.
 with a per-scope trigger index (ADR-0082 amendment): 50,000 subprocess
 iterations now complete in 76 s in the engine harness.
 
+*Amendment (classic replay nests a subprocess's iterations):* the classic replay
+(`/timeline`, below the bounded threshold) grouped a body's iterations by token
+lineage but listed every step *inside* an iteration of a multi-instance
+subprocess as a top-level row. That lineage cannot place them: the engine starts
+each iteration's inner start event with a fresh token and no parent token, so
+twelve parallel iterations produced twelve interleaved, indistinguishable
+`k_start`/`k_join` rows. The owner this projection already writes per hidden
+element (`cfOutlineHidden`, element → owning iteration) is that fact. The
+timeline now reads it back once per instance (`IterationOwners`, a read of
+existing rows, nothing new written in `applyToState`) and gives each step
+`inIteration`, the iteration it ran inside; an iteration itself and a step
+outside any iteration carry none. The history lays the steps out as a tree —
+body → iterations → their steps, nested bodies recursively — each level folded
+until opened, and an iteration row says how many steps it ran and where it is
+still waiting. A store whose iteration-step index is not proven complete yields
+no owners, so such a history keeps its flat rows rather than a partial nesting.
+
+*Amendment (the line is the operator's to lower):* the 500-iteration line where
+the replay hands over to the bounded view was a constant in the browser. An
+iteration of a multi-instance subprocess runs several steps, so a few hundred of
+them already make a full timeline of thousands of rows and frames well below it.
+`--replay-full-max-iterations` (`ATLAS_REPLAY_FULL_MAX_ITERATIONS`, Helm
+`atlas.replayFullMaxIterations`) sets it from 0 to 500, reported as
+`fullReplayMaxIterations` in `/api/v1/info`. It can only be lowered: 500 stays the
+ceiling for the reason above, the serve command refuses a value outside the range,
+the option clamps a programmatic one, and the browser holds any answer to it. The
+"more than four times the line across all bodies" rule moves with it. The decision
+remains the browser's, from one page of the bounded history; `/timeline` itself
+still answers any instance, as before.
+
 ## Pros and cons of the options
 
 ### Option 1

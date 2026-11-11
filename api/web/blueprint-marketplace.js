@@ -242,7 +242,14 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
           const file = new File([await res.blob()], "blueprint-" + inspected.version + ".tar.gz", {
             type: "application/gzip",
           });
-          const out = await importPackage(file, { call, title: t("blueprint.title") });
+          // The application itself is installed by the server's hub import, not from
+          // the bytes this page holds: the server fetches the release again, holds it
+          // to the previewed digest and records where the application came from. The
+          // package read here supplies the constants and catalogues beside it.
+          const out = await importPackage(file, {
+            call, title: t("blueprint.title"),
+            importSource: (query) => call("POST", pinned(inspected, "/import", query ? "&" + query : "")),
+          });
           if (out) {
             closeAfterImport();
             notify(t("blueprint.imported") + (packageSummary(out) ? " · " + packageSummary(out) : ""), "ok");

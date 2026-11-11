@@ -47,6 +47,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Multi-Instance Explorer from the grouped row. The token row under the diagram names a
   multi-instance activity holding several tokens once, with its count, instead of one chip
   per iteration.
+- **`mi-subprocess-replay.spec.mjs`** ([ADR-0517](../docs/adr/0517-scalable-instance-replay.md)):
+  a parallel multi-instance subprocess in the classic replay. The token row names the
+  subprocess and each inner element its iterations share once, with its count. The instance
+  history nests the iterations under the subprocess and each iteration's steps under it, by the
+  timeline's `inIteration`, in tree order rather than the interleaved log order; the playhead
+  on a folded step marks the outermost row holding it.
 - **`mi-explorer.spec.mjs`** ([OHS2](../docs/planning/operations-history-at-scale-program.md),
   [ADR-0517](../docs/adr/0517-scalable-instance-replay.md)): an instance with 50,000
   iterations opens without requesting `/timeline`, shows its loop as one collapsed group
@@ -61,6 +67,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and a failed read is shown as an error at its step. The harness computes each page from the
   iteration number, as the server's index does, instead of holding 50,000 rows.
 
+  The line where the replay switches to the bounded view is the server's
+  (`fullReplayMaxIterations` in `/api/v1/info`): a lowered line sends a 300-iteration
+  instance to the bounded view, zero sends every multi-instance instance there, and an
+  answer above the 500 ceiling is held to it.
 - **`migration-wiring.spec.mjs`** (ADR-0162): where the Operations surfaces open the
   batch migration, against the real console and a mocked server — the ⋯ menu of a process
   row (also after the list is redrawn), the live view's *Migrate instances…* button for the
@@ -116,8 +126,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   the atlas hub Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,
   performs no write on preview or cancellation, sends the reviewed `If-Match` digest
-  on download, and hands the package to the existing dry-run and authorized import
-  flow; mismatched digests and an absent registry fail closed.
+  on download, and installs the application through the server's hub import — dry run
+  first, then the import, both carrying the previewed digest and no package bytes, so the
+  server records where the application came from (ADR-0499 amendment g); mismatched digests
+  and an absent registry fail closed.
 
 - **`application-delete.spec.mjs`**
   ([ADR-0468](../docs/adr/0468-deleting-an-application-with-its-contents.md)):

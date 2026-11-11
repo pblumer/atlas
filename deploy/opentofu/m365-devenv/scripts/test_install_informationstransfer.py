@@ -55,3 +55,45 @@ class Rewrite(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeAtlas:
+    """Records the calls; answers just enough for install(..., from_hub=True)."""
+
+    def __init__(self, apps):
+        self.apps, self.calls = apps, []
+
+    def call(self, method, path, body=None, raw=None, ctype=None):
+        self.calls.append((method, path))
+        if path == "/api/v1/applications":
+            return 200, {"applications": self.apps}
+        if path.endswith("/publish"):
+            return 200, {"release": {"version": 1}}
+        if path == "/api/v1/principals":
+            return 200, {"principals": [{"id": "grp_im", "type": "group", "name": "Identity Management"}]}
+        return 200, {}
+
+
+class FromHub(unittest.TestCase):
+    """--nach-hub: the hub installed the package; the installer publishes it and imports the catalogue."""
+
+    def setUp(self):
+        self.work = tempfile.mkdtemp()
+        self.pkg = os.path.join(self.work, "informationstransfer")
+        it.adapt(EXAMPLE, self.pkg, it.constants_for(TEST_OU, "exchange-server", ""))
+
+    def tearDown(self):
+        shutil.rmtree(self.work, ignore_errors=True)
+
+    def test_it_uploads_no_package_and_publishes_the_imported_application(self):
+        atlas = FakeAtlas([{"id": "app1", "key": it.APP_KEY}])
+        self.assertEqual(it.install(atlas, self.pkg, from_hub=True), "app1")
+        paths = [p for _, p in atlas.calls]
+        self.assertNotIn("/api/v1/applications/source", [p.split("?")[0] for p in paths])
+        self.assertFalse(any(p.startswith("/api/v1/dmn-models") for p in paths))
+        self.assertIn("/api/v1/applications/app1/publish", paths)
+        self.assertIn("/api/v1/catalogs/import", paths)
+
+    def test_it_stops_when_nothing_was_imported_from_the_hub(self):
+        with self.assertRaises(SystemExit):
+            it.install(FakeAtlas([]), self.pkg, from_hub=True)

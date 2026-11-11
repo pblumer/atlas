@@ -13,6 +13,26 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **atlas hub records where an installed application came from.** The server-side hub import
+  records, under the application's key, the registry, the configured index URL, the fingerprint
+  of the pinned key that signed the index, the release and its exact digest, the catalogues it
+  left to the Console, who installed it and when. The record is written as pending before the
+  import writes anything, so an import whose record cannot be written installs nothing, and
+  becomes installed when the import finishes; an import that stops leaves the earlier record as
+  it was. The Console's atlas hub dialog now installs the application through this import, so a
+  person's install is recorded like an agent's. Administrators read the records with
+  `GET /api/v1/blueprints/installations` or the MCP tool `atlas_hub_installations`, with the
+  registry unreachable. The record covers the application only, not its catalogues, constants
+  or publishing (ADR-0499 amendment g).
+- **The calendar Worker Type books into Exchange Server too.** A calendar Worker whose bundle
+  names `"provider": "exchange-ews"` books into Exchange Server 2016, 2019 or Subscription
+  Edition on premises through Exchange Web Services, which Microsoft Graph does not reach. A
+  service account with Editor on each booking mailbox's calendar authenticates with NTLM (or
+  Basic where only that is enabled); the endpoint is the server's EWS URL and a task names a
+  calendar by its mailbox address. Only times and availability are read, never subjects. A
+  repeated delivery finds its reservation by a create key written into an extended property,
+  and a mailbox the account may not send for refuses attendees with
+  `CALENDAR_ATTENDEES_NOT_ALLOWED` (ADR-0552, phase 4).
 - **The Helm chart can install alerting rules for the single writer.** `prometheusRule.enabled=true`
   renders a Prometheus Operator `PrometheusRule` with four recording rules and seven alerts: probe
   timeouts and failed store reads (critical), a noticeable wait for the writer, the writer's
@@ -214,6 +234,27 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **Where the Operations replay switches to the bounded view is configurable.** The replay loads
+  an instance's whole timeline up to a multi-instance body of 500 iterations and opens the
+  bounded view with the Multi-Instance Explorer above it. `--replay-full-max-iterations`
+  (`ATLAS_REPLAY_FULL_MAX_ITERATIONS`, Helm `atlas.replayFullMaxIterations`) lowers that line,
+  from 0 to 500, for installations whose iterations run many steps each — a multi-instance
+  subprocess — so a few hundred of them already make the full history slow. It cannot be raised:
+  500 is the ceiling the timeline's growth allows, and a start with a value outside the range
+  stops with the reason. `GET /api/v1/info` reports the line as `fullReplayMaxIterations`.
+- **The instance history shows the structure of a multi-instance subprocess.** Every step that
+  ran inside an iteration of a multi-instance subprocess was a top-level row of the history, so
+  twelve iterations produced twelve identical `k_start`, `k_join` and task rows side by side and
+  nothing said which iteration they belonged to. The history now nests them: the subprocess is
+  one row, opened it lists its iterations, and an opened iteration shows the steps it ran,
+  indented under it. An iteration row says how many steps it ran and, while it runs, where it
+  waits; its number leads its name so a narrow column never cuts it. The timeline gives each
+  step the iteration it ran inside (`inIteration`) for this.
+- **The replay's token row names a multi-instance subprocess's inner elements once.** The
+  iterations of a multi-instance subprocess each walk a token through its inner shapes, so an
+  inner task held by twelve iterations was twelve "Token … — Datensatz bearbeiten" chips. Such an
+  element is now one chip with its count and the subprocess it runs in, as the subprocess itself
+  already was.
 - **The SharePoint Server team site checks its address before it creates the site.** The
   on-premises product `m365-spserver-site` now reads the address the name rule formed with
   `get-site` before `create-site`, as the SharePoint Online team site does. A site there that

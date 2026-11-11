@@ -74,3 +74,19 @@ func TestHubReleaseArchitectureCarriesTheDigestAndLayers(t *testing.T) {
 		t.Fatalf("a sketch without a digest reached the server: %s", gotPath)
 	}
 }
+
+// The installation records are read from the server, with nothing an agent supplies
+// in the path.
+func TestHubInstallationsReadsTheRecords(t *testing.T) {
+	var gotMethod, gotPath string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.EscapedPath()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"applicationKey":"hub-sample","state":"installed"}]`))
+	}))
+	defer backend.Close()
+	callToolAgainstBackend(t, backend, "atlas_hub_installations", map[string]any{})
+	if gotMethod != http.MethodGet || gotPath != "/api/v1/blueprints/installations" {
+		t.Fatalf("called %s %s", gotMethod, gotPath)
+	}
+}
