@@ -237,7 +237,7 @@ _Changed_ / _Removed_ for each version.
   fulfilment repair (`POST /api/v1/orders/fulfilment/repair`) lists every line still waiting on
   an instance that is no longer active under `orphanedLines`, no longer counts its
   orchestration healthy, and settles it when run without `dryRun`
-  (ADR-draft-a-cancelled-line-instance-settles-its-line).
+  (ADR-0558).
 - **A long value no longer stretches the Variables table past its panel.** A structure holding
   an unbroken line — a Graph delta link, a token — made the table in the replay's Variables tab
   thousands of pixels wide, so the filter, Copy all and every Copy button slid off screen. The

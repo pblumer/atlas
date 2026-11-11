@@ -10,7 +10,7 @@ import (
 )
 
 // An order line whose process an operator ended
-// (ADR-draft-a-cancelled-line-instance-settles-its-line).
+// (ADR-0558).
 //
 // Observed live: provisioning instances cancelled from the instance list left their
 // lines "running" for nine days. The line moves only when its process reports, the

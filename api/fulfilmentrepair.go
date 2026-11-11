@@ -54,7 +54,7 @@ type fulfilmentRepairResp struct {
 	// OrphanedLines are the lines waiting on an instance that is no longer active,
 	// settled by the repair as a failed report would have settled them — or, in a
 	// dry run, that it would settle
-	// (ADR-draft-a-cancelled-line-instance-settles-its-line). An orchestration
+	// (ADR-0558). An orchestration
 	// waiting on such a line is not counted healthy: it waits for a message that
 	// nothing is left to publish.
 	OrphanedLines []orphanedLine `json:"orphanedLines"`

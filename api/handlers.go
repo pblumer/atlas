@@ -4619,7 +4619,7 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
 			// The order line this instance was working, if any, settles now that its
-			// end is durable (ADR-draft-a-cancelled-line-instance-settles-its-line).
+			// end is durable (ADR-0558).
 			s.settleLinesEndedBy([]uint64{key})
 			stats, statErr = s.statsOffLoop()
 		}

@@ -10,7 +10,7 @@ import (
 )
 
 // A line whose instance ended without reporting
-// (ADR-draft-a-cancelled-line-instance-settles-its-line).
+// (ADR-0558).
 
 func lineWith(status LineStatus, ins ...LineInstance) Line {
 	return Line{ItemID: "vpn", Status: status, Instances: ins}

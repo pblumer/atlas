@@ -1,4 +1,4 @@
-# ADR-DRAFT: An order line whose instance an operator ended settles as a failed report
+# ADR-0558: An order line whose instance an operator ended settles as a failed report
 
 - **Status:** Accepted
 - **Implementation:** Landed

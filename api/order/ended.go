@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// A line whose process ended without saying how (ADR-draft-a-cancelled-line-instance-settles-its-line).
+// A line whose process ended without saying how (ADR-0558).
 //
 // A line moves only when its process reports — the provisioning's outcome, the
 // return's, the approver's decision. An operator who cancels that process directly

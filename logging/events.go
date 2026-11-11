@@ -452,7 +452,7 @@ var (
 	// OrderLineInstanceEnded: an instance an order line was waiting on ended without
 	// reporting — an operator cancelled or terminated it — and the line was settled
 	// as a failed report would have settled it
-	// (ADR-draft-a-cancelled-line-instance-settles-its-line). A warning, because a
+	// (ADR-0558). A warning, because a
 	// line somebody has to look at is the consequence.
 	OrderLineInstanceEnded = newEvent("order.line_instance_ended")
 	// OrderLineUnsettled: an instance an order line was waiting on ended, and the

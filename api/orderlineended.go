@@ -9,7 +9,7 @@ import (
 )
 
 // An order line whose process an operator ended
-// (ADR-draft-a-cancelled-line-instance-settles-its-line).
+// (ADR-0558).
 //
 // A line settles when its process reports, and an operator who cancels that process
 // from the instance list ends the one thing that was going to. So every operator
