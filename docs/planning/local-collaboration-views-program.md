@@ -3,8 +3,9 @@
 **Programme:** Local collaboration views (ID: LCV)
 **Milestone:** [Milestone 2 — Events and timers](../../ROADMAP.md#milestone-2--events-and-timers-).
 **Architecture authority:** [ADR-0559](../adr/0559-local-collaboration-views.md) (**Accepted / Partial**).
-**Programme owner:** pblumer (accepted 2026-11-11). **LCV1:** active (owner pblumer). LCV2 to LCV4
-are planned and have no implementation owner yet.
+**Programme owner:** pblumer (accepted 2026-11-11). **LCV1** and **LCV2:** active (owner pblumer),
+built on one branch and not yet merged. LCV3 and LCV4 are planned and have no implementation owner
+yet.
 
 ## User outcome
 
@@ -60,7 +61,13 @@ time-ordered read of the graph's rows for the replay.
 
 **Acceptance:** a browser end-to-end test that opens the view collapsed, expands one
 process, plays a replay with a delivery, a start and a send that reached nobody, and shows
-"outside your view" for a reader without access; the history's beginning is stated.
+"outside your view" for a reader without access; the history's beginning is stated
+(`e2e/operations-interactions.spec.mjs`). The replay route lists what the graph counts, under
+the same rules, in both directions (`api/interaction/replay_test.go`,
+`api/interactions_http_test.go`).
+
+**As built:** an expanded white box shows its message ports, not its diagram (ADR-0559
+*As built*); narrowing the replay to a correlation key is left for later.
 
 ### LCV3 — Saved collaboration and its findings
 

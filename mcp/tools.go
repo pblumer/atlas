@@ -1651,6 +1651,47 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_process_interaction_replay",
+			Description: "The arrivals atlas_process_interactions counts, listed one by one, oldest first (ADR-0559 §8): " +
+				"each 'event' is 'received' (a message arrived at a waiting element), 'started' (it started an " +
+				"instance), 'unreceived' (a send of the process reached nobody) or 'outside' (what one of its sends " +
+				"reached outside your view, as 'count' and 'started'), with 'at', 'from', 'to' and 'message' as the " +
+				"graph's participant ids and the 'correlationKey' your row carries. Without a cursor the newest page of " +
+				"the window; 'before' continues to older events from a page's 'next', 'after' to newer ones from its " +
+				"'latest'. Reading backwards, 'more' false means the history begins there: the window's start or the " +
+				"oldest row the event log keeps. Use it to follow one business case by its correlation key across " +
+				"processes.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"processId": stringProp("The BPMN process id the graph is computed around."),
+					"window":    stringProp("How far back to read, as a duration such as 24h (default: the event-log retention)."),
+					"before":    stringProp("The 'next' of a previous page, to read older events."),
+					"after":     stringProp("The 'latest' of a previous page, to read newer events."),
+					"limit":     map[string]any{"type": "integer", "minimum": 1, "maximum": 2000, "description": "Maximum events to return (default 500, at most 2000)."},
+				},
+				"required": []string{"processId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				q.Set("processId", optString(args, "processId"))
+				for _, name := range []string{"window", "before", "after"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
+				if v, ok := args["limit"]; ok {
+					switch n := v.(type) {
+					case float64:
+						q.Set("limit", strconv.Itoa(int(n)))
+					case string:
+						q.Set("limit", n)
+					}
+				}
+				return asText(c.get("/api/v1/process-interactions/replay?" + q.Encode()))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +

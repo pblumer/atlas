@@ -221,13 +221,27 @@ var errStop = errors.New("stop")
 
 // Build computes the graph around in.ProcessID.
 func Build(in Input) (Graph, error) {
-	b := builder{in: in, participants: map[string]*Participant{}, exchanges: map[exchangeKey]*Exchange{}, unreceived: map[unreceivedKey]*Unreceived{}}
+	b, center, err := newBuilder(in)
+	if err != nil {
+		return Graph{}, err
+	}
+	b.possible(center)
+	window, err := b.observe()
+	if err != nil {
+		return Graph{}, err
+	}
+	return b.graph(center, window), nil
+}
+
+// newBuilder indexes the definitions and places the center, the newest version of
+// in.ProcessID, as the first participant.
+func newBuilder(in Input) (*builder, Definition, error) {
+	b := &builder{in: in, participants: map[string]*Participant{}, exchanges: map[exchangeKey]*Exchange{},
+		unreceived: map[unreceivedKey]*Unreceived{}, centerKeys: map[uint64]bool{}, byKey: map[uint64]Definition{}}
 	center, ok := b.newest(in.ProcessID)
 	if !ok {
-		return Graph{}, ErrUnknownProcess
+		return nil, Definition{}, ErrUnknownProcess
 	}
-	b.centerKeys = map[uint64]bool{}
-	b.byKey = map[uint64]Definition{}
 	for _, d := range in.Definitions {
 		b.byKey[d.Key] = d
 		if d.ProcessID == in.ProcessID {
@@ -236,13 +250,7 @@ func Build(in Input) (Graph, error) {
 	}
 	b.centerID = ProcessID(in.ProcessID)
 	b.process(center).Center = true
-
-	b.possible(center)
-	window, err := b.observe()
-	if err != nil {
-		return Graph{}, err
-	}
-	return b.graph(center, window), nil
+	return b, center, nil
 }
 
 type exchangeKey struct{ from, to, message string }
@@ -420,8 +428,55 @@ func (b *builder) observe() (Window, error) {
 	return w, nil
 }
 
-// fold adds one command's message rows: its send, if any, and what it reached.
+// arrival is one fact a command's rows establish about the center, attributed to the
+// participants the caller may know: a message that arrived (n times, started of them
+// starting an instance) or, with unreceived, a send of the center that reached nobody.
+// The graph counts arrivals; the replay lists them (replay.go).
+type arrival struct {
+	at         int64
+	position   uint64
+	from, to   string
+	message    string
+	n, started int
+	unreceived bool
+	// outside marks the count of a send's arrivals outside the reader's view.
+	outside bool
+	key     string
+}
+
+// fold adds one command's message rows to the graph.
 func (b *builder) fold(group []state.EventLogEntry) {
+	for _, a := range b.attribute(group) {
+		if a.unreceived {
+			k := unreceivedKey{a.from, a.message}
+			u, ok := b.unreceived[k]
+			if !ok {
+				u = &Unreceived{From: a.from, Message: a.message, LastAt: stamp(a.at)}
+				b.unreceived[k] = u
+			}
+			u.Count++
+			continue
+		}
+		e := b.exchange(a.from, a.to, a.message)
+		if e.Observed == nil {
+			// The graph reads the log newest first, so the first arrival counted is the
+			// last one.
+			e.Observed = &Observed{LastAt: stamp(a.at)}
+		}
+		e.Observed.Received += a.n
+		e.Observed.Started += a.started
+	}
+}
+
+// attribute reads one command's message rows — its send, if any, and what it reached
+// — and answers what they establish about the center, in the order the rows hold.
+//
+// Two rules decide what the caller learns, both ADR-0472 §5's:
+//   - A reception is attributed to a sender only when the caller may read the send row;
+//     otherwise it comes from outside their view.
+//   - What a readable send of the center reached beyond the receptions the caller may
+//     read is counted as received outside their view, from the send row's own counts.
+func (b *builder) attribute(group []state.EventLogEntry) []arrival {
 	var send *state.EventLogEntry
 	var receptions []state.EventLogEntry
 	for i := range group {
@@ -434,7 +489,7 @@ func (b *builder) fold(group []state.EventLogEntry) {
 		}
 	}
 	if send == nil && len(receptions) == 0 {
-		return
+		return nil
 	}
 
 	// Who sent it, as far as the caller may know.
@@ -461,7 +516,7 @@ func (b *builder) fold(group []state.EventLogEntry) {
 				from = b.lazy(Participant{ID: idDirected, Kind: KindDirected})
 			}
 		}
-	} else if len(receptions) > 0 && receptions[0].Flow.SenderProcessInstanceKey == 0 {
+	} else if receptions[0].Flow.SenderProcessInstanceKey == 0 {
 		// A reception with no send in its command is a kept message handed to a
 		// subscription that opened later (ADR-0472 §1), and only a publish with a time
 		// to live is kept.
@@ -470,6 +525,7 @@ func (b *builder) fold(group []state.EventLogEntry) {
 		}
 	}
 
+	var out []arrival
 	readReceived, readStarted := 0, 0
 	for _, r := range receptions {
 		fl := r.Flow
@@ -477,10 +533,12 @@ func (b *builder) fold(group []state.EventLogEntry) {
 			continue
 		}
 		toCenter := b.centerKeys[fl.ReceiverProcessDefKey]
-		readReceived++
+		started := 0
 		if fl.ReceiverProcessInstanceKey == 0 {
-			readStarted++
+			started = 1
 		}
+		readReceived++
+		readStarted += started
 		if !fromCenter && !toCenter {
 			continue // depth one: an exchange that does not touch the center
 		}
@@ -491,33 +549,25 @@ func (b *builder) fold(group []state.EventLogEntry) {
 			src = b.materialize(src)
 		}
 		to := b.party(fl.ReceiverProcessDefKey)
-		b.observed(b.exchange(src.ID, to.ID, fl.MessageName), r.At, fl.ReceiverProcessInstanceKey == 0, 1)
+		out = append(out, arrival{at: r.At, position: r.Position, from: src.ID, to: to.ID, message: fl.MessageName,
+			n: 1, started: started, key: fl.CorrelationKey})
 	}
 
 	if send == nil || !fromCenter {
-		return
+		return out
 	}
 	d := send.Dispatch
 	// What the send reached beyond what the caller may read is received outside their
 	// view: the send row says how many, not where.
-	hidden := int(d.Reached) + int(d.Started) - readReceived
-	hiddenStarted := int(d.Started) - readStarted
-	if hidden > 0 {
-		e := b.exchange(b.centerID, b.outside().ID, d.Name)
-		b.observed(e, send.At, false, hidden)
-		if hiddenStarted > 0 {
-			e.Observed.Started += hiddenStarted
-		}
+	if hidden := int(d.Reached) + int(d.Started) - readReceived; hidden > 0 {
+		out = append(out, arrival{at: send.At, position: send.Position, from: b.centerID, to: b.outside().ID,
+			message: d.Name, n: hidden, started: max(int(d.Started)-readStarted, 0), outside: true, key: d.CorrelationKey})
 	}
 	if d.Reached == 0 && d.Started == 0 {
-		k := unreceivedKey{b.centerID, d.Name}
-		u, ok := b.unreceived[k]
-		if !ok {
-			u = &Unreceived{From: b.centerID, Message: d.Name, LastAt: stamp(send.At)}
-			b.unreceived[k] = u
-		}
-		u.Count++
+		out = append(out, arrival{at: send.At, position: send.Position, from: b.centerID, message: d.Name,
+			unreceived: true, key: d.CorrelationKey})
 	}
+	return out
 }
 
 // lazy and lazyParty describe a participant without adding it yet: a sender is only
@@ -539,30 +589,12 @@ func (b *builder) lazyParty(defKey uint64) *Participant {
 
 func (b *builder) materialize(p *Participant) *Participant { return b.add(*p) }
 
-// observed counts n arrivals at at on e. The log is read newest first, so the first
-// arrival counted is the last one.
-func (b *builder) observed(e *Exchange, at int64, started bool, n int) {
-	if e.Observed == nil {
-		e.Observed = &Observed{LastAt: stamp(at)}
-	}
-	e.Observed.Received += n
-	if started {
-		e.Observed.Started += n
-	}
-}
-
 // graph is the answer in a stable order: the center first, then participants as they
 // were met; exchanges by sender, receiver and name.
 func (b *builder) graph(center Definition, w Window) Graph {
 	g := Graph{ProcessID: center.ProcessID, Participants: []Participant{}, Exchanges: []Exchange{},
 		Unreceived: []Unreceived{}, Ports: ports(center), Observed: w}
-	for _, id := range b.order {
-		if id == b.centerID {
-			g.Participants = append([]Participant{*b.participants[id]}, g.Participants...)
-			continue
-		}
-		g.Participants = append(g.Participants, *b.participants[id])
-	}
+	g.Participants = b.participantList()
 	for _, e := range b.exchanges {
 		g.Exchanges = append(g.Exchanges, *e)
 	}
@@ -581,6 +613,16 @@ func (b *builder) graph(center Definition, w Window) Graph {
 	}
 	sort.Slice(g.Unreceived, func(i, j int) bool { return g.Unreceived[i].Message < g.Unreceived[j].Message })
 	return g
+}
+
+// participantList is the participants met, the center first and the others in the
+// order they were met.
+func (b *builder) participantList() []Participant {
+	out := make([]Participant, 0, len(b.order))
+	for _, id := range b.order {
+		out = append(out, *b.participants[id])
+	}
+	return out
 }
 
 // ports are the center's message names, outgoing first, each with the elements

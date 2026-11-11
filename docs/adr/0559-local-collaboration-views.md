@@ -576,9 +576,37 @@ programme is [`docs/programs/lcv`](../programs/lcv/program.json), its plan
   - Signals are not read (§3).
 - **The bound.** The scan reads at most 100 000 rows (`interactionScan`). A cut sets
   `observed.partial` and dates `observed.readFrom` at the oldest row read.
-- **Not built yet:** the Operations view with collapsed participants and the message-only replay
-  (§7, §8; slice LCV2), the saved collaboration and its findings (§5; LCV3), composing step by
-  step in the Modeler (§6; LCV4).
+
+**Slice LCV2 (2026-11): the Operations view and the message-only replay.**
+
+- **The page** is `#/operations/interactions/{processId}` (`api/web/interactions.js`), reached
+  from an *Interactions* link on every process of the Operations list. It draws the LCV1 graph
+  as three columns of collapsed pools: whoever only sends to the process on the left, the
+  process in the middle, everybody it sends to on the right. Observed exchanges are solid,
+  possible-only ones dashed, and an observed exchange the newest definitions no longer allow
+  is drawn in the attention colour. The sends that reached nobody are listed under the graph.
+  The period is a day, a week or the event-log retention.
+- **Expanding a white box shows its message ports, not its diagram.** §8 says an expanded white
+  box shows its contents; drawing a whole BPMN diagram inside a pool of this layout is a layout
+  problem of its own, and the ports are what the exchanges attach to. A neighbour's ports are
+  read from its own graph, asked with a window of one nanosecond so that no row is scanned.
+  `↗` opens a neighbour as the center of its own graph, which is how the picture is extended
+  (§3). Expanding to the diagram is left open.
+- **The replay route.** `GET /api/v1/process-interactions/replay` (and the MCP tool
+  `atlas_process_interaction_replay`) lists the graph's arrivals one by one, oldest first:
+  `received`, `started`, `unreceived`, and `outside` for what a send of the process reached
+  outside the reader's view. It is the graph's own attribution, now one function
+  (`attribute`), applied group by group, so the two cannot disagree. A page ends between two
+  commands; `before` and `after` are event-log positions, as on `/api/v1/event-log`.
+- **The page's replay** reads the history backwards until the route says it began, keeps at most
+  5 000 events, and states from when its history is complete and how far the event log reaches.
+  It plays one event per step as an envelope travelling along its exchange, or, at five or
+  twenty-five events per step, bundles the step into counts that pulse on each exchange and
+  says which of the two it shows. *Live* follows with `after`, and redraws the graph first when
+  an event names an exchange it does not have. Correlation keys are listed with the events;
+  narrowing the replay to one key (§7) is not built.
+- **Not built yet:** narrowing to a correlation key (§7), the saved collaboration and its findings
+  (§5; LCV3), composing step by step in the Modeler (§6; LCV4).
 
 ### Consequences
 

@@ -219,3 +219,131 @@ func TestTheInteractionGraphShowsWhatEachReaderMayRead(t *testing.T) {
 		}
 	}
 }
+
+type replayEvent struct {
+	Position       string `json:"position"`
+	Kind           string `json:"kind"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	Message        string `json:"message"`
+	Count          int    `json:"count"`
+	Started        int    `json:"started"`
+	CorrelationKey string `json:"correlationKey"`
+}
+
+type replayPage struct {
+	Events []replayEvent `json:"events"`
+	Next   string        `json:"next"`
+	Latest string        `json:"latest"`
+	More   bool          `json:"more"`
+}
+
+func readReplay(t *testing.T, c *http.Client, ts *httptest.Server, query string) replayPage {
+	t.Helper()
+	code, body := cReq(t, c, ts, "GET", "/api/v1/process-interactions/replay"+query, "")
+	var p replayPage
+	if code != http.StatusOK || json.Unmarshal(body, &p) != nil {
+		t.Fatalf("replay%s = %d %s", query, code, body)
+	}
+	return p
+}
+
+func eventKinds(p replayPage) []string {
+	out := make([]string, len(p.Events))
+	for i, e := range p.Events {
+		out[i] = e.Kind + " " + e.From + " -> " + e.To + " " + e.Message
+	}
+	return out
+}
+
+// TestTheReplayListsWhatTheGraphCounts: the order's note nobody received, the release
+// that started shipping and shipping's report, oldest first, with the order's key; a
+// second order arrives after the cursor; a member sees the same history through their
+// own rows; the cursors are checked.
+func TestTheReplayListsWhatTheGraphCounts(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	memberID := createUserWithRoles(t, admin, ts.URL, "member", `["user"]`)
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/projects", `{"name":"Sekretariat"}`)
+	var proj struct {
+		ID string `json:"id"`
+	}
+	if (code != http.StatusCreated && code != http.StatusOK) || json.Unmarshal(body, &proj) != nil {
+		t.Fatalf("create project = %d: %s", code, body)
+	}
+	if code, body := cReq(t, admin, ts, "PUT", "/api/v1/projects/"+proj.ID+"/members/"+memberID,
+		`{"role":"viewer"}`); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("add project member = %d: %s", code, body)
+	}
+	order := deployIntoProject(t, admin, ts, orderBPMN, proj.ID)
+	deployIntoProject(t, admin, ts, shippingBPMN, "")
+	start := func(id string) {
+		t.Helper()
+		if code, body := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/processes/%d/instances", order),
+			`{"variables":{"orderId":"`+id+`"}}`); code != http.StatusOK {
+			t.Fatalf("start order = %d: %s", code, body)
+		}
+	}
+	start("A-1")
+
+	p := readReplay(t, admin, ts, "?processId=bestellung")
+	want := []string{
+		"unreceived process:bestellung ->  protokoll",
+		"started process:bestellung -> process:versand freigabe",
+		"received process:versand -> process:bestellung versandt",
+	}
+	if got := eventKinds(p); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("replay = %v, want %v", got, want)
+	}
+	if p.More || p.Events[1].CorrelationKey != "A-1" {
+		t.Errorf("page = %+v, want the whole history, keyed by the order", p)
+	}
+
+	start("A-2")
+	newer := readReplay(t, admin, ts, "?processId=bestellung&after="+p.Latest)
+	if got := eventKinds(newer); len(got) != 3 || newer.Events[0].CorrelationKey != "" || newer.Events[1].CorrelationKey != "A-2" {
+		t.Errorf("after the latest = %v (%+v)", got, newer.Events)
+	}
+	older := readReplay(t, admin, ts, "?processId=bestellung&limit=1")
+	if len(older.Events) != 1 || !older.More {
+		t.Fatalf("one event = %+v", older)
+	}
+	if back := readReplay(t, admin, ts, "?processId=bestellung&limit=1&before="+older.Next); len(back.Events) != 1 ||
+		back.Events[0].Position == older.Events[0].Position {
+		t.Errorf("the page before = %+v, after %+v", back, older)
+	}
+
+	member := signInAs(t, ts.URL, "member", "a-password-that-is-long")
+	mp := readReplay(t, member, ts, "?processId=bestellung")
+	var outside, fromOutside int
+	for _, e := range mp.Events {
+		switch {
+		case e.Kind == "outside" && e.To == "outside-view" && e.Message == "freigabe":
+			outside++
+			if e.Count != 1 || e.Started != 1 {
+				t.Errorf("outside event = %+v", e)
+			}
+		case e.From == "outside-view" && e.Message == "versandt":
+			fromOutside++
+		case e.To == "process:versand" || e.From == "process:versand":
+			t.Errorf("the member reads a row of shipping: %+v", e)
+		}
+	}
+	if outside != 2 || fromOutside != 2 {
+		t.Errorf("member's replay = %v, want both orders' release and report through their own rows", eventKinds(mp))
+	}
+
+	for q, want := range map[string]int{
+		"?processId=bestellung&before=x":         http.StatusBadRequest,
+		"?processId=bestellung&before=1&after=1": http.StatusBadRequest,
+		"?processId=bestellung&limit=2001":       http.StatusBadRequest,
+		"?processId=bestellung&limit=0":          http.StatusBadRequest,
+		"?processId=nowhere":                     http.StatusNotFound,
+		"?window=1h":                             http.StatusBadRequest,
+	} {
+		if code, body := cReq(t, admin, ts, "GET", "/api/v1/process-interactions/replay"+q, ""); code != want {
+			t.Errorf("GET replay%s = %d %s, want %d", q, code, body, want)
+		}
+	}
+}

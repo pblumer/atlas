@@ -3537,6 +3537,39 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .flow-log .empty { padding: 14px 16px; color: var(--muted); }
 .replay-link { margin-left: 8px; font-size: 12px; }
 
+/* Who a process talks to (ADR-0559): collapsed pools in three columns, exchanges
+   between them, and the envelopes of the message-only replay. Possible-only exchanges
+   are dashed, observed ones solid, and an observed exchange the newest definitions no
+   longer allow is marked with the attention colour. */
+.ix-card { overflow-x: auto; }
+.ix-canvas { min-height: 120px; background: var(--diagram-bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+.ix-svg { display: block; min-width: 760px; }
+.ix-legend { font-size: 12px; margin-bottom: 6px; }
+.ix-box rect { fill: var(--surface); stroke: var(--diagram-shape-stroke); stroke-width: 1.5; }
+.ix-box { cursor: pointer; }
+.ix-box.center rect { stroke: var(--accent); stroke-width: 2.5; }
+.ix-box:not(.kind-process) rect { stroke-dasharray: 6 4; }
+.ix-box.kind-outside-view rect { fill: var(--diagram-bg); stroke: var(--border-strong); }
+.ix-box.kind-outside-view text { fill: var(--muted); font-style: italic; }
+.ix-box.inactive rect { opacity: .6; }
+.ix-box-name { font-size: 14px; font-weight: 600; fill: var(--diagram-label); }
+.ix-box-hint, .ix-port { font-size: 11px; fill: var(--muted); }
+.ix-box-toggle, .ix-box-open { font-size: 15px; font-weight: 700; fill: var(--accent-text); }
+.ix-edge path { fill: none; stroke: var(--diagram-shape-stroke); stroke-width: 1.6; }
+.ix-edge.possible-only path { stroke-dasharray: 6 5; stroke: var(--muted); }
+.ix-edge.not-possible path { stroke: var(--mesh-attention); }
+.ix-edge.pulse path { stroke: var(--accent); stroke-width: 3.5; }
+.ix-edge-label { font-size: 11px; fill: var(--text); paint-order: stroke; stroke: var(--diagram-bg); stroke-width: 4px; }
+.ix-arrowhead { fill: var(--diagram-shape-stroke); }
+.ix-envelope { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.ix-envelope.kind-unreceived { fill: var(--danger); }
+.ix-envelope.kind-outside { fill: var(--muted); }
+.ix-pulse-count { font-size: 12px; font-weight: 700; fill: var(--accent-text); }
+.ix-unreceived { margin: 8px 0 0; }
+.ix-feed { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; }
+.ix-feed li { padding: 2px 0; border-bottom: 1px solid var(--border); }
+.ix-feed li.kind-unreceived { color: var(--danger); }
+
 /* ---------- Documentation prose (Markdown) ----------
    An element's documentation is written as Markdown and rendered by markdown.js
    (ADR-0250). One ruleset serves every surface that shows

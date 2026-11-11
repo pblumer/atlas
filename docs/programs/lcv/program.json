@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-11",
   "plan": "../../planning/local-collaboration-views-program.md",
   "milestone": "../../../ROADMAP.md#milestone-2--events-and-timers-",
-  "next_action": "Review and merge the LCV1 pull request (the interaction graph route, its MCP tool and the acceptance of ADR-0559); then start LCV2, the Operations view over that route with collapsed participants and the message-only replay read page by page from the event log.",
+  "next_action": "Review and merge LCV1 and LCV2 together (the branch carries both, as the owner asked for no separate LCV1 pull request); then decide LCV3's store — a draft kind or a store of its own — and record it in ADR-0559 before building the saved collaboration.",
   "slices": [
     {
       "id": "LCV1",
@@ -17,7 +17,7 @@
       "depends_on": [],
       "issues": [],
       "prs": [],
-      "note": "GET /api/v1/process-interactions and atlas_process_interactions: participants, exchanges with their possible and observed layers, sends that reached nobody, the process's message ports. Pure computation in api/interaction; the event-log scan runs off the loop on a ReadView, bounded at 100000 rows, and rows are read under the event log's own rule (eventLogReach). ADR-0559 accepted with this slice.",
+      "note": "Built on the branch, not yet merged. GET /api/v1/process-interactions and atlas_process_interactions: participants, exchanges with their possible and observed layers, sends that reached nobody, the process's message ports. Pure computation in api/interaction; the event-log scan runs off the loop on a ReadView, bounded at 100000 rows, and rows are read under the event log's own rule (eventLogReach). ADR-0559 accepted with this slice.",
       "evidence": [
         "../../../api/interaction/interaction_test.go",
         "../../../api/interactions_http_test.go"
@@ -26,14 +26,19 @@
     {
       "id": "LCV2",
       "title": "Operations view: collapsed participants and the message-only replay",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "LCV1"
       ],
       "issues": [],
       "prs": [],
-      "note": "ADR-0559 §7 and §8: the graph around a process in the Operations app, opening collapsed, each participant expandable; a replay of deliveries, starts, sends that reached nobody and black-box sends read from the event log page by page over a time range, with a dense mode that pulses counts; 'outside your view' for what the reader may not see; the history's beginning stated. Needs a time-ordered row route or cursor over the graph's rows, and browser end-to-end tests."
+      "note": "Built on the branch, not yet merged: the Operations page #/operations/interactions/{processId} with collapsed pools in three columns, expansion to message ports, opening a neighbour as the center, and the message-only replay read from GET /api/v1/process-interactions/replay (atlas_process_interaction_replay) backwards until its history begins, played singly or bundled, followed live. Deviation recorded in ADR-0559 As built: an expanded white box shows its ports, not its diagram. Not built: narrowing to a correlation key (§7).",
+      "evidence": [
+        "../../../api/interaction/replay_test.go",
+        "../../../api/interactions_http_test.go",
+        "../../../e2e/operations-interactions.spec.mjs"
+      ]
     },
     {
       "id": "LCV3",

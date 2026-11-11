@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,11 +42,94 @@ type interactionGraph struct {
 
 // handleProcessInteractions serves GET /api/v1/process-interactions.
 func (s *Server) handleProcessInteractions(w http.ResponseWriter, r *http.Request) {
+	in, view, part, retention, ok := s.interactionInput(w, r)
+	if !ok {
+		return
+	}
+	defer view.Close()
+	in.Scan = func(fn func(state.EventLogEntry) error) error { return view.EventLogBefore(part, 0, fn) }
+	g, err := interaction.Build(in)
+	if !interactionAnswered(w, in.ProcessID, err) {
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, interactionGraph{Graph: g, Retention: retention.String()})
+}
+
+// The replay's page sizes (ADR-0559 §8): how many events a page holds when the caller
+// names no limit, and the most it may name.
+const (
+	interactionReplayPage    = 500
+	interactionReplayMaxPage = 2000
+)
+
+// handleProcessInteractionReplay serves GET /api/v1/process-interactions/replay: the
+// graph's arrivals one by one, oldest first, a page at a time. `before` reads the
+// history backwards from a page's `next`, `after` what came since its `latest`; with
+// neither, the newest page of the window.
+func (s *Server) handleProcessInteractionReplay(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	cursor := func(name string) (uint64, bool) {
+		raw := strings.TrimSpace(q.Get(name))
+		if raw == "" {
+			return 0, true
+		}
+		v, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, name+" must be a cursor the replay answered: a decimal position")
+			return 0, false
+		}
+		return v, true
+	}
+	before, ok := cursor("before")
+	if !ok {
+		return
+	}
+	after, ok := cursor("after")
+	if !ok {
+		return
+	}
+	if before != 0 && after != 0 {
+		httpapi.Error(w, http.StatusBadRequest, "name before or after, not both")
+		return
+	}
+	limit := interactionReplayPage
+	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < 1 || v > interactionReplayMaxPage {
+			httpapi.Error(w, http.StatusBadRequest, "limit must be between 1 and "+strconv.Itoa(interactionReplayMaxPage))
+			return
+		}
+		limit = v
+	}
+	in, view, part, _, ok := s.interactionInput(w, r)
+	if !ok {
+		return
+	}
+	defer view.Close()
+	rin := interaction.ReplayInput{Input: in, Limit: limit, After: after}
+	if after != 0 {
+		rin.Direction = interaction.Newer
+		rin.Scan = func(fn func(state.EventLogEntry) error) error { return view.EventLogAfter(part, after, fn) }
+	} else {
+		rin.Scan = func(fn func(state.EventLogEntry) error) error { return view.EventLogBefore(part, before, fn) }
+	}
+	page, err := interaction.Replay(rin)
+	if !interactionAnswered(w, in.ProcessID, err) {
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, page)
+}
+
+// interactionInput reads the query both routes share — processId and window — and
+// gathers what the graph reads under the rules the other doors to the same facts
+// apply. It answers the request itself when it cannot proceed. The view it returns is
+// open and the caller closes it; the scan is the caller's to choose.
+func (s *Server) interactionInput(w http.ResponseWriter, r *http.Request) (interaction.Input, *state.ReadView, uint16, time.Duration, bool) {
 	q := r.URL.Query()
 	processID := strings.TrimSpace(q.Get("processId"))
 	if processID == "" {
 		httpapi.Error(w, http.StatusBadRequest, "processId is required: the process to compute the graph around")
-		return
+		return interaction.Input{}, nil, 0, 0, false
 	}
 	retention := s.eventLogTTL
 	if retention <= 0 {
@@ -56,7 +140,7 @@ func (s *Server) handleProcessInteractions(w http.ResponseWriter, r *http.Reques
 		d, err := time.ParseDuration(raw)
 		if err != nil || d <= 0 {
 			httpapi.Error(w, http.StatusBadRequest, "window must be a positive duration, such as 24h")
-			return
+			return interaction.Input{}, nil, 0, 0, false
 		}
 		window = d
 	}
@@ -67,7 +151,7 @@ func (s *Server) handleProcessInteractions(w http.ResponseWriter, r *http.Reques
 		rows, err := s.messageSources(r)
 		if err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "process interactions: "+err.Error())
-			return
+			return interaction.Input{}, nil, 0, 0, false
 		}
 		sources = interactionSources(rows)
 	}
@@ -87,33 +171,33 @@ func (s *Server) handleProcessInteractions(w http.ResponseWriter, r *http.Reques
 	})
 	if view == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "process interactions: the server is stopping")
-		return
+		return interaction.Input{}, nil, 0, 0, false
 	}
-	defer view.Close()
-
 	now := s.now()
-	g, err := interaction.Build(interaction.Input{
+	return interaction.Input{
 		ProcessID:   processID,
 		Definitions: interactionDefinitions(defs),
 		Sources:     sources,
-		Scan: func(fn func(state.EventLogEntry) error) error {
-			return view.EventLogBefore(part, 0, fn)
-		},
-		ReadsAll:  all,
-		Visible:   func(key uint64) bool { return visible[key] },
-		Now:       now,
-		From:      now - int64(window),
-		ScanLimit: interactionScan,
-	})
+		ReadsAll:    all,
+		Visible:     func(key uint64) bool { return visible[key] },
+		Now:         now,
+		From:        now - int64(window),
+		ScanLimit:   interactionScan,
+	}, view, part, retention, true
+}
+
+// interactionAnswered answers an error of the graph or the replay, and reports
+// whether there was none.
+func interactionAnswered(w http.ResponseWriter, processID string, err error) bool {
 	switch {
 	case errors.Is(err, interaction.ErrUnknownProcess):
 		httpapi.Error(w, http.StatusNotFound, "no deployed process "+processID)
-		return
+		return false
 	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "process interactions: "+err.Error())
-		return
+		return false
 	}
-	httpapi.JSON(w, http.StatusOK, interactionGraph{Graph: g, Retention: retention.String()})
+	return true
 }
 
 // interactionDefinitions is the definitions as the graph reads them, with their

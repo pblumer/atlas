@@ -1047,9 +1047,11 @@ Making processes wait, react, and time out.
   [LCV](docs/programs/lcv/program.json)): who a process talks to, derived from the definitions
   and the event log rather than drawn in one file. ✅ LCV1, the interaction graph around one
   process — possible and observed exchanges, sends that reached nobody, its message ports —
-  `GET /api/v1/process-interactions` and `atlas_process_interactions`. 🔲 LCV2, the Operations
-  view with every process collapsed and a replay of only the messages; 🔲 LCV3, the saved
-  collaboration with its findings; 🔲 LCV4, composing one step by step in the Modeler.
+  `GET /api/v1/process-interactions` and `atlas_process_interactions`. ✅ LCV2, the Operations
+  page *Interactions* with every process collapsed and a replay of only the messages, singly or
+  bundled, live — `GET /api/v1/process-interactions/replay` and
+  `atlas_process_interaction_replay`. 🔲 LCV3, the saved collaboration with its findings;
+  🔲 LCV4, composing one step by step in the Modeler.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional

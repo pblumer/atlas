@@ -933,6 +933,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   caused under it; a send nobody received is marked unless the buffer kept it, and an expiry is
   marked; instances and definitions link to their pages; the filters travel as query parameters,
   *Older* pages back with `before`, and Live puts what came `after` the newest row on top.
+- **`operations-interactions.spec.mjs`** ([ADR-0559](../docs/adr/0559-local-collaboration-views.md)):
+  the Operations page **Interactions** (who a process talks to). The graph opens with every
+  participant collapsed, the process in the middle between who sends to it and who it sends to;
+  observed, possible-only and no-longer-possible exchanges are drawn apart; the participant
+  outside the reader's view has no name, a black box no expander. A process expands to its
+  message ports (a neighbour's read from its own graph with a window that reads no rows),
+  collapses again, and opens as the center of its own graph. The replay reads its history
+  backwards page by page until it begins, says so, plays one message at a time or bundled per
+  step, and Live appends what came `after` the newest event.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the **events atlas emits in the Modeler's signal picker**, driven through the real
   vendored bpmn-js.
