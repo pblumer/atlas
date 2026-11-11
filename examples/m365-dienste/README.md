@@ -843,10 +843,13 @@ Paket [`ad-dienste`](../ad-dienste/) (siehe [Kopplung an ad-dienste](#kopplung-a
 3. **Initialpasswort festlegen** (Aufgabe für `M365-Administration`). Die Person muss es bei der
    ersten Anmeldung ändern. Eine Aufgabe und kein erzeugtes Passwort, weil jemand es übergeben
    muss; ein Temporary Access Pass ist nicht modelliert.
-4. **Belegte Namen lesen** (`list-users` mit `startswith(userPrincipalName, '<vorname.nachname>')`)
+4. **Belegte Namen lesen** (`list-users` mit `startswith(userPrincipalName, '<NAME_PREFIX><vorname.nachname>')`)
    und **Entra-Konto anlegen** (`create-user`). Namensregel: `vorname.nachname@<MAIL_DOMAIN>`,
    kleingeschrieben, Umlaute umschrieben (ä → ae), Akzente entfernt, Leerzeichen und andere
    Zeichen gestrichen; ist der Name belegt, der erste freie mit 2 bis 9 (`anna.mueller2`).
+   Davor steht `NAME_PREFIX`, ebenso vor dem Anzeigenamen; leer, ausser in einem geteilten Tenant,
+   wo es das Präfix der Testumgebung ist (`atlas-test-58o4-anna.mueller@…`). So findet das
+   Aufräumen der Testumgebung auch die Konten, die dieser Prozess angelegt hat.
    Gesetzt werden `accountEnabled` true, Anzeige-, Vor- und Nachname, `employeeId` (Personalnummer),
    `department` (Organisationseinheit), `usageLocation` (`USAGE_LOCATION`) und das Passwort.
 5. Daneben, ohne den Ablauf aufzuhalten: **Zugangsdaten übergeben** (Aufgabe für
