@@ -66,6 +66,9 @@ func TestADamagedTaskAnswerIsReportedNotMisread(t *testing.T) {
 	if err := tx.deleteTaskAnswerIndexes(99); err == nil {
 		t.Error("the purge read past a damaged fact")
 	}
+	if err := tx.PurgeInstanceHistory(99, 1, 0); err == nil {
+		t.Error("the instance purge went past a damaged fact")
+	}
 	tx.Close()
 
 	// A list entry of the wrong width, and one whose key is cut short.

@@ -263,3 +263,62 @@ func TestTheCompletedListPages(t *testing.T) {
 		}
 	}
 }
+
+// twoStepBPMN asks a first task, then parks on a second, so the instance lives on after
+// the first was answered and its variables can change after it.
+const twoStepBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="zweistufig" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="first" name="Erfassen">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="intmgr"/>
+        <zeebe:formDefinition formId="erfassen-form"/>
+      </extensionElements>
+    </userTask>
+    <userTask id="second" name="Prüfen"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="first"/>
+    <sequenceFlow id="f2" sourceRef="first" targetRef="second"/>
+    <sequenceFlow id="f3" sourceRef="second" targetRef="end"/>
+  </process>
+</definitions>`
+
+// A completed task shows its variables as they stood once it was answered, not as a
+// later step or an operator changed them (ADR-0554 §3); a key nobody completed is 404.
+func TestACompletedTaskShowsTheValuesAtItsAnswer(t *testing.T) {
+	ts, admin, _, clients := intmgrServer(t)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/forms",
+		`{"id":"erfassen-form","name":"Erfassen","schema":{"components":[{"type":"textfield","key":"betrag","label":"Betrag"}]}}`); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("save form: %d (%s)", code, b)
+	}
+	startTask(t, ts, admin, twoStepBPMN)
+	var key uint64
+	for k := range taskKeysSeenBy(t, ts, clients["imke"], "") {
+		key = k
+	}
+	code, body := cReq(t, admin, ts, "GET", fmt.Sprintf("/api/v1/tasks/%d", key), "")
+	var tk struct {
+		ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	}
+	if code != http.StatusOK || json.Unmarshal(body, &tk) != nil {
+		t.Fatalf("get task: %d (%s)", code, body)
+	}
+	if code, b := cReq(t, clients["imke"], ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/complete", key), `{"variables":{"betrag":"100"}}`); code != http.StatusOK {
+		t.Fatalf("complete: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/instances/%d/variables", tk.ProcessInstanceKey), `{"variables":{"betrag":"999"}}`); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("operator change: %d (%s)", code, b)
+	}
+	code, body = cReq(t, clients["imke"], ts, "GET", fmt.Sprintf("/api/v1/tasks/completed/%d", key), "")
+	var v completedView
+	if code != http.StatusOK || json.Unmarshal(body, &v) != nil {
+		t.Fatalf("view: %d (%s)", code, body)
+	}
+	if v.Values["betrag"] != "100" {
+		t.Errorf("betrag = %v, want the value at the answer, 100", v.Values["betrag"])
+	}
+	if code, _ := cReq(t, clients["imke"], ts, "GET", "/api/v1/tasks/completed/987654321", ""); code != http.StatusNotFound {
+		t.Errorf("a key nobody completed = %d, want 404", code)
+	}
+}

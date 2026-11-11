@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -105,5 +107,66 @@ func TestTheAnsweredRevision(t *testing.T) {
 	}
 	if got := s.answeredRevisionOnLoop("gone", ""); got != "" {
 		t.Errorf("a missing form = %q", got)
+	}
+}
+
+// taskFormIDOnLoop names no form for a job whose element instance is gone or whose
+// definition this server no longer holds, and the form a held user task binds.
+func TestTheTaskFormIDOfAJob(t *testing.T) {
+	st, err := state.Open(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	b := compiler.NewBuilder(7, "p", 1)
+	start := b.AddStartEvent()
+	task := b.AddUserTask("T", compiler.Assignment{}, compiler.Assignment{}, "the-form", 0, 0, 3)
+	b.Connect(start, task)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := st.NewTransaction()
+	for key, def := range map[uint64]uint64{100: 7, 101: 8} {
+		if err := tx.PutElementInstance(key, &model.ElementInstanceValue{ProcessDefKey: def, ElementId: task}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	tx.Close()
+	s := &Server{store: st, deployments: map[uint64]*deployment{7: {Key: 7, cp: cp}}}
+	for el, want := range map[uint64]string{100: "the-form", 101: "", 999: ""} {
+		if got := s.taskFormIDOnLoop(&model.JobValue{ElementInstanceKey: el}); got != want {
+			t.Errorf("element %d: form %q, want %q", el, got, want)
+		}
+	}
+}
+
+// A revision store that cannot be read records no revision and refuses nothing: the
+// task is then shown without its form. Opening over a file and deleting with an
+// unreadable store report the fault.
+func TestABrokenRevisionStore(t *testing.T) {
+	s := &Server{forms: newForms(t)}
+	if err := s.forms.Save(form{ID: "f", Name: "F", Schema: `{"components":[]}`}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(s.forms.revisions.Dir()); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.answeredRevisionOnLoop("f", ""); got != "" {
+		t.Errorf("revision with a broken store = %q", got)
+	}
+	if err := s.forms.Delete("f"); err == nil {
+		t.Error("deleting with an unreadable revision store reported nothing")
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "form-revisions"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newFormStore(filepath.Join(dir, "forms")); err == nil {
+		t.Error("a revision directory that is a file was opened")
 	}
 }

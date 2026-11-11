@@ -102,6 +102,10 @@ func TestAWizardIsMarkedOnTheSubprocess(t *testing.T) {
 			if got := cp.Wizard(w); got != kind {
 				t.Fatalf("Wizard(w) = %v, want %v", got, kind)
 			}
+			// Only a public wizard hands a public start's visitor a pass.
+			if got := cp.HasPublicWizard(); got != (kind == WizardPublic) {
+				t.Errorf("HasPublicWizard() = %v for a %v wizard", got, kind)
+			}
 			for _, inside := range []string{"one", "inner", "deep", "we"} {
 				if got := cp.EnclosingWizard(node(t, cp, inside)); got != w {
 					t.Errorf("EnclosingWizard(%s) = %d, want the wizard %d", inside, got, w)
