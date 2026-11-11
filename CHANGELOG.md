@@ -22,6 +22,18 @@ _Changed_ / _Removed_ for each version.
   The check runs in the Modeler, because the compiler knows a linked form only by its id and
   nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
   parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
+- **A task form can show a chart.** The form editor offers a *Chart* that draws one dataset of a
+  report variable in the format `atlas.report/1`: a key figure with its change, bars, a stacked
+  bar (also as shares), a line over time, or actual against target. Every value can be read as
+  its tooltip and the whole chart as a table; a report that cannot be drawn is said in words in
+  the chart's place. The chart is shown, never submitted, so a task's holder reads the report and
+  a completed task shows it. Colours follow a palette checked for colour-vision deficiency in the
+  light and dark appearances, and numbers are written in the region the reader chose (ADR-0555).
+- **A task prints.** The Tasks app's task view, open or completed, has a *Print* button. It
+  prints the task as it stands: its fields, the form with what was typed into it, and a line
+  saying when and by whom it was printed; the buttons, the tabs and the process diagram stay
+  off the paper, and a long form runs over as many sheets as it needs instead of stopping at
+  the first. The browser's *Save as PDF* turns it into a PDF (ADR-0555).
 - **atlas hub records where an installed application came from.** The server-side hub import
   records, under the application's key, the registry, the configured index URL, the fingerprint
   of the pinned key that signed the index, the release and its exact digest, the catalogues it

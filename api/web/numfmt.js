@@ -60,6 +60,14 @@ function marks(regionId) {
   return REGIONS[regionId || region()] || REGIONS.international;
 }
 
+// numberMarks are the two characters the active region writes numbers with, for a
+// component that cannot ask prefs.js itself: the chart in the vendored form viewer is
+// handed them as the form's `atlasNumberMarks`, so it writes a number as the badge
+// beside it does.
+export function numberMarks() {
+  return { ...marks() };
+}
+
 // fmtCount renders a count with its thousands grouped. Anything under a thousand comes
 // back untouched — a separator on "999" is noise in a pill that small.
 //

@@ -252,8 +252,8 @@ not close it off.
   - Tasks app: a view *Erledigt* / *Completed* beside the built-in folders
     (`api/web/completedtasks.js`), shown only with authentication on.
   - MCP: `atlas_list_completed_tasks`, `atlas_get_completed_task`.
-  - **Not built yet:** print and *Save as PDF* for a completed task. They come with
-    ADR-0555 §6, which draws both for every task form.
+  - Print: a completed task prints from its view, as every task form does since
+    ADR-0555 RT1; the browser's *Save as PDF* makes the PDF.
 
 ### Consequences
 

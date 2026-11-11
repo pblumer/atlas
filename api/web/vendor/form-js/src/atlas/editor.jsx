@@ -51,6 +51,8 @@ import {
   isDecisionField
 } from './decision-source.js';
 import { MAIL_VIEW_TYPE } from './mailview.jsx';
+import { CHART_TYPE } from './chart.jsx';
+import { CHART_TYPES } from './chart-layout.js';
 
 // The palette entry that adds a select searching the first remote source. It is a preset,
 // not a type of its own: what it creates is a select, and a select is what is saved.
@@ -872,6 +874,91 @@ function MailViewKeyEntry(props) {
   );
 }
 
+// ---------- the chart (ADR-0555 §4) ----------------------------------------------------------
+
+const CHART_TYPE_LABELS = {
+  kpi: 'Key figure', bar: 'Bar', stackedBar: 'Stacked bar', line: 'Line', bullet: 'Actual against target'
+};
+
+function ChartTextEntry(props) {
+  const { id, field, editField, prop, label, description, validate } = props;
+  return (
+    <PanelInput
+      id={ id }
+      label={ label }
+      value={ field[prop] || '' }
+      validate={ validate }
+      description={ description }
+      onCommit={ (v) => editField(field, prop, v.trim() || undefined) } />
+  );
+}
+
+function ChartTypeEntry(props) {
+  const { id, field, editField } = props;
+  return (
+    <PanelSelect
+      id={ id }
+      label="Chart type"
+      value={ field.chartType || 'bar' }
+      options={ CHART_TYPES.map((t) => ({ value: t, label: CHART_TYPE_LABELS[t] })) }
+      description="A key figure for one number and its change; bars to compare categories; a stacked bar for parts; a line for a value over time; actual against target for a goal. Pie and gauge charts are not offered: a stacked bar and a bullet answer the same questions more legibly."
+      onChange={ (v) => editField(field, 'chartType', v) } />
+  );
+}
+
+function ChartOrientationEntry(props) {
+  const { id, field, editField } = props;
+  return (
+    <PanelSelect
+      id={ id }
+      label="Orientation"
+      value={ field.orientation || 'horizontal' }
+      options={ [ { value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' } ] }
+      description="Horizontal bars leave room for long category names; vertical bars suit a few short ones."
+      onChange={ (v) => editField(field, 'orientation', v === 'horizontal' ? undefined : v) } />
+  );
+}
+
+function ChartCheckEntry(props) {
+  const { id, field, editField, prop, label, description } = props;
+  return (
+    <PanelCheckbox
+      id={ id }
+      label={ label }
+      value={ !!field[prop] }
+      description={ description }
+      onChange={ (v) => editField(field, prop, v || undefined) } />
+  );
+}
+
+function ChartSeriesEntry(props) {
+  const { id, field, editField } = props;
+  return (
+    <PanelInput
+      id={ id }
+      label="Series"
+      value={ Array.isArray(field.series) ? field.series.join(', ') : '' }
+      description="The series to draw, by name, in this order, separated by commas. Empty draws them all."
+      onCommit={ (v) => {
+        const names = v.split(',').map((s) => s.trim()).filter(Boolean);
+        editField(field, 'series', names.length ? names : undefined);
+      } } />
+  );
+}
+
+function ChartTargetEntry(props) {
+  const { id, field, editField } = props;
+  return (
+    <PanelInput
+      id={ id }
+      label="Target"
+      type="number"
+      value={ field.target ?? '' }
+      description="The target each bar is held against. Empty takes the dataset's own target, or its second series."
+      onCommit={ (v) => editField(field, 'target', v === '' ? undefined : Number(v)) } />
+  );
+}
+
 // ---------- the provider ------------------------------------------------------------------
 
 class AtlasRemotePropertiesProvider {
@@ -912,6 +999,7 @@ class AtlasRemotePropertiesProvider {
       }
 
       if (field.type === MAIL_VIEW_TYPE) return this._mailView(groups, field, editField);
+      if (field.type === CHART_TYPE) return this._chart(groups, field, editField);
       if (isRemoteSelect(field)) return this._remote(groups, ctx);
       if (isDecisionField(field)) return this._decision(groups, field, editField, services);
       if (isLegacyDirectoryField(field)) return this._legacy(groups, ctx);
@@ -925,6 +1013,39 @@ class AtlasRemotePropertiesProvider {
     const entries = [
       { id: 'atlasMail-label', component: MailViewLabelEntry, field, editField, isEdited: isEditedValue },
       { id: 'atlasMail-key', component: MailViewKeyEntry, field, editField, isEdited: isEditedValue }
+    ];
+    const general = groups.find((g) => g.id === 'general');
+    if (general && Array.isArray(general.entries)) {
+      general.entries = [ ...general.entries.filter((e) => e.id !== 'label' && e.id !== 'key'), ...entries ];
+      return groups;
+    }
+    return [ { id: 'general', label: 'General', entries }, ...groups ];
+  }
+
+  // _chart gives the chart its report, its dataset and how it is drawn. Which entries show
+  // follows the chart type: orientation for bars, shares for a stacked bar, a target for
+  // actual against target.
+  _chart(groups, field, editField) {
+    const type = field.chartType || 'bar';
+    const entry = (id, component, extra = {}) => ({ id, component, field, editField, isEdited: isEditedValue, ...extra });
+    const entries = [
+      entry('atlasChart-title', ChartTextEntry, { prop: 'title', label: 'Title' }),
+      entry('atlasChart-key', ChartTextEntry, {
+        prop: 'key', label: 'Report variable',
+        validate: (v) => (MAIL_KEY.test(v.trim()) ? null : 'A variable name, such as report or weekly.report.'),
+        description: 'The variable a report task wrote, in the format atlas.report/1. The form shows it and never submits it.'
+      }),
+      entry('atlasChart-dataset', ChartTextEntry, {
+        prop: 'dataset', label: 'Dataset',
+        validate: (v) => (v.trim() ? null : 'The name of one dataset of the report.'),
+        description: 'The dataset of the report this chart draws, by its name under datasets.'
+      }),
+      entry('atlasChart-type', ChartTypeEntry),
+      ...(type === 'bar' ? [ entry('atlasChart-orientation', ChartOrientationEntry) ] : []),
+      ...(type !== 'kpi' && type !== 'bullet' ? [ entry('atlasChart-series', ChartSeriesEntry) ] : []),
+      ...(type === 'stackedBar' ? [ entry('atlasChart-stack100', ChartCheckEntry, { prop: 'stack100', label: 'Shares (100 %)', description: 'Each category as its parts\' shares of the whole.', isEdited: isEditedCheck }) ] : []),
+      ...(type === 'bar' || type === 'stackedBar' ? [ entry('atlasChart-values', ChartCheckEntry, { prop: 'showValues', label: 'Show values', description: 'Write each value at its bar.', isEdited: isEditedCheck }) ] : []),
+      ...(type === 'bullet' ? [ entry('atlasChart-target', ChartTargetEntry) ] : [])
     ];
     const general = groups.find((g) => g.id === 'general');
     if (general && Array.isArray(general.entries)) {

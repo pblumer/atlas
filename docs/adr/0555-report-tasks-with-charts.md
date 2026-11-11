@@ -1,7 +1,7 @@
 # ADR-0555: A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** pblumer (maintainer; asked for this record on 2026-11-11 and settled four
   choices: read means acknowledged, the data comes from Atlas, a report is a snapshot,
@@ -304,6 +304,48 @@ On a narrow screen they stack in one column, as the Tasks app does
   attachment or a stored document ([ADR-0543](0543-a-file-is-a-document-not-a-variable.md))
   would need. It means drawing the charts in Go and a second implementation of the
   geometry. See the open question.
+
+### As built
+
+- **RT1 (2026-11-11): print (§6, first half).**
+  - Every task form prints: the Tasks app's detail pane, open or completed
+    ([ADR-0554](0554-completed-tasks-stay-readable.md)), has a *Drucken* / *Print*
+    button. `api/web/printtask.js` copies the pane into a print root at the end of
+    `<body>`, carries what was typed into the copy, and leaves the way back, the
+    buttons, the tabs, the process diagram and the form library's badge off the paper.
+    A footer states when and by whom it was printed. While the dialog is open nothing
+    else is laid out (`app.css`, `@media print`), and the root goes on `afterprint`.
+  - The pane is copied rather than printed in place: the Tasks app's panes have a fixed
+    height and scroll on their own, so a print of the page cut the task off at the first
+    sheet.
+  - The browser's *Print → Save as PDF* makes the PDF of any task form from this.
+  - **Not built yet:** the vector *Save as PDF* of §6, which draws the charts from the
+    geometry of §4.
+- **RT2 (2026-11-11): the `chart` component (§2, §4).**
+  - `chart-layout.js` in the vendored form-js sources reads the report contract and its
+    limits and lays the five types out as primitives; it imports nothing, so the PDF
+    writer can draw the same list. `chart.jsx` draws them as SVG, with an SVG title,
+    every mark's value as its tooltip, a legend for two series or more, a table view and
+    a framed message for a report it cannot draw. Its key is a binding the form reads
+    and never writes (`publicstartfields.go`, `startformcheck.go`), so a task's holder
+    reads the report and a completed task shows it (ADR-0554).
+  - Colours: the categorical slots are the reference palette, validated against the
+    Console's light, dark and cockpit surfaces (all hard gates pass; in light, slots 3, 4
+    and 5 sit below 3:1, so the legend and the table view are the relief). They are
+    written as values in `form-theme.css`, not as tokens of its own, because that sheet
+    sets only tokens form-js reads.
+  - Deviations from §4, decided while building:
+    - **Numbers** are written in the reader's region (ADR-0459), handed to the form as
+      `atlasNumberMarks`, and in the neutral international marks without one. The
+      browser's locale is never asked, as everywhere in the Console.
+    - **A change is neutral ink**, an arrow and the difference: whether fewer is better
+      (incidents) or worse (orders) the chart cannot know, and the status colours are
+      not a series' to borrow.
+    - **The report's notes and its date** are said once, under the first chart of the
+      form that draws that report, not under every chart.
+    - **A line's area** is drawn only when its axis starts at zero.
+  - The form editor offers the chart in its palette, with title, report variable,
+    dataset, type and the options of that type.
 
 ### Consequences
 

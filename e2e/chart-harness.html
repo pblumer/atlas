@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas chart e2e harness</title>
+    <!-- Drives the real vendored form-js viewer with Atlas's chart (ADR-0555 §4), the
+         way the Tasks app mounts a task form: loadFormViewer, a Form with atlasLocale,
+         importSchema with the instance's variables. __mount(data, opts) renders the
+         schema below — one chart of each type over `report`, and a checkbox the person
+         answers — and __submit() answers what completing the task would send. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div style="padding: 18px; max-width: 760px">
+      <div id="host"></div>
+    </div>
+    <script type="module">
+      import { loadFormViewer } from "/formviewer.js";
+
+      window.__schema = {
+        type: "default",
+        id: "weekly-report",
+        components: [
+          { type: "chart", id: "Field_kpi", key: "report", dataset: "openIncidents", chartType: "kpi", title: "Offene Incidents" },
+          { type: "chart", id: "Field_bar", key: "report", dataset: "byProcess", chartType: "bar", title: "Instanzen je Prozess", showValues: true },
+          { type: "chart", id: "Field_stack", key: "report", dataset: "sla", chartType: "stackedBar", title: "SLA", stack100: true },
+          { type: "chart", id: "Field_line", key: "report", dataset: "weekly", chartType: "line", title: "Verlauf" },
+          { type: "chart", id: "Field_bullet", key: "report", dataset: "openIncidents", chartType: "bullet", title: "Ziel", target: 2 },
+          { type: "checkbox", id: "Field_read", key: "gelesen", label: "Ich habe den Bericht zur Kenntnis genommen" },
+        ],
+      };
+
+      window.__report = {
+        schema: "atlas.report/1",
+        title: "Prozesslauf KW 45",
+        generatedAt: "2026-11-11T07:00:00Z",
+        notes: ["Statistik auf die neuesten 10000 Instanzen begrenzt"],
+        datasets: {
+          openIncidents: { unit: "count", value: 3, previous: 5 },
+          byProcess: { unit: "count", categories: ["Eintritt", "Austritt", "Mutation"],
+            series: [{ name: "gestartet", values: [42, 17, 63] }, { name: "beendet", values: [40, 15, 58] }] },
+          sla: { unit: "count", categories: ["VPN", "Laptop"],
+            series: [{ name: "eingehalten", values: [18, 9] }, { name: "verpasst", values: [2, 3] }, { name: "überfällig", values: [1, 0] }] },
+          weekly: { unit: "count", categories: ["KW 40", "KW 41", "KW 42", "KW 43", "KW 44", "KW 45"],
+            series: [{ name: "gestartet", values: [30, 34, 29, null, 41, 38] }] },
+        },
+      };
+
+      let form = null;
+      window.__mount = async (data, opts = {}) => {
+        const { Form } = await loadFormViewer();
+        if (form) { try { form.destroy(); } catch { /* noop */ } }
+        const host = document.getElementById("host");
+        host.innerHTML = "";
+        form = new Form({ container: host, ...(opts.locale ? { atlasLocale: opts.locale } : {}), ...(opts.marks ? { atlasNumberMarks: opts.marks } : {}) });
+        await form.importSchema(opts.schema || window.__schema, data);
+        window.__mounted = true;
+      };
+      window.__submit = () => form.submit().data;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

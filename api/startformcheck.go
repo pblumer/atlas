@@ -82,7 +82,7 @@ func collectFormRules(components any, prefix []string, conditional bool, out *[]
 				at = append(append([]string(nil), prefix...), strings.Split(p, ".")...)
 			}
 			collectFormRules(comp["components"], at, cond, out)
-		case mailViewType:
+		case mailViewType, chartType:
 			// Shows a variable, submits nothing.
 		default:
 			key, _ := comp["key"].(string)

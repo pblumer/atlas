@@ -6,7 +6,7 @@ form-viewer.js and form-playground.js are pre-built ESM bundles of:
   - preact@10.29.8                       (the one Preact all of the above resolve to)
   - feelers@3.1.0                        (pinned by an override, see below)
   - Atlas's own form-js modules in src/atlas/ (ADR-0473, ADR-draft-mail-html-view,
-    ADR-draft-form-options-from-a-decision)
+    ADR-draft-form-options-from-a-decision, ADR-0555)
   - esbuild@0.28.2                       (bundler only; not shipped)
 
 with every transitive dependency fixed by src/package-lock.json.
@@ -27,6 +27,15 @@ is patched or copied:
     envelope, the text, and the cleaned HTML body in a sandboxed frame that loads no
     remote image until the reader asks. It is not keyed, so the form never submits it.
     viewer.jsx registers it; editor.jsx gives it its Label and Variable entries.
+  - chart.jsx is the chart (ADR-0555 §4), a component of its own type, "chart": it
+    draws one dataset of a report variable in the contract atlas.report/1 as a key
+    figure, bars, a stacked bar, a line or actual against target, with a legend, the
+    report's notes and a table view. It is not keyed, so the form never submits it.
+    chart-layout.js holds what it draws and imports nothing: it checks the report and
+    lays the chart out as primitives (rectangle, line, polyline, text) whose colours
+    are roles, which form-theme.css maps to the theme. viewer.jsx registers the chart;
+    editor.jsx gives it its title, report variable, dataset, type and the options of
+    that type.
   - viewer.jsx registers the component every select renders through. It renders
     form-js's own Select for the three sources form-js knows, and for the remote one a
     field that mounts the search the page provides as the `atlasRemote` service
@@ -82,7 +91,7 @@ properties-panel.css and form-js-playground's dist/assets/form-js-playground.css
 verbatim (README.md). License: see LICENSE.
 
 SHA-256 form-viewer.js:
-ca28ad310b3d0a66f80c1ad9bc536aa6eba42180250933ae0e2f5d4b56ac331f
+83a884b8131167cee8c8d6421553ae1bbd8b51ae92d86db20c00ed538d756142
 
 SHA-256 form-playground.js:
-7486c8167f3d9e0aa9c067995a233050aedaaf283922d266dfd8d600568d8b22
+4a1f3101d1666955ccb9b41549e66a60efa6050b9d6038b6b084c34f8c4f559d

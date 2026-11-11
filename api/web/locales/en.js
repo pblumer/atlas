@@ -1178,6 +1178,10 @@ export default {
   "tasks.folders.new": "New folder",
   "tasks.opened": "Opened",
   // The Completed view (ADR-0554).
+  "tasks.print": "Print",
+  "tasks.print.title": "Print the task or save it as PDF",
+  "tasks.print.footer": "Printed on {when} by {who}",
+  "tasks.print.footerAnon": "Printed on {when}",
   "tasks.completed.folder": "Completed",
   "tasks.completed.title": "Completed by you",
   "tasks.completed.loading": "Loading…",

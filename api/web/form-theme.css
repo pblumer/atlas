@@ -216,3 +216,82 @@
 }
 .fjs-container .atlas-mailview-empty,
 .fjs-container .atlas-mailview-cut { padding: 8px 12px; font-size: 12px; color: var(--muted, #62666d); }
+
+/* The chart (ADR-0555 §4). Every mark names its colour by role (chart-layout.js), and
+   the roles are set here, in light and again for the dark and cockpit appearances. One
+   series takes the brand accent; several take the categorical slots in fixed order —
+   the reference palette, validated for colour-vision deficiency and contrast against
+   the Console's surfaces: #ffffff light, #1d2025 dark and #0c1622 cockpit. In light,
+   slots 3, 4 and 5 sit below 3:1 against the surface, which is why a chart of several
+   series always carries a legend and a table view. The colours are written as values,
+   not as tokens of their own: this sheet sets only tokens form-js reads. */
+.fjs-container .atlas-chart-s0 { fill: #2a78d6; stroke: #2a78d6; background: #2a78d6; }
+.fjs-container .atlas-chart-s1 { fill: #eb6834; stroke: #eb6834; background: #eb6834; }
+.fjs-container .atlas-chart-s2 { fill: #1baf7a; stroke: #1baf7a; background: #1baf7a; }
+.fjs-container .atlas-chart-s3 { fill: #eda100; stroke: #eda100; background: #eda100; }
+.fjs-container .atlas-chart-s4 { fill: #e87ba4; stroke: #e87ba4; background: #e87ba4; }
+.fjs-container .atlas-chart-s5 { fill: #008300; stroke: #008300; background: #008300; }
+.fjs-container .atlas-chart-s6 { fill: #6250d6; stroke: #6250d6; background: #6250d6; }
+.fjs-container .atlas-chart-s7 { fill: #e34948; stroke: #e34948; background: #e34948; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s0,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s0 { fill: #3987e5; stroke: #3987e5; background: #3987e5; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s1,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s1 { fill: #d95926; stroke: #d95926; background: #d95926; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s2,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s2 { fill: #199e70; stroke: #199e70; background: #199e70; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s3,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s3 { fill: #c98500; stroke: #c98500; background: #c98500; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s4,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s4 { fill: #d55181; stroke: #d55181; background: #d55181; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s5,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s5 { fill: #008300; stroke: #008300; background: #008300; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s6,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s6 { fill: #9085e9; stroke: #9085e9; background: #9085e9; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-s7,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-s7 { fill: #e66767; stroke: #e66767; background: #e66767; }
+.fjs-container .atlas-chart-accent { fill: var(--accent, #0b5cff); stroke: var(--accent, #0b5cff); background: var(--accent, #0b5cff); }
+.fjs-container .atlas-chart-svg .atlas-chart-grid { stroke: #e1e0d9; }
+.fjs-container .atlas-chart-svg .atlas-chart-axis { stroke: #c3c2b7; }
+.fjs-container .atlas-chart-svg rect.atlas-chart-track { fill: #ecebe6; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-svg .atlas-chart-grid,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-svg .atlas-chart-grid { stroke: #2c2c2a; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-svg .atlas-chart-axis,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-svg .atlas-chart-axis { stroke: #4a4a46; }
+:root[data-appearance="dark"] .fjs-container .atlas-chart-svg rect.atlas-chart-track,
+:root[data-appearance="cockpit"] .fjs-container .atlas-chart-svg rect.atlas-chart-track { fill: #2c2f35; }
+.fjs-container .atlas-chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.fjs-container .atlas-chart-toggle {
+  border: 1px solid var(--border-strong, #cdd0d6); background: var(--surface, #fff); color: var(--text, #14161a);
+  border-radius: 4px; padding: 2px 10px; cursor: pointer; font-size: 12px; flex-shrink: 0;
+}
+.fjs-container .atlas-chart-box { width: 100%; overflow-x: auto; }
+.fjs-container .atlas-chart-svg { display: block; max-width: 100%; height: auto; font-family: inherit; }
+.fjs-container .atlas-chart-svg text { fill: var(--text, #14161a); font-variant-numeric: tabular-nums; }
+.fjs-container .atlas-chart-svg text.atlas-chart-muted { fill: var(--muted, #62666d); }
+.fjs-container .atlas-chart-svg text.atlas-chart-onfill { fill: #fff; }
+.fjs-container .atlas-chart-svg .atlas-chart-target { stroke: var(--text, #14161a); }
+.fjs-container .atlas-chart-svg rect.atlas-chart-hit { fill: transparent; }
+.fjs-container .atlas-chart-svg polygon.atlas-chart-area { fill: var(--accent, #0b5cff); fill-opacity: .12; }
+.fjs-container .atlas-chart-svg polyline { fill: none; }
+.fjs-container .atlas-chart-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px;
+  color: var(--text, #14161a);
+}
+.fjs-container .atlas-chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.fjs-container .atlas-chart-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.fjs-container .atlas-chart-notes { margin-top: 4px; font-size: 12px; color: var(--muted, #62666d); }
+.fjs-container .atlas-chart-notes p { margin: 2px 0; }
+.fjs-container .atlas-chart-error {
+  padding: 10px 12px; font-size: 13px; border-radius: 4px; color: var(--text, #14161a);
+  border: 1px dashed var(--border-strong, #cdd0d6); background: var(--bg, #f6f7f9);
+}
+.fjs-container .atlas-chart-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fjs-container .atlas-chart-table caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
+.fjs-container .atlas-chart-table th,
+.fjs-container .atlas-chart-table td { padding: 4px 10px; border-bottom: 1px solid var(--border, #e2e4e9); text-align: right; }
+.fjs-container .atlas-chart-table th[scope="row"],
+.fjs-container .atlas-chart-table thead th:first-child { text-align: left; font-weight: 500; }
+@media print {
+  .fjs-container .atlas-chart { break-inside: avoid; }
+  .fjs-container .atlas-chart-toggle { display: none; }
+}

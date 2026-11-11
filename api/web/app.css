@@ -3749,6 +3749,22 @@ details.fold-sub[open] > summary::before { transform: rotate(90deg); }
 .tasks-completed-values dt { font-weight: 600; }
 .tasks-completed-values dd { margin: 0; overflow-wrap: anywhere; }
 
+/* Printing a task (ADR-0555 §6, web/printtask.js). The detail pane is copied into
+   .task-print-root, and while the print dialog is open nothing else is laid out: the
+   panes of the Tasks app have a fixed height and scroll on their own, and printed in
+   place they would cut the task off at the first sheet. */
+.task-print-root { display: none; }
+@media print {
+  body.printing-task { background: #fff; }
+  body.printing-task > *:not(.task-print-root) { display: none !important; }
+  body.printing-task .task-print-root { display: block; color: #000; }
+  .task-print-root, .task-print-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .task-print-root .tasks-detail-head { margin-bottom: 12px; }
+  .task-print-root .tasks-field, .task-print-root .fjs-form-field, .task-print-root svg,
+  .task-print-root .tasks-doc, .task-print-root .tasks-completed-values { break-inside: avoid; }
+  .task-print-root .tasks-print-foot { margin-top: 18px; font-size: 9pt; color: #555; }
+}
+
 /* Priority & due date (ADR-0091) */
 .prio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b26b00; margin-right: 6px; vertical-align: middle; flex: 0 0 auto; }
 .due-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; flex: 0 0 auto; }

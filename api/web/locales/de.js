@@ -1171,6 +1171,10 @@ export default {
   "tasks.opened": "Eröffnet",
   // The Completed view (ADR-0554): the tasks the signed-in person completed, shown
   // again read-only in the form they were answered in.
+  "tasks.print": "Drucken",
+  "tasks.print.title": "Die Aufgabe drucken oder als PDF speichern",
+  "tasks.print.footer": "Gedruckt am {when} von {who}",
+  "tasks.print.footerAnon": "Gedruckt am {when}",
   "tasks.completed.folder": "Erledigt",
   "tasks.completed.title": "Von dir erledigt",
   "tasks.completed.loading": "Lade…",
