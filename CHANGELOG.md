@@ -27,7 +27,9 @@ _Changed_ / _Removed_ for each version.
   rule (`GET /api/v1/decisions/{id}/binding`, MCP `atlas_decision_binding`), and says which
   version that is and since when; a version that is not deployed is said before the deploy
   refuses it. A switch shows the stored model the editor opens. "Open in the decision editor"
-  leaves the way the panel's Edit does, with the way back (ADR-draft-decision-peek).
+  leaves the way the panel's Edit does, with the way back, and says beside it whether the stored
+  model it opens decides differently from the version shown. A decision that exists only as a
+  deployment can be stored from the peek, unchanged, and then edited (ADR-draft-decision-peek).
 - **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
   names `"provider": "google-calendar"` uses a service account the booking calendars are shared
   with; the model stays the same. Recurring and all-day appointments block their time, and a

@@ -50,6 +50,11 @@ type boundDecisionResp struct {
 	Key             uint64 `json:"key,omitempty"`
 	DeployedVersion int32  `json:"deployedVersion,omitempty"`
 	DeployedAt      int64  `json:"deployedAt,omitempty"`
+	// ApplicationID and ModelName say where a decision deployment was published from
+	// and what its model is called — what the peek files a stored model under, and
+	// names it, when it creates one from the deployment.
+	ApplicationID string `json:"applicationId,omitempty"`
+	ModelName     string `json:"modelName,omitempty"`
 	// Fallback marks a latest binding that found no decision deployment and answers
 	// from the bundled model instead.
 	Fallback bool `json:"fallback,omitempty"`
@@ -224,7 +229,7 @@ func (s *Server) handleDecisionBinding(w http.ResponseWriter, r *http.Request) {
 			s.do(func() {
 				var ok bool
 				if decRec, ok, _ = s.decisionDeploys.load(resp.Key); ok {
-					resp.DeployedAt = decRec.DeployedAt
+					resp.DeployedAt, resp.ApplicationID, resp.ModelName = decRec.DeployedAt, decRec.ApplicationID, decRec.ModelName
 				}
 			})
 		}

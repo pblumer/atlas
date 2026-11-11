@@ -23,6 +23,7 @@ type boundView struct {
 	Key             uint64          `json:"key"`
 	DeployedVersion int32           `json:"deployedVersion"`
 	DeployedAt      int64           `json:"deployedAt"`
+	ModelName       string          `json:"modelName"`
 	Fallback        bool            `json:"fallback"`
 	Reason          string          `json:"reason"`
 	Versions        []int32         `json:"versions"`
@@ -90,7 +91,7 @@ func TestADraftsBindingResolvesAsADeployNowWould(t *testing.T) {
 	deployOneDecision(t, x, "", eligibilityDMN("approve"))
 	v2 := deployOneDecision(t, x, "", eligibilityDMN("vip"))
 	v = readBound(t, x, "?binding=latest")
-	if v.Source != "decisionDeployment" || v.Key != v2.Key || v.DeployedVersion != 2 || v.Fallback || v.DeployedAt == 0 {
+	if v.Source != "decisionDeployment" || v.Key != v2.Key || v.DeployedVersion != 2 || v.Fallback || v.DeployedAt == 0 || v.ModelName != "Eligibility" {
 		t.Fatalf("latest = %+v, want decision deployment v2 (key %d)", v, v2.Key)
 	}
 	if !strings.Contains(string(v.Logic), `vip`) {

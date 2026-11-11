@@ -33,7 +33,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   binding resolves to (the server's answer, named with its version), with the called decision
   ringed and its logic shown; a requirement chip, a click on a node and Enter on a focused node
   walk the graph; the stored model is one switch away and read only then; a version that is not
-  deployed is said with the versions that are; a deployed version on screen asks for that
+  deployed is said with the versions that are; the editor button warns when the stored model
+  it opens differs from the version shown; a decision that exists only as a deployment is
+  stored unchanged under its model name and its application, never over a taken name, and can
+  then be opened; a deployed version on screen asks for that
   definition's resolution; a decision the server does not hold is said, not drawn; and "Open in
   the decision editor" leaves through the panel's door, with the way back.
 - **`mi-history.spec.mjs`** ([OHS1](../docs/planning/operations-history-at-scale-program.md)):

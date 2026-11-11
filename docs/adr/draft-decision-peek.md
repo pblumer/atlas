@@ -143,6 +143,36 @@ is a second view a switch reaches.
 version is not deployed, and a task with no model anywhere, are stated before the deploy refuses
 them. One request more per peek; the stored view is read only when it is opened.
 
+### Amendment (2026-11-11): the editor door says what it opens, and a deployment can be stored
+
+The editor door opens the stored model, because that is what is edited — but the peek now
+opens on the model the binding resolves to, so the two can differ, and the button did not say
+so. And a decision that exists only as a deployment had no door at all: there was nothing for
+the editor to open, and no way from the peek to make something.
+
+**Decision.**
+
+- **The door says what it opens.** The peek reads the stored model beside the bound one and
+  compares them by what they decide: the requirements graph without its layout, and each
+  element's logic as the engine reads it. A checksum would call two models different that only
+  a diagram move or a re-serialisation separates. Beside the button, a warning says that the
+  editor opens the stored model and that it differs from the version shown, and that a change
+  made there runs only after a deploy; where the two match, a plain line says so; where the
+  binding answers with nothing, it says that. The button's title carries the same sentence.
+- **A deployment can be stored.** Where the binding answers with a decision deployment and no
+  stored model exists, the peek offers "Create stored model": the deployed source, unchanged,
+  is written to the model store and a reference points at it — the two writes "Save to model"
+  makes for a decision never in the model (ADR-0321). It is named after the deployment's model
+  and filed under the application the deployment was published from, else the diagram's. A
+  handle that is taken is refused by the store (ADR-0222) and the refusal is shown; whose model
+  to replace is not the peek's to decide. The window then opens again on the new model, with
+  the editor door.
+
+**Consequences.** One read more per peek where a stored model exists (it was read lazily
+before). The comparison does not cover what neither the graph nor the logic view carries — a
+decision's description, the model's item definitions — so "matches" means "decides the same",
+which is what the hint claims and no more.
+
 ## Pros and cons of the options
 
 ### Option 1 — a link to the decision editor
