@@ -1,12 +1,13 @@
 # ADR-0555: A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** pblumer (maintainer; asked for this record on 2026-11-11 and settled four
   choices: read means acknowledged, the data comes from Atlas, a report is a snapshot,
   and a report can be printed and saved as PDF; accepted on 2026-11-11 that a report is
-  computed with a technical principal's reach until ADR-0475 lands)
+  computed with a technical principal's reach until ADR-0475 lands; accepted the record
+  on 2026-11-11 with RT3)
 - **Open question:** whether a report must also leave Atlas as a PDF *file* — attached to
   a mail for a recipient without an account, or stored as a document — which needs the
   charts drawn on the server. This record draws them in the browser only (§6); the
