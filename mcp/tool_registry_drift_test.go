@@ -237,6 +237,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_decision_deployments":        "GET /api/v1/decision-deployments",
 	"atlas_deployed_decision_model":     "GET /api/v1/decision-deployments/{key}/xml",
 	"atlas_dmnref_graph":                "GET /api/v1/dmnrefs/{id}/graph",
+	"atlas_dmnref_logic":                "GET /api/v1/dmnrefs/{id}/logic",
+	"atlas_decision_binding":            "GET /api/v1/decisions/{id}/binding",
 	"atlas_get_decision_model":          "GET /api/v1/dmn-models/{ref}/xml",
 	"atlas_collaboration_runtime":       "GET /api/v1/collaborations/{key}/runtime",
 	"atlas_list_drafts":                 "GET /api/v1/drafts",

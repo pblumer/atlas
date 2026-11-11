@@ -13,6 +13,23 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A business rule task's decision is one click from the task.** In the Modeler's Implement
+  view a business rule task that calls a decision carries a small decision mark, as a user task
+  carries its form mark. A click opens the decision over the diagram, without saving or leaving
+  it: the requirements graph with the called decision marked, and below it whatever node is
+  picked — what it requires, what requires it, and its logic, so the graph can be walked from
+  the task. The logic comes from the engine's own reading of the model, for every DMN 1.5 boxed
+  expression it supports (decision table, literal expression, context, list, relation,
+  invocation, conditional, filter, iterator), through the new read
+  `GET /api/v1/dmnrefs/{id}/logic` and the MCP tool `atlas_dmnref_logic`. The window shows the
+  model the task's binding resolves to — the deployed version latest or a pinned version
+  answers with, or the model a deploy would bundle — resolved on the server by the worker's own
+  rule (`GET /api/v1/decisions/{id}/binding`, MCP `atlas_decision_binding`), and says which
+  version that is and since when; a version that is not deployed is said before the deploy
+  refuses it. A switch shows the stored model the editor opens. "Open in the decision editor"
+  leaves the way the panel's Edit does, with the way back, and says beside it whether the stored
+  model it opens decides differently from the version shown. A decision that exists only as a
+  deployment can be stored from the peek, unchanged, and then edited (ADR-draft-decision-peek).
 - **A directory delta can keep only the objects it is about.** `delta-users` and `delta-groups`
   take a `keep` predicate — `department eq 'IT'`, `startswith(displayName,'test-')`, joined with
   `and` / `or` and parentheses, compared case-insensitively — and the Entra Worker applies it to

@@ -128,6 +128,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	}{
 		{"draft xml (authorizeArtifact)", "GET", "/api/v1/drafts/d1/xml", ""},
 		{"dmnref graph (authorizeArtifact)", "GET", "/api/v1/dmnrefs/r1/graph", ""},
+		{"dmnref logic (authorizeArtifact)", "GET", "/api/v1/dmnrefs/r1/logic", ""},
 		{"dmnref validate (authorizeArtifact)", "POST", "/api/v1/dmnrefs/r1/validate", ""},
 		{"delete draft (authorizeArtifact)", "DELETE", "/api/v1/drafts/d1", ""},
 		{"delete dmnref (authorizeArtifact)", "DELETE", "/api/v1/dmnrefs/r1", ""},
