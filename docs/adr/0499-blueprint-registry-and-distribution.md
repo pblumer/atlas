@@ -157,6 +157,17 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 - **Read.** `GET /api/v1/blueprints/installations` lists the records from this server's disk, with the registry unreachable or unconfigured; it is an administrator's, because it says who installed what from where. The MCP tool `atlas_hub_installations` proxies it.
 - **Not decided here (#1422).** The record covers the application's source only: catalogues, constants and a published release are separate writes the Console makes afterwards and are not part of it. Nothing reconciles a pending record with what the application holds, a deleted application keeps its record, and updates and rollback stay BMP2.
 
+## Amendment 2026-11-11 (h): an installation's status is read, never reported
+
+**Context.** Amendment (g) records where an installed application came from, but only for its source: a Console install then writes the application's constants, publishes a release and imports the package's catalogues, each a separate write the server cannot bind into one. Issue #1422 asks that an installation never appear complete when one of those failed, survive a restart, and show every installed component.
+
+**Decision (owner pblumer).** The record keeps, besides its pin, what the verified package carried, as the import read it before writing: its processes, forms, decisions and constants (the manifest's and the package's `konstanten.json`), its catalogues and products, and whether its catalogue document asks to be published. No step stores a "complete". Every read of `GET /api/v1/blueprints/installations` compares those identities with what this server holds then:
+
+- **Components.** The application (by id, and by key while the record is pending); each process, form and decision in that application; each constant held for it; the application's newest release, `published` when it names every process and decision of the package and is not older than the newest save of those processes (both stamped in seconds, so a save in the release's own second counts as released), `unpublished` when it is behind; each catalogue, `published` when the package asks for publishing and the catalogue has a release; each product.
+- **Status.** `complete` when the import finished and every component is present or published; `partial` when one is missing or behind — installing the release again continues it, the importer's decisions guarding what was changed here; `pending` when the server stopped inside the import, the components listed but not vouched for; `removed` when the application is gone, the record kept as history.
+- **Who reads it.** The route is a modeler's, narrowed to the installations into applications the caller may view; `installedBy` and records of deleted applications are an administrator's. The Console's atlas hub dialog marks an installed release in the listing and lists its components in the preview; `atlas_hub_installations` answers the same.
+- **No new transaction.** Deriving the status at read time needs no write across stores, so the architecture gate of #1422 (a cross-store transaction needs its own ADR) is not reached. What a component's status cannot tell is whether its content is the package's: a catalogue's or a constant's content may have been answered or edited here, which is the importer's business, not this record's.
+
 ## Links
 
 - [ADR-0128](0128-process-applications.md)

@@ -170,15 +170,20 @@ func hubTools() []Tool {
 		{
 			Name: "atlas_hub_installations",
 			Description: "Where each application installed through atlas_hub_import_release (or the Console's " +
-				"atlas hub dialog) came from, as this server recorded it (ADR-0499): applicationKey, " +
-				"applicationId, state, registryId, indexUrl, signedBy (the fingerprint of the pinned key " +
-				"that signed the index), publisherId, blueprintId, version, digest, cataloguesNotImported, " +
-				"installedBy and recordedAt (Unix seconds). state is installed when the import finished; " +
-				"pending means the server stopped between recording the import and finishing it, so what " +
-				"the application holds is not known — say so to the person, and importing the same release " +
-				"again settles it. It is read from the server's own disk and answers with the registry " +
-				"unreachable. It covers the application only: catalogues, constants and publishing are not " +
-				"part of the record. Administrator only. Nothing is written.",
+				"atlas hub dialog) came from, and what of it this server holds now (ADR-0499): applicationKey, " +
+				"applicationId, registryId, indexUrl, signedBy (the fingerprint of the pinned key that signed " +
+				"the index), publisherId, blueprintId, version, digest, recordedAt (Unix seconds), and " +
+				"components — the application, each process, form, decision and constant, the release, each " +
+				"catalogue and product the verified package carried — each present, missing, published or " +
+				"unpublished as this server holds it now, never as a client reported it. status is complete " +
+				"when every component is here and the newest release carries the processes as they are; " +
+				"partial when one is missing or behind — installing the same release again, and importing its " +
+				"catalogues and constants in the Console, continues it; pending when the server stopped " +
+				"between recording the import and finishing it, so what the application holds is not vouched " +
+				"for; removed when the application is gone. Say which components are missing to the person. " +
+				"Lists the installations into applications you may view; installedBy only for an " +
+				"administrator. Read from the server's own disk, it answers with the registry unreachable. " +
+				"Nothing is written.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/blueprints/installations"))

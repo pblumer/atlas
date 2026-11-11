@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"time"
 
@@ -47,6 +48,11 @@ type hubInstallation struct {
 	// did not install; the Console installs them beside it, separately.
 	CataloguesNotImported []string `json:"cataloguesNotImported"`
 	InstalledBy           string   `json:"installedBy,omitempty"`
+	// Expected is what the verified package carried — its processes, forms,
+	// decisions, constants, catalogues and products — as the import read it before
+	// writing: what the installation's status is read against (amendment h).
+	// Absent on a record kept before that.
+	Expected *hubExpected `json:"expected,omitempty"`
 	// RecordedAt is when the record took its state, in Unix seconds.
 	RecordedAt int64 `json:"recordedAt"`
 }
@@ -78,20 +84,54 @@ type hubJournal struct {
 }
 
 func (s *Server) newHubJournal(r *http.Request, release blueprintregistry.Release, origin blueprintregistry.Origin,
-	applicationKey string, catalogues []string) *hubJournal {
-	sorted := append([]string{}, catalogues...)
-	sort.Strings(sorted)
+	inspection blueprintregistry.PackageInspection, constants []string) *hubJournal {
+	exp := &hubExpected{PublishCatalogues: inspection.CataloguePublish}
+	for _, c := range inspection.Catalogues {
+		exp.Catalogues = append(exp.Catalogues, c.ID)
+	}
+	for _, p := range inspection.Products {
+		exp.Products = append(exp.Products, p.ID)
+	}
+	exp.Constants = append(exp.Constants, constants...)
 	rec := hubInstallation{
-		ApplicationKey: applicationKey, State: hubPending,
+		ApplicationKey: inspection.ApplicationKey, State: hubPending,
 		RegistryID: origin.RegistryID, IndexURL: origin.IndexURL, SignedBy: origin.SignedBy,
 		PublisherID: release.PublisherID, BlueprintID: release.BlueprintID, Version: release.Version,
-		Digest: release.Artifact.Digest, CataloguesNotImported: sorted,
-		RecordedAt: s.now() / int64(time.Second),
+		Digest: release.Artifact.Digest, CataloguesNotImported: sortedUnique(exp.Catalogues),
+		RecordedAt: s.now() / int64(time.Second), Expected: exp,
 	}
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		rec.InstalledBy = p.UserID
 	}
 	return &hubJournal{store: s.hubInstalls, rec: rec}
+}
+
+// expectTree adds what the source tree carries to what the record expects: its
+// processes, forms and decisions, and the constants its manifest declares.
+func (j *hubJournal) expectTree(man sourceManifest, offered []heldConstant) {
+	exp := j.rec.Expected
+	for _, p := range man.Processes {
+		exp.Processes = append(exp.Processes, p.ID)
+	}
+	for _, f := range man.Forms {
+		exp.Forms = append(exp.Forms, f.ID)
+	}
+	for _, d := range man.Decisions {
+		exp.Decisions = append(exp.Decisions, d.ID)
+	}
+	for _, c := range offered {
+		exp.Constants = append(exp.Constants, c.Name)
+	}
+	for _, list := range []*[]string{&exp.Processes, &exp.Forms, &exp.Decisions, &exp.Constants, &exp.Catalogues, &exp.Products} {
+		*list = sortedUnique(*list)
+	}
+}
+
+// sortedUnique is a sorted copy of list without repeats, never nil.
+func sortedUnique(list []string) []string {
+	out := append([]string{}, list...)
+	sort.Strings(out)
+	return slices.Compact(out)
 }
 
 // begin writes the pending record before the import writes anything. An error
@@ -145,23 +185,51 @@ func (j *hubJournal) end(res sourceImportResult, outcome hubOutcome) error {
 }
 
 // handleListHubInstallations lists where this server's atlas hub installations
-// came from, read from its own disk: it answers with the registry unreachable or
-// not configured at all. It is an administrator's, because it says who installed
-// what from where.
-func (s *Server) handleListHubInstallations(w http.ResponseWriter, _ *http.Request) {
+// came from and what of each is here now (amendment h), read from its own disk: it
+// answers with the registry unreachable or not configured at all. Anybody who may
+// model reads the installations into applications they may view; who installed one
+// is an administrator's to read.
+func (s *Server) handleListHubInstallations(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	var (
 		recs []hubInstallation
 		err  error
 	)
+	// The records on the loop, so a record an import is writing is never read
+	// halfway; what they are compared with is read after, off it.
 	s.do(func() { recs, err = s.hubInstalls.LoadAll() })
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read atlas hub installation records: "+err.Error())
 		return
 	}
-	if recs == nil {
-		recs = []hubInstallation{}
+	views := []hubInstallationView{}
+	if len(recs) > 0 {
+		holdings, err := s.hubHoldings()
+		if err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read what the atlas hub installations installed: "+err.Error())
+			return
+		}
+		admin := s.isAdmin(r)
+		for _, rec := range recs {
+			visible, err := s.hubVisible(r, rec)
+			if err != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "read atlas hub installation records: "+err.Error())
+				return
+			}
+			if !visible {
+				continue
+			}
+			v, err := holdings.view(rec)
+			if err != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "read what the atlas hub installations installed: "+err.Error())
+				return
+			}
+			if !admin {
+				v.InstalledBy = ""
+			}
+			views = append(views, v)
+		}
 	}
-	sort.Slice(recs, func(i, k int) bool { return recs[i].ApplicationKey < recs[k].ApplicationKey })
-	httpapi.JSON(w, http.StatusOK, recs)
+	sort.Slice(views, func(i, k int) bool { return views[i].ApplicationKey < views[k].ApplicationKey })
+	httpapi.JSON(w, http.StatusOK, views)
 }

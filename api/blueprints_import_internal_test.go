@@ -40,6 +40,12 @@ func hubImportServerAt(t *testing.T, dir string) (*Server, *httptest.Server, *fa
 	return srv, ts, f, stop
 }
 
+// hubCatalogue is the sample release's catalogue document: one catalogue selling one
+// product the release's process provisions, published on import.
+const hubCatalogue = `{"catalogs":[{"id":"cat-hub","texts":{"de":"Hub"},"languages":["de"],"items":["hub-product"]}],
+  "products":[{"id":"hub-product","homeCatalog":"cat-hub","state":"active","texts":{"de":"Produkt"},
+    "provisionProcess":"proc_hub_sample","deprovisionProcess":"proc_hub_sample"}],"publish":true}`
+
 // offer makes the registry serve release 1.0.0 of org.example.hub-sample as an
 // application whose one process is processXML.
 func (f *fakeBlueprintSource) offer(t *testing.T, processXML string) {
@@ -48,7 +54,8 @@ func (f *fakeBlueprintSource) offer(t *testing.T, processXML string) {
 	if err := writeSourceArchive(&archive, []sourceFile{
 		{Path: "atlas.json", Data: []byte(`{"formatVersion":1,"key":"hub-sample","name":"Hub sample","processes":[{"id":"proc_hub_sample","name":"Hub sample","path":"processes/hub.bpmn"}],"forms":[],"decisions":[]}`)},
 		{Path: "processes/hub.bpmn", Data: []byte(processXML)},
-		{Path: "katalog.json", Data: []byte(`{"catalogs":[{"id":"cat-hub","items":[]}],"products":[]}`)},
+		{Path: "katalog.json", Data: []byte(hubCatalogue)},
+		{Path: "konstanten.json", Data: []byte(`{"constants":[{"name":"HUB_TENANT","type":"string","value":"t-1"}]}`)},
 	}); err != nil {
 		t.Fatal(err)
 	}

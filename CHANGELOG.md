@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **atlas hub shows what of an installed release is here.** An installation now lists its
+  components — the application, its processes, forms, decisions and constants, its release, its
+  catalogues and products — each as this server holds it at the moment it is read, never as the
+  Console reported it, and says whether the installation is complete, incomplete, interrupted or
+  its application deleted. A step that failed or a server that stopped in between shows as
+  incomplete with the missing parts named, and installing the release again continues it. The
+  atlas hub dialog marks an installed release in the listing and lists its components in the
+  preview. Anybody who may model reads the installations into applications they may view
+  (ADR-0499 amendment h).
 - **The Modeler warns about a variable the model reads and nothing in it writes.** The Problems
   bar names each element whose expressions, conditions, correlation keys or template
   placeholders read a variable that no start variable, constant, result, mapping, form field,
