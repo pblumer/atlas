@@ -1,10 +1,10 @@
 # ADR-0554: A completed task stays readable to the person who completed it, in the form they answered
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** pblumer (maintainer; asked on 2026-11-11 that a closed task can be looked
-  at again)
+  at again, and accepted this record on 2026-11-11)
 - **Open question:** who besides the person who completed a task may read it again: the
   members of the groups it was offered to, its assignee if somebody else completed it, a
   deputy. This record lets only the completer read it (§4), because a completed task
