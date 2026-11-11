@@ -65,7 +65,9 @@ Start "Termin anfragen"            (Startformular termin-dienstleistung, öffent
    Für Microsoft 365: `{"provider": "microsoft-graph", "tenantId": "…", "clientId": "…",
    "clientSecret": "…"}` und im Modell die Adresse des eigenen Ressourcenpostfachs. Für
    Google Workspace: `{"provider": "google-calendar", "clientEmail": "…", "privateKey":
-   "…"}` und im Modell die Kalender-ID des freigegebenen Kalenders. Die Schritte stehen im
+   "…"}` und im Modell die Kalender-ID des freigegebenen Kalenders. Für einen CalDAV-Server:
+   `{"provider": "caldav", "username": "…", "password": "…", "timeZone": "Europe/Zurich"}`, das
+   Kalender-Home als Endpoint des Workers und im Modell der Sammlungsname des Kalenders. Die Schritte stehen im
    Handbuch unter *Calendar booking*.
 2. Das Beispiel installieren (Handbuch, Kapitel Beispiele, oder atlas hub, Bundle
    `terminbuchung`) und in der Tasks-App unter *Start process* bei **Terminbuchung** den

@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/connector/calendar"
+	"github.com/pblumer/atlas/connector/calendar/caldavfake"
 	"github.com/pblumer/atlas/connector/calendar/catalog"
 	"github.com/pblumer/atlas/connector/calendar/googlefake"
 	"github.com/pblumer/atlas/connector/calendar/graphfake"
@@ -136,6 +137,53 @@ var backends = []backendUnderTest{
 	}},
 	{name: calendar.ProviderGraph, build: buildGraphWorld},
 	{name: calendar.ProviderGoogle, build: buildGoogleWorld},
+	{name: calendar.ProviderCalDAV, build: buildCalDAVWorld},
+}
+
+// caldavWorld is the CalDAV backend against the in-process CalDAV server.
+type caldavWorld struct {
+	fake *caldavfake.Server
+	b    calendar.Backend
+}
+
+func buildCalDAVWorld(specs map[string]calendar.MockCalendarSpec) world {
+	cals := map[string]caldavfake.Calendar{}
+	for name, spec := range specs {
+		if spec.RefuseAttendees {
+			return nil // a CalDAV server records attendees; it does not refuse them
+		}
+		c := caldavfake.Calendar{ReadOnly: spec.ReadOnly}
+		for _, b := range spec.Busy {
+			c.Busy = append(c.Busy, caldavfake.Busy{Start: b.Start, End: b.End, Transparent: b.Free, Weekly: b.Weekly})
+		}
+		cals[name] = c
+	}
+	fake := caldavfake.New(cals)
+	b, err := calendar.NewBackend(fake.HomeURL(), caldavfake.Bundle(zone), calendar.Options{HTTPClient: fake.HTTPClient()})
+	if err != nil {
+		panic("calendarbooking: the CalDAV backend does not build against the fake: " + err.Error())
+	}
+	return caldavWorld{fake: fake, b: b}
+}
+
+func (w caldavWorld) backend() calendar.Backend { return w.b }
+
+func (w caldavWorld) close() { w.fake.Close() }
+
+func (w caldavWorld) events(cal string) []observed {
+	var out []observed
+	for _, o := range w.fake.Objects(cal) {
+		att := make([]calendar.Attendee, len(o.Attendees))
+		for j, a := range o.Attendees {
+			att[j] = calendar.Attendee{Email: a}
+		}
+		key, _ := strings.CutPrefix(o.UID, "atlas-")
+		if !strings.HasPrefix(o.UID, "atlas-") {
+			key = ""
+		}
+		out = append(out, observed{ID: o.Name, Key: key, Start: o.Start, End: o.End, Subject: o.Summary, Body: o.Description, Attendees: att})
+	}
+	return out
 }
 
 // googleWorld is the Google backend against the in-process fake of the Calendar API.
@@ -277,7 +325,10 @@ func Suite(name string) evidence.Suite {
 			"transactionId. A refusal a provider never makes (Graph never refuses attendees) is met vacuously on it. " +
 			"google-calendar runs against connector/calendar/googlefake, written from Google's documentation, not observed " +
 			"from a domain; it pages every read, expands a series only for singleEvents, refuses an event id it has seen " +
-			"and keeps a deleted event as cancelled. " +
+			"and keeps a deleted event as cancelled. caldav runs against connector/calendar/caldavfake, written from RFC 4791 " +
+			"and RFC 5545, not observed from a server; it expands a series only when asked, refuses a calendar-query that " +
+			"reads more than times and availability, and keeps ETags. A CalDAV server records attendees and does not refuse " +
+			"them, so that case is met vacuously on it. " +
 			"The backends see every create that returned before a read began; whether a provider does is not shown here.",
 		Run: func(ctx context.Context, contract workertype.TechnicalContract) ([]evidence.Result, error) {
 			return run(ctx, name, contract)
