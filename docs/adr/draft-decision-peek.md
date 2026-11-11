@@ -4,12 +4,10 @@
 - **Implementation:** Landed
 - **Date:** 2026-11-10
 - **Deciders:** Atlas maintainers
-- **Open question:** The peek shows the model the decision's reference resolves today — what
-  the decision editor opens. A task bound to a pinned version, or to the version deployed with
-  its process (ADR-0423), evaluates a deployed model that can differ from it. Whether the peek
-  should show the model the binding resolves instead, and how it would say which deployment
-  that is for a draft that has never been deployed, is not settled here. The window says which
-  binding applies and that the two can differ.
+- **Open question:** A deployed definition written before deploy-time pinning (ADR-0063)
+  resolves `latest` to the newest model *of either kind* when its task is activated. The peek
+  shows that model (`newestModel`), as the registry's latest pointer names it now; whether that
+  is worth more than a sentence on so old a definition is not settled here.
 - **Question checked:** 2026-11
 
 ## Context and problem statement
@@ -107,6 +105,44 @@ Chosen: **option 2, with the logic from temis (option 4, second half)**.
   decision and process documents. Moving it onto the same server read would give those
   documents the full DMN 1.5 set too.
 
+### Amendment (2026-11-11): the peek shows the model the binding resolves to
+
+As landed, the peek showed the model the decision's reference holds today — what the editor
+opens — and said that a task bound to a version, or to the model deployed with its process,
+could evaluate a different one. The owner decided that the peek answers the question a reader
+of the diagram is asking: what this step decides when it runs.
+
+**Decision.** The peek opens on the model the task's binding resolves to, and the stored model
+is a second view a switch reaches.
+
+- **The server resolves it**, at `GET /api/v1/decisions/{id}/binding` (MCP:
+  `atlas_decision_binding`), so the browser does not re-implement ADR-0423:
+  - **A draft** is resolved as a deploy now and the worker would: `version` to the decision
+    deployment holding that version (or, when it is not deployed, a statement naming the
+    versions that are — the deploy would refuse it); `latest` to the newest decision
+    deployment, or without one to the stored model a deploy would bundle, chosen as the deploy
+    chooses it (the first reference whose model compiles and answers to the id); `deployment`
+    to that bundle.
+  - **A deployed definition on screen** (opened from a version, not yet saved as a draft) is
+    resolved by `dmn.TaskModelOf`, which is the worker's own `decisionModelKey` applied to the
+    definition's compiled task: its pins, its bundle and its binding policy. The task on the
+    canvas may have been edited since; the compiled one is the authority.
+  - A deployed model's graph and logic come from the registry, where it was compiled when it
+    was deployed (`Registry.Graph`, `Registry.Logic`); a stored one is compiled off the run
+    loop as the reference reads do.
+  - A stored model filed in an application the caller may not view is named as hidden, with
+    neither its reference nor its content: the caller learns no more than a deploy would tell
+    them.
+- **The window says what it shows**: the binding, which model answers and since when (for a
+  decision deployment, its version and deploy date), and whether that is a draft's or a
+  deployed definition's resolution. The stored view carries a warning-toned line saying it is
+  what the editor opens and runs only once deployed or bundled.
+- **The editor door is unchanged**: it opens the stored model, since that is what is edited.
+
+**Consequences.** The first open question of this record is closed. A version-bound task whose
+version is not deployed, and a task with no model anywhere, are stated before the deploy refuses
+them. One request more per peek; the stored view is read only when it is opened.
+
 ## Pros and cons of the options
 
 ### Option 1 — a link to the decision editor
@@ -130,7 +166,7 @@ Chosen: **option 2, with the logic from temis (option 4, second half)**.
 - extends ADR-0465 (the form mark) to the business rule task
 - keeps ADR-0320 (the decision editor is a page): the peek reads, the editor edits
 - reuses ADR-0405's window and renderer (`decision-graph.js`), without a case
-- shows the binding of ADR-0423; draws decision services per ADR-0398
-- `dmn/logic.go`, `api/decisions.go` (`handleDmnRefLogic`), `api/web/decision-logic.js`,
+- resolves the binding of ADR-0423 with the worker's own function; draws decision services per ADR-0398
+- `dmn/logic.go`, `dmn/bound.go`, `api/decisions.go` (`handleDmnRefLogic`), `api/decisionbinding.go`, `api/web/decision-logic.js`,
   `api/web/decision-graph.js` (`openDecisionPeek`), `api/web/editor.js`
   (`drawDecisionBadges`, `walkDecisionDoor`), `e2e/decision-peek.spec.mjs`

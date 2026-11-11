@@ -21,8 +21,13 @@ _Changed_ / _Removed_ for each version.
   the task. The logic comes from the engine's own reading of the model, for every DMN 1.5 boxed
   expression it supports (decision table, literal expression, context, list, relation,
   invocation, conditional, filter, iterator), through the new read
-  `GET /api/v1/dmnrefs/{id}/logic` and the MCP tool `atlas_dmnref_logic`. "Open in the decision
-  editor" leaves the way the panel's Edit does, with the way back (ADR-draft-decision-peek).
+  `GET /api/v1/dmnrefs/{id}/logic` and the MCP tool `atlas_dmnref_logic`. The window shows the
+  model the task's binding resolves to — the deployed version latest or a pinned version
+  answers with, or the model a deploy would bundle — resolved on the server by the worker's own
+  rule (`GET /api/v1/decisions/{id}/binding`, MCP `atlas_decision_binding`), and says which
+  version that is and since when; a version that is not deployed is said before the deploy
+  refuses it. A switch shows the stored model the editor opens. "Open in the decision editor"
+  leaves the way the panel's Edit does, with the way back (ADR-draft-decision-peek).
 - **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
   names `"provider": "google-calendar"` uses a service account the booking calendars are shared
   with; the model stays the same. Recurring and all-day appointments block their time, and a

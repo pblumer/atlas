@@ -1164,7 +1164,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // "Open in the decision editor" leaves — through leaveForDecision, as the panel's
   // Edit does.
   const refreshBadges = makeImplementBadges(root, modeler, api, (el) => openLinkedForm(api, toast, el),
-    (el) => peekCalledDecision(api, projectId, el));
+    // A deployed version on screen (not yet saved as a draft) is resolved as that
+    // definition resolves it at runtime; a draft as a deploy now would.
+    (el) => peekCalledDecision(api, projectId, el, identity.fromDeployment && !identity.draftId ? key : null));
   registerFormContextPad(modeler, api, toast);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
@@ -3003,10 +3005,12 @@ function calledDecisionOf(element) {
 }
 
 // peekCalledDecision opens the decision a business rule task calls over the diagram
-// (ADR-draft-decision-peek): its requirements graph with the called decision marked, and the logic
-// of whatever node the author picks. Nothing is saved or left to look; the peek's
-// editor button is the door out, and it is walkDecisionDoor's.
-function peekCalledDecision(api, projectId, element) {
+// (ADR-draft-decision-peek): the model its binding resolves to, with the called
+// decision marked, and the logic of whatever node the author picks. processKey is the
+// deployed definition on screen, whose own resolution then applies, or null for a
+// draft. Nothing is saved or left to look; the peek's editor button is the door out,
+// and it is walkDecisionDoor's.
+function peekCalledDecision(api, projectId, element, processKey) {
   const decisionId = calledDecisionOf(element);
   if (!decisionId) return;
   const cd = findExt(element.businessObject, "zeebe:CalledDecision") || {};
@@ -3018,6 +3022,8 @@ function peekCalledDecision(api, projectId, element) {
     taskLabel: element.businessObject.name || element.id,
     binding: version ? "version" : cd.bindingType === "deployment" ? "deployment" : "latest",
     version,
+    processKey,
+    elementId: element.id,
     onEdit: (ref) => walkDecisionDoor(element, "e/" + encodeURIComponent(ref.id)),
   });
 }

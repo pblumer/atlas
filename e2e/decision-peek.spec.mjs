@@ -25,6 +25,9 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?>
       <bpmn:extensionElements><zeebe:calledDecision decisionId="Gone" resultVariable="x"/></bpmn:extensionElements>
       <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
     </bpmn:businessRuleTask>
+    <bpmn:businessRuleTask id="Task_pinned" name="Fest gebunden">
+      <bpmn:extensionElements><zeebe:calledDecision decisionId="Price" resultVariable="p7" atlas:version="7"/></bpmn:extensionElements>
+    </bpmn:businessRuleTask>
     <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Task_price"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Task_price" targetRef="Task_empty"/>
@@ -36,6 +39,7 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmndi:BPMNShape id="Task_price_di" bpmnElement="Task_price"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Task_empty_di" bpmnElement="Task_empty"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Task_lost_di" bpmnElement="Task_lost"><dc:Bounds x="580" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Task_pinned_di" bpmnElement="Task_pinned"><dc:Bounds x="260" y="240" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="740" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
@@ -84,8 +88,30 @@ const LOGIC = {
   ],
 };
 
+// The stored model — what the decision editor opens — has moved on since v2 was
+// deployed: Base adds 20 where the deployed version adds 10.
+const LOGIC_STORED = {
+  ...LOGIC,
+  elements: LOGIC.elements.map((e) => (e.id === "Base" ? { ...e, view: { ...e.view, text: "Age + 20" } } : e)),
+};
+
+// BOUND is what the server answers for the task's binding: Price evaluates the
+// deployed version 2 (latest), while version 7 is not deployed and Gone has nothing.
+function bound(q) {
+  if (q.get("processKey")) {
+    return { decisionId: "Price", perspective: "definition", processKey: Number(q.get("processKey")), binding: "latest",
+      source: "decisionDeployment", key: 41, deployedVersion: 1, deployedAt: 1767225600, graph: GRAPH, logic: LOGIC };
+  }
+  if (q.get("binding") === "version") {
+    return { decisionId: "Price", perspective: "draft", binding: "version", version: Number(q.get("version")),
+      source: "none", reason: "versionNotDeployed", versions: [1, 2] };
+  }
+  return { decisionId: "Price", perspective: "draft", binding: "latest",
+    source: "decisionDeployment", key: 42, deployedVersion: 2, deployedAt: 1767225600, graph: GRAPH, logic: LOGIC };
+}
+
 function installMock(page) {
-  const state = { stored: XML, draftSaves: [], logicReads: 0 };
+  const state = { stored: XML, draftSaves: [], logicReads: 0, boundQueries: [] };
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -107,7 +133,18 @@ function installMock(page) {
     }
     if (path === "/api/v1/dmnrefs" && method === "GET") return route.fulfill({ json: [{ id: "ref-pricing", name: "Pricing", modelRef: "pricing", projectId: "" }] });
     if (path === "/api/v1/dmnrefs/ref-pricing/graph") return route.fulfill({ json: GRAPH });
-    if (path === "/api/v1/dmnrefs/ref-pricing/logic") { state.logicReads++; return route.fulfill({ json: LOGIC }); }
+    if (path === "/api/v1/dmnrefs/ref-pricing/logic") { state.logicReads++; return route.fulfill({ json: LOGIC_STORED }); }
+    if (path === "/api/v1/decisions/Gone/binding") {
+      return route.fulfill({ json: { decisionId: "Gone", perspective: "draft", binding: "latest", source: "none", reason: "noModel" } });
+    }
+    if (path === "/api/v1/decisions/Price/binding") {
+      state.boundQueries.push(url.search);
+      return route.fulfill({ json: bound(url.searchParams) });
+    }
+    if (path === "/api/v1/processes" && method === "GET") {
+      return route.fulfill({ json: [{ key: 7, processId: "preis", name: "Preis", version: 1, projectId: "" }] });
+    }
+    if (path === "/api/v1/processes/7/xml") return route.fulfill({ body: XML, contentType: "application/xml" });
     if (path.endsWith("/validate")) return route.fulfill({ json: { version: "test", problems: [] } });
     return route.fulfill({ json: [] });
   });
@@ -120,8 +157,8 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { delete window.EventSource; });
 });
 
-async function openDiagram(page) {
-  await page.goto("/index.html#/modeler/draft/preis");
+async function openDiagram(page, hash = "#/modeler/draft/preis") {
+  await page.goto("/index.html" + hash);
   await expect(page.locator('[data-element-id="Task_price"]').first()).toBeVisible({ timeout: 20000 });
   await page.locator('[data-tab="implement"]').click();
 }
@@ -152,6 +189,11 @@ test("the mark opens the decision over the diagram, and its graph can be walked"
   await expect(peek(page)).toBeVisible();
   await expect(peek(page).locator("#drg-title")).toHaveText("Price");
   await expect(peek(page).locator(".drg-sub")).toContainText("Pricing");
+  // What is shown is what the binding resolves to — the server's answer, for the
+  // draft's latest binding: deployed version 2.
+  expect(state.boundQueries).toEqual(["?binding=latest"]);
+  await expect(peek(page).locator(".drg-peek-binding")).toContainText("Version 2");
+  await expect(peek(page).locator(".drg-peek-binding")).toContainText(/Entwurf/);
   // Nothing was saved or left to look.
   expect(await page.evaluate(() => location.hash)).toBe("#/modeler/draft/preis");
   expect(state.draftSaves).toHaveLength(0);
@@ -181,7 +223,20 @@ test("the mark opens the decision over the diagram, and its graph can be walked"
   await expect(detail.locator("h3")).toContainText("Age");
   await expect(detail).toContainText("number");
   await expect(detail.locator('.drg-chip[data-node="Band"]')).toBeVisible();
-  expect(state.logicReads).toBe(1); // one read serves every node
+  // The binding's answer carried graph and logic; the stored model was not read.
+  expect(state.logicReads).toBe(0);
+
+  // The stored model — what the editor opens — is one switch away, and says it is
+  // not what runs. Here it has moved on: Base adds 20 where v2 adds 10.
+  await peek(page).locator('[data-peek-view="stored"]').click();
+  await expect(peek(page).locator(".drg-peek-binding.is-stored")).toBeVisible();
+  await node(page, "Base").click();
+  await expect(detail.locator("pre.drg-code")).toHaveText("Age + 20");
+  expect(state.logicReads).toBe(1);
+  await peek(page).locator('[data-peek-view="bound"]').click();
+  await expect(peek(page).locator('[data-peek-view="bound"]')).toHaveAttribute("aria-selected", "true");
+  await expect(peek(page).locator(".drg-peek-detail pre.drg-code")).toHaveText("Age + 10");
+  expect(state.logicReads).toBe(1); // each view is read once
 
   // Escape closes it, and the diagram is where it was.
   await page.keyboard.press("Escape");
@@ -197,6 +252,30 @@ test("a decision this server does not hold is said, not drawn", async ({ page })
   await expect(peek(page)).toContainText("Gone");
   await expect(peek(page).locator(".drg-canvas")).toHaveCount(0);
   await expect(peek(page).locator("[data-peek-edit]")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a version that is not deployed is said, with the versions that are", async ({ page }) => {
+  const state = installMock(page);
+  await openDiagram(page);
+  await badge(page, "Task_pinned").click();
+  expect(state.boundQueries).toEqual(["?binding=version&version=7"]);
+  await expect(peek(page).locator(".drg-peek-binding")).toContainText("Version 7");
+  await expect(peek(page)).toContainText("v1, v2");
+  await expect(peek(page).locator(".drg-canvas")).toHaveCount(0);
+  // The stored model is still there to look at.
+  await peek(page).locator('[data-peek-view="stored"]').click();
+  await expect(node(page, "Price")).toHaveClass(/is-called/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a deployed version on screen is resolved as that definition resolves it", async ({ page }) => {
+  const state = installMock(page);
+  await openDiagram(page, "#/modeler/d/7");
+  await badge(page, "Task_price").click();
+  await expect(peek(page).locator(".drg-peek-binding")).toContainText("Version 1");
+  expect(state.boundQueries).toEqual(["?processKey=7&elementId=Task_price"]);
+  await expect(peek(page).locator(".drg-peek-binding")).toContainText(/deployte Prozessversion/);
   expect(page.__errors).toEqual([]);
 });
 

@@ -3,6 +3,8 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -174,7 +176,7 @@ func TestUngroupedPersonalSpace(t *testing.T) {
 // forms, and the deliberate runtime exception: fetching a form to render a task
 // (GET /forms/{id}) is NOT scope-gated even though the listing is.
 func TestArtifactScopeFormsAndRefs(t *testing.T) {
-	ts, _ := newAuthServer(t, "admin", "password1")
+	ts, dir := newAuthServer(t, "admin", "password1")
 	admin := newClient(t)
 	login(t, admin, ts, "admin", "password1")
 	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1","roles":["modeler","operator","user"]}`)
@@ -251,6 +253,24 @@ func TestArtifactScopeFormsAndRefs(t *testing.T) {
 	}
 	if code, _ := cReq(t, bob, ts, "POST", "/api/v1/dmnrefs/"+refID+"/validate", ""); code != http.StatusNotFound {
 		t.Fatalf("non-member ref validate = %d, want 404", code)
+	}
+
+	// The decision peek's binding read names the stored model a deploy would bundle —
+	// to the owner. A non-member learns that one exists, which the deploy itself
+	// would tell them, and nothing of what it holds (ADR-draft-decision-peek).
+	if err := os.MkdirAll(filepath.Join(dir, "dmn-models"), 0o755); err != nil {
+		t.Fatalf("mkdir models: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "dmn-models", "m1.dmn"), []byte(`<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="d" name="Rating" namespace="http://atlas/dmn"><decision id="Rating" name="Rating"><literalExpression><text>"secret"</text></literalExpression></decision></definitions>`), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	_, ab := cReq(t, alice, ts, "GET", "/api/v1/decisions/Rating/binding?binding=deployment", "")
+	if !strings.Contains(string(ab), `"storedModel"`) || !strings.Contains(string(ab), refID) || !strings.Contains(string(ab), "secret") {
+		t.Fatalf("owner binding = %s, want the stored model with its logic", ab)
+	}
+	code, bb := cReq(t, bob, ts, "GET", "/api/v1/decisions/Rating/binding?binding=deployment", "")
+	if code != http.StatusOK || !strings.Contains(string(bb), `"hidden":true`) || strings.Contains(string(bb), "secret") || strings.Contains(string(bb), refID) {
+		t.Fatalf("non-member binding = %d %s, want hidden, without the reference or its logic", code, bb)
 	}
 
 	// But the runtime form fetch is open: a task worker who isn't a project member

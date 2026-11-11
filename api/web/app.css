@@ -7955,6 +7955,14 @@ button.im-problem:hover { background: var(--accent-soft); }
 /* The decision peek (ADR-draft-decision-peek): the same window, opened from a business rule task in
    the Modeler. Every node is a button; the called decision is ringed in amber and the
    one whose logic is shown below in the accent, so both read at once when they differ. */
+.drg-peek-views { margin: 0 0 10px; }
+.drg-peek-binding {
+  margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+  background: var(--accent-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* The stored view says it is not what runs, in the tone a warning takes, so the two
+   views cannot be read as one. */
+.drg-peek-binding.is-stored { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
 .drg-node.is-pick { cursor: pointer; }
 .drg-node.is-pick:hover > :first-child { stroke: var(--accent); }
 .drg-node.is-pick:focus { outline: none; }

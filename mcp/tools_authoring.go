@@ -885,6 +885,41 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_decision_binding",
+			Description: "Read which model a business rule task's binding resolves its decision to, with that model's " +
+				"requirements graph and logic. For a draft's task give binding (latest, version or deployment) and, for " +
+				"version, the version: it is resolved as a deploy now and the worker would. For a deployed definition's task " +
+				"give processKey and elementId instead: it is resolved as the worker resolves it for that definition.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":         stringProp("The decision id the task names."),
+					"binding":    stringProp("latest (default), version or deployment — for a draft's task."),
+					"version":    stringProp("The decision version a version-bound task names."),
+					"processKey": stringProp("A deployed definition's key (from atlas_list_processes), to resolve its task instead."),
+					"elementId":  stringProp("The business rule task's element id in that definition."),
+				},
+				"required": []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{}
+				for _, k := range []string{"binding", "version", "processKey", "elementId"} {
+					if v, _ := args[k].(string); v != "" {
+						q.Set(k, v)
+					}
+				}
+				path := "/api/v1/decisions/" + url.PathEscape(id) + "/binding"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
 			Name: "atlas_get_decision_model",
 			Description: "Get the raw DMN XML stored under a model handle — the handle used with " +
 				"atlas_upload_decision_model, i.e. a rule's (decision reference's) modelRef. Refused with a not-found error " +

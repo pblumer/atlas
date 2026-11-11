@@ -90,6 +90,7 @@ Bearer` header.
 | `atlas_decision_evaluations` | `id` | one decision's evaluation history across all instances |
 | `atlas_dmnref_graph` | `id` | a rule's (decision reference's) DRD (nodes and edges) |
 | `atlas_dmnref_logic` | `id` | a rule's logic per decision and knowledge model (table, literal, context, …) |
+| `atlas_decision_binding` | `id`, `binding`/`version` or `processKey`/`elementId` | which model a business rule task's binding resolves to, with its graph and logic |
 | `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
 | `atlas_deploy_project` | `id` | deployed project definitions |
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
