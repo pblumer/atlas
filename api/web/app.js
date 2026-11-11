@@ -8630,10 +8630,11 @@ async function viewWorkers() {
         b.onclick = async () => {
           b.disabled = true;
           try {
-            await api("POST", "/api/v1/workers/breakers/close", {
-              jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector,
-              endpoint: b.dataset.closeEndpoint,
-            });
+            // endpoint only where the row has one (a REST target, ADR-0340 amended):
+            // every other breaker is keyed by job type and Worker as before.
+            const target = { jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector };
+            if (b.dataset.closeEndpoint) target.endpoint = b.dataset.closeEndpoint;
+            await api("POST", "/api/v1/workers/breakers/close", target);
             toast("Released " + (b.dataset.closeEndpoint || b.dataset.closeConnector || b.dataset.closeBreaker));
           } catch (e) { toast(e.message, "err"); }
           setTimeout(load, 400);

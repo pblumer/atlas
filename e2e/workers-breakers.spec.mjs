@@ -112,6 +112,21 @@ test("Close now releases exactly the target on its row", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("Close now on a REST row releases that host and no other", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const closed = [];
+  const rest = { ...heldRow(), jobType: "io.atlas.http.rest", connector: "", endpoint: "https://api.example.com" };
+  installMock(page, { breakers: [rest], onClose: (body) => closed.push(body) });
+  await bootApp(page);
+  await goto(page, "#/operations/workers");
+
+  await page.locator("#wk-breakers button", { hasText: "Close now" }).click();
+  await expect.poll(() => closed.length).toBe(1);
+  expect(closed).toEqual([{ jobType: "io.atlas.http.rest", connector: "", endpoint: "https://api.example.com" }]);
+  expect(errors).toEqual([]);
+});
+
 test("a probing breaker says so, because it is a different answer to 'what is happening'", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
