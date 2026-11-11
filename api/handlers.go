@@ -6232,7 +6232,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		// A sitting that cannot be read is no reason to refuse the answer: the
 		// completion goes ahead, and the next screen is found in the inbox instead.
 		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
-		s.proc.CompleteJob(key, vars...)
+		// A person's answer: who, and through which revision of the task's form, is
+		// frozen beside the completion so the person can read the task again
+		// (ADR-0554).
+		revision := s.answeredRevisionOnLoop(s.taskFormIDOnLoop(jv), offeredFormRevision(body))
+		s.proc.CompleteUserTask(key, completerOf(r), revision, vars...)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for

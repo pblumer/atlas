@@ -107,6 +107,7 @@ var persistentStores = []storeEntry{
 	{name: "decisions", class: classDesignTime, why: "the deployed decision definitions, and the DMN source the registry is rebuilt from"},
 	{name: "drafts", class: classDesignTime, why: "work in progress in the Modeler"},
 	{name: "forms", class: classDesignTime, why: "task forms"},
+	{name: "form-revisions", class: classDesignTime, why: "every schema a task form was saved or answered with, so a completed task is shown in the form it was answered in (ADR-0554)"},
 	{name: "projects", class: classDesignTime, why: "applications and their sharing scopes"},
 	{name: "panorama-models", class: classDesignTime, why: "landscape models"},
 	{name: "capabilities", class: classDesignTime, why: "the business capabilities the organisation must be able to perform, and how each is currently done"},

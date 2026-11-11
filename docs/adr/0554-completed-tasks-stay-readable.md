@@ -1,10 +1,10 @@
 # ADR-0554: A completed task stays readable to the person who completed it, in the form they answered
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** pblumer (maintainer; asked on 2026-11-11 that a closed task can be looked
-  at again)
+  at again, and accepted this record on 2026-11-11)
 - **Open question:** who besides the person who completed a task may read it again: the
   members of the groups it was offered to, its assignee if somebody else completed it, a
   deputy. This record lets only the completer read it (§4), because a completed task
@@ -211,6 +211,49 @@ not close it off.
 - **MCP** ([ADR-0016](0016-mcp-server-over-http-api.md)) gets `atlas_list_completed_tasks`
   and `atlas_get_completed_task`, acting as the connected person, so an agent working for
   a person can look up what that person answered.
+
+### As built
+
+- **CT1 (2026-11-11):**
+  - The fact is `model.TaskAnswerValue` (`model/taskanswer.go`), value type
+    `VTTaskAnswer`, intent `IntentTaskAnswered`. It carries the element by its compiled
+    index and the form by its revision only: the form's id is the compiled element's,
+    and element ids are never written to the log as text (I5).
+  - `Processor.CompleteUserTask` puts the completer and the form revision on the command
+    (`Command.Answer`, allocated by the API off the run loop). `handleJobCompleted` fills
+    in the keys, the definition and the element, and appends the fact after the
+    completion's variables and before the element completes. It is not appended for a
+    forced completion, without a completer, or for a job that is not a user task's.
+  - The fold is `state.Tx.RecordTaskAnswer` (`state/taskanswer.go`). The fact is stored
+    under the instance with the record's timestamp **and log position**
+    (`cfTaskAnswer` 0x49). The position is what the view reads the history up to. The two
+    indexes are `cfTaskAnswerByCompleter` 0x4A and `cfTaskAnswerByJob` 0x4B. The
+    instance purge drops all three. The fold allocates its keys as the other audit
+    families do (`RecordOperatorAction`, `RecordAuthorization`). The processor itself
+    allocates nothing for the answer.
+  - Form revisions: `formStore` wraps the sidecar store. `Save` records the schema as a
+    revision in the sibling directory `form-revisions` (design-time, in the backup), and
+    `Delete` removes the form's revisions. A rename keeps the old id's revisions. A
+    completion records the current schema as a revision if it is not one yet, so a form
+    saved before revisions existed has one once it is answered.
+    `GET /api/v1/forms/{id}` answers `revision`; the Tasks app sends it back as
+    `formRevision`.
+  - Completions recorded as answers: the Tasks app's completion
+    (`POST /api/v1/tasks/{key}/complete`, which MCP's `atlas_complete_task` also uses)
+    and the approvals decision. A task answered through a mail link or a public wizard
+    has no signed-in person and is not listed.
+  - The view reads the process scope and the task's own scope from the variable history
+    up to the answer's position, the inner value winning. It shows what the form
+    revision binds (`collectFormFieldKeys`, the open task's rule), and without a kept
+    revision only the variables the task's element wrote. **Not covered:** a task inside
+    an embedded subprocess whose form binds a variable of the subprocess's own scope.
+    That variable is not shown, because the scope chain between the task and the process
+    is not walked.
+  - Tasks app: a view *Erledigt* / *Completed* beside the built-in folders
+    (`api/web/completedtasks.js`), shown only with authentication on.
+  - MCP: `atlas_list_completed_tasks`, `atlas_get_completed_task`.
+  - **Not built yet:** print and *Save as PDF* for a completed task. They come with
+    ADR-0555 §6, which draws both for every task form.
 
 ### Consequences
 

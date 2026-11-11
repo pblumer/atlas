@@ -1169,6 +1169,22 @@ export default {
   "tasks.folders.shared": "Geteilt",
   "tasks.folders.new": "Neuer Ordner",
   "tasks.opened": "Eröffnet",
+  // The Completed view (ADR-0554): the tasks the signed-in person completed, shown
+  // again read-only in the form they were answered in.
+  "tasks.completed.folder": "Erledigt",
+  "tasks.completed.title": "Von dir erledigt",
+  "tasks.completed.loading": "Lade…",
+  "tasks.completed.empty": "Du hast noch keine Aufgabe erledigt, die hier gezeigt werden kann.",
+  "tasks.completed.noMatch": "Keine erledigte Aufgabe passt zu deinem Filter.",
+  "tasks.completed.retention": "Erledigte Aufgaben bleiben so lange sichtbar, wie die Historie ihrer Instanz aufbewahrt wird. Aufgaben, die vor dieser Funktion erledigt wurden, fehlen.",
+  "tasks.completed.at": "erledigt {when}",
+  "tasks.completed.more": "Ältere laden",
+  "tasks.completed.pick": "Wähle eine erledigte Aufgabe, um sie noch einmal zu sehen.",
+  "tasks.completed.byYou": "Erledigt am {when} durch dich",
+  "tasks.completed.formMissing": "Das Formular dieser Aufgabe wurde gelöscht. Gezeigt werden deine Antworten.",
+  "tasks.completed.erased": "Nicht mehr lesbar, weil die betroffene Person gelöscht wurde: {fields}",
+  "tasks.completed.noValues": "Diese Aufgabe hat keine Antworten.",
+  "tasks.completed.help": "Gezeigt wird das Formular, wie du es ausgefüllt hast, mit den Werten beim Abschluss. Hat sich ein Wert geändert, während die Aufgabe offen war, siehst du den Wert beim Abschluss.",
 
   // The Start view groups the startable processes by the application they were
   // deployed under; the ones under none, or under one the viewer may not see, sit
@@ -3154,6 +3170,8 @@ export default {
   "bpmn.vars.src.loopCounter": "Schleifenzähler",
   "bpmn.vars.src.agentResult": "Ergebnisse des Agenten",
   "bpmn.vars.src.calledProcess": "Aus dem aufgerufenen Prozess {process}",
+  "bpmn.vars.src.agentParam": "Parameter des Agenten",
+  "bpmn.vars.src.agentToolCall": "Kennung des Tool-Aufrufs",
   "bpmn.vars.place.start": "Start",
   "bpmn.vars.place.process": "Prozess",
   "bpmn.vars.place.dataObject": "Datenobjekt",
@@ -3182,6 +3200,9 @@ export default {
   "bpmn.vars.use.writes": "Schreibt",
   "bpmn.vars.use.local": "Nur innerhalb des Elements",
   "bpmn.vars.useNone": "Dieses Element liest und schreibt keine Variablen.",
+  "bpmn.prob.unwritten.one": "Liest {names}, das im Modell nirgends geschrieben wird. Kommt der Wert von ausserhalb des Modells (Start, Nachricht), oder ist der Name falsch geschrieben?",
+  "bpmn.prob.unwritten.other": "Liest {names}, die im Modell nirgends geschrieben werden. Kommen die Werte von ausserhalb des Modells (Start, Nachricht), oder sind die Namen falsch geschrieben?",
+  "bpmn.deploy.unwritten": "Diese Variablen werden gelesen, aber im Modell nirgends geschrieben. Ohne Wert von aussen sind sie zur Laufzeit null. Deployen kannst du trotzdem.",
   "sim.tokens.one": "{n} Token hier",
   "sim.tokens.other": "{n} Tokens hier",
   "sim.join": "wartet auf die Zusammenführung",

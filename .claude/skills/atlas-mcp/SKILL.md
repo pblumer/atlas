@@ -96,6 +96,8 @@ Bearer` header.
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
 | `atlas_get_task` | `key` | one open user task (deep-link read) |
 | `atlas_complete_task` | `key`, `variables?` | completed user task |
+| `atlas_list_completed_tasks` | `limit?`, `cursor?`, `process?`, `from?`, `to?` | `{items, nextCursor}` of the tasks the connected person completed (ADR-0554) |
+| `atlas_get_completed_task` | `key` | one task the connected person completed, read-only, in the form revision it was answered through |
 | `atlas_claim_task` | `key`, `assignee?` | claims/assigns a task (`assignee` required without auth) |
 | `atlas_unclaim_task` | `key` | releases a task's assignment |
 | `atlas_assignable_users` | — | usernames a task can be assigned to (feeds `atlas_claim_task`) |

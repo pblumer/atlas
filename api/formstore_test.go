@@ -154,3 +154,41 @@ func TestFormStoreReadAndDeleteErrors(t *testing.T) {
 		t.Error("delete of a non-empty directory: want an error")
 	}
 }
+
+// TestFormRevisionsAreKeptPerSchema covers ADR-0554 §2: every saved schema is a
+// revision, saving an unchanged one adds nothing, a revision stays readable after the
+// form changed, and deleting the form takes its revisions and no other form's.
+func TestFormRevisionsAreKeptPerSchema(t *testing.T) {
+	fs := newForms(t)
+	first := form{ID: "f", Name: "F", SavedAt: 1, Schema: `{"components":[{"key":"a"}]}`}
+	second := form{ID: "f", Name: "F", SavedAt: 2, Schema: `{"components":[{"key":"b"}]}`}
+	other := form{ID: "g", Name: "G", SavedAt: 3, Schema: first.Schema}
+	for _, f := range []form{first, first, second, other} {
+		if err := fs.Save(f); err != nil {
+			t.Fatalf("save: %v", err)
+		}
+	}
+	all, err := fs.revisions.LoadAll()
+	if err != nil || len(all) != 3 {
+		t.Fatalf("revisions = %d, %v; want 3 (two of f, one of g)", len(all), err)
+	}
+	rev, ok, err := fs.Revision("f", formDigest(first.Schema))
+	if err != nil || !ok || rev.Schema != first.Schema || rev.SavedAt != 1 {
+		t.Fatalf("first revision = %+v, %v, %v", rev, ok, err)
+	}
+	if digest, err := fs.RecordRevision(second); err != nil || digest != formDigest(second.Schema) {
+		t.Fatalf("RecordRevision of a kept schema = %q, %v", digest, err)
+	}
+	if _, ok, _ := fs.Revision("f", "md5:x"); ok {
+		t.Fatal("a digest of another kind was looked up")
+	}
+	if err := fs.Delete("f"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok, _ := fs.Revision("f", formDigest(second.Schema)); ok {
+		t.Fatal("a deleted form's revision is still kept")
+	}
+	if _, ok, _ := fs.Revision("g", formDigest(other.Schema)); !ok {
+		t.Fatal("another form's revision went with it")
+	}
+}

@@ -75,7 +75,7 @@ func exportedValues() []Value {
 		&MessageSubscriptionValue{}, &OperatorActionValue{}, &ProcessInstanceValue{},
 		&ProcessMigrationValue{}, &SignalSubscriptionValue{}, &TimerValue{},
 		&VariableAuditValue{}, &VariableIndexValue{}, &VariableValue{},
-		&AuthorizationValue{}, &ActionApprovalValue{},
+		&AuthorizationValue{}, &ActionApprovalValue{}, &TaskAnswerValue{},
 	}
 }
 

@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Modeler warns about a variable the model reads and nothing in it writes.** The Problems
+  bar names each element whose expressions, conditions, correlation keys or template
+  placeholders read a variable that no start variable, constant, result, mapping, form field,
+  loop, agent tool or called process writes (`variable.unwritten`), and the deploy panel lists
+  them before the deploy. It is only a warning: a value can come from outside the model — a
+  message's payload, an undeclared start variable — so both deploy buttons stay as they are.
+  The check runs in the Modeler, because the compiler knows a linked form only by its id and
+  nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
+  parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
 - **atlas hub records where an installed application came from.** The server-side hub import
   records, under the application's key, the registry, the configured index URL, the fingerprint
   of the pinned key that signed the index, the release and its exact digest, the catalogues it
@@ -41,6 +50,19 @@ _Changed_ / _Removed_ for each version.
   series selector, the object's labels, extra alert labels and every threshold are values; the
   thresholds are starting points to calibrate. The recording rules drop `instance`, which a pod
   restart changes, so the 7-day baseline survives a restart (ADR-0557).
+- **A completed task can be seen again by the person who completed it.** The Tasks app has a
+  view *Completed*: the tasks the signed-in person completed, newest first, each opened read-only
+  in the revision of its form it was answered through, with the values as they stood once it was
+  answered and the answer itself marked. A form changed since shows the old revision; a form
+  deleted since leaves the answers as a plain list. Nobody else reads it, administrators
+  included, and it stays as long as the instance's history is kept. Every completion by a
+  person is now recorded as a fact of its own (`TaskAnswered`) beside the job's completion, with
+  who answered and through which form revision, and the list is folded from it, so a replay
+  rebuilds it; forms keep every schema they were saved or answered with as a revision
+  (`form-revisions`). `GET /api/v1/forms/{id}` answers the `revision` a completion names back
+  as `formRevision`. New reads `GET /api/v1/tasks/completed` and
+  `GET /api/v1/tasks/completed/{key}`, and MCP tools `atlas_list_completed_tasks` and
+  `atlas_get_completed_task`. Tasks completed before this release are not listed (ADR-0554).
 - **The Modeler's Variables panel narrows to the selected element.** With a task, gateway,
   event or subprocess selected, the panel lists what that element reads — the variables its
   FEEL expressions, branch conditions, correlation keys and template placeholders name —
@@ -280,6 +302,14 @@ _Changed_ / _Removed_ for each version.
   view, `POST /api/v1/workers/breakers/close` and `atlas_close_breaker` name it as `endpoint`. A
   worker reports a refused request with `"rejected": true` on the fail call (`workersdk.Rejected`);
   a worker that does not send it is counted as before (ADR-0340, amended 2026-11-11).
+- **A position with a variant can be refused and approved through its process.** `POST
+  /api/v1/orders/{id}/lines/{position}/decision` matched the item id only, while a position's
+  process is started with `positionId` = `<item>#<variant>` (ADR-0384). A refusal or an approval
+  of such a position answered 404 and the line stayed open, so every rule refusal of
+  `examples/informationstransfer` (all of whose positions have a variant) was lost. The route now
+  resolves the position as every other line route does: the key, or the item id where the order
+  carries one position of the product; naming a product it carries twice is refused with both
+  positions named.
 - **The examples address a position with a variant correctly.** A product with variants names
   its position `<product>#<variant>` (ADR-0384), and the examples put that id into the address
   of their calls to Atlas unencoded. The `#` turned the rest of the address into a fragment, so

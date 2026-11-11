@@ -1174,3 +1174,58 @@ func TestARoundSaysWhatIsReadyAndWhatIsStillComing(t *testing.T) {
 		t.Errorf("unknown order = %d, want 404", rec.Code)
 	}
 }
+
+// TestDecidingAVariantPosition: a position of a product with variants is named
+// "<item>#<variant>", which is what its process is started with as positionId. The
+// decision route took only the item id, so a refusal of such a position answered
+// 404 and the line stayed open. It now resolves the position as every other line
+// route does, and naming a product the order carries twice is refused, not guessed.
+func TestDecidingAVariantPosition(t *testing.T) {
+	s := newService(t)
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+	ord := Order{ID: "ord_v", Orderer: "usr_1", Recipient: "usr_1", ReleaseID: "rel_1", CreatedAt: 1, UpdatedAt: 1,
+		Lines: []Line{
+			{ItemID: "transfer", VariantID: "amtswechsel", Status: StatusRunning},
+			{ItemID: "phone", VariantID: "silver", Status: StatusPending},
+			{ItemID: "phone", VariantID: "black", Status: StatusPending},
+		}}
+	s.loop.Do(func() {
+		if err := s.store.Save(ord); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for _, ref := range []string{"transfer#amtswechsel", "transfer"} {
+		ord.ID = "ord_v_" + strings.ReplaceAll(ref, "#", "_")
+		o := ord
+		s.loop.Do(func() {
+			if err := s.store.Save(o); err != nil {
+				t.Fatal(err)
+			}
+		})
+		rec := do(t, s.HandleDecide, op, "POST", `{"by":"Identity Management","reason":"keine Ressource"}`,
+			"id", o.ID, "item", ref)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("refuse %s = %d (%s), want 200", ref, rec.Code, rec.Body)
+		}
+		got := decode[Order](t, rec)
+		if got.Lines[0].Status != StatusRejected || got.Lines[0].Reason != "keine Ressource" {
+			t.Errorf("refuse %s: line = %s/%q, want rejected with the reason", ref, got.Lines[0].Status, got.Lines[0].Reason)
+		}
+	}
+
+	if rec := do(t, s.HandleDecide, op, "POST", `{"by":"usr_boss","approved":true}`,
+		"id", "ord_v", "item", "phone#black"); rec.Code != http.StatusOK {
+		t.Fatalf("approve phone#black = %d (%s), want 200", rec.Code, rec.Body)
+	} else if got := decode[Order](t, rec); got.Lines[2].ApprovedBy != "usr_boss" || got.Lines[1].ApprovedBy != "" {
+		t.Errorf("approved %q / %q, want only the black phone", got.Lines[1].ApprovedBy, got.Lines[2].ApprovedBy)
+	}
+	if rec := do(t, s.HandleDecide, op, "POST", `{"by":"usr_boss","reason":"nein"}`,
+		"id", "ord_v", "item", "phone"); rec.Code != http.StatusBadRequest {
+		t.Errorf("refuse phone (two positions) = %d (%s), want 400 naming both", rec.Code, rec.Body)
+	}
+	if rec := do(t, s.HandleDecide, op, "POST", `{"by":"usr_boss","reason":"nein"}`,
+		"id", "ord_v", "item", "tablet"); rec.Code != http.StatusNotFound {
+		t.Errorf("refuse tablet = %d, want 404", rec.Code)
+	}
+}

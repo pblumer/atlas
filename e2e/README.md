@@ -550,6 +550,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   string literal, with a name nothing writes marked as such), *Writes* and *Local*; a gateway
   reads its branches' conditions; "Show all" lifts the narrowing until the next selection.
 
+- **`vars-unwritten.spec.mjs`**: the **warning about a variable the model reads and nothing in
+  it writes**, on the same diagram as `vars-scope.spec.mjs` with an agent-driven ad-hoc
+  subprocess added. Exactly one Problems-bar warning (`variable.unwritten`), on the task that
+  reads `betrag`; none for what the compiler cannot see is written — the called process's
+  variables, a round's item, an input mapping's local, an agent tool's parameter and
+  `toolCallId`. The warning goes when the expression stops reading the name, and the deploy
+  panel lists it while both deploy buttons stay enabled.
+
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
   its process id and a form under the id a user task binds to, so saving onto an id

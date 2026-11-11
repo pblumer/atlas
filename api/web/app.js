@@ -49,6 +49,7 @@ import { versionDeleteState, holderNote } from "./decision-cleanup.js";
 import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
+import { createCompletedView } from "./completedtasks.js";
 import { runImport } from "./infomodel-import.js";
 import { uploadPicture, PERSON } from "./picturescale.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
@@ -9765,6 +9766,10 @@ async function viewTasks(preselectKey) {
   const listEl = document.getElementById("task-list");
   const detailEl = document.getElementById("task-detail");
   const titleEl = document.getElementById("task-list-title");
+  // The tasks the signed-in person completed, shown again read-only (ADR-0554). With
+  // authentication off nobody is named on a completion, so there is nothing to list.
+  const completed = authOn ? createCompletedView({ api, listEl, detailEl, titleEl }) : null;
+  const inCompleted = () => !!completed && state.folder === "completed";
 
   // Make the list | detail divider draggable, so the detail (and its form) can be
   // widened or narrowed by resizing the list column. The width persists across
@@ -9884,6 +9889,7 @@ async function viewTasks(preselectKey) {
       : "";
 
     nav.innerHTML = builtin +
+      (completed ? folderButton("completed", tr("tasks.completed.folder"), "", false) : "") +
       `<div class="tasks-folder-head">${esc(tr("tasks.folders.mine"))}</div>` +
       mine.map((f) => folderButton("saved:" + f.id, f.name,
         Object.prototype.hasOwnProperty.call(state.folderCounts, f.id) ? state.folderCounts[f.id] : null, true)).join("") +
@@ -9898,9 +9904,18 @@ async function viewTasks(preselectKey) {
     nav.querySelectorAll(".tasks-folder").forEach((b) => {
       b.addEventListener("click", () => {
         if (b.dataset.folder === state.folder) return;
+        if (inCompleted()) completed.hide();
         state.folder = b.dataset.folder;
         state.selected = null;
         state.filtered = null;
+        if (inCompleted()) {
+          renderFolders();
+          syncCompletedChrome();
+          renderFolderBar(null);
+          renderBulk();
+          completed.show({ reload: true, query: state.query });
+          return;
+        }
         // A saved folder's rows come from the server, so selecting one is a load,
         // not a re-filter of what is already here.
         if (state.folder.startsWith("saved:")) loadFolderPage();
@@ -9934,7 +9949,19 @@ async function viewTasks(preselectKey) {
 
   const byKey = (k) => state.tasks.find((t) => t.key === k);
 
+  // syncCompletedChrome hides what only the inbox means: selecting several tasks and
+  // sorting them mean nothing for completed ones. Inline display rather than [hidden],
+  // which a class's own display rule outranks.
+  function syncCompletedChrome() {
+    const selectEl = document.getElementById("task-select");
+    const sortLabel = view.querySelector(".tasks-sort");
+    if (selectEl) selectEl.style.display = inCompleted() ? "none" : "";
+    if (sortLabel) sortLabel.style.display = inCompleted() ? "none" : "";
+  }
+
   function renderList() {
+    syncCompletedChrome();
+    if (inCompleted()) { completed.renderList(state.query); return; }
     const items = visible();
     const saved = savedFolder();
     const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
@@ -10220,6 +10247,9 @@ async function viewTasks(preselectKey) {
         if (data[key] == null) delete data[key];
       }
       payload = { variables: data };
+      // The revision of the form the person answered through, so the task is shown
+      // again in this form even after it changes (ADR-0554).
+      if (state.mountedRevision) payload.formRevision = state.mountedRevision;
     }
     const btn = document.getElementById("task-complete");
     if (btn) btn.disabled = true;
@@ -10363,6 +10393,7 @@ async function viewTasks(preselectKey) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
     }
+    state.mountedRevision = "";
     // And the variables it was filled from, so the two have one lifetime. This is
     // hygiene rather than a fix: nothing reads them without a mounted form, and a
     // mount always sets them, so a stale value cannot currently be reached. Kept
@@ -10452,6 +10483,7 @@ async function viewTasks(preselectKey) {
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
       state.mountedSchema = def.schema;
+      state.mountedRevision = def.revision || "";
       state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
@@ -10740,6 +10772,7 @@ async function viewTasks(preselectKey) {
   function renderDetail() {
     destroyForm();
     destroyProc();
+    if (inCompleted()) { completed.renderDetail(); return; }
     const t = state.tasks.find((x) => x.key === state.selected);
     // A narrow screen shows the list or the task, not both side by side
     // (ADR-0417); the grid says which.
@@ -10953,7 +10986,7 @@ async function viewTasks(preselectKey) {
   function renderTrunc() {
     const el = document.getElementById("task-trunc");
     if (!el) return;
-    if (!state.truncated) { el.hidden = true; el.innerHTML = ""; return; }
+    if (!state.truncated || inCompleted()) { el.hidden = true; el.innerHTML = ""; return; }
     el.hidden = false;
     // Count the list the person is actually looking at: inside a folder that is the
     // folder's page, not the unfiltered one loaded beside it for the built-in badges.
@@ -11186,6 +11219,7 @@ async function viewTasks(preselectKey) {
     // deployed since this page loaded — so the editor's value lists are re-read too.
     forgetCatalogue();
     await loadFolderList();
+    if (inCompleted()) { await completed.show({ reload: true, query: state.query }); return; }
     await load();
   });
 
