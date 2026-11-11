@@ -744,6 +744,12 @@ type failJobReq struct {
 	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
 	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
 	RetryBackoff int64 `json:"retryBackoff"`
+	// Rejected says the target answered and refused the request as wrong — an HTTP 400,
+	// say — rather than failing to answer. The job fails exactly as without it; the
+	// circuit breaker hears that the target answers instead of a failure against it
+	// (ADR-0340, amended 2026-11-11). Absent, as from any worker older than the field,
+	// the failure counts against the target as it always did.
+	Rejected bool `json:"rejected"`
 }
 
 type resolveIncidentReq struct {
@@ -5466,8 +5472,14 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		if worker != "" {
 			// The breaker hears it before the command that records it, while the job
 			// is still readable, and only for a *worker's* report: an operator failing
-			// a job by hand is not evidence about a target (ADR-0340).
-			s.breakers.failed(s.breakerTargetOfJob(jv), key, jv.ProcessInstanceKey, req.Message)
+			// a job by hand is not evidence about a target (ADR-0340). A rejection is
+			// evidence the target answers, and is told as such (amended 2026-11-11).
+			switch {
+			case !req.Rejected:
+				s.breakers.failed(s.breakerTargetOfJob(jv), key, jv.ProcessInstanceKey, req.Message)
+			case s.breakers.tracking(jv.JobType):
+				s.breakers.succeeded(s.breakerTargetOfJob(jv))
+			}
 		}
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		if worker != "" {

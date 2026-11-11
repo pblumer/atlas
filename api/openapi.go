@@ -630,7 +630,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/workers/breakers/close", s.handleCloseBreaker, apiOp{
 			summary: "End a circuit breaker's hold early, for an operator who has already fixed the target (ADR-0340); 200 with closed:false when nothing was held", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("The target to stop holding back", schemaObj(map[string]any{
-				"jobType": tString(), "connector": tString(),
+				"jobType": tString(), "connector": tString(), "endpoint": tString(),
 			}, "jobType")),
 			resp: jsonBody("Whether a hold was ended", tObject())}},
 		{"GET", "/api/v1/workers/{id}/history", s.handleWorkerHistory, apiOp{
@@ -682,8 +682,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
 			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents", role: RoleOperator,
-			req: jsonBody("Retries left and a failure message; a worker also presents its id and the lease token its activation returned", schemaObj(map[string]any{
+			req: jsonBody("Retries left and a failure message; a worker also presents its id and the lease token its activation returned, the delay before the next attempt in milliseconds, and rejected:true when the target answered that the request was wrong, which the circuit breaker does not count against it (ADR-0340)", schemaObj(map[string]any{
 				"retries": tInteger(), "message": tString(), "worker": tString(), "leaseToken": tInteger(),
+				"retryBackoff": tInteger(), "rejected": tBool(),
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/error", s.handleThrowJobError, apiOp{

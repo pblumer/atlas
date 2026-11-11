@@ -601,3 +601,61 @@ func TestAnEngineOnlyJobNeverFeedsABreaker(t *testing.T) {
 		}
 	}
 }
+
+// TestAQuietStreakStopsBeingTracked. A target that failed twice and was never called
+// again could not trip anything — the next failure would start its streak over — but
+// while its entry sat in the map, every completion of its type paid to be attributed.
+// With one breaker per REST endpoint that is a host nobody calls any more, kept for the
+// life of the process (ADR-0340, amended 2026-11-11).
+func TestAQuietStreakStopsBeingTracked(t *testing.T) {
+	b, at := breakerAt(0)
+	quiet := breakerKey{jobType: cardType, endpoint: "https://gone.example"}
+	fail(b, quiet, 1)
+	fail(b, quiet, 2)
+	if !b.tracking(cardType) {
+		t.Fatal("a live streak is not tracked")
+	}
+	at(breakerStreakWindow + time.Second)
+	if b.tracking(cardType) {
+		t.Error("a streak quiet for longer than its window is still tracked")
+	}
+	if len(b.byKey) != 0 {
+		t.Errorf("entries = %d after the quiet streak expired, want none", len(b.byKey))
+	}
+
+	// A held breaker is not a streak, and never expires this way: only a probe or an
+	// operator closes it.
+	tripIt(b)
+	at(2 * breakerStreakWindow)
+	if !b.tracking(mailType) || !b.holdingFor(mailType) {
+		t.Error("the sweep dropped a breaker that is holding work back")
+	}
+}
+
+// TestEndpointsOfOneTypeAreSeparateTargets. Two REST hosts share one job type and no
+// Worker; one going down holds back its own calls and nobody else's — and the totals an
+// alert reads stay one series per Worker, however many hosts the data names.
+func TestEndpointsOfOneTypeAreSeparateTargets(t *testing.T) {
+	b, _ := breakerAt(0)
+	a := breakerKey{jobType: cardType, endpoint: "https://a.example"}
+	other := breakerKey{jobType: cardType, endpoint: "https://b.example"}
+	for i := uint64(1); i <= breakerThreshold; i++ {
+		fail(b, a, i)
+	}
+	if b.allow(a, 99) {
+		t.Error("the host that is down was let through before its cooldown")
+	}
+	if !b.allow(other, 98) {
+		t.Error("a healthy host sharing the job type was held back")
+	}
+	views := b.openBreakers(typeName)
+	if len(views) != 1 || views[0].Endpoint != "https://a.example" || views[0].Connector != "" {
+		t.Errorf("open breakers = %+v, want the one endpoint", views)
+	}
+	if len(b.stats) != 1 {
+		t.Errorf("stats keys = %d, want totals kept per Worker, not per endpoint", len(b.stats))
+	}
+	if !b.closeNow(a) || b.holdingFor(cardType) {
+		t.Error("closing the endpoint's breaker by its key did not end the hold")
+	}
+}

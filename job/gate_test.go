@@ -2,6 +2,7 @@ package job_test
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -378,5 +379,55 @@ func TestARecoveredTypeForgetsWhereItsScanStopped(t *testing.T) {
 	if resumed != keys[waiting-1] {
 		t.Errorf("the second outage resumed at %d, want the newest job %d — the old cursor outlived the recovery",
 			resumed, keys[waiting-1])
+	}
+}
+
+// TestARejectionIsNotTheTargetsFailure. A handler that says the target answered and
+// refused the request as wrong — an HTTP 400 for a malformed path — still fails its job,
+// spending the attempt, but the gate hears that the target answered rather than that it
+// failed. Three such refusals from three instances are three bad requests, not an
+// outage, and must not hold back every other job of the type (ADR-0340, amended
+// 2026-11-11).
+func TestARejectionIsNotTheTargetsFailure(t *testing.T) {
+	p, store, jobType, defKey := setup(t)
+	r := job.NewRunner(store, p)
+	r.Handle(jobType, func(state.Reader) job.Handler {
+		return func(job.Job) error {
+			return fmt.Errorf("rest: %w", job.Rejected(errors.New("POST /x returned HTTP 400")))
+		}
+	})
+	keys := backlog(t, p, store, jobType, defKey, 2)
+	before := map[uint64]int32{}
+	for _, k := range keys {
+		jv, ok, err := store.GetJob(k)
+		if err != nil || !ok {
+			t.Fatalf("GetJob(%d): ok=%v err=%v", k, ok, err)
+		}
+		before[k] = jv.Retries
+	}
+
+	gate := newHeldGate()
+	r.SetGate(gate)
+	if _, err := r.PollOnce(); err != nil {
+		t.Fatalf("PollOnce: %v", err)
+	}
+
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	_, failed, complete := gate.counts()
+	if failed != 0 || complete != 2 {
+		t.Errorf("gate heard %d failures and %d answers, want no failures and two answers", failed, complete)
+	}
+	// The job itself failed exactly as before: an attempt spent.
+	for _, k := range keys {
+		jv, ok, err := store.GetJob(k)
+		if err != nil {
+			t.Fatalf("GetJob(%d): %v", k, err)
+		}
+		if ok && jv.Retries != before[k]-1 {
+			t.Errorf("job %d has %d retries, want %d: a rejection must still spend its attempt", k, jv.Retries, before[k]-1)
+		}
 	}
 }
