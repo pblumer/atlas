@@ -1436,7 +1436,7 @@ func runtimeTools() []Tool {
 				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. " +
 				"CHECK 'breakers' FIRST when a queue is not moving: each row is a target whose jobs atlas is " +
 				"deliberately holding back because it kept failing (ADR-0340), with 'connector' (the Worker the " +
-				"model names), 'jobType', 'state' (\"open\" or \"probing\"), 'trippedAt', 'reason' (what it last " +
+				"model names) or, for a REST task, 'endpoint' (the scheme and host it calls), 'jobType', 'state' (\"open\" or \"probing\"), 'trippedAt', 'reason' (what it last " +
 				"failed with), 'probeAt' (when the next single job goes through to test it) and 'refused'. That " +
 				"work is WAITING, NOT FAILED — no retry spent, no incident raised — and it resumes by itself as " +
 				"soon as the target answers, so there is nothing to resolve and no incident will appear for it. " +
@@ -1455,8 +1455,9 @@ func runtimeTools() []Tool {
 			Description: "Stop holding one target's jobs back, now, without waiting for the engine's next " +
 				"attempt (ADR-0340). Use it after fixing what a breaker row in atlas_workers reported — a " +
 				"worker configuration, a credential, the endpoint itself. 'jobType' is required and is the row's " +
-				"job type; 'connector' is its Worker name, omitted for a job type that names no Worker. " +
-				"Returns {jobType, connector, closed}; closed=false means nothing was being held, which is not " +
+				"job type; 'connector' is its Worker name, omitted for a job type that names no Worker; 'endpoint' " +
+				"is the row's endpoint, which a REST task's breaker is keyed by instead (scheme and host it calls). " +
+				"Returns {jobType, connector, endpoint, closed}; closed=false means nothing was being held, which is not " +
 				"an error — a target that recovered on its own a moment earlier looks exactly like that. " +
 				"Closing a target that is in fact still down is safe and cheap: the next three failures simply " +
 				"hold it again, and they spend one retry each rather than parking tokens. There is deliberately " +
@@ -1467,6 +1468,7 @@ func runtimeTools() []Tool {
 				"properties": map[string]any{
 					"jobType":   map[string]any{"type": "string", "description": "The held row's job type, e.g. io.atlas.mail.send"},
 					"connector": map[string]any{"type": "string", "description": "The Worker name the model states; omit when the row has none"},
+					"endpoint":  map[string]any{"type": "string", "description": "The row's endpoint, for a REST task's breaker (e.g. https://api.example.com); omit when the row has none"},
 				},
 				"required": []any{"jobType"},
 			},
@@ -1477,6 +1479,7 @@ func runtimeTools() []Tool {
 				}
 				body, err := json.Marshal(map[string]any{
 					"jobType": jobType, "connector": optString(args, "connector"),
+					"endpoint": optString(args, "endpoint"),
 				})
 				if err != nil {
 					return "", err

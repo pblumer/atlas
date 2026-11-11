@@ -486,7 +486,7 @@ func (w *Worker) work(ctx context.Context, j Job) {
 			_ = w.throwError(ctx, j, be)
 			return
 		}
-		_ = w.fail(ctx, j, err.Error())
+		_ = w.fail(ctx, j, err.Error(), IsRejected(err))
 		return
 	}
 	_ = w.complete(ctx, j, out)
@@ -552,7 +552,7 @@ func (w *Worker) complete(ctx context.Context, j Job, out Outcome) error {
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/complete", body, nil)
 }
 
-func (w *Worker) fail(ctx context.Context, j Job, message string) error {
+func (w *Worker) fail(ctx context.Context, j Job, message string, rejected bool) error {
 	// One attempt is spent by this failure; at zero the engine raises an incident.
 	retries := j.Retries - 1
 	if retries < 0 {
@@ -567,6 +567,12 @@ func (w *Worker) fail(ctx context.Context, j Job, message string) error {
 	// nothing.
 	if backoff := w.retryBackoff(int32(retries)); backoff > 0 {
 		body["retryBackoff"] = backoff / int64(time.Millisecond)
+	}
+	// Sent only when true, so an ordinary failure's report is byte for byte what it was
+	// before the field existed; a server that predates it ignores it, and counts the
+	// failure against the target as it always did (ADR-0340, amended 2026-11-11).
+	if rejected {
+		body["rejected"] = true
 	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/fail", body, nil)
 }

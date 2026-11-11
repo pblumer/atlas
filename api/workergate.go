@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
@@ -36,7 +38,7 @@ var _ job.Gate = jobGate{}
 // this engine's bookkeeping and would tell a reader nothing.
 func (s *Server) logBreakerChange(k breakerKey, state breakerState, reason string, cooldown time.Duration) {
 	name, _ := s.jobTypes.Name(k.jobType)
-	target := k.connector
+	target := k.target()
 	if target == "" {
 		target = name // a job type an external worker serves by name alone is its own target
 	}
@@ -120,7 +122,19 @@ func (s *Server) breakerTargetOf(jobKey uint64) (breakerKey, uint64, bool) {
 // A task that names no Worker resolves to its job type alone, with an empty connector.
 // That is not a failure to attribute: an external worker serving a plain job type by
 // name *is* the target, as far as this engine can see.
+//
+// A REST task names no Worker but does name its endpoint, and is keyed by the origin
+// its url evaluates to (ADR-0340, amended 2026-11-11): one host's outage must not hold
+// back calls to another. That evaluation reads the variables the url names, which is
+// more than the two point reads, and it is paid where they are — for a held type's
+// candidates and for a failure — never in the steady state.
 func (s *Server) breakerTargetOfJob(jv *model.JobValue) breakerKey {
+	return s.jobTarget(jv, true)
+}
+
+// jobTarget is breakerTargetOfJob with the endpoint optional: a caller that only wants
+// the Worker a task names — which worker may take it — does not pay to evaluate a url.
+func (s *Server) jobTarget(jv *model.JobValue, withEndpoint bool) breakerKey {
 	k := breakerKey{jobType: jv.JobType}
 	ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey)
 	if err != nil || !ok {
@@ -132,6 +146,11 @@ func (s *Server) breakerTargetOfJob(jv *model.JobValue) breakerKey {
 	}
 	if ref, ok := d.cp.NodeConnectorRef(ei.ElementId); ok {
 		k.connector = ref.Connector
+	}
+	if withEndpoint && k.connector == "" && jv.JobType == compiler.RestJobTypeIndex {
+		if detail, err := d.cp.ConnectorTaskOf(ei.ElementId); err == nil {
+			k.endpoint = rest.Origin(s.store, detail, ei, jv.ElementInstanceKey)
+		}
 	}
 	return k
 }
@@ -201,10 +220,11 @@ func servedConnectors(names []string) map[string]bool {
 // name — a job for one was leased to the other and failed there with "no worker
 // registered as …". Found against a real tenant and server.
 func (s *Server) jobServedBy(jobKey uint64, serves map[string]bool) bool {
-	k, _, ok := s.breakerTargetOf(jobKey)
-	if !ok {
+	jv, ok, err := s.store.GetJob(jobKey)
+	if err != nil || !ok {
 		return false // completed or re-leased since the scan saw it
 	}
+	k := s.jobTarget(jv, false)
 	name := strings.TrimSpace(k.connector)
 	return name == "" || strings.HasPrefix(name, "=") || serves[name]
 }
@@ -260,6 +280,8 @@ func (s *Server) scanServedCandidates(jobType int32, worker string, serves map[s
 type closeBreakerReq struct {
 	JobType   string `json:"jobType"`
 	Connector string `json:"connector"`
+	// Endpoint is a REST breaker's origin, as its row in the Workers view names it.
+	Endpoint string `json:"endpoint"`
 }
 
 // handleCloseBreaker ends a hold early — for the operator who has already fixed the
@@ -291,7 +313,8 @@ func (s *Server) handleCloseBreaker(w http.ResponseWriter, r *http.Request) {
 			unknown = true
 			return
 		}
-		closed = s.breakers.closeNow(breakerKey{jobType: idx, connector: strings.TrimSpace(req.Connector)})
+		closed = s.breakers.closeNow(breakerKey{jobType: idx, connector: strings.TrimSpace(req.Connector),
+			endpoint: strings.TrimSpace(req.Endpoint)})
 	})
 	if unknown {
 		httpapi.Error(w, http.StatusNotFound,
@@ -305,6 +328,6 @@ func (s *Server) handleCloseBreaker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
-		"jobType": name, "connector": req.Connector, "closed": closed,
+		"jobType": name, "connector": req.Connector, "endpoint": req.Endpoint, "closed": closed,
 	})
 }

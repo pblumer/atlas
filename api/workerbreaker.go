@@ -94,9 +94,32 @@ const (
 // type all reach the same host, so the state belongs to the thing they share. A task that
 // names no worker carries an empty connector, and its job type is its target — that is
 // all this engine can see of it.
+//
+// Except for a REST task, which names no Worker but does name its endpoint: its url is
+// in the model. Keyed by job type alone, every REST task on the server shared one
+// breaker, and one dead host — or one model's bad requests to it — held back calls to
+// every other (ADR-0340, amended 2026-11-11). Its endpoint is the origin that url
+// evaluates to, and empty for everything else.
 type breakerKey struct {
 	jobType   int32
 	connector string
+	endpoint  string
+}
+
+// worker is the key without its endpoint: what the totals are kept under. An endpoint
+// is evaluated from an instance's variables, so its values are the data's to invent,
+// and totals that outlive recovery must stay the size of the Workers the models name.
+func (k breakerKey) worker() breakerKey {
+	return breakerKey{jobType: k.jobType, connector: k.connector}
+}
+
+// target is the name an operator knows the target by: the endpoint a REST task calls,
+// else the Worker the task names, else "" for a job type that is its own target.
+func (k breakerKey) target() string {
+	if k.endpoint != "" {
+		return k.endpoint
+	}
+	return k.connector
 }
 
 type breakerState uint8
@@ -163,6 +186,8 @@ type workerBreakers struct {
 	// job completing normally from resolving its Worker for no reason.
 	tracked map[int32]int
 	now     func() int64
+	// nextSweep is when [workerBreakers.expireQuietStreaks] next looks.
+	nextSweep int64
 	// onChange is told about every transition between held and not held. Work that
 	// silently does not happen is the one failure mode an operator cannot diagnose, so
 	// a breaker is never allowed to trip in silence — and the breaker itself holds only
@@ -195,7 +220,35 @@ func (b *workerBreakers) holdingFor(jobType int32) bool { return b.holding[jobTy
 // currently held, or one part-way through a failure streak. It is the reporting
 // path's first question: a completion on a type nothing is wrong with has nothing to
 // tell the breaker, and must not pay a read to discover that.
-func (b *workerBreakers) tracking(jobType int32) bool { return b.tracked[jobType] > 0 }
+//
+// A streak that has gone quiet is dropped here first. It could never trip anything — the
+// next failure would start it over (breakerStreakWindow) — but while it sat in the map it
+// made every completion of its type pay to be attributed. With one key per Worker a
+// success on that Worker cleared it; with one per REST endpoint, a host that failed twice
+// and was never called again would have done that for the life of the process.
+func (b *workerBreakers) tracking(jobType int32) bool {
+	if b.tracked[jobType] == 0 {
+		return false
+	}
+	b.expireQuietStreaks()
+	return b.tracked[jobType] > 0
+}
+
+// expireQuietStreaks forgets every closed entry whose streak last grew more than a
+// window ago. It walks the entries at most once a window, and the entries are the size
+// of what is currently wrong, so it costs a completion nothing it can notice.
+func (b *workerBreakers) expireQuietStreaks() {
+	now := b.now()
+	if now < b.nextSweep {
+		return
+	}
+	b.nextSweep = now + int64(breakerStreakWindow)
+	for k, e := range b.byKey {
+		if e.state == breakerClosed && now-e.lastFail > int64(breakerStreakWindow) {
+			b.forget(k, e)
+		}
+	}
+}
 
 // allow answers whether this job may be handed out. A refusal changes nothing about the
 // job: it stays activatable, unleased and untouched.
@@ -348,8 +401,10 @@ func (b *workerBreakers) forget(k breakerKey, e *breakerEntry) {
 	}
 }
 
-// count returns this target's totals, creating them on first sight.
+// count returns this target's totals, creating them on first sight. They are kept per
+// Worker, not per endpoint — see [breakerKey.worker].
 func (b *workerBreakers) count(k breakerKey) *breakerCounts {
+	k = k.worker()
 	c, ok := b.stats[k]
 	if !ok {
 		c = &breakerCounts{}
@@ -366,6 +421,9 @@ type breakerView struct {
 	JobType   string `json:"jobType"`
 	TypeIndex int32  `json:"-"`
 	Connector string `json:"connector,omitempty"`
+	// Endpoint is the origin a REST task calls, for a breaker keyed by it; empty for a
+	// target that is a Worker or a job type (ADR-0340, amended 2026-11-11).
+	Endpoint  string `json:"endpoint,omitempty"`
 	State     string `json:"state"`
 	TrippedAt int64  `json:"trippedAt"`
 	Reason    string `json:"reason,omitempty"`
@@ -397,6 +455,7 @@ func (b *workerBreakers) openBreakers(nameOf func(int32) (string, bool)) []break
 			JobType:   name,
 			TypeIndex: k.jobType,
 			Connector: k.connector,
+			Endpoint:  k.endpoint,
 			State:     e.state.String(),
 			TrippedAt: e.trippedAt,
 			Reason:    e.reason,
@@ -411,8 +470,10 @@ func (b *workerBreakers) openBreakers(nameOf func(int32) (string, bool)) []break
 			return out[i].JobType < out[j].JobType
 		case out[i].TypeIndex != out[j].TypeIndex:
 			return out[i].TypeIndex < out[j].TypeIndex // two types the resolver could not name
-		default:
+		case out[i].Connector != out[j].Connector:
 			return out[i].Connector < out[j].Connector
+		default:
+			return out[i].Endpoint < out[j].Endpoint
 		}
 	})
 	return out

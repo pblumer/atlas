@@ -11297,6 +11297,17 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         target, it is judged unreachable and atlas <b>stops handing out its jobs</b>. Every ten seconds – then
         twenty, forty, up to five minutes – exactly <b>one</b> job goes through as a test. As soon as that one
         succeeds, the whole backlog carries on by itself.</p>
+      <p data-l="de">Was als Ziel zählt: der Worker, den die Aufgabe nennt – bei einer REST-Aufgabe, die keinen
+        nennt, der Host, den sie aufruft (Schema, Host und Port). Fällt ein Host aus, laufen Aufrufe an andere
+        Hosts weiter. Und nur ein Ziel, das <i>nicht antwortet</i>, zählt als ausgefallen: Weist es die Anfrage
+        als falsch zurück – HTTP 400, 404, 401 und ähnliche, nicht aber 408 und 429 –, scheitert der Job wie
+        bisher mit Retry und Incident, aber atlas hält deswegen nichts zurück. Der Fehler liegt dann im Modell
+        oder in den Daten, nicht beim Ziel.</p>
+      <p data-l="en">What counts as a target: the worker the task names – for a REST task, which names none, the
+        host it calls (scheme, host and port). When one host is down, calls to other hosts carry on. And only a
+        target that <i>does not answer</i> counts as down: when it rejects the request as wrong – HTTP 400, 404,
+        401 and the like, but not 408 or 429 – the job fails as before, with retries and an incident, but atlas
+        holds nothing back because of it. The fault is then in the model or the data, not at the target.</p>
       <p data-l="de">Zurückgehaltene Arbeit <b>wartet, sie ist nicht gescheitert</b>: kein Retry wurde dafür
         verbraucht, kein Incident erzeugt, nichts abgebrochen. Genau deshalb musst du hinsehen können – und dafür
         gibt es in <a href="/#/operations/workers">Operations → Workers</a> die Karte <b>Held back</b>. Sie nennt

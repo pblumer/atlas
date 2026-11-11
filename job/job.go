@@ -186,7 +186,10 @@ type Gate interface {
 	// actually hand out if allowed.
 	Allow(jobType int32, jobKey uint64) bool
 	// Failed and Succeeded report a worked job's outcome. They are called before the
-	// command that records it, while the job is still readable.
+	// command that records it, while the job is still readable. Succeeded means the
+	// target answered, which is not only a completion: a thrown BPMN error and a
+	// [RejectedError] — the target refused the request as wrong — report it too,
+	// although the latter still fails the job.
 	Failed(jobType int32, jobKey uint64, message string)
 	Succeeded(jobType int32, jobKey uint64)
 }
@@ -577,7 +580,15 @@ func (r *Runner) Submit(outcomes []Outcome) {
 			continue
 		}
 		if o.Err != nil {
-			if r.gate != nil {
+			// A rejection fails the job like any failure, but what it tells the gate is
+			// that the target answered: it read the request and said it was wrong. That
+			// is no evidence of an outage, and it is the probe's verdict if it was the
+			// probe (ADR-0340, amended 2026-11-11).
+			switch {
+			case r.gate == nil:
+			case IsRejected(o.Err):
+				r.gate.Succeeded(o.Job.Type, o.Job.Key)
+			default:
 				r.gate.Failed(o.Job.Type, o.Job.Key, o.Err.Error())
 			}
 			left := o.Job.Retries - 1

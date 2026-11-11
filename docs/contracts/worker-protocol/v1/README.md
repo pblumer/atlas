@@ -156,6 +156,12 @@ Optional, and ignored for job types that do not use them:
 - `retryBackoff` (milliseconds, optional) holds the job back before it is offered again.
   The server's own policy is 60 s with one retry left and 15 s with more. Clients should use
   the same, so a job waits equally long wherever it runs.
+- `rejected` (boolean, optional) says the target answered and refused the request as wrong —
+  an HTTP 4xx other than 408 and 429, say. The job fails exactly as without it. The server's
+  circuit breaker (ADR-0340) then counts it as the target answering, not as a failure against
+  the target, so repeated bad requests do not hold back other jobs of that target. Send it only
+  when true; omitted, the failure counts against the target. `workersdk` sends it for a
+  handler error marked with `workersdk.Rejected`.
 
 ### Throw a BPMN error: `POST /api/v1/jobs/{jobKey}/error`
 

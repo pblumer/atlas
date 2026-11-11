@@ -8610,7 +8610,7 @@ async function viewWorkers() {
           <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
             <th>Last failure</th><th></th></tr></thead>
           <tbody>${held.map((b) => `<tr class="wk-stuck">
-            <td><b>${esc(b.connector || b.jobType)}</b>${b.state === "probing"
+            <td><b>${esc(b.endpoint || b.connector || b.jobType)}</b>${b.state === "probing"
               ? ` <span class="pill-kv" title="One job is out right now, testing whether the target has recovered">probing</span>` : ""}</td>
             <td><span class="pill-kv">${esc(b.jobType)}</span></td>
             <td>${esc(fmtSeen(b.trippedAt))}</td>
@@ -8618,6 +8618,7 @@ async function viewWorkers() {
             <td class="muted">${esc(b.reason || "\u2014")}</td>
             <td><button class="btn neutral sm" data-close-breaker="${esc(b.jobType)}"
               data-close-connector="${esc(b.connector || "")}"
+              data-close-endpoint="${esc(b.endpoint || "")}"
               title="Stop holding this target's jobs back now, without waiting for the next attempt">Close now</button></td>
           </tr>`).join("")}</tbody>
         </table>
@@ -8631,10 +8632,12 @@ async function viewWorkers() {
         b.onclick = async () => {
           b.disabled = true;
           try {
-            await api("POST", "/api/v1/workers/breakers/close", {
-              jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector,
-            });
-            toast("Released " + (b.dataset.closeConnector || b.dataset.closeBreaker));
+            // endpoint only where the row has one (a REST target, ADR-0340 amended):
+            // every other breaker is keyed by job type and Worker as before.
+            const target = { jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector };
+            if (b.dataset.closeEndpoint) target.endpoint = b.dataset.closeEndpoint;
+            await api("POST", "/api/v1/workers/breakers/close", target);
+            toast("Released " + (b.dataset.closeEndpoint || b.dataset.closeConnector || b.dataset.closeBreaker));
           } catch (e) { toast(e.message, "err"); }
           setTimeout(load, 400);
         };

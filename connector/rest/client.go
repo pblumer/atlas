@@ -34,6 +34,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/connector/nettimeout"
+	"github.com/pblumer/atlas/workersdk"
 )
 
 // Request is one HTTP call a REST task makes. URL is the full,
@@ -69,7 +70,8 @@ type Client interface {
 // HTTPClient calls a real REST API over HTTP. It sends Request.Body as a JSON
 // body (when present) to Request.URL with an Idempotency-Key header, and decodes a
 // JSON response body. A non-2xx status is returned as an error so the job stays
-// pending and is retried (at-least-once).
+// pending and is retried (at-least-once); one that says the request was wrong
+// ([workersdk.RejectsRequest]) is marked [workersdk.Rejected].
 type HTTPClient struct {
 	http *http.Client
 }
@@ -124,7 +126,15 @@ func (c *HTTPClient) Do(ctx context.Context, r Request) (Response, error) {
 		return Response{}, fmt.Errorf("rest: read response from %s %s: %w", r.Method, r.URL, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return Response{}, fmt.Errorf("rest: %s %s returned HTTP %d%s", r.Method, r.URL, resp.StatusCode, describeError(raw))
+		err := fmt.Errorf("rest: %s %s returned HTTP %d%s", r.Method, r.URL, resp.StatusCode, describeError(raw))
+		if workersdk.RejectsRequest(resp.StatusCode) {
+			// The far side read the request and said it was wrong. The job fails all the
+			// same, but this is no sign the host is down, and the circuit breaker must
+			// not hold back every other task calling it over one model's bad request
+			// (ADR-0340, amended 2026-11-11).
+			return Response{}, workersdk.Rejected(err)
+		}
+		return Response{}, err
 	}
 	return Response{Status: resp.StatusCode, Body: decodeBody(raw)}, nil
 }

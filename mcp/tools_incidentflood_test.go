@@ -190,6 +190,14 @@ func TestCloseBreakerViaTool(t *testing.T) {
 		t.Errorf("close_breaker with nothing held = %q, want closed:false", text)
 	}
 
+	// A REST task's breaker is keyed by the endpoint it calls, and the tool carries it
+	// through to the close (ADR-0340, amended 2026-11-11).
+	text, isErr = toolText(t, result(t, run(t, atlas, callTool(4, "atlas_close_breaker",
+		map[string]any{"jobType": "io.atlas.http.rest", "endpoint": "https://api.example.com"}))[0]))
+	if isErr || !strings.Contains(text, `"endpoint":"https://api.example.com"`) {
+		t.Errorf("close_breaker with an endpoint = (%q, isErr=%v), want the endpoint carried through", text, isErr)
+	}
+
 	// A job type this engine has never interned is a typo, not a no-op.
 	text, isErr = toolText(t, result(t, run(t, atlas, callTool(2, "atlas_close_breaker",
 		map[string]any{"jobType": "io.atlas.nonsense"}))[0]))

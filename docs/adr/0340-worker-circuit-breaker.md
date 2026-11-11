@@ -2,7 +2,9 @@
 
 - **Status:** Accepted (amended 2026-09-15 — the job record gains no field; the gate attributes lazily,
   and only while a breaker is open. 2026-09-16 — the Prometheus metrics are aggregates, not per-Worker
-  series. See the amendment note and the visibility section below.)
+  series. 2026-11-11 — a request the target refused as wrong is not a failure against it, and a
+  REST task's target is the endpoint it calls. See the amendment notes and the visibility section
+  below.)
 - **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Deciders:** Atlas engine team
@@ -11,8 +13,10 @@
   not resolve), without the worker protocol carrying a cause. The trip condition below sidesteps
   most of it by requiring distinct process instances rather than distinct attempts, and the residue
   is a false trip on a fault that hits every instance alike — which stops an integration that was
-  producing nothing but incidents anyway.
-- **Question checked:** 2026-09
+  producing nothing but incidents anyway. Since 2026-11-11 the protocol carries one cause — the
+  target answered and refused the request (`"rejected": true`) — which settles the case of a
+  request the target can read; a failure in preparing the call is still unmarked.
+- **Question checked:** 2026-11
 
 > **Amendment (2026-09-15): no field on the job record.** The decision below priced Worker
 > attribution as if the gate had to perform it for **every candidate job on every dispatch**, and
@@ -257,6 +261,70 @@ the durable record. The queue depth is the honest signal, and it is already on t
   rate the flood is created. A poll on a held type therefore waits its own wait out and looks once
   at the end, which costs a healthy Worker sharing that type up to one poll of latency — paid only
   while a breaker is open.
+
+## Amended 2026-11-11: a refused request is not an outage, and a REST task's target is its endpoint
+
+**What happened.** A model's REST task POSTed to Atlas's own API with an unencoded `#` in the path,
+so it reached the wrong route and drew HTTP 400 ("order: a line cannot be set to here …") for every
+instance. Three distinct instances failing in a row is the trip condition, so the breaker judged the
+target down. A REST task names no Worker, so its target was the job type `io.atlas.http.rest`, and
+the engine held back **every** REST task on the server — the shop's fulfilment orchestration
+(`api/systemprocesses/auftrag-erfuellung.bpmn`) for every order among them — until a probe got
+through. Two things in this record made that possible, and both are changed.
+
+**1. A rejection is evidence that the target answers.** The trip condition counts failures, and a
+failure was anything a worker reported. But a 400 is the far side reading the request and saying it
+is wrong: the host is up and doing its job. The "distinct instances" rule was meant to keep a data
+fault from tripping a breaker, and it does not when the fault is in the *model* — every instance
+sends the same malformed request.
+
+- The Worker protocol gains an optional cause on a failure: `"rejected": true` on
+  `POST /api/v1/jobs/{key}/fail`, sent by `workersdk` when a handler returns an error marked with
+  `workersdk.Rejected` (`job.Rejected` in process, the same type). It is absent unless true, so a
+  worker older than the field sends what it always sent and is counted as before, and a server
+  older than the field ignores it.
+- The job fails exactly as before — one attempt spent, an incident once none are left. Only what
+  the breaker hears changes: a rejection is reported as **the target answered**, i.e. as
+  `Succeeded`. That breaks a streak, and it is the probe's verdict when it was the probe: the probe
+  asks "does the target answer?", and a 400 says yes. Treating it as no verdict at all would leave
+  the target half open until the probe is written off, five minutes later.
+- The REST Worker Type marks a 4xx response as rejected, **except 408 and 429**: a request timeout
+  and a rate limit are about the target's own state and are failures like a 503. 401 and 403 are
+  marked rejected too — a credential the target refuses is a configuration fault, not an outage, and
+  the incident names it.
+- Other Worker Types keep reporting plain failures until they mark their own rejections; they are
+  each keyed by the Worker the task names, so their exposure is one Worker, not the server. Failures
+  in *preparing* a call (a secret that does not resolve, an OAuth token endpoint that refuses the
+  client) stay unmarked: the target was never reached, so there is nothing it answered, and the open
+  question above still stands for them.
+
+**2. A REST task's target is the endpoint it calls.** Option 5 was rejected because "every mail task
+shares one reserved job type, so one dead SMTP host would stop mail for every process on the
+server" — and the fallback for a task that names no Worker quietly re-created exactly that for REST,
+whose tasks name no Worker because the endpoint is in the model. A REST task's breaker is now keyed
+by `(job type, "", origin)`, where the origin is the scheme, host and port its url evaluates to,
+lower-cased (`connector/rest.Origin`). Not the path: what goes down is a host, and keying by route
+would trip once per route of one dead host.
+
+- **Cost.** The url is usually FEEL (`=atlasApiBase + "/api/v1/orders/" + orderId + …`), so
+  attributing a REST job now evaluates it, reading only the variables that url names. That is paid
+  where attribution already was: for candidates of a held type, inside the scan budget of
+  ADR-0270, and once per failure — never in the steady state, where `holdingFor` and `tracking` are
+  answered from empty maps. A literal url costs no read. The served-Worker filter of the external
+  pull, which only wants the Worker name, does not evaluate it.
+- **Bounded state.** An origin comes from instance data, so its values are the data's to invent.
+  Breaker entries remain the size of what is currently wrong; a closed entry whose streak has been
+  quiet for longer than the streak window — which could never trip anything — is now forgotten
+  rather than kept until a success on the same key, which for a host nobody calls any more would
+  never come. The run-long totals behind the Prometheus aggregates stay keyed per Worker, without
+  the origin, so they stay the size of what the models name.
+- **Visibility.** The Workers view's held row carries `endpoint` beside `connector`, the Console
+  shows it as the target, `POST /api/v1/workers/breakers/close` and `atlas_close_breaker` take it,
+  and the `worker.breaker_open` / `worker.breaker_closed` log lines name it as `target`.
+
+This would not by itself have kept the incident from tripping: the broken model and the fulfilment
+orchestration both called Atlas's own host. The first change is the fix for it; the second keeps the
+next host that does go down from taking every other REST integration with it.
 
 ## Pros and cons of the options
 

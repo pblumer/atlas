@@ -304,6 +304,16 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **A request the target refuses no longer holds back other jobs.** A REST task whose request
+  drew HTTP 400 from three instances in a row opened the worker circuit breaker for the whole
+  REST job type, so Atlas held back every REST task on the server — the shop's fulfilment
+  orchestration for every order among them — until a probe got through. A 4xx answer other than
+  408 and 429 now still fails the job (retry, then incident, as before) but counts as the target
+  answering, not as the target being down. A REST task's breaker is now also keyed by the scheme
+  and host it calls, so one host that is down no longer holds back calls to another; the Workers
+  view, `POST /api/v1/workers/breakers/close` and `atlas_close_breaker` name it as `endpoint`. A
+  worker reports a refused request with `"rejected": true` on the fail call (`workersdk.Rejected`);
+  a worker that does not send it is counted as before (ADR-0340, amended 2026-11-11).
 - **A position with a variant can be refused and approved through its process.** `POST
   /api/v1/orders/{id}/lines/{position}/decision` matched the item id only, while a position's
   process is started with `positionId` = `<item>#<variant>` (ADR-0384). A refusal or an approval
