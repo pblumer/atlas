@@ -257,7 +257,9 @@ known condition with a plain failure instead of a code a process can catch.)
   reach; scoping is the server's: a dedicated booking account with only the booking
   calendars shared to it.
 - **EWS:** a service account with delegate access to the booking mailboxes. The first
-  version supports what the Exchange Worker's on-premises backend already supports.
+  version supports what the Exchange Worker's on-premises backend already supports. As
+  built, it supports NTLM and Basic but not Kerberos alone (see phase 4): the Exchange
+  Worker reaches Kerberos through the pwsh it starts, this backend speaks HTTP itself.
 
 All of it lives on the Worker (ADR-0545). The engine receives slots and an event id.
 
@@ -495,6 +497,63 @@ Not built: the phasing's "tried against at least two servers" — no run against
 or another real server has been made, so server quirks (iCloud's discovery, servers that
 ignore `expand`) are known only from their documentation. EWS (phase 4), live runs, and
 published contracts with written evidence records remain.
+
+### As built: phase 4 (2026-11-11)
+
+- **Exchange Web Services** (`connector/calendar/ews.go`), provider `exchange-ews`, for
+  Exchange Server 2016, 2019 and Subscription Edition on premises. The bundle is the
+  service account's `username` (`DOMAIN\account` or a UPN) and `password`, and an
+  optional `authentication`; the Worker's endpoint is required and is the server's EWS URL
+  (`https://mail.contoso.ch/EWS/Exchange.asmx`), https unless it is loopback. Every
+  request names schema `Exchange2013_SP1`, which all three versions accept, and works in
+  UTC (`TimeZoneContext` UTC). A redirect is refused: EWS does not redirect a SOAP POST.
+- **Delegate access, not impersonation.** A calendar is the SMTP address of a mailbox,
+  addressed as its distinguished `calendar` folder with that mailbox. The service account
+  needs Editor on each booking calendar (the Exchange Worker's `add-folder-permission`);
+  to invite attendees also Send on Behalf or Send As (`grant-send-on-behalf`,
+  `add-send-as`). Without either, Exchange answers `ErrorSendAsDenied`, which the backend
+  throws as `CALENDAR_ATTENDEES_NOT_ALLOWED` — so the attendees case of the suites is
+  exercised on EWS, not met vacuously. ApplicationImpersonation was not chosen: unless an
+  administrator scopes it, it reaches every mailbox of the organization; delegate access
+  reaches only the ones granted.
+- **Authentication.** NTLMv2, inside Negotiate where the server offers it, through
+  `github.com/Azure/go-ntlmssp` (already in the module graph through the LDAP client,
+  now a direct dependency). The negotiator never sends the password as Basic, even to a
+  server that asks for it; `"authentication": "basic"` must say so. Kerberos alone is
+  refused at configuration: a Go client would need a keytab and a KDC, which is a
+  separate decision. Extended Protection for Authentication, where a server enforces it
+  for NTLM, is not implemented and would refuse this Worker — not observed, a risk to
+  check on the first real server.
+- **Reading.** `FindItem` with a `CalendarView`, which expands recurring appointments
+  into their occurrences, and an `IdOnly` shape with Start, End, LegacyFreeBusyStatus,
+  IsCancelled and the create key — no subject, body, organizer or attendees. Not
+  `GetUserAvailability` as this record first said: availability answers no item ids, and
+  the conflict rule must tell its own placeholder from the rest. Busy is every item not
+  `Free` and not cancelled; a view holding more than 5000 items is refused.
+- **Idempotent creation by search (`check`).** EWS has no idempotency token. The create
+  key is written into a named extended property in a property set of atlas's own; before
+  creating, the backend reads the slot and returns an item carrying the key. This is the
+  same check Graph runs before posting. Two deliveries of one job running at the same
+  moment could both create; the conflict rule then sees two items with the same key and
+  keeps both, a duplicate placeholder for one customer, not a double booking of two. The
+  window is a redelivery while the first delivery is still running.
+- **Confirmation and cancellation.** `confirm-booking` reads the item, refuses a cancelled
+  one, and sets subject, body and required attendees with `SendToAllAndSaveCopy` when
+  there are attendees, `SendToNone` otherwise. `cancel-booking` moves the item to the
+  mailbox's deleted items and sends attendees the cancellation. On `ErrorItemNotFound`
+  the backend asks for the mailbox's calendar (`GetFolder`) and reports whichever is
+  missing. Only the response code of a failure is kept, never its message text, which
+  can quote addresses.
+- **Evidence.** `connector/calendar/ewsfake` stands in for EWS. It authenticates every
+  request with NTLMv2 and checks the client's response against the password (a wrong one
+  is 401), refuses an item shape wider than the above, refuses a calendar item whose
+  elements leave the schema's order, expands a series only in a calendar view, and keeps
+  no idempotency of its own. Every suite case passes on the mock, Graph, Google, CalDAV
+  and EWS except read-after-write visibility.
+
+Not built: a run against a real Exchange Server; Kerberos; Exchange Online through EWS,
+which this record leaves to Graph. The response codes and the element order are taken
+from Microsoft's EWS reference, not observed.
 
 ### Consequences
 

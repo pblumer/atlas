@@ -22,6 +22,15 @@ _Changed_ / _Removed_ for each version.
   The check runs in the Modeler, because the compiler knows a linked form only by its id and
   nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
   parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
+- **The calendar Worker Type books into Exchange Server too.** A calendar Worker whose bundle
+  names `"provider": "exchange-ews"` books into Exchange Server 2016, 2019 or Subscription
+  Edition on premises through Exchange Web Services, which Microsoft Graph does not reach. A
+  service account with Editor on each booking mailbox's calendar authenticates with NTLM (or
+  Basic where only that is enabled); the endpoint is the server's EWS URL and a task names a
+  calendar by its mailbox address. Only times and availability are read, never subjects. A
+  repeated delivery finds its reservation by a create key written into an extended property,
+  and a mailbox the account may not send for refuses attendees with
+  `CALENDAR_ATTENDEES_NOT_ALLOWED` (ADR-0552, phase 4).
 - **The Helm chart can install alerting rules for the single writer.** `prometheusRule.enabled=true`
   renders a Prometheus Operator `PrometheusRule` with four recording rules and seven alerts: probe
   timeouts and failed store reads (critical), a noticeable wait for the writer, the writer's
