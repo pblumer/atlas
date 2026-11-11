@@ -22,7 +22,7 @@ _Changed_ / _Removed_ for each version.
   parts rise, the host is the likelier cause; if only the store part rises, it is the store or its
   disk. Probes that are not finished within ten seconds count as
   `atlas_runloop_probe_timeouts_total`. The probe writes nothing, is not counted as a run-loop
-  turn, and runs only while `/metrics` is served (ADR-draft-runloop-reference-probe).
+  turn, and runs only while `/metrics` is served (ADR-0557).
 - **The calendar Worker Type books into CalDAV servers too.** A calendar Worker whose bundle
   names `"provider": "caldav"` with a username and an app-specific password books into
   Nextcloud, iCloud, Fastmail, Synology, Radicale or any other CalDAV server; its endpoint is

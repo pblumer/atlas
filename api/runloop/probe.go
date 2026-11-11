@@ -6,7 +6,7 @@ import (
 )
 
 // Probe hands work to the loop as a reference turn and reports how long it queued before
-// the loop started it (ADR-draft-runloop-reference-probe).
+// the loop started it (ADR-0557).
 //
 // It exists because the turn histograms (see [Metrics]) measure the traffic the server
 // happens to be carrying. When they rise, the cause may be more load, a different mix

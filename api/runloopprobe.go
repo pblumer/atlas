@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/metrics"
 )
 
-// The run-loop reference probe (ADR-draft-runloop-reference-probe).
+// The run-loop reference probe (ADR-0557).
 //
 // The turn histograms (runLoopMetrics) describe the traffic the server carries. When they
 // rise, the cause may be more load, a different mix of work, or a writer that has become

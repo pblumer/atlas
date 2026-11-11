@@ -6,7 +6,7 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-// The reference read (ADR-draft-runloop-reference-probe).
+// The reference read (ADR-0557).
 //
 // The run-loop probe times a fixed piece of store work on the single writer, so that a
 // change in its duration says the store has become slower to read rather than that the

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A reference probe measures the single writer independent of traffic
+# ADR-0557: A reference probe measures the single writer independent of traffic
 
 - **Status:** Accepted
 - **Implementation:** Landed
