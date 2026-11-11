@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pblumer/atlas/api/apppkg"
 	"github.com/pblumer/atlas/api/blueprintregistry"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/importplan"
@@ -352,7 +354,7 @@ func (s *Server) handleBlueprintImport(w http.ResponseWriter, r *http.Request) {
 	}
 	// The record of where the application came from is written before the import
 	// writes anything, and finished in the same run-loop turn (ADR-0499 amendment g).
-	journal := s.newHubJournal(r, release, origin, inspection.ApplicationKey, catalogues)
+	journal := s.newHubJournal(r, release, origin, inspection, packageConstantNames(files))
 	status, body := s.importSourceFiles(r, files, decide, journal)
 	switch v := body.(type) {
 	case sourceImportResult:
@@ -367,4 +369,27 @@ func (s *Server) handleBlueprintImport(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpapi.JSON(w, status, body)
 	}
+}
+
+// packageConstantNames names the constants a package's konstanten.json offers, the
+// file the Console imports beside the source tree. A file it cannot read names
+// none: the Console's own import of it reports why.
+func packageConstantNames(files []sourceFile) []string {
+	for _, f := range files {
+		if f.Path != apppkg.ConstantsFile {
+			continue
+		}
+		var file sourceConstants
+		if json.Unmarshal(f.Data, &file) != nil {
+			return nil
+		}
+		names := make([]string, 0, len(file.Constants))
+		for _, c := range file.Constants {
+			if c.Name != "" {
+				names = append(names, c.Name)
+			}
+		}
+		return names
+	}
+	return nil
 }

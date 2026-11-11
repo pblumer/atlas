@@ -262,6 +262,7 @@ func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide i
 	)
 	if journal != nil {
 		journal.rec.ApplicationKey = man.Key // the key the import writes, whatever the package's index said
+		journal.expectTree(man, offered)
 	}
 	s.do(func() {
 		if journal != nil && !decide.DryRun {

@@ -34,6 +34,42 @@ async function trustedJSON(url) {
   return data;
 }
 
+// installations reads what this server installed from the hub, by Blueprint, with
+// each installation's components as the server holds them now (ADR-0499 amendment
+// h). A server that cannot answer — an older one, or a refusal — shows nothing.
+async function installations() {
+  try {
+    const res = await fetch("/api/v1/blueprints/installations", { cache: "no-store" });
+    if (!res.ok) return new Map();
+    const list = await res.json();
+    return new Map((Array.isArray(list) ? list : []).map((i) => [i.blueprintId, i]));
+  } catch {
+    return new Map();
+  }
+}
+
+const installedStatus = (inst) => t("blueprint.installed.status." + inst.status);
+
+// installedSection says what of a release this server holds: which version from
+// where, its status, and each component as it is here.
+function installedSection(inst) {
+  const rows = (inst.components || []).map((c) => {
+    const ok = c.status === "present" || c.status === "published";
+    return `<li data-component="${esc(c.kind + ":" + c.id)}" data-state="${esc(c.status)}">
+      ${esc(t("blueprint.installed.kind." + c.kind))} <code>${esc(c.id)}</code>${c.version ? " v" + esc(c.version) : ""}:
+      <span class="${ok ? "muted" : "chip small sv-warn"}">${esc(t("blueprint.installed.state." + c.status))}</span></li>`;
+  }).join("");
+  const hint = inst.status === "complete" ? "" :
+    `<p class="small" data-installed-hint>${esc(t("blueprint.installed.hint." + inst.status))}</p>`;
+  return `<section data-installation="${esc(inst.status)}">
+      <p><b>${esc(t("blueprint.installed.title"))}</b></p>
+      <p class="small">${esc(t("blueprint.installed.line", { version: inst.version, registry: inst.registryId,
+        digest: inst.digest, status: installedStatus(inst) }))}</p>
+      ${hint}
+      ${rows ? `<ul class="small">${rows}</ul>` : ""}
+    </section>`;
+}
+
 // This atlas hub view presents an operator-pinned registry listing and a
 // safe inspected package preview, then hands an approved package to the same
 // importer as the ordinary Console file-upload action. No second installer.
@@ -97,6 +133,8 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
   // Tags only steer what is shown; they are signed with the index, and the
   // server decides nothing by them.
   let activeTag = "";
+  // What this server installed from the hub, by Blueprint, read with each listing.
+  let installed = new Map();
   const chips = (tags) => (tags || []).map((tag) =>
     `<span class="chip small" data-tag-chip="${esc(tag)}">${esc(tag)}</span>`).join(" ");
 
@@ -140,6 +178,8 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
       const index = connection.done.index || {};
       const tooOld = new Map((connection.done.incompatible || []).map((r) => [r.blueprintId + "@" + r.version, r.minAtlas]));
       const releases = index.releases || [];
+      installed = await installations();
+      if (closed) return;
       const allTags = [...new Set(releases.flatMap((r) => r.tags || []))].sort();
       if (activeTag && !allTags.includes(activeTag)) activeTag = "";
       const shown = releases
@@ -164,6 +204,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
               <div class="muted small">${esc(r.publisherId)} · ${esc(r.license)}</div>
               <div class="small">${esc(r.description)}</div>
               ${(r.tags || []).length ? `<div class="small" style="margin-top:4px">${chips(r.tags)}</div>` : ""}
+              ${installed.has(r.blueprintId) ? `<div class="small" style="margin-top:4px"><span class="chip small${installed.get(r.blueprintId).status === "complete" ? "" : " sv-warn"}" data-installed="${esc(installed.get(r.blueprintId).status)}">${esc(t("blueprint.installed.chip", { version: installed.get(r.blueprintId).version, status: installedStatus(installed.get(r.blueprintId)) }))}</span></div>` : ""}
               ${tooOld.has(r.blueprintId + "@" + r.version) ? `<div class="small" style="margin-top:4px"><span class="chip small sv-warn" data-too-old>${esc(t("blueprint.route.needsAtlas", { min: tooOld.get(r.blueprintId + "@" + r.version) || "?", version: connection.done.atlasVersion }))}</span></div>` : ""}</div>
             <button class="btn ghost" type="button" data-preview="${i}"${tooOld.has(r.blueprintId + "@" + r.version) ? " disabled" : ""}>${esc(t("blueprint.preview"))}</button>
           </div>`).join("")}</div>` : `<p class="muted">${esc(t("blueprint.empty"))}</p>`}`;
@@ -209,6 +250,7 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
         <p>${esc(t("blueprint.digest"))}: <code>${esc(inspected.digest)}</code></p>
         <p><b>${esc(t("blueprint.needs"))}:</b> ${esc(needs.join(", ") || t("blueprint.none"))}</p>
         ${catalogues ? `<p><b>${esc(t("transfer.catalogues"))}:</b></p><ul>${catalogues}</ul>` : ""}
+        ${installed.has(inspected.blueprintId) ? installedSection(installed.get(inspected.blueprintId)) : ""}
         <section data-architecture>
           <p><b>${esc(t("blueprint.architecture.title"))}</b></p>
           <p class="muted small">${esc(t("blueprint.architecture.hint"))}</p>

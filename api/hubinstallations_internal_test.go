@@ -66,6 +66,11 @@ func TestHubImportRecordsWhereTheApplicationCameFrom(t *testing.T) {
 		RegistryID: "org.example.hub", IndexURL: f.origin.IndexURL, SignedBy: f.origin.SignedBy,
 		PublisherID: "org.example", BlueprintID: "org.example.hub-sample", Version: "1.0.0", Digest: digest,
 		CataloguesNotImported: []string{"cat-hub"},
+		Expected: &hubExpected{
+			Processes: []string{"proc_hub_sample"}, Forms: []string{}, Decisions: []string{},
+			Constants: []string{"HUB_TENANT"}, Catalogues: []string{"cat-hub"}, Products: []string{"hub-product"},
+			PublishCatalogues: true,
+		},
 	}
 	if rec.RecordedAt == 0 {
 		t.Fatal("the record carries no time")

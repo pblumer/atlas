@@ -70,7 +70,7 @@ const healthyWay = (indexBody, extra = {}) => [
     releases: indexBody.releases.length, compatible: indexBody.releases.length, ...extra },
 ];
 
-async function stubRegistry(page, { status = 200, downloadStatus = 200, downloadBody = null, previewBody = preview, previewFailure = null, indexBody = index, way = null, sketchStatus = 200 } = {}) {
+async function stubRegistry(page, { status = 200, downloadStatus = 200, downloadBody = null, previewBody = preview, previewFailure = null, indexBody = index, way = null, sketchStatus = 200, installations = null } = {}) {
   const requests = [];
   await page.route("**/api/v1/blueprints**", async (route) => {
     const request = route.request();
@@ -81,6 +81,10 @@ async function stubRegistry(page, { status = 200, downloadStatus = 200, download
       await route.fulfill(status === 200
         ? { status: 200, contentType: "application/x-ndjson", body: (way || healthyWay(indexBody)).map((l) => JSON.stringify(l)).join("\n") + "\n" }
         : { status, contentType: "application/json", body: JSON.stringify({ error: "Registry not configured" }) });
+    } else if (path === "/api/v1/blueprints/installations") {
+      await route.fulfill(installations
+        ? { status: 200, contentType: "application/json", body: JSON.stringify(installations) }
+        : { status: 404, contentType: "application/json", body: JSON.stringify({ error: "not found" }) });
     } else if (path === "/api/v1/blueprints") {
       await route.fulfill({ status, contentType: "application/json",
         body: JSON.stringify(status === 200 ? indexBody : { error: "Registry not configured" }) });
@@ -389,4 +393,45 @@ test("a package that differs from the signed index is named as such, not as a ne
   await expect(page.locator("#result")).toHaveText(
     "err: Import fehlgeschlagen: Der Weg zum atlas hub endete bei «Paket herunterladen und prüfen»: Paket weicht vom signierten Index ab.");
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+});
+
+// What this server installed is read from the server, never remembered by the page:
+// the listing marks the release with the installed version and its status, and the
+// preview lists each component as the server holds it, the missing ones marked, with
+// what to do about it (ADR-0499 amendment h).
+test("an incomplete installation is marked in the listing and its missing components named in the preview", async ({ page }) => {
+  const requests = await stubRegistry(page, { installations: [{
+    applicationKey: "purchase", applicationId: "app-1", blueprintId: release.blueprintId, version: "1.0.0",
+    registryId: index.registryId, digest, status: "partial", components: [
+      { kind: "application", id: "purchase", status: "present" },
+      { kind: "process", id: "proc_purchase", status: "present" },
+      { kind: "release", id: "purchase", status: "published", version: 1 },
+      { kind: "catalogue", id: "cat-requests", status: "missing" },
+    ],
+  }] });
+  await page.evaluate(() => window.__open());
+  const chip = page.locator("[data-installed]");
+  await expect(chip).toHaveAttribute("data-installed", "partial");
+  await expect(chip).toContainText("v1.0.0");
+  await page.locator('[data-preview="0"]').click();
+  const section = page.locator("[data-installation]");
+  await expect(section).toHaveAttribute("data-installation", "partial");
+  await expect(section.locator('[data-component="catalogue:cat-requests"]')).toHaveAttribute("data-state", "missing");
+  await expect(section.locator('[data-component="release:purchase"]')).toContainText("v1");
+  await expect(section.locator("[data-installed-hint]")).toBeVisible();
+  // Reading what is installed writes nothing.
+  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+  expect(requests.filter((r) => r.path.endsWith("/package"))).toHaveLength(0);
+});
+
+test("a complete installation is marked without a hint", async ({ page }) => {
+  await stubRegistry(page, { installations: [{
+    applicationKey: "purchase", blueprintId: release.blueprintId, version: "1.0.0", registryId: index.registryId,
+    digest, status: "complete", components: [{ kind: "application", id: "purchase", status: "present" }],
+  }] });
+  await page.evaluate(() => window.__open());
+  await expect(page.locator("[data-installed]")).toHaveAttribute("data-installed", "complete");
+  await page.locator('[data-preview="0"]').click();
+  await expect(page.locator("[data-installation]")).toHaveAttribute("data-installation", "complete");
+  await expect(page.locator("[data-installed-hint]")).toHaveCount(0);
 });

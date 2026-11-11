@@ -129,7 +129,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   on download, and installs the application through the server's hub import — dry run
   first, then the import, both carrying the previewed digest and no package bytes, so the
   server records where the application came from (ADR-0499 amendment g); mismatched digests
-  and an absent registry fail closed.
+  and an absent registry fail closed. An installed release is marked in the listing with its
+  version and status, and its preview lists each component as the server holds it, the
+  missing ones marked (amendment h).
 
 - **`application-delete.spec.mjs`**
   ([ADR-0468](../docs/adr/0468-deleting-an-application-with-its-contents.md)):
