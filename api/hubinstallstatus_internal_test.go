@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -217,5 +219,129 @@ func TestHubInstallationsShowOnlyWhatTheCallerMaySee(t *testing.T) {
 	admin := list(&httpapi.Principal{UserID: "usr_root", Roles: []string{RoleAdmin}})
 	if len(admin) != 1 || admin[0].InstalledBy != "usr_ann" {
 		t.Fatalf("the administrator's view = %+v", admin)
+	}
+}
+
+// view reads forms and decisions in the application, holds a release that does not
+// name a decision of the package to be behind, and reads a record kept before
+// amendment h — which knows only its application and catalogues — with what it has.
+func TestHubViewReadsEveryKindAndARecordKeptBefore(t *testing.T) {
+	srv, _ := openAt(t, t.TempDir())
+	var err error
+	srv.do(func() {
+		for _, save := range []func() error{
+			func() error { return srv.projects.Save(project{ID: "app-1", Key: "kinds", Name: "Kinds"}) },
+			func() error { return srv.drafts.Save(draft{ProcessID: "p1", ProjectID: "app-1", SavedAt: 10}) },
+			func() error { return srv.forms.Save(form{ID: "f1", ProjectID: "app-1"}) },
+			func() error { return srv.forms.Save(form{ID: "f-elsewhere", ProjectID: "app-2"}) },
+			func() error { return srv.dmnrefs.Save(dmnRef{ID: "d1", ProjectID: "app-1"}) },
+			func() error {
+				return srv.releases.Save(applicationRelease{ID: "rel-1", ApplicationID: "app-1", Version: 3, PublishedAt: 20,
+					Members: []releaseMember{{Kind: "process", Ref: "p1"}}})
+			},
+		} {
+			if err = save(); err != nil {
+				return
+			}
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	holdings, err := srv.hubHoldings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := holdings.view(hubInstallation{ApplicationKey: "kinds", ApplicationID: "app-1", State: hubInstalled,
+		Expected: &hubExpected{Processes: []string{"p1"}, Forms: []string{"f1", "f-elsewhere"}, Decisions: []string{"d1"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantComponents(t, "kinds", v, hubStatusPartial, map[string]string{
+		"process:p1":       hubPresent,
+		"form:f1":          hubPresent,
+		"form:f-elsewhere": hubMissing, // in another application, not this one
+		"decision:d1":      hubPresent,
+		"release:kinds":    hubUnpublished, // version 3 names p1 but not d1
+	})
+
+	legacy, err := holdings.view(hubInstallation{ApplicationKey: "kinds", ApplicationID: "app-1", State: hubInstalled,
+		CataloguesNotImported: []string{"cat-x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := componentStates(legacy); len(got) != 2 || got["application:kinds"] != hubPresent || got["catalogue:cat-x"] != hubMissing {
+		t.Fatalf("a record kept before amendment h = %v", got)
+	}
+}
+
+// releaseCovers asks for every process and every decision of the package.
+func TestReleaseCoversEveryProcessAndDecision(t *testing.T) {
+	rel := applicationRelease{Members: []releaseMember{{Kind: "process", Ref: "p1"}, {Kind: "decision", Ref: "d1"}}}
+	for _, c := range []struct {
+		name string
+		exp  hubExpected
+		want bool
+	}{
+		{"both named", hubExpected{Processes: []string{"p1"}, Decisions: []string{"d1"}}, true},
+		{"a process it lacks", hubExpected{Processes: []string{"p1", "p2"}}, false},
+		{"a decision it lacks", hubExpected{Decisions: []string{"d2"}}, false},
+		{"a decision named as a process", hubExpected{Processes: []string{"d1"}}, false},
+	} {
+		if got := releaseCovers(rel, c.exp); got != c.want {
+			t.Errorf("%s: releaseCovers = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// expectTree takes the tree's identities and the manifest's constants beside the
+// package's, each list sorted and without repeats.
+func TestExpectTreeTakesTheTreeSortedAndOnce(t *testing.T) {
+	j := &hubJournal{rec: hubInstallation{Expected: &hubExpected{Constants: []string{"B", "A"}, Catalogues: []string{"c2", "c1", "c2"}}}}
+	j.expectTree(sourceManifest{
+		Processes: []sourceProcess{{ID: "p2"}, {ID: "p1"}},
+		Forms:     []sourceForm{{ID: "f1"}},
+		Decisions: []sourceDecision{{ID: "d1"}, {ID: "d1"}},
+	}, []heldConstant{{Name: "A"}, {Name: "C"}})
+	got, _ := json.Marshal(j.rec.Expected)
+	want := `{"processes":["p1","p2"],"forms":["f1"],"decisions":["d1"],"constants":["A","B","C"],"catalogues":["c1","c2"],"products":[]}`
+	if string(got) != want {
+		t.Fatalf("expected = %s\nwant       %s", got, want)
+	}
+}
+
+// packageConstantNames reads the names from konstanten.json and nothing else.
+func TestPackageConstantNames(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		files []sourceFile
+		want  string
+	}{
+		{"no file", []sourceFile{{Path: "atlas.json", Data: []byte(`{}`)}}, "[]"},
+		{"unreadable", []sourceFile{{Path: "konstanten.json", Data: []byte(`{`)}}, "[]"},
+		{"named, and one without a name", []sourceFile{{Path: "konstanten.json",
+			Data: []byte(`{"constants":[{"name":"A"},{"name":""},{"name":"B"}]}`)}}, `["A","B"]`},
+	} {
+		got, _ := json.Marshal(append([]string{}, packageConstantNames(c.files)...))
+		if string(got) != c.want {
+			t.Errorf("%s: names = %s, want %s", c.name, got, c.want)
+		}
+	}
+}
+
+// A record store it cannot read is an error, never an empty listing: "nothing was
+// installed from the hub" is an answer, and a broken store must not give it.
+func TestHubInstallationsWithAnUnreadableStoreAnswerAnError(t *testing.T) {
+	dir := t.TempDir()
+	_, ts, _, _ := hubImportServerAt(t, dir)
+	store := filepath.Join(dir, "blueprint-installations")
+	if err := os.RemoveAll(store); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(store, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, raw := hubCall(t, ts, http.MethodGet, "/api/v1/blueprints/installations", ""); code != http.StatusInternalServerError {
+		t.Fatalf("listing over a broken store = %d %s", code, raw)
 	}
 }
