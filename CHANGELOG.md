@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The calendar Worker Type books into CalDAV servers too.** A calendar Worker whose bundle
+  names `"provider": "caldav"` with a username and an app-specific password books into
+  Nextcloud, iCloud, Fastmail, Synology, Radicale or any other CalDAV server; its endpoint is
+  the calendar home and a task names a calendar by its collection name. Recurring
+  appointments are read expanded by the server and a server that does not expand them is
+  refused; only times, status and transparency are read, never titles. A repeated delivery
+  books once, by a resource name derived from the create key and written with
+  `If-None-Match`, and the confirmation is written with `If-Match` (ADR-0552, phase 3).
 - **A business rule task's decision is one click from the task.** In the Modeler's Implement
   view a business rule task that calls a decision carries a small decision mark, as a user task
   carries its form mark. A click opens the decision over the diagram, without saving or leaving
