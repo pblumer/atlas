@@ -3121,7 +3121,13 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .vt tbody tr:hover { background: var(--accent-soft); }
 .vt td { padding: 8px 12px; vertical-align: top; }
 .vt .c-name { font: 600 12.5px/1.45 ui-monospace, monospace; color: var(--text); width: 40%; word-break: break-all; }
-.vt .c-valcell { min-width: 0; }
+/* The value column takes the width the others leave rather than the width its content
+   asks for. A structure's one-line peek (.v-open .peek, nowrap) otherwise made its full
+   text — a delta link, a token — the column's minimum, and the table ran thousands of
+   pixels past its panel, toolbar and Copy buttons with it. max-width 0 removes that
+   minimum, so the peek ellipsizes as designed; min-width keeps the column readable when
+   the panel is narrow (it outranks max-width). */
+.vt .c-valcell { max-width: 0; min-width: 9em; }
 .vt .c-val { font: 13px/1.5 ui-monospace, monospace; word-break: break-word; }
 .vt .c-val.num  { color: #0a7c5a; }
 .vt .c-val.bool { color: #b26a00; font-weight: 600; }
@@ -3203,6 +3209,12 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   margin: 0; max-height: min(320px, 34vh); overflow: auto; padding: 8px 10px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre;
+  /* An unwrapped line — a delta link, a token — would otherwise set the min-content
+     width of the colspan cell and stretch the whole table past its panel, pushing the
+     toolbar and every other row off screen. As with .c-val.long, width 0 takes the
+     <pre> out of the table's width sum and min-width fills the cell; the long line
+     then scrolls inside the box, which overflow: auto already provides. */
+  width: 0; min-width: 100%;
 }
 .vt .v-big {
   margin-top: 6px; padding: 2px 8px; border-radius: 6px; cursor: pointer;

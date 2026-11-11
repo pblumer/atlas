@@ -26,6 +26,16 @@ _Changed_ / _Removed_ for each version.
   as `formRevision`. New reads `GET /api/v1/tasks/completed` and
   `GET /api/v1/tasks/completed/{key}`, and MCP tools `atlas_list_completed_tasks` and
   `atlas_get_completed_task`. Tasks completed before this release are not listed (ADR-0554).
+- **A reference probe measures the single writer whatever the traffic.** Every five seconds the
+  server hands its run loop the same fixed, read-only work and exports how long it queued
+  (`atlas_runloop_probe_wait_seconds`) and how long each part took
+  (`atlas_runloop_probe_store_seconds`, `atlas_runloop_probe_compute_seconds`): sixteen point reads of the state
+  store, and a fixed computation. Because the work never changes, a rising duration means the
+  writer became slower rather than busier, and it shows while the server is idle too. If both
+  parts rise, the host is the likelier cause; if only the store part rises, it is the store or its
+  disk. Probes that are not finished within ten seconds count as
+  `atlas_runloop_probe_timeouts_total`. The probe writes nothing, is not counted as a run-loop
+  turn, and runs only while `/metrics` is served (ADR-0557).
 - **The calendar Worker Type books into CalDAV servers too.** A calendar Worker whose bundle
   names `"provider": "caldav"` with a username and an app-specific password books into
   Nextcloud, iCloud, Fastmail, Synology, Radicale or any other CalDAV server; its endpoint is
@@ -216,6 +226,11 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **A long value no longer stretches the Variables table past its panel.** A structure holding
+  an unbroken line — a Graph delta link, a token — made the table in the replay's Variables tab
+  thousands of pixels wide, so the filter, Copy all and every Copy button slid off screen. The
+  value column now takes the width the other columns leave: the one-line preview is cut with an
+  ellipsis, and the opened structure scrolls sideways inside its own box.
 - **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
   worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
   is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
