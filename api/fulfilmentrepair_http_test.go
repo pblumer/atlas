@@ -32,6 +32,7 @@ type repairResp struct {
 		Reason   string `json:"reason"`
 	} `json:"cancelled"`
 	Restarted []string `json:"restarted"`
+	Stuck     []string `json:"stuck"`
 	Healthy   int      `json:"healthy"`
 }
 
@@ -226,5 +227,43 @@ func TestADryRunChangesNothing(t *testing.T) {
 	if len(after) != len(before) {
 		t.Errorf("the dry run left %d orchestrations running, %d were before it",
 			len(after), len(before))
+	}
+}
+
+// TestAnOpenOrderNothingCanMoveIsNamedNotStartedAgain.
+//
+// A failed line keeps its order open, and the order then has nothing ready and no
+// outcome coming. An orchestration started for it would ask, be told nothing, and
+// end, so every run of the repair started one more for nothing. It is named as
+// stuck instead, for a person to decide on, and nothing is started.
+func TestAnOpenOrderNothingCanMoveIsNamedNotStartedAgain(t *testing.T) {
+	ts, admin, _, ord := aServerWithAnOrderFor(t, "alice")
+	for key := range orchestrationsOf(t, admin, ts) {
+		if code, b := cReq(t, admin, ts, "DELETE",
+			fmt.Sprintf("/api/v1/instances/%d", key), ""); code != http.StatusOK && code != http.StatusNoContent {
+			t.Fatalf("cancel the orchestration: %d (%s)", code, b)
+		}
+	}
+	for _, item := range []string{"vpn", "laptop"} {
+		if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/"+item,
+			`{"status":"failed"}`); code != http.StatusOK {
+			t.Fatalf("report %s failed: %d (%s)", item, code, b)
+		}
+	}
+	// The reports woke nothing, since nothing is waiting; make sure of the starting
+	// point before asking the repair.
+	for key := range orchestrationsOf(t, admin, ts) {
+		cReq(t, admin, ts, "DELETE", fmt.Sprintf("/api/v1/instances/%d", key), "")
+	}
+
+	got := repair(t, admin, ts, "")
+	if len(got.Restarted) != 0 {
+		t.Errorf("the repair started %v again; an order nothing can move needs no orchestration", got.Restarted)
+	}
+	if len(got.Stuck) != 1 || got.Stuck[0] != ord {
+		t.Errorf("stuck = %v, want the order %s named for a person to decide on", got.Stuck, ord)
+	}
+	if n := len(orchestrationsOf(t, admin, ts)); n != 0 {
+		t.Errorf("%d orchestrations are running after the repair, want none", n)
 	}
 }
