@@ -17,9 +17,11 @@ this environment's test users and groups leave the Worker. It
      nothing else, and cannot deploy) and seals it in the vault as `verzeichnisabgleich`,
      unless a token of that name exists; the secret is never returned or printed;
   3. writes an environment copy of the model:
-       - delta-users: keep="department eq '<env>' or startswith(userPrincipalName,'<env>-')",
-         with department added to its select (the test users carry the environment id as
-         their department, entra.tf; the UPN covers a test user given another department);
+       - delta-users: keep="department eq '<env>'", with department added to its select:
+         the test users carry the environment id as their department (entra.tf), and so do
+         the accounts the HR entry creates (constant DEPARTMENT, install-m365-dienste.py).
+         Not the prefix: room, equipment and shared mailboxes and partner accounts carry it
+         too, and they are not people who sign in to Atlas;
        - delta-groups: keep="startswith(displayName,'<env>-')" (the test groups' names);
        - both name this environment's Entra Worker (tofu output atlas_workers, kind entra);
        - the two calls to Atlas become REST connector tasks against http://127.0.0.1:8080
@@ -67,7 +69,7 @@ def keeps(env_id):
     something else."""
     if not re.fullmatch(r"[A-Za-z0-9._-]+", env_id):
         sys.exit(f"environment id {env_id!r} is not a plain name; refusing to build a keep from it")
-    users = f"department eq '{env_id}' or startswith(userPrincipalName,'{env_id}-')"
+    users = f"department eq '{env_id}'"
     groups = f"startswith(displayName,'{env_id}-')"
     return users, groups
 

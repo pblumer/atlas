@@ -26,7 +26,7 @@ class Copy(unittest.TestCase):
         root = ET.fromstring(self.xml.encode("utf-8"))
         keeps = [e.get("keep") for e in root.iter("{http://atlas/schema/1.0}entraConnector")]
         self.assertEqual(keeps, [
-            f"department eq '{ENV}' or startswith(userPrincipalName,'{ENV}-')",
+            f"department eq '{ENV}'",
             f"startswith(displayName,'{ENV}-')",
         ])
 

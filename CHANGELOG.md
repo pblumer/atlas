@@ -177,6 +177,23 @@ _Changed_ / _Removed_ for each version.
   as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
   refuses only the next deploy of an affected model (ADR-0547).
 
+### Fixed
+- **An HR entry in a shared tenant creates its account under the environment's prefix.** The
+  HR entry of `examples/m365-dienste` (`hr-eintritt.bpmn`) built the account's name without
+  `NAME_PREFIX`, which every other process of the package puts in front of what it creates. In
+  the shared tenant of `deploy/opentofu/m365-devenv` the account was therefore
+  `vorname.nachname@…`, which neither the environment's cleanup (it looks for the prefix) nor
+  its directory mirroring found. The UPN, the alias, the display name and the search for taken
+  names now start with `NAME_PREFIX`; without a prefix the names are unchanged.
+- **An HR entry in a shared tenant gets the environment's department, and the mirroring keeps
+  only that.** The directory mirroring of `deploy/opentofu/m365-devenv` kept every account whose
+  UPN carries the environment's prefix, so its first run would have made Atlas accounts of room,
+  equipment and shared mailboxes and of partner accounts. It now keeps only accounts whose
+  `department` is the environment id, as the test persons carry it. So that an account the HR
+  entry creates still reaches Atlas, `hr-eintritt.bpmn` sets `department` from the new
+  application constant `DEPARTMENT` when it is not empty (the installer sets the environment id),
+  and from the OE otherwise, as before.
+
 ## [0.25.0] — 2026-11-09
 
 **Every process, decision and form belongs to an application** (ADR-0544). Nothing new is
@@ -502,13 +519,6 @@ directory gains the document store. Four changes can break what worked against 0
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
-- **An HR entry in a shared tenant creates its account under the environment's prefix.** The
-  HR entry of `examples/m365-dienste` (`hr-eintritt.bpmn`) built the account's name without
-  `NAME_PREFIX`, which every other process of the package puts in front of what it creates. In
-  the shared tenant of `deploy/opentofu/m365-devenv` the account was therefore
-  `vorname.nachname@…`, which neither the environment's cleanup (it looks for the prefix) nor
-  its directory mirroring found. The UPN, the alias, the display name and the search for taken
-  names now start with `NAME_PREFIX`; without a prefix the names are unchanged.
 - **A decision model opens with its graph in view.** The decision editor left a model's graph
   where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
   to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
