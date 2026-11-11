@@ -1,4 +1,4 @@
-# ADR-DRAFT: A collaboration is a view over processes that already exist
+# ADR-0559: A collaboration is a view over processes that already exist
 
 - **Status:** Proposed
 - **Implementation:** Not started

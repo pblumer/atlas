@@ -646,6 +646,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0556](0556-decision-peek.md) | A business rule task's decision is one click from the task, and its graph can be walked there | Accepted | Landed |
 | [0557](0557-runloop-reference-probe.md) | A reference probe measures the single writer independent of traffic | Accepted | Landed |
 | [0558](0558-a-cancelled-line-instance-settles-its-line.md) | An order line whose instance an operator ended settles as a failed report | Accepted | Landed |
+| [0559](0559-local-collaboration-views.md) | A collaboration is a view over processes that already exist | Proposed | Not started |
 
 ## The two states of a record
 
