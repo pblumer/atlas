@@ -229,6 +229,11 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **The fulfilment repair no longer starts orchestrations that can do nothing.** An order whose
+  lines failed stays open, with nothing ready and no outcome coming. `POST
+  /api/v1/orders/fulfilment/repair` started an orchestration for it on every run, which asked,
+  was told nothing, and ended. Such an order is now listed under the new `stuck` field and left
+  alone: moving it on (abandoning or reporting the line) is a decision for a person.
 - **The Modeler's Variables panel lists the variables that arrive through a construct.** It
   listed result variables, output mappings, form fields and data objects, and missed a
   multi-instance's output collection, its round item and `loopCounter`, input-mapping

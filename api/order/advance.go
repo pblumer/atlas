@@ -155,9 +155,10 @@ func Ready(o Order) []Line {
 //   - Failed is an incident that was reported, and the process that reported it
 //     goes on to its end in every model that reports one. Nothing reports on that
 //     line again by itself, and waiting on it would park the orchestration on a
-//     message nobody publishes. An order left open by one is the
-//     repair route's case: an open order with nothing working it
-//     (api/fulfilmentrepair.go).
+//     message nobody publishes. An order left open by one has nothing an
+//     orchestration could do; the repair route names it as stuck rather than
+//     starting one for it (api/fulfilmentrepair.go), and moving it on is a person's
+//     decision.
 //   - Returning reports too, but a return never makes another line startable —
 //     returned does not satisfy a precondition — so there is nothing to wait for it
 //     for.
