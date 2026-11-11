@@ -5,7 +5,7 @@
 import { attachFeelEditor } from "./feel.js";
 import { expressionReads, rootOf } from "./varuse.js";
 import { groupReplayHistory, historyRows, historyAncestors, historyDescendants, foldLegendTokens, multiInstanceScope } from "./replay-history.js";
-import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
+import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, boundedThreshold } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
 import { DIAGRAM_RENDERER } from "./appearance.js";
@@ -15844,12 +15844,15 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
 // full replay timeline would be too large to load (ADR-0517). It errs towards the
 // bounded view: more top-level bodies than one page also counts, because their sum
 // is then unknown. A probe that failed or found the index unavailable keeps the
-// classic replay, which is what every instance used before.
-function needsBoundedHistory(probe) {
+// classic replay, which is what every instance used before. limit is the server's
+// line (boundedThreshold): 0 sends every instance with a multi-instance body to the
+// bounded view.
+function needsBoundedHistory(probe, limit) {
   if (!probe || !probe.available) return false;
   const total = probe.bodies.reduce((n, b) => n + (Number(b.iterations) || 0), 0);
-  return largestBody(probe.bodies) > BOUNDED_HISTORY_THRESHOLD ||
-    total > 4 * BOUNDED_HISTORY_THRESHOLD || !!probe.nextCursor;
+  if (limit === 0 && probe.bodies.length) return true;
+  return largestBody(probe.bodies) > limit ||
+    total > 4 * limit || !!probe.nextCursor;
 }
 
 // mountBoundedReplay is the replay of an instance too large for the timeline: the
@@ -16115,9 +16118,13 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // so an instance with a large loop is shown through the bounded view instead.
   // A failure here is not fatal: the replay falls back to the timeline as before.
   let miProbe = null;
-  try { miProbe = await loadMIBodies(api, key); } catch { miProbe = null; }
+  let limit;
+  [miProbe, limit] = await Promise.all([
+    loadMIBodies(api, key).catch(() => null),
+    boundedThreshold(api),
+  ]);
   if (gen !== generation) return;
-  if (needsBoundedHistory(miProbe)) {
+  if (needsBoundedHistory(miProbe, limit)) {
     return mountBoundedReplay(root, { api, key, lib, gen, probe: miProbe });
   }
 

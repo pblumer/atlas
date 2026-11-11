@@ -184,6 +184,14 @@ atlas:
   # While it is true, every start logs a WARN (event=server.instance_purge_enabled).
   instancePurge: true
 
+  # -- The largest multi-instance body the Operations replay still loads in full
+  # (--replay-full-max-iterations, ADR-0517). An instance with a larger one, or with
+  # more than four times this across its bodies, opens in the bounded view with the
+  # Multi-Instance Explorer. 0 to 500; 500 is the default and the ceiling, because the
+  # full timeline grows with the square of the iteration count. Lower it where
+  # iterations run many steps each (multi-instance subprocesses).
+  replayFullMaxIterations: 500
+
   # -- Script task workers. Each shells out to an interpreter and runs arbitrary
   # code (ADR-0047). The default image bundles python3 and node, so those are ON;
   # PowerShell is OFF because the default image does not ship pwsh — build the

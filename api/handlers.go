@@ -300,6 +300,11 @@ type infoResp struct {
 	// MCP (the --mcp-shop switch, ADR-0550), so an adapter
 	// or an agent can say so before a tool call is refused.
 	MCPShop bool `json:"mcpShop"`
+	// FullReplayMaxIterations is the largest multi-instance body the Operations
+	// replay still loads in full (--replay-full-max-iterations, ADR-0517); an instance
+	// with a larger one, or with more than four times this across its bodies, opens in
+	// the bounded view.
+	FullReplayMaxIterations int `json:"fullReplayMaxIterations"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,
 	// so the web UI can show exactly which commit the running server was built from.
 	Revision  string `json:"revision,omitempty"`
@@ -803,15 +808,16 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	b := buildInfo()
 	httpapi.JSON(w, http.StatusOK, infoResp{
-		Product:   "Atlas",
-		Version:   Version,
-		Docs:      s.docsEnabled,
-		Catalogue: !s.catalogueOff,
-		MCPShop:   !s.catalogueOff && !s.mcpShopOff,
-		Revision:  b.Revision,
-		BuildTime: b.Time,
-		Modified:  b.Modified,
-		Go:        b.Go,
+		Product:                 "Atlas",
+		Version:                 Version,
+		Docs:                    s.docsEnabled,
+		Catalogue:               !s.catalogueOff,
+		MCPShop:                 !s.catalogueOff && !s.mcpShopOff,
+		FullReplayMaxIterations: s.fullReplayMaxIterations(),
+		Revision:                b.Revision,
+		BuildTime:               b.Time,
+		Modified:                b.Modified,
+		Go:                      b.Go,
 	})
 }
 

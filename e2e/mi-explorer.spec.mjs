@@ -248,3 +248,32 @@ test("a failed variables read is shown at its step, not as no variables", async 
   await expect(page.locator(".mi-ex-detail .mi-rp-vars-error")).toContainText("variables lost");
   await expect(page.locator(".mi-ex-detail .mi-rp-scope")).toHaveCount(0);
 });
+
+// Where the full replay ends is the server's to say (--replay-full-max-iterations,
+// /api/v1/info), lowered only: the default is the ceiling the timeline's growth allows.
+const opens = async (page, scenario) => {
+  await page.evaluate((s) => Object.assign(window.__scenario, s), scenario);
+  await page.evaluate(() => window.__mount());
+  // The full replay asks for the timeline; the bounded one draws its collapsed group.
+  await page.waitForFunction(() => window.__requests.some((u) => u.includes("/timeline")) ||
+    !!document.querySelector("#history-list .ops-hrow.mi-bounded"));
+  const requests = await page.evaluate(() => window.__requests);
+  return requests.some((u) => u.includes("/timeline")) ? "full" : "bounded";
+};
+
+test("an instance under the default line opens in the full replay", async ({ page }) => {
+  expect(await opens(page, { iterations: 300 })).toBe("full");
+});
+
+test("a lowered line sends the same instance to the bounded view", async ({ page }) => {
+  expect(await opens(page, { iterations: 300, info: { fullReplayMaxIterations: 200 } })).toBe("bounded");
+  await expect(page.locator("#history-list .ops-hrow.mi-bounded")).toHaveCount(1);
+});
+
+test("a line of zero sends every multi-instance instance to the bounded view", async ({ page }) => {
+  expect(await opens(page, { iterations: 1, info: { fullReplayMaxIterations: 0 } })).toBe("bounded");
+});
+
+test("no answer raises the line above its ceiling", async ({ page }) => {
+  expect(await opens(page, { iterations: 600, info: { fullReplayMaxIterations: 5000 } })).toBe("bounded");
+});

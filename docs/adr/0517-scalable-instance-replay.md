@@ -323,6 +323,19 @@ until opened, and an iteration row says how many steps it ran and where it is
 still waiting. A store whose iteration-step index is not proven complete yields
 no owners, so such a history keeps its flat rows rather than a partial nesting.
 
+*Amendment (the line is the operator's to lower):* the 500-iteration line where
+the replay hands over to the bounded view was a constant in the browser. An
+iteration of a multi-instance subprocess runs several steps, so a few hundred of
+them already make a full timeline of thousands of rows and frames well below it.
+`--replay-full-max-iterations` (`ATLAS_REPLAY_FULL_MAX_ITERATIONS`, Helm
+`atlas.replayFullMaxIterations`) sets it from 0 to 500, reported as
+`fullReplayMaxIterations` in `/api/v1/info`. It can only be lowered: 500 stays the
+ceiling for the reason above, the serve command refuses a value outside the range,
+the option clamps a programmatic one, and the browser holds any answer to it. The
+"more than four times the line across all bodies" rule moves with it. The decision
+remains the browser's, from one page of the bounded history; `/timeline` itself
+still answers any instance, as before.
+
 ## Pros and cons of the options
 
 ### Option 1

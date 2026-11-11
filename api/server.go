@@ -988,6 +988,10 @@ type Server struct {
 	// tests build a Server as a literal and expect the whole surface. Set once before
 	// Handler is mounted; read-only thereafter.
 	catalogueOff bool
+	// fullReplayMax is where the Operations replay hands over to the bounded view
+	// (WithFullReplayMaxIterations, replaybound.go); unset means the default.
+	fullReplayMax    int
+	fullReplayMaxSet bool
 	// cataloguePurgeOff is the administrator's permanent delete of a catalogue or a
 	// product switched off with --catalogue-purge=false / WithoutCataloguePurge
 	// (ADR-0469). Spelled as "off" for catalogueOff's reason: the

@@ -193,6 +193,14 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **Where the Operations replay switches to the bounded view is configurable.** The replay loads
+  an instance's whole timeline up to a multi-instance body of 500 iterations and opens the
+  bounded view with the Multi-Instance Explorer above it. `--replay-full-max-iterations`
+  (`ATLAS_REPLAY_FULL_MAX_ITERATIONS`, Helm `atlas.replayFullMaxIterations`) lowers that line,
+  from 0 to 500, for installations whose iterations run many steps each — a multi-instance
+  subprocess — so a few hundred of them already make the full history slow. It cannot be raised:
+  500 is the ceiling the timeline's growth allows, and a start with a value outside the range
+  stops with the reason. `GET /api/v1/info` reports the line as `fullReplayMaxIterations`.
 - **The instance history shows the structure of a multi-instance subprocess.** Every step that
   ran inside an iteration of a multi-instance subprocess was a top-level row of the history, so
   twelve iterations produced twelve identical `k_start`, `k_join` and task rows side by side and
