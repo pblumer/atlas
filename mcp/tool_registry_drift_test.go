@@ -185,6 +185,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_server_constants":                   "GET /api/v1/server/constants",
 	"atlas_list_tasks":                         "GET /api/v1/tasks",
 	"atlas_get_task":                           "GET /api/v1/tasks/{key}",
+	"atlas_list_completed_tasks":               "GET /api/v1/tasks/completed",
+	"atlas_get_completed_task":                 "GET /api/v1/tasks/completed/{key}",
 	"atlas_complete_task":                      "POST /api/v1/tasks/{key}/complete",
 	"atlas_claim_task":                         "POST /api/v1/tasks/{key}/claim",
 	"atlas_unclaim_task":                       "POST /api/v1/tasks/{key}/unclaim",

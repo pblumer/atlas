@@ -71,6 +71,11 @@ type inflightValue struct {
 	// which has just made a network round trip to get here.
 	authorization *model.AuthorizationValue
 	approval      *model.ActionApprovalValue
+	// taskAnswer rides only on a user task's completion and the TaskAnswered event it
+	// emits (ADR-0554), behind a pointer for the same reason as the two above: it is
+	// four strings wide, and the completion handler in the API allocates it off the run
+	// loop, so the processor copies sixteen bytes and allocates nothing.
+	taskAnswer *model.TaskAnswerValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -133,6 +138,10 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 	case model.VTActionApproval:
 		if v.approval != nil {
 			return v.approval
+		}
+	case model.VTTaskAnswer:
+		if v.taskAnswer != nil {
+			return v.taskAnswer
 		}
 	}
 	return nil
@@ -254,6 +263,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTActionApproval:
 		if v, ok := rec.Value.(*model.ActionApprovalValue); ok {
 			iv.approval = v
+		}
+	case model.VTTaskAnswer:
+		if v, ok := rec.Value.(*model.TaskAnswerValue); ok {
+			iv.taskAnswer = v
 		}
 	}
 	return iv

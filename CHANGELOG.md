@@ -50,6 +50,19 @@ _Changed_ / _Removed_ for each version.
   series selector, the object's labels, extra alert labels and every threshold are values; the
   thresholds are starting points to calibrate. The recording rules drop `instance`, which a pod
   restart changes, so the 7-day baseline survives a restart (ADR-0557).
+- **A completed task can be seen again by the person who completed it.** The Tasks app has a
+  view *Completed*: the tasks the signed-in person completed, newest first, each opened read-only
+  in the revision of its form it was answered through, with the values as they stood once it was
+  answered and the answer itself marked. A form changed since shows the old revision; a form
+  deleted since leaves the answers as a plain list. Nobody else reads it, administrators
+  included, and it stays as long as the instance's history is kept. Every completion by a
+  person is now recorded as a fact of its own (`TaskAnswered`) beside the job's completion, with
+  who answered and through which form revision, and the list is folded from it, so a replay
+  rebuilds it; forms keep every schema they were saved or answered with as a revision
+  (`form-revisions`). `GET /api/v1/forms/{id}` answers the `revision` a completion names back
+  as `formRevision`. New reads `GET /api/v1/tasks/completed` and
+  `GET /api/v1/tasks/completed/{key}`, and MCP tools `atlas_list_completed_tasks` and
+  `atlas_get_completed_task`. Tasks completed before this release are not listed (ADR-0554).
 - **The Modeler's Variables panel narrows to the selected element.** With a task, gateway,
   event or subprocess selected, the panel lists what that element reads — the variables its
   FEEL expressions, branch conditions, correlation keys and template placeholders name —

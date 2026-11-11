@@ -204,6 +204,10 @@ func TestAbandonDoesNotTouchAnAlreadyPublishedCheckpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stage: %v", err)
 	}
+	// The stage says so, so a caller does not count its commit as a fresh verification.
+	if !staged.AlreadyPublished() {
+		t.Error("a stage at an already-published position does not say so")
+	}
 	if err := staged.Abandon(); err != nil {
 		t.Fatalf("Abandon: %v", err)
 	}

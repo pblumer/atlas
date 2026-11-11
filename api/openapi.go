@@ -792,11 +792,15 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
 			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). Answers {items, total, totalExact, truncated, nextCursor}; pass nextCursor as ?before= to page to older tasks. On a capped page total is a floor — counting every open task is a walk, and GET /api/v1/task-folders/counts is what pays for it. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients). ?folder=<id> scopes it to a saved folder's rule, paged the same way. ?content=1 adds to each row the short text and number values of the fields its form asks for — none for a task without a form", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tPage())}},
+		{"GET", "/api/v1/tasks/completed", s.handleListCompletedTasks, apiOp{
+			summary: "List the user tasks the caller completed, newest first, for as long as each instance's history is kept (ADR-0554). ?process=<processId> and ?from= / ?to= (RFC 3339 or YYYY-MM-DD, by completion time) narrow it; ?limit= (default 50, max 200) and ?cursor= (the previous page's nextCursor) page it. Answers {items, nextCursor}. Tasks completed before this list existed are not in it", tag: "Tasks", role: RoleUser, resp: jsonBody("Completed tasks", tObject())}},
+		{"GET", "/api/v1/tasks/completed/{key}", s.handleGetCompletedTask, apiOp{
+			summary: "Show one task the caller completed again, read-only (ADR-0554): the task, the form revision it was answered through (null with formMissing when that form was deleted), the variables the form binds as they stood once it was answered, which of them were the answer, and which can no longer be read because their data subject was erased. 404 for a task the caller did not complete", tag: "Tasks", role: RoleUser, resp: jsonBody("Completed task", tObject())}},
 		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
 			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", role: RoleUser, resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
-			summary: "Complete a user task", tag: "Tasks", role: RoleUser,
-			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
+			summary: "Complete a user task. formRevision names the revision of the task's form the person answered through (the revision GET /api/v1/forms/{id} answers with); without it, or when it is no revision of that form, the form's current one is recorded (ADR-0554)", tag: "Tasks", role: RoleUser,
+			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject(), "formRevision": tString()})),
 			resp: jsonBody("Task key", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/form-data/{field}/query", s.formLookup.HandleQuery, apiOp{
 			summary: "Search the remote data source of one directory field of a task's form: one bounded page of options from the Worker the form names, for a caller who may work on the task. The request carries only the term, the values of the form fields the source is bound to, a cursor and a page size; which Worker, resource and properties is the stored form's (ADR-0473)", tag: "Tasks", role: RoleUser,

@@ -46,6 +46,7 @@ var continuationCarries = map[string]string{
 	"Actor":         "external",
 	"Reason":        "external",
 	"Manual":        "external",
+	"Answer":        "external",
 	"ErrorMessage":  "external", // a worker's or operator's throw (ADR-0089), never a followup
 	"RetryBackoff":  "external",
 	"LeaseFor":      "external",

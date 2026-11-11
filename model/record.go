@@ -192,6 +192,12 @@ const (
 	// answer different questions — what was decided, and who agreed to what. Appended
 	// last so every prior value type keeps its numeric value on the log.
 	VTActionApproval
+	// VTTaskAnswer is the fact that a person answered a user task: who completed it,
+	// through which form revision, and where it sat (ADR-0554 §1). Append-only history
+	// keyed under its process instance, like VTOperatorAction; it is folded into the
+	// index a person's completed tasks are listed from. Appended last so every prior
+	// value type keeps its numeric value on the log.
+	VTTaskAnswer
 )
 
 func (t ValueType) String() string {
@@ -228,6 +234,8 @@ func (t ValueType) String() string {
 		return "Authorization"
 	case VTActionApproval:
 		return "ActionApproval"
+	case VTTaskAnswer:
+		return "TaskAnswer"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -584,6 +592,10 @@ const (
 	// IntentApprovalRecorded is one fact about an approval — requested, answered or
 	// withdrawn; the value's Kind says which.
 	IntentApprovalRecorded
+	// IntentTaskAnswered is the fact that a person answered a user task (VTTaskAnswer,
+	// ADR-0554). It is appended by the job completion's handler, never submitted as a
+	// command. Appended at the end so every prior intent keeps its value.
+	IntentTaskAnswered
 )
 
 func (i Intent) String() string {
@@ -726,6 +738,8 @@ func (i Intent) String() string {
 		return "ApprovalDeciding"
 	case IntentApprovalRecorded:
 		return "ApprovalRecorded"
+	case IntentTaskAnswered:
+		return "TaskAnswered"
 	default:
 		return "Intent(?)"
 	}

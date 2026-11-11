@@ -630,6 +630,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordAuthorization(h.Position, v.authorization)
 		}
 
+	case model.VTTaskAnswer:
+		if h.Intent == model.IntentTaskAnswered && v.taskAnswer != nil {
+			// A person answered a user task (ADR-0554). The handler froze who, through
+			// which form revision and where into the event; the header gives the time, so
+			// replay rebuilds the same index rows (I4/I6).
+			return tx.RecordTaskAnswer(h.Timestamp, h.Position, v.taskAnswer)
+		}
+
 	case model.VTActionApproval:
 		if h.Intent == model.IntentApprovalRecorded && v.approval != nil {
 			// One fact about an approval — requested, answered or withdrawn — frozen on

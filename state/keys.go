@@ -86,6 +86,11 @@ const (
 	// ADR-0549). Keyed under the instance so a purge reaches it.
 	cfVariableElementSnapshot columnFamily = 0x48 // varElemSnap:<piKey>:<scopeKey>:<ts>:<pos> → VariableValue (element; Index set)
 	cfJobTake                 columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
+	// A person's answered user tasks (ADR-0554): the fact under its instance, and the
+	// two indexes a reader finds it by. See taskanswer.go.
+	cfTaskAnswer            columnFamily = 0x49 // taskAns:<piKey>:<jobKey> → at(8) TaskAnswerValue
+	cfTaskAnswerByCompleter columnFamily = 0x4A // taskAnsBy:<completer>0x00<at>:<jobKey> → piKey(8)
+	cfTaskAnswerByJob       columnFamily = 0x4B // taskAnsJob:<jobKey> → piKey(8)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

@@ -76,6 +76,12 @@ type Command struct {
 	// is somehow empty, and a worker's completion never mints an operator-action record.
 	// A BPMN error thrown by hand carries it for the same reason (ADR-0089).
 	Manual bool
+	// Answer marks a user task's completion as a person's answer (ADR-0554): who
+	// completed it and through which form revision. The API allocates it off the run
+	// loop; the handler fills in where the task sat and freezes it into a TaskAnswered
+	// event beside JobCompleted. nil for every other completion — a worker's, an
+	// operator's forced one — and it rides only on the non-hot-path completion intent.
+	Answer *model.TaskAnswerValue
 	// ErrorMessage is what a worker said about the BPMN error it threw (ADR-0089), the
 	// text an operator reads on the incident when nothing catches the error. It rides
 	// only on the non-hot-path IntentJobErrorThrown command, beside the code in
