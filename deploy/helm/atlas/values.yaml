@@ -273,7 +273,8 @@ prometheusRule:
   # -- The series selector that picks this installation's targets in every expression.
   # Empty means job="<release fullname>", which is the job label a ServiceMonitor on
   # the chart's Service produces. Set it to match your scrape config otherwise, e.g.
-  # 'job="atlas", namespace="prod"'.
+  # 'job="atlas", namespace="prod"'. On the command line --set splits on commas, so
+  # escape them there: --set prometheusRule.selector='job="atlas"\, namespace="prod"'.
   selector: ""
   # -- The thresholds are assumptions derived from a small, healthy installation
   # (store reference about 5µs, compute reference about 14µs, wait in microseconds

@@ -116,7 +116,8 @@ jobs:
       # The alerting rules need the Prometheus Operator's CRDs, so they must stay out of a
       # default install, render when asked for, and pick their targets by the selector.
       # Whether the rendered expressions and annotation templates are valid PromQL is
-      # checked by promtool against the rule groups the template produced.
+      # checked by promtool against the rule groups the template produced. --set splits
+      # on commas, so a selector with several matchers escapes them as \, there.
       - name: PrometheusRule is opt-in and its rules are valid
         run: |
           if helm template ci deploy/helm/atlas | grep -q 'kind: PrometheusRule'; then
@@ -127,7 +128,7 @@ jobs:
           grep -q 'kind: PrometheusRule' /tmp/rule.yaml
           grep -q 'job="ci-atlas"' /tmp/rule.yaml
           helm template ci deploy/helm/atlas --set prometheusRule.enabled=true \
-            --set prometheusRule.selector='job="atlas", namespace="prod"' \
+            --set prometheusRule.selector='job="atlas"\, namespace="prod"' \
             --show-only templates/prometheusrule.yaml | grep -q 'namespace="prod"'
           python3 -c 'import sys, yaml; yaml.safe_dump(yaml.safe_load(open("/tmp/rule.yaml"))["spec"], open("/tmp/groups.yaml", "w"))'
           docker run --rm -v /tmp:/work --entrypoint promtool prom/prometheus:v2.54.1 check rules /work/groups.yaml
