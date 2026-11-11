@@ -39,6 +39,8 @@ var orderGates = []handlerGate{
 	{name: "HandleGet", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
 	{name: "HandleNext", kind: ungated, method: "GET", id: true,
 		why: "orchestrator work, gated by the operator role rather than by the object: an operator drives orders that are not theirs, which is what the role is for (ADR-0209). It exposes which lines are ready and nothing about who ordered them"},
+	{name: "HandleRound", kind: ungated, method: "GET", id: true,
+		why: "the orchestrator's read of a round, HandleNext's answer plus which positions are still running: the same operator work on orders that are not the operator's, and like it nothing about who ordered them"},
 	{name: "HandleReport", kind: ungated, method: "POST", id: true,
 		why: "the other half of the same pair, and the same reasoning: nobody reports the result of their own provisioning. It accepts only the two outcomes a provisioning attempt produces — a rejection and an abandonment are decisions with an author and have their own transitions"},
 	{name: "HandleDecide", kind: ungated, method: "POST", id: true,

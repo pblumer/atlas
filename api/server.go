@@ -479,6 +479,9 @@ type Server struct {
 	// no metrics, because then nothing observes them.
 	runLoopStats *runLoopMetrics
 	engineStats  *engineMetrics
+	// probeStats is the run-loop reference probe's exposition (runloopprobe.go); nil
+	// when this server exports no metrics, and then no probe runs.
+	probeStats *runLoopProbeMetrics
 	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
 	// binary embeds (ADR-0444). Like formGen it
 	// owns no state and holds no run loop.
@@ -796,6 +799,10 @@ type Server struct {
 	// withExporterTrigger — the same deterministic-test seam as the retention sweep.
 	exporterTicks  <-chan time.Time
 	exporterTicked chan struct{}
+	// probeTicks and probeTicked are the same seam for the run-loop reference probe
+	// (runloopprobe.go), set together by withRunLoopProbeTrigger; nil in production.
+	probeTicks  <-chan time.Time
+	probeTicked chan struct{}
 
 	// Retention (ADR-0115): hard-delete finished-instance history older than
 	// retentionMaxAge, gated on the safe (exported, else durable) position so nothing
@@ -2068,7 +2075,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			// A map has no order and start variables are written in the order given,
 			// so sort: the same order must produce the same log, live and on replay.
 			sort.Slice(start, func(i, j int) bool { return start[i].Name < start[j].Name })
-			s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			if message == order.AdvancedMessage {
+				s.do(func() { s.publishOrderAdvanced(orderID, start...) })
+			} else {
+				s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			}
 			return s.drive()
 		},
 		// The notification's link is built on the operator's configured origin and
@@ -2763,6 +2774,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		if err := s.buildMetrics(); err != nil {
 			return nil, err
 		}
+		// The run-loop reference probe (runloopprobe.go) measures the single writer on a
+		// fixed cadence, whatever the traffic. It runs only with metrics, because the
+		// registry is the only place its measurements go.
+		s.wg.Add(1)
+		go s.runLoopProbe(&runLoopProber{srv: s, metrics: s.probeStats, deadline: runLoopProbeDeadline})
 	}
 	if s.checkpointInterval > 0 {
 		s.checkpointRequests = make(chan checkpointRequest)

@@ -644,6 +644,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0554](0554-completed-tasks-stay-readable.md) | A completed task stays readable to the person who completed it, in the form they answered | Proposed | Not started |
 | [0555](0555-report-tasks-with-charts.md) | A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task | Proposed | Not started |
 | [0556](0556-decision-peek.md) | A business rule task's decision is one click from the task, and its graph can be walked there | Accepted | Landed |
+| [0557](0557-runloop-reference-probe.md) | A reference probe measures the single writer independent of traffic | Accepted | Landed |
+| [0558](0558-a-cancelled-line-instance-settles-its-line.md) | An order line whose instance an operator ended settles as a failed report | Accepted | Landed |
 
 ## The two states of a record
 

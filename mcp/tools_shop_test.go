@@ -57,6 +57,7 @@ func TestTheShopToolsReachTheirRoutes(t *testing.T) {
 		{"atlas_list_orders", map[string]any{}, "GET", "/api/v1/orders", "", nil},
 		{"atlas_get_order", map[string]any{"orderId": "ord 1"}, "GET", "/api/v1/orders/ord%201", "", nil},
 		{"atlas_order_ready_lines", map[string]any{"orderId": "ord 1"}, "GET", "/api/v1/orders/ord%201/next", "", nil},
+		{"atlas_order_round", map[string]any{"orderId": "ord 1"}, "GET", "/api/v1/orders/ord%201/round", "", nil},
 		{"atlas_shop_tasks", map[string]any{}, "GET", "/api/v1/shop/tasks", "", nil},
 		{"atlas_order_line_progress", map[string]any{"orderId": "ord 1", "position": "phone#black"},
 			"GET", "/api/v1/shop/orders/ord%201/lines/phone%23black/progress", "", nil},

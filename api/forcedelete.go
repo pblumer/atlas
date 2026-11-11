@@ -124,6 +124,10 @@ func (s *Server) removeDeployments(keys []uint64, mayCancel bool) (int, error) {
 			if err := s.drive(); err != nil {
 				return cancelled, err
 			}
+			// A provisioning process deleted with its instances still running ends
+			// the work its order lines wait on, as a cancel does
+			// (ADR-0558).
+			s.settleLinesEndedBy(batch)
 			cancelled += len(batch)
 			continue
 		}

@@ -64,7 +64,7 @@ func TestTheOrchestrationReachesAtlasAndMovesOn(t *testing.T) {
 	ord := idOf(t, body)
 
 	// The orchestration's first step is the call. It is done when the answer is on
-	// the instance: `bereit` is what GET /orders/{id}/next writes back, and nothing
+	// the instance: `runde` is what GET /orders/{id}/round writes back, and nothing
 	// else in the model produces it.
 	//
 	// Polled rather than awaited, because the job runs on the engine's own loop and
@@ -73,13 +73,13 @@ func TestTheOrchestrationReachesAtlasAndMovesOn(t *testing.T) {
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		vars, state := orchestrationOf(t, admin, ts, ord)
-		if _, answered := vars["bereit"]; answered {
+		if _, answered := vars["runde"]; answered {
 			return // the call went out, came back, and its answer is on the instance
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("the orchestration never got past its first call: state=%q variables=%v\n"+
-				"That step is GET /api/v1/orders/{id}/next against this server's own API. "+
-				"Nothing else in the model writes `bereit`, so an instance without it is an "+
+				"That step is GET /api/v1/orders/{id}/round against this server's own API. "+
+				"Nothing else in the model writes `runde`, so an instance without it is an "+
 				"instance whose first request never landed.", state, variableNames(vars))
 		}
 		time.Sleep(200 * time.Millisecond)
