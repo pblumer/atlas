@@ -3,6 +3,7 @@ module github.com/pblumer/atlas
 go 1.26
 
 require (
+	github.com/Azure/go-ntlmssp v0.1.1
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/andybalholm/cascadia v1.3.3
 	github.com/cockroachdb/pebble v1.1.5
@@ -28,7 +29,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

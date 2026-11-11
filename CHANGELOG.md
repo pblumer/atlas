@@ -24,6 +24,15 @@ _Changed_ / _Removed_ for each version.
   `GET /api/v1/blueprints/installations` or the MCP tool `atlas_hub_installations`, with the
   registry unreachable. The record covers the application only, not its catalogues, constants
   or publishing (ADR-0499 amendment g).
+- **The calendar Worker Type books into Exchange Server too.** A calendar Worker whose bundle
+  names `"provider": "exchange-ews"` books into Exchange Server 2016, 2019 or Subscription
+  Edition on premises through Exchange Web Services, which Microsoft Graph does not reach. A
+  service account with Editor on each booking mailbox's calendar authenticates with NTLM (or
+  Basic where only that is enabled); the endpoint is the server's EWS URL and a task names a
+  calendar by its mailbox address. Only times and availability are read, never subjects. A
+  repeated delivery finds its reservation by a create key written into an extended property,
+  and a mailbox the account may not send for refuses attendees with
+  `CALENDAR_ATTENDEES_NOT_ALLOWED` (ADR-0552, phase 4).
 - **The Helm chart can install alerting rules for the single writer.** `prometheusRule.enabled=true`
   renders a Prometheus Operator `PrometheusRule` with four recording rules and seven alerts: probe
   timeouts and failed store reads (critical), a noticeable wait for the writer, the writer's
