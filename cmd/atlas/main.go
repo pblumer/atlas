@@ -394,6 +394,12 @@ func runServe(args []string) error {
 		return err
 	}
 	instancePurge := fs.Bool("instance-purge", instancePurgeDefault, "let an administrator delete a process version's finished instances for good, those that finished before a cut-off, from Operations or POST /api/v1/processes/{key}/history-purge; running instances are never touched and nothing is deleted before the exporter has it. On by default (opt-out), --instance-purge=false to refuse it, which a production installation whose history is evidence should set (or ATLAS_INSTANCE_PURGE=false)")
+	// Where the Operations replay stops loading an instance's whole timeline and opens
+	// the bounded view instead (ADR-0517). Lowering it is the only direction: the
+	// default is the ceiling the timeline's quadratic growth allows.
+	fullReplayMax := fs.Int("replay-full-max-iterations", envIntOr("ATLAS_REPLAY_FULL_MAX_ITERATIONS", api.DefaultFullReplayMaxIterations),
+		fmt.Sprintf("the largest multi-instance body the Operations replay still loads in full, with every step and token of every iteration; an instance with a larger one, or with more than four times this across its bodies, opens in the bounded view with the Multi-Instance Explorer (ADR-0517). 0 to %d, default %d, which is also the ceiling: the full timeline grows with the square of the iteration count. Lower it where iterations run many steps each — a multi-instance subprocess — so a few hundred of them already make the full history slow (or ATLAS_REPLAY_FULL_MAX_ITERATIONS)",
+			api.DefaultFullReplayMaxIterations, api.DefaultFullReplayMaxIterations))
 	catalogue := fs.Bool("catalogue", catalogueDefault, "serve the shop, the catalogue, the orders and the inventory — their routes, the shop page, their Console menus and MCP tools (ADR-0312); on by default (opt-out), --catalogue=false to switch the whole area off. Nothing stored is removed, deployed processes run unchanged, and turning it back on is a restart (or ATLAS_CATALOGUE=false)")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
@@ -403,6 +409,9 @@ func runServe(args []string) error {
 	metricsInstance := fs.String("metrics-instance", os.Getenv("ATLAS_METRICS_INSTANCE"), "how this node appears in --metrics-url's `instance` label, e.g. atlas-01.internal. Atlas cannot derive it: a scrape target is your configuration, and guessing would answer about a different process while looking exactly like an answer about this one. Left empty, a Panorama element bound to this server's own runtime reports itself unidentifiable and says why")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *fullReplayMax < 0 || *fullReplayMax > api.DefaultFullReplayMaxIterations {
+		return fmt.Errorf("--replay-full-max-iterations=%d: must be between 0 and %d — the full replay cannot be raised above its ceiling", *fullReplayMax, api.DefaultFullReplayMaxIterations)
 	}
 	proxies, err := trustedproxy.Parse(*trustedProxies)
 	if err != nil {
@@ -479,7 +488,7 @@ func runServe(args []string) error {
 		ClientID:     *linkClientID,
 		ClientSecret: *linkClientSecret,
 		Scopes:       *linkScopes,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, *mcpShop, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets, *allowUnsignedWorkerTypes)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, *mcpShop, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets, *allowUnsignedWorkerTypes, *fullReplayMax)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -630,7 +639,7 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge, mcpShop bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits, allowUnsignedWorkerTypes bool) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge, mcpShop bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits, allowUnsignedWorkerTypes bool, fullReplayMax int) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -814,6 +823,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !catalogue {
 		apiOpts = append(apiOpts, api.WithoutCatalogue())
 	}
+	apiOpts = append(apiOpts, api.WithFullReplayMaxIterations(fullReplayMax))
 	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
 	if osExport.Enabled() {
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))

@@ -68,6 +68,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_hub_preview_release":      "GET /api/v1/blueprints/{id}/releases/{version}/preview",
 	"atlas_hub_import_release":       "POST /api/v1/blueprints/{id}/releases/{version}/import",
 	"atlas_hub_release_architecture": "GET /api/v1/blueprints/{id}/releases/{version}/architecture",
+	"atlas_hub_installations":        "GET /api/v1/blueprints/installations",
 	"atlas_export_catalog":           "GET /api/v1/catalogs/{id}/document",
 	"atlas_export_catalog_products":  "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate": "POST /api/v1/catalogs/{id}/import",

@@ -76,6 +76,7 @@ Die Shop-Werkzeuge handeln immer als die Person der Verbindung, mit deren Rechte
 | zurückgeben | `atlas_return_order_line` |
 | Aktion einer gehaltenen Position | `atlas_order_line_actions`, dann `atlas_ask_order_line_action` mit `trigger = customer` (Person) oder `operator` (Carla), Ergebnis mit `atlas_order_line_outcomes` |
 | HR-Ereignis | `atlas_trigger_start` (Eintritt), `atlas_publish_message` (Austritt) |
+| Applikation aus dem atlas hub | `atlas_hub_list_releases`, `atlas_hub_preview_release`, `atlas_hub_import_release`, `atlas_list_applications` |
 | OE-Tabelle | `atlas_get_decision_model`, `atlas_upload_decision_model`, `atlas_deploy_decision`, `atlas_try_decision` |
 | Prüfungen | `atlas_info`, `atlas_workers`, `atlas_list_incidents`, `atlas_incident_summary`, `atlas_application_constants`, `atlas_instance_timeline` |
 
@@ -85,7 +86,9 @@ Die Shop-Werkzeuge handeln immer als die Person der Verbindung, mit deren Rechte
 |---|---|
 | VMs `atlas`, `dc`, `exch` laufen, Atlas antwortet | `atlas_info` über `atlas-admin` |
 | Worker `entra`, `exchange`, `sharepoint`, `mail`, `ad` verbunden | `atlas_workers` |
-| Applikationen installiert: M365-Dienste (mit Exchange-Server-Variante), AD-Dienste, Lizenzmanagement, Informationstransfer | `atlas_list_applications`, `atlas_list_catalogs` |
+| Applikationen installiert: M365-Dienste (mit Exchange-Server-Variante), AD-Dienste, Lizenzmanagement | `atlas_list_applications`, `atlas_list_catalogs` |
+| Informationstransfer **nicht** installiert: der Lauf installiert ihn in Phase 0 aus dem atlas hub. Ist er von einem früheren Lauf aus dem hub da, ist H3 ein Import ohne Änderung; stammt er aus `install-informationstransfer.py` ohne `--nach-hub`, die Applikation vorher in der Console löschen | `atlas_list_applications` |
+| Hub-Register gepinnt und erreichbar | `atlas_hub_list_releases` antwortet ohne 502/503 |
 | Konstante `ORTSANGABEN` = `false` in `beispiel-m365-dienste` | `atlas_application_constants` |
 | Freie Lizenzen: mindestens 13 (12 Eintritte, eine Reserve) | Lizenzmanagement, Bestand |
 | Shop über MCP nicht abgeschaltet | Server ohne Opt-out (`mcpShop` in `atlas_info`) |
@@ -158,8 +161,16 @@ Fall abdeckt; die Abdeckungstabelle am Ende fasst sie zusammen.
 | V0 | `atlas_info` | `mcpShop` ist `true`; sonst Abbruch |
 | V2 | `atlas_list_incidents`, `atlas_incident_summary` | Ausgangsbestand notiert: nur neue Incidents zählen als Befund |
 | V3 | `atlas_list_tasks` | offene Aufgaben notiert; alte Aufgaben bleiben unberührt |
-| V4 | `atlas_application_constants` der vier Applikationen | `NAME_PREFIX`, `ORTSANGABEN = false`, `ENTRA_TRANSFER = aus` |
+| V4 | `atlas_application_constants` der drei installierten Applikationen | `NAME_PREFIX`, `ORTSANGABEN = false`; `ENTRA_TRANSFER = aus` prüft H5 |
 | V5 | `scripts/testlauf-rollen.py --dry-run` | 0 Änderungen; sonst ohne `--dry-run` ausführen und notieren |
+| H1 | `atlas_hub_list_releases` | `io.github.pblumer.atlas.informationstransfer` gelistet, Version wie in `examples/hub/releases.json` |
+| H2 | `atlas_hub_preview_release` mit dieser Version | Applikation `beispiel-informationstransfer`, Katalog `cat-it-identity` mit `it-informationstransfer`, Needs `ad`, `entra`, `exchange`, `teamsphone`; Digest notiert |
+| H3 | `atlas_hub_import_release` mit dem Digest, zuerst als Trockenlauf, dann `dryRun = false` | Plan ohne `changed`, `elsewhere` oder offene Lücke; Import ohne 409; `cataloguesNotImported` nennt `cat-it-identity` |
+| H4 | Shell: `python3 scripts/install-informationstransfer.py --nach-hub` | veröffentlicht die Applikation, importiert den Katalog mit Zielgruppe Identity Management, setzt die Konstanten (`ENTRA_TRANSFER = aus`), Gruppen und die Formularsuche am Worker `ad_verzeichnis` |
+| H5 | `atlas_list_applications`, `atlas_application_constants`; Anna: `atlas_shop_catalogs` | Applikation veröffentlicht, `AD_PERSONEN_OU` ist die Test-OU, `NAME_PREFIX` gesetzt, `ENTRA_TRANSFER = aus`; Anna sieht «Informationstransfer» |
+
+Den Teamsphone-Worker hat diese Umgebung nicht: Der Import nennt ihn als nicht erfüllten Need,
+das ist erwartet. Die Telefonnummer geht im Lauf ohnehin als Aufgabe an `M365-Telefonie`.
 
 ### Phase 1: Tag 1, die Firma bekommt ihre Grundausstattung
 
@@ -249,7 +260,7 @@ Ein Grossauftrag: ein zweites Projektteam und ein Lernender.
 
 | Fall | Person | Schritt | Erwartung | Prüft |
 |---|---|---|---|---|
-| M1 | Anna | `it-informationstransfer`, Variante `abteilungswechsel`: Nina wechselt von PROJ zu ADM | Gruppenmitgliedschaften übertragen, Quelle markiert; Entra-Transfer bleibt aus | Informationstransfer |
+| M1 | Anna | siehe Phase 6b, Fall T4 | | |
 | M2 | Anna | G9 Info: `zugriff-entziehen` für Reto | Berechtigung weg | |
 | M3 | Anna | G8 Verteiler: `mitglied-entfernen` Luca | Luca nicht mehr Mitglied | |
 | M4 | Anna | G5 Alle: `sichtbarkeit` privat | Team privat | |
@@ -259,6 +270,35 @@ Ein Grossauftrag: ein zweites Projektteam und ein Lernender.
 | M8 | Anna | G9 Info zurückgeben, solange A1 besteht | verweigert mit Hinweis auf den Zugriff A1 | Abhängigkeit |
 | M9 | Anna | G7 Projektablage: `loeschen`, dann `wiederherstellen` | Site im Papierkorb, dann zurück | |
 
+### Phase 6b: Informationstransfer
+
+Quelle und Ziel eines Transfers sucht das Bestellformular im Active Directory, unter
+`AD_PERSONEN_OU` (der Test-OU). Die Eintrittspersonen sind reine Cloud-Konten und die vier
+Testpersonen bleiben unverändert; darum legt der Lauf seine Transferkonten selbst an, über die
+AD-Dienste. Diese Konten haben kein Postfach: Die Postfach-Optionen (Adresse, Inhalt,
+Kontingent) prüft der Lauf nur als Ablehnung (R5). Bestellt wird von Anna (Zielgruppe Identity
+Management), genehmigt von Carla (`GRUPPE_IDENTITY_MANAGEMENT`).
+
+| Fall | Person | Schritt | Erwartung | Prüft |
+|---|---|---|---|---|
+| T0 | Anna | `ad-externes-konto` `HW<RUN> Erika Extern` (Max genehmigt als Vorgesetzter des Sponsors), drei `ad-testkonto` `HW<RUN>-T1`, `HW<RUN>-T2`, `HW<RUN>-T3` mit Ablaufdatum in 30 Tagen; Initialpasswörter wie in E2, nie im Protokoll | vier Konten unter der Test-OU, in `atlas_shop_form_query` des Feldes `quelle` von `it-informationstransfer` auffindbar | Zusammenspiel der Kataloge |
+| T0b | Anna | G16 Gruppe: `mitglied` Erika Extern | Erika ist Mitglied von `HW<RUN> Projekte` | Vorbereitung |
+| T1 | Anna, Carla | Variante `internalisierung`: Quelle Erika Extern, Ziel T1; `optRechte`, `optKuerzel`, `optTelefon` = ja, alle anderen nein; Carla genehmigt | Genehmigung zeigt die Hinweise der Regel; T1 ist Mitglied von `HW<RUN> Projekte`; Kürzel auf T1; Aufgabe «Telefonie» an `M365-Telefonie`, Carla erledigt sie; Quelle trägt «Ressourcen transferiert»; Position `done`, danach selbst zurückgegeben | Szenario, Aufgabe ohne Worker |
+| T2 | Anna, Carla | Variante `externalisierung`: Quelle T2, Ziel Erika Extern, `optRechte` = ja | wie T1 für die Rechte, ohne Telefonie-Aufgabe | Szenario |
+| T3 | Anna, Carla | Variante `amtswechsel`: Quelle T3, Ziel T1, `optKuerzel` = ja | Kürzel übertragen, Quelle vermerkt | Szenario |
+| T4 | Anna, Carla | Variante `abteilungswechsel` (früher M1): Quelle T1, Ziel T2, `optRechte` = ja | Rechte von T1 auf T2, Quelle vermerkt; `ENTRA_TRANSFER` bleibt aus | Szenario |
+| T5 | Anna, Carla | `internalisierung` T2 → T3, `optRechte` = ja; Carla **lehnt ab** mit Begründung | Position abgelehnt, Anna liest die Begründung; an T3 nichts geändert | Genehmigung, Ablehnung |
+| R1 | Anna | alle Optionen nein | sofort abgelehnt, Grund «Keine Ressource gewählt»; keine Genehmigung bei Carla | Regel |
+| R2 | Anna | Quelle = Ziel (T3) | abgelehnt, Grund Quelle und Ziel gleich | Regel |
+| R3 | Anna | `abteilungswechsel` T3 → T2 mit `optEntra` = ja | abgelehnt mit den Gründen «Entra nur bei Internalisierung» und «Entra ausgeschaltet» | Regel |
+| R4 | Anna | `amtswechsel` Quelle Erika Extern (nach T1 vermerkt) → T3 | abgelehnt, Grund «schon transferiert» | Regel |
+| R5 | Anna | `amtswechsel` T3 → T2 mit `optMail` = ja | abgelehnt, Grund «Kein Postfach» | Regel |
+
+Je Ablehnung durch die Regel: Die Position endet abgelehnt, ohne Aufgabe bei Identity Management,
+und `atlas_get_order` zeigt die Gründe. Die Freigabe der Informationssicherheit für einen
+Entra-Transfer prüft der Lauf nicht: Sie kommt nur mit `ENTRA_TRANSFER = ein`, und das löscht in
+dieser Umgebung ohne Entra Connect ein Cloud-Konto endgültig (siehe Grenzen).
+
 ### Phase 7: Rückbau und Abschluss
 
 Nicht Teil eines echten Hochlaufs, aber Pflicht im Test: Die Umgebung ist danach wie vorher.
@@ -266,7 +306,7 @@ Nicht Teil eines echten Hochlaufs, aber Pflicht im Test: Die Umgebung ist danach
 | Fall | Person | Schritt | Erwartung |
 |---|---|---|---|
 | Z1 | admin | `hr.austritt` für alle übrigen Personalnummern | Konten gesperrt, Pakete zurückgegeben, Lizenzen frei |
-| Z2 | Anna | jede noch gehaltene Position zurückgeben, abhängige zuerst (A1 und A2 vor G9, A8 vor G16) | Rückbau `completed` |
+| Z2 | Anna | jede noch gehaltene Position zurückgeben, abhängige zuerst (A1 und A2 vor G9, A8 vor G16, die Transferkonten aus T0 vor G16) | Rückbau `completed` |
 | Z3 | Anna | G1 Vertrag: `senken` auf den Stand vor dem Lauf, dann zurückgeben | Kontingent wie vorher |
 | Z4 | admin | `M365OeMitgliedschaften` auf die Version vor dem Lauf zurücksetzen | Platzhalter wieder aktiv |
 | Z5 | admin | Incidents gegen V2, Aufgaben gegen V3 | keine neuen; sonst jede mit Instanz und Meldung im Protokoll |
@@ -287,7 +327,8 @@ Nicht Teil eines echten Hochlaufs, aber Pflicht im Test: Die Umgebung ist danach
 | Lizenzmanagement | G1, E4, W5, Z3 |
 | Active Directory | G16, A8–A10 |
 | Exchange und SharePoint Server (On-Premises) | G15, G17 |
-| Informationstransfer | M1 |
+| Atlas hub: Applikation installieren | H1–H5 |
+| Informationstransfer: vier Szenarien, Regel, Genehmigung und Ablehnung, Aufgabe ohne Worker | T0–T5, R1–R5 |
 | Rückgabe und Abhängigkeiten | M7, M8, Z2 |
 
 ## Protokoll
@@ -326,5 +367,8 @@ ein Unternehmen einführt, kann sie als Leitfaden nehmen:
   prüft der Lauf darum nicht in Places.
 - Nicht im Katalog dieser Umgebung und darum nicht im Lauf: Telefonie, Anrufwarteschlange,
   Telefonzentrale (kein Teams-Phone-Worker), Viva Engage, Aufbewahrung, hybride Identität.
+- Informationstransfer: Die Transferkonten haben kein Postfach, darum prüft der Lauf Adresse,
+  Inhalt und Kontingent nur als Ablehnung der Regel. Den Entra-Transfer und die Freigabe der
+  Informationssicherheit prüft er nicht (`ENTRA_TRANSFER` bleibt `aus`, kein Entra Connect).
 - Ein Lauf braucht je nach Exchange-Antwortzeiten drei bis fünf Stunden. Die VMs fahren um
   22:00 UTC herunter; ein Lauf sollte bis 16:00 UTC begonnen haben.

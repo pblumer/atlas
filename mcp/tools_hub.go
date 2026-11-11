@@ -167,5 +167,22 @@ func hubTools() []Tool {
 				return asText(c.post(path+"?"+q.Encode(), "application/json", nil))
 			},
 		},
+		{
+			Name: "atlas_hub_installations",
+			Description: "Where each application installed through atlas_hub_import_release (or the Console's " +
+				"atlas hub dialog) came from, as this server recorded it (ADR-0499): applicationKey, " +
+				"applicationId, state, registryId, indexUrl, signedBy (the fingerprint of the pinned key " +
+				"that signed the index), publisherId, blueprintId, version, digest, cataloguesNotImported, " +
+				"installedBy and recordedAt (Unix seconds). state is installed when the import finished; " +
+				"pending means the server stopped between recording the import and finishing it, so what " +
+				"the application holds is not known — say so to the person, and importing the same release " +
+				"again settles it. It is read from the server's own disk and answers with the registry " +
+				"unreachable. It covers the application only: catalogues, constants and publishing are not " +
+				"part of the record. Administrator only. Nothing is written.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/blueprints/installations"))
+			},
+		},
 	}
 }

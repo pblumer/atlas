@@ -116,7 +116,13 @@ export function openAnswers(problems, directory) {
 // request — body raw bytes with a type, or anything else as JSON — and resolves to
 // { status, data }, the answer decoded. Resolves to what each step did, or null when
 // the person cancelled; nothing is written before the last question is answered.
-export async function importPackage(file, { call, title = t("package.title") }) {
+//
+// importSource(query), when given, sends the application step instead of uploading
+// the file to POST /api/v1/applications/source, and resolves as call does: the atlas
+// hub dialog passes the server's own hub import, which fetches the release again,
+// holds it to the previewed digest and records where the application came from
+// (ADR-0499 amendment g). query is the step's query string without its "?".
+export async function importPackage(file, { call, title = t("package.title"), importSource = null }) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const files = await readArchive(bytes);
   const json = (name) => (files.has(name) ? JSON.parse(text(files.get(name))) : null);
@@ -136,8 +142,9 @@ export async function importPackage(file, { call, title = t("package.title") }) 
     throw new Error(`${what}: ${d.error || d.reason || "HTTP " + res.status}${problems.length ? " — " + problems.join("; ") : ""}`);
   };
   const q = (query, sep = "?") => (query ? sep + query : "");
-  const source = async (query) => ok(await call("POST", "/api/v1/applications/source" + q(query), bytes, "application/gzip"),
-    t("package.what.application"));
+  const source = async (query) => ok(await (importSource
+    ? importSource(query)
+    : call("POST", "/api/v1/applications/source" + q(query), bytes, "application/gzip")), t("package.what.application"));
   const constantsPath = (appId, query) => `/api/v1/applications/${encodeURIComponent(appId)}/constants/import${q(query)}`;
 
   // The plans.

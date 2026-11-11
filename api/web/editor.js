@@ -4,8 +4,8 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { expressionReads, rootOf } from "./varuse.js";
-import { groupReplayHistory, foldLegendTokens } from "./replay-history.js";
-import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
+import { groupReplayHistory, historyRows, historyAncestors, historyDescendants, foldLegendTokens, multiInstanceScope } from "./replay-history.js";
+import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, boundedThreshold } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
 import { DIAGRAM_RENDERER } from "./appearance.js";
@@ -15958,12 +15958,15 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
 // full replay timeline would be too large to load (ADR-0517). It errs towards the
 // bounded view: more top-level bodies than one page also counts, because their sum
 // is then unknown. A probe that failed or found the index unavailable keeps the
-// classic replay, which is what every instance used before.
-function needsBoundedHistory(probe) {
+// classic replay, which is what every instance used before. limit is the server's
+// line (boundedThreshold): 0 sends every instance with a multi-instance body to the
+// bounded view.
+function needsBoundedHistory(probe, limit) {
   if (!probe || !probe.available) return false;
   const total = probe.bodies.reduce((n, b) => n + (Number(b.iterations) || 0), 0);
-  return largestBody(probe.bodies) > BOUNDED_HISTORY_THRESHOLD ||
-    total > 4 * BOUNDED_HISTORY_THRESHOLD || !!probe.nextCursor;
+  if (limit === 0 && probe.bodies.length) return true;
+  return largestBody(probe.bodies) > limit ||
+    total > 4 * limit || !!probe.nextCursor;
 }
 
 // mountBoundedReplay is the replay of an instance too large for the timeline: the
@@ -16229,9 +16232,13 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // so an instance with a large loop is shown through the bounded view instead.
   // A failure here is not fatal: the replay falls back to the timeline as before.
   let miProbe = null;
-  try { miProbe = await loadMIBodies(api, key); } catch { miProbe = null; }
+  let limit;
+  [miProbe, limit] = await Promise.all([
+    loadMIBodies(api, key).catch(() => null),
+    boundedThreshold(api),
+  ]);
   if (gen !== generation) return;
-  if (needsBoundedHistory(miProbe)) {
+  if (needsBoundedHistory(miProbe, limit)) {
     return mountBoundedReplay(root, { api, key, lib, gen, probe: miProbe });
   }
 
@@ -16335,7 +16342,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
   const expandedHistory = new Set(); // collapsed by default, scoped to this replay view
-  let historyParents = new Map();
+  let historyGroups = { children: new Map(), inner: new Map(), parents: new Map() };
   // The bounded history's bodies by element-instance key: which grouped rows can
   // open the Multi-Instance Explorer. Empty when the index is unavailable.
   const miBodyByKey = new Map(
@@ -16361,7 +16368,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       onSelect: (d) => {
         const at = steps.findIndex((st) => String(st.elementInstanceKey) === String(d.iteration.elementInstanceKey));
         if (at >= 0) {
-          expandedHistory.add(groupReplayHistory(steps).parents.get(at));
+          for (const a of historyAncestors(groupReplayHistory(steps), at)) expandedHistory.add(a);
           renderHistory();
           selectElement(steps[at].elementId, steps[at].elementInstanceKey);
         }
@@ -17923,11 +17930,21 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     const raceTitle = "An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so the replay draws it once — here, on the gateway — and outlines the armed branches dashed.";
     // A multi-instance activity is named once with its token count, not once per
     // iteration: the diagram's dots already fold into "+n", and the history row of its
-    // body counts and opens the iterations (foldLegendTokens).
-    const miMode = (elId) => {
+    // body counts and opens the iterations (foldLegendTokens). The same holds one level
+    // down: the iterations of a multi-instance subprocess each walk a token through its
+    // inner shapes, so an inner task is named once with the count it holds, under the
+    // subprocess it runs in (multiInstanceScope).
+    const describeEl = (elId) => {
       const el = registry.get(elId);
-      const mode = el && el.businessObject ? loopMode(el.businessObject) : "none";
-      return mode === "parallel" || mode === "sequential" ? mode : "";
+      const bo = el && el.businessObject;
+      if (!bo) return null;
+      const mode = loopMode(bo);
+      return { mode: mode === "parallel" || mode === "sequential" ? mode : "", parentId: bo.$parent && bo.$parent.id };
+    };
+    const scopes = new Map();
+    const miScope = (elId) => {
+      if (!scopes.has(elId)) scopes.set(elId, multiInstanceScope(elId, describeEl));
+      return scopes.get(elId);
     };
     const chip = (token) =>
       `<span class="token-chip"${token.race ? ` title="${esc(raceTitle)}"` : ""}>` +
@@ -17935,13 +17952,16 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)"
         : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`;
     const miChip = ({ elementId, tokens: held }) => {
-      const mode = miMode(elementId);
-      return `<span class="token-chip mi" title="${esc(tr("ops.token.mi.title"))}">` +
+      const { scopeId, mode, inside } = miScope(elementId);
+      const text = inside
+        ? trPlural("ops.token.miInner", held.length, { element: stepLabel(held[0]), scope: stepLabel({ elementId: scopeId }) })
+        : trPlural("ops.token.mi", held.length, { element: stepLabel(held[0]) });
+      return `<span class="token-chip mi${inside ? " mi-inner" : ""}" title="${esc(tr(inside ? "ops.token.miInner.title" : "ops.token.mi.title"))}">` +
         `<i style="--token-color:${tokenColor(held[0].tokenId)}">${mode === "sequential" ? "&#8801;" : "&#8741;"}</i>` +
-        `${esc(trPlural("ops.token.mi", held.length, { element: stepLabel(held[0]) }))}</span>`;
+        `${esc(text)}</span>`;
     };
     legend.innerHTML = tokens.length
-      ? foldLegendTokens(tokens, (elId) => !!miMode(elId)).map((e) => (e.token ? chip(e.token) : miChip(e))).join("")
+      ? foldLegendTokens(tokens, (elId) => !!miScope(elId)).map((e) => (e.token ? chip(e.token) : miChip(e))).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
     applySelection();
   }
@@ -18274,11 +18294,15 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     const atPos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : -1;
     let curIdx = -1;
     for (let n = 0; n < steps.length; n++) if (steps[n].position <= atPos) curIdx = n;
+    // A step folded away inside a collapsed group is shown by the outermost collapsed
+    // group around it — the row that is on screen and holds it.
+    let curRow = curIdx;
+    if (curIdx >= 0) for (const a of historyAncestors(historyGroups, curIdx)) if (!expandedHistory.has(a)) curRow = a;
     historyEl.querySelectorAll(".ops-hrow[data-i]").forEach((row) => {
       const i = Number(row.dataset.i);
       const pos = steps[i] ? steps[i].position : 0;
       row.classList.toggle("done", atPos >= 0 && pos <= atPos);
-      row.classList.toggle("cur", i === curIdx || (historyParents.get(curIdx) === i && !expandedHistory.has(i)));
+      row.classList.toggle("cur", i === curRow);
       row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0)
         || (selMig >= 0 && i === selMig));
     });
@@ -18304,10 +18328,14 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       return;
     }
     const groups = groupReplayHistory(steps);
-    historyParents = groups.parents;
-    const rows = steps.map((s, i) => {
+    historyGroups = groups;
+    // The rows in tree order: a multi-instance body holds its iterations, and an
+    // iteration of a multi-instance subprocess holds the steps it ran, each level one
+    // indent deeper and folded until opened (historyRows).
+    const rows = historyRows(steps.length, groups, expandedHistory).map(({ i, depth }) => {
+      const s = steps[i];
       const parent = groups.parents.get(i);
-      if (parent !== undefined && !expandedHistory.has(parent)) return "";
+      const indent = depth ? ` style="padding-left:${14 + depth * 24}px"` : "";
       if (s.action === "migrate") {
         // Drawn as a rule across the list rather than another element row: the steps
         // above it and below it are on different versions of the process, and that is
@@ -18331,9 +18359,10 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         </div>`;
       }
       const done = s.endAt > 0;
-      // An incident on one of the collapsed rounds must remain visible on its body.
-      const groupIncidents = (groups.children.get(i) || [])
-        .filter((idx) => incidentByEik(steps[idx].elementInstanceKey)).length;
+      // An incident on one of the collapsed rounds, or on a step inside one, must remain
+      // visible on every group around it.
+      const nested = groups.children.has(i) || groups.inner.has(i) ? historyDescendants(groups, i) : [];
+      const groupIncidents = nested.filter((idx) => incidentByEik(steps[idx].elementInstanceKey)).length;
       const inc = incidentByEik(s.elementInstanceKey) ||
         (groupIncidents ? { message: tr("ops.mi.incidents", { count: groupIncidents }) } : null);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
@@ -18341,33 +18370,49 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       // A loop runs the same node again and again, so without its round number every
       // iteration is an identical row and the operator cannot tell which one they are
       // reading (ADR-0077/0133).
+      // It leads the name: under a body every iteration carries the same name, so the
+      // number is what tells them apart and must be the last thing a narrow column cuts.
       const round = s.iteration
-        ? ` <span class="ops-hiter" title="Round ${s.iteration} of this loop">#${s.iteration}</span>`
+        ? `<span class="ops-hiter lead" title="Round ${s.iteration} of this loop">#${s.iteration}</span> `
         : "";
       const children = groups.children.get(i);
-      const isGroup = !!children?.length;
+      const innerSteps = groups.inner.get(i);
+      const isBody = !!children?.length;
+      const isGroup = isBody || !!innerSteps?.length;
       const opened = expandedHistory.has(i);
-      const toggleLabel = isGroup ? tr(opened ? "ops.mi.collapse" : "ops.mi.expand") : "";
+      const toggleLabel = isGroup
+        ? tr(isBody ? (opened ? "ops.mi.collapse" : "ops.mi.expand") : (opened ? "ops.mi.iter.collapse" : "ops.mi.iter.expand"))
+        : "";
       const button = isGroup
         ? `<button type="button" class="ops-mi-toggle" data-body="${i}" aria-expanded="${opened}" aria-label="${esc(toggleLabel)}" title="${esc(toggleLabel)}">${opened ? "&#9662;" : "&#9656;"}</button>`
         : "";
       // The explorer pages this body's iterations from the bounded history, so it
       // is offered wherever the server has the body indexed (ADR-0517).
-      const explore = isGroup && miBodyByKey.has(String(s.elementInstanceKey))
+      const explore = isBody && miBodyByKey.has(String(s.elementInstanceKey))
         ? ` <button type="button" class="btn neutral small ops-mi-explore" data-body-key="${esc(s.elementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button>`
         : "";
-      const summary = isGroup
+      // An iteration of a subprocess says how many steps it ran and, while it is still
+      // running, where it waits — so among several hundred iterations the one stuck on
+      // a task can be found without opening each.
+      const waitingAt = !isBody && innerSteps?.length && !done
+        ? [...innerSteps].reverse().find((idx) => !steps[idx].endAt)
+        : undefined;
+      const summary = isBody
         ? ` <span class="ops-mi-count" title="${esc(tr("ops.mi.summary", {
             completed: children.filter((idx) => steps[idx].endAt && steps[idx].loop?.outcome !== "terminated").length,
             active: children.filter((idx) => !steps[idx].endAt && steps[idx].loop?.outcome !== "terminated").length,
             terminated: children.filter((idx) => steps[idx].loop?.outcome === "terminated").length,
           }))}">${esc(tr("ops.mi.count", { count: children.length }))}</span>`
-        : "";
-      return `<div class="ops-hrow${inc ? " inc" : ""}${parent !== undefined ? " mi-child" : ""}${isGroup ? " mi-group" : ""}" data-i="${i}" data-eik="${s.elementInstanceKey || 0}"${
+        : isGroup
+          ? ` <span class="ops-mi-count ops-iter-steps">${esc(trPlural("ops.mi.iter.steps", innerSteps.length))}</span>${
+            waitingAt !== undefined ? ` <span class="ops-iter-at">${esc(tr("ops.mi.iter.at", { element: stepLabel(steps[waitingAt]) }))}</span>` : ""}`
+          : "";
+      return `<div class="ops-hrow${inc ? " inc" : ""}${parent !== undefined ? " mi-child" : ""}${isGroup ? " mi-group" : ""}${
+        isGroup && !isBody ? " mi-iter" : ""}" data-i="${i}" data-eik="${s.elementInstanceKey || 0}" data-depth="${depth}"${indent}${
         inc ? ` title="${esc(inc.message || "Incident")}"` : ""}>
         ${button}
         <span class="ops-hicon ${inc ? "inc" : done ? "done" : "live"}">${icon}</span>
-        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>${summary}${explore}
+        <span class="ops-hname">${round}${esc(stepLabel(s))}</span>${summary}${explore}
         <span class="ops-htime">${esc(when)}</span>
       </div>`;
     }).join("");

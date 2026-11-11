@@ -23,7 +23,9 @@ import (
 // receives a caller-controlled URL or signing key and never touches the run loop.
 type blueprintSource interface {
 	LoadIndex(context.Context) (blueprintregistry.Index, error)
-	Fetch(context.Context, string, string) (blueprintregistry.Release, []byte, error)
+	// FetchOrigin answers a release, its verified bytes and where they came from:
+	// the registry, the index URL and the pinned key that signed the index.
+	FetchOrigin(context.Context, string, string) (blueprintregistry.Release, blueprintregistry.Origin, []byte, error)
 }
 
 // configuredBlueprintSource accepts a single static operator-owned HTTPS
@@ -172,25 +174,33 @@ func (s *Server) handleListBlueprints(w http.ResponseWriter, r *http.Request) {
 // selectedBlueprint checks selection against the signed index, rather than
 // sending an arbitrary user-supplied location to the outbound HTTP client.
 func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blueprintregistry.Release, []byte, bool) {
+	release, _, archive, ok := s.selectedBlueprintOrigin(w, r)
+	return release, archive, ok
+}
+
+// selectedBlueprintOrigin is selectedBlueprint answering also where the release came
+// from (blueprintregistry.Origin), for the import that records it.
+func (s *Server) selectedBlueprintOrigin(w http.ResponseWriter, r *http.Request) (blueprintregistry.Release, blueprintregistry.Origin, []byte, bool) {
+	var none blueprintregistry.Origin
 	if !s.requireBlueprints(w) {
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, none, nil, false
 	}
 	id, version := r.PathValue("id"), r.PathValue("version")
 	if id == "" || version == "" {
 		httpapi.Error(w, http.StatusBadRequest, "Blueprint identifier and version are required")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, none, nil, false
 	}
 	index, err := s.blueprints.LoadIndex(r.Context())
 	if err != nil {
 		s.registryFailure(w, r, registryUnavailable, err)
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, none, nil, false
 	}
 	found := false
 	for _, rel := range index.Releases {
 		if rel.BlueprintID == id && rel.Version == version {
 			if !blueprintregistry.Compatible(rel.Atlas, Version) {
 				httpapi.Error(w, http.StatusConflict, "Blueprint is incompatible with this atlas version")
-				return blueprintregistry.Release{}, nil, false
+				return blueprintregistry.Release{}, none, nil, false
 			}
 			found = true
 			break
@@ -198,20 +208,20 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	}
 	if !found {
 		httpapi.Error(w, http.StatusNotFound, "Blueprint release not in the trusted registry")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, none, nil, false
 	}
 	// Fetch independently re-verifies the current signed index; a changed or
 	// revoked release is never silently replaced by an untrusted package.
-	release, bytes, err := s.blueprints.Fetch(r.Context(), id, version)
+	release, origin, bytes, err := s.blueprints.FetchOrigin(r.Context(), id, version)
 	if err != nil {
 		s.registryFailure(w, r, "Blueprint package download or signature/digest verification failed", err)
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, none, nil, false
 	}
 	if !blueprintregistry.Compatible(release.Atlas, Version) {
 		httpapi.Error(w, http.StatusConflict, "Blueprint release compatibility changed; review again")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, none, nil, false
 	}
-	return release, bytes, true
+	return release, origin, bytes, true
 }
 
 func (s *Server) handleBlueprintPreview(w http.ResponseWriter, r *http.Request) {
@@ -314,7 +324,7 @@ func (s *Server) handleBlueprintImport(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	release, compressed, ok := s.selectedBlueprint(w, r)
+	release, origin, compressed, ok := s.selectedBlueprintOrigin(w, r)
 	if !ok {
 		return
 	}
@@ -340,7 +350,10 @@ func (s *Server) handleBlueprintImport(w http.ResponseWriter, r *http.Request) {
 	for _, c := range inspection.Catalogues {
 		catalogues = append(catalogues, c.ID)
 	}
-	status, body := s.importSourceFiles(r, files, decide)
+	// The record of where the application came from is written before the import
+	// writes anything, and finished in the same run-loop turn (ADR-0499 amendment g).
+	journal := s.newHubJournal(r, release, origin, inspection.ApplicationKey, catalogues)
+	status, body := s.importSourceFiles(r, files, decide, journal)
 	switch v := body.(type) {
 	case sourceImportResult:
 		httpapi.JSON(w, status, blueprintImportResult{

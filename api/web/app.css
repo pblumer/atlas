@@ -2940,6 +2940,7 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
   padding: 0 4px; margin-left: 5px; border-radius: 4px;
   color: var(--muted); background: var(--bg); border: 1px solid var(--border);
 }
+.ops-hiter.lead { margin-left: 0; margin-right: 2px; }
 .ops-hrow {
   display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; font-size: 13px;
   border-left: 3px solid transparent;
@@ -2949,6 +2950,14 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
    only on expansion; this is a presentation index, not a replacement for paging. */
 .ops-hrow.mi-child { padding-left: 38px; }
 .ops-hrow.mi-group { font-weight: 600; }
+/* An iteration of a multi-instance subprocess folds the steps it ran. There can be
+   hundreds of them under one body, so they stay regular weight: the body is the
+   heading, the iterations its entries. */
+.ops-hrow.mi-group.mi-iter { font-weight: 400; }
+.ops-iter-at {
+  flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--muted);
+}
 .ops-mi-toggle {
   flex: 0 0 20px; height: 22px; padding: 0;
   border: 1px solid var(--border); border-radius: 4px;
