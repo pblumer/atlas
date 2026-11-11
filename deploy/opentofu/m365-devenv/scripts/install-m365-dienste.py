@@ -30,7 +30,8 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
      the map already has. A hub import through the Console asks the same in its dialog;
   6. sets the application constants: NAME_PREFIX (the environment's prefix, so everything
      the catalogue creates lies in the shared tenant's Exchange scope and is removed by
-     the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE, ORTSANGABEN (false unless --ortsangaben);
+     the cleanup scripts), DEPARTMENT (the environment id, the department the directory
+     mirroring keeps), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE, ORTSANGABEN (false unless --ortsangaben);
   7. installs the on-premises variant: the Exchange products when exchange_onprem is built,
      the SharePoint Server team site when enable_sharepoint_server is on;
   8. opens the SharePoint and Exchange Workers, and the SharePoint Server Worker (configured
@@ -557,6 +558,10 @@ def main():
         # compiler reads an empty value as "none"), so the package declares the fallback
         # "" as JSON, and the value held here has the same type.
         {"name": "NAME_PREFIX", "type": "json", "value": json.dumps(prefix)},
+        # The environment id, as the test users carry it (entra.tf): an account the HR entry
+        # creates gets it as its department, so the directory mirroring, which keeps only
+        # this department (install-verzeichnisabgleich.py), mirrors it too.
+        {"name": "DEPARTMENT", "type": "json", "value": json.dumps(prefix.rstrip("-"))},
         {"name": "MAIL_DOMAIN", "type": "string", "value": domain},
         {"name": "USAGE_LOCATION", "type": "string", "value": os.environ.get("M365_USAGE_LOCATION", "CH")},
         {"name": "PARTNER_UPN_DOMAIN", "type": "string", "value": domain},
