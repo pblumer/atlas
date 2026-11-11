@@ -292,6 +292,14 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **A position with a variant can be refused and approved through its process.** `POST
+  /api/v1/orders/{id}/lines/{position}/decision` matched the item id only, while a position's
+  process is started with `positionId` = `<item>#<variant>` (ADR-0384). A refusal or an approval
+  of such a position answered 404 and the line stayed open, so every rule refusal of
+  `examples/informationstransfer` (all of whose positions have a variant) was lost. The route now
+  resolves the position as every other line route does: the key, or the item id where the order
+  carries one position of the product; naming a product it carries twice is refused with both
+  positions named.
 - **The examples address a position with a variant correctly.** A product with variants names
   its position `<product>#<variant>` (ADR-0384), and the examples put that id into the address
   of their calls to Atlas unencoded. The `#` turned the rest of the address into a fragment, so

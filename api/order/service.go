@@ -1177,6 +1177,7 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		got       Order
 		found     bool
 		lineOK    bool
+		ambiguous bool
 		decideErr error
 		opErr     error
 	)
@@ -1184,10 +1185,23 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		if got, found, opErr = s.store.Get(id); opErr != nil || !found {
 			return
 		}
+		// The position as every other line route names it (ResolveLine): its key,
+		// "<item>#<variant>" for a product with variants — what a position's process
+		// is started with as positionId — or the item id where the order carries
+		// one position of the product. Matching the item id alone missed every
+		// variant position, so its refusal answered 404 and the line stayed open.
+		key, resolveErr := ResolveLine(got, item)
+		if resolveErr != nil {
+			ambiguous = !strings.Contains(resolveErr.Error(), "carries no line")
+			if ambiguous {
+				decideErr = resolveErr
+			}
+			return
+		}
 		lines := make([]Line, len(got.Lines))
 		copy(lines, got.Lines)
 		for i := range lines {
-			if lines[i].ItemID != item {
+			if lines[i].Key() != key {
 				continue
 			}
 			lineOK = true
@@ -1216,6 +1230,8 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "record decision: "+opErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no order "+id)
+	case ambiguous:
+		httpapi.Error(w, http.StatusBadRequest, decideErr.Error())
 	case !lineOK:
 		httpapi.Error(w, http.StatusNotFound, "order "+id+" carries no line for "+item)
 	case decideErr != nil:
