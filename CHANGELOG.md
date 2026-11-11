@@ -13,6 +13,17 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **atlas hub records where an installed application came from.** The server-side hub import
+  records, under the application's key, the registry, the configured index URL, the fingerprint
+  of the pinned key that signed the index, the release and its exact digest, the catalogues it
+  left to the Console, who installed it and when. The record is written as pending before the
+  import writes anything, so an import whose record cannot be written installs nothing, and
+  becomes installed when the import finishes; an import that stops leaves the earlier record as
+  it was. The Console's atlas hub dialog now installs the application through this import, so a
+  person's install is recorded like an agent's. Administrators read the records with
+  `GET /api/v1/blueprints/installations` or the MCP tool `atlas_hub_installations`, with the
+  registry unreachable. The record covers the application only, not its catalogues, constants
+  or publishing (ADR-0499 amendment g).
 - **The Helm chart can install alerting rules for the single writer.** `prometheusRule.enabled=true`
   renders a Prometheus Operator `PrometheusRule` with four recording rules and seven alerts: probe
   timeouts and failed store reads (critical), a noticeable wait for the writer, the writer's

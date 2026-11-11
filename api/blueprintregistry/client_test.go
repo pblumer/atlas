@@ -277,3 +277,42 @@ func TestPublicClientAcceptsEitherOfTwoPinnedKeys(t *testing.T) {
 		t.Fatal("no pinned key accepted")
 	}
 }
+
+// An installation records where its package came from, so the fetch that delivers
+// the bytes names the index snapshot they were checked against: its registry ID, the
+// index URL the operator configured and the pinned key whose signature verified it —
+// during a rotation the one that actually signed, not merely the first one pinned.
+func TestPublicClientFetchOriginNamesTheKeyThatSigned(t *testing.T) {
+	pkg := []byte("immutable compressed package bytes")
+	hash := sha256.Sum256(pkg)
+	index := mutateTestIndex(t, func(root map[string]any) {
+		artifact := releaseFields(root)["artifact"].(map[string]any)
+		artifact["digest"] = "sha256:" + hex.EncodeToString(hash[:])
+		artifact["sizeBytes"] = len(pkg)
+	})
+	oldSeed := sha256.Sum256([]byte("origin test: old key"))
+	newSeed := sha256.Sum256([]byte("origin test: new key"))
+	oldKey, newKey := ed25519.NewKeyFromSeed(oldSeed[:]), ed25519.NewKeyFromSeed(newSeed[:])
+	pinned := []ed25519.PublicKey{oldKey.Public().(ed25519.PublicKey), newKey.Public().(ed25519.PublicKey)}
+	sig := []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(newKey, index)))
+	c := testPublicClientWithKeys(t, index, sig, pkg, pinned...)
+
+	release, origin, data, err := c.FetchOrigin(context.Background(), "org.example.purchase-approval", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string(pkg) || release.Version != "1.0.0" {
+		t.Fatalf("fetched %q %+v", data, release)
+	}
+	want := Origin{
+		RegistryID: "org.example.community",
+		IndexURL:   "https://catalog.example.org/blueprints/index.json",
+		SignedBy:   KeyFingerprint(pinned[1]),
+	}
+	if origin != want {
+		t.Fatalf("origin = %+v, want %+v", origin, want)
+	}
+	if _, _, _, err := c.FetchOrigin(context.Background(), "org.example.purchase-approval", "9.9.9"); err == nil {
+		t.Fatal("an unlisted version has an origin")
+	}
+}

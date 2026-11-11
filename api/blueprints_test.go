@@ -25,15 +25,18 @@ type fakeBlueprintSource struct {
 	loadError    error
 	fetchError   error
 	fetches      int
+	// origin is what FetchOrigin answers beside the release: the registry, the
+	// index URL and the key that signed it.
+	origin blueprintregistry.Origin
 }
 
 func (f *fakeBlueprintSource) LoadIndex(context.Context) (blueprintregistry.Index, error) {
 	return f.index, f.loadError
 }
 
-func (f *fakeBlueprintSource) Fetch(_ context.Context, _, _ string) (blueprintregistry.Release, []byte, error) {
+func (f *fakeBlueprintSource) FetchOrigin(_ context.Context, _, _ string) (blueprintregistry.Release, blueprintregistry.Origin, []byte, error) {
 	f.fetches++
-	return f.release, f.packageBytes, f.fetchError
+	return f.release, f.origin, f.packageBytes, f.fetchError
 }
 
 func sampleBlueprintSource(t *testing.T) *fakeBlueprintSource {
