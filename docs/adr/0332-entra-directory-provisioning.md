@@ -1,6 +1,6 @@
 # ADR-0332: Accounts and groups are pulled from Entra by delta query, and the first run writes nothing
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-10: in a tenant shared with people the mirroring is not about, the delta reads name a `keep` the Entra Worker applies before it answers, see [ADR-0553](0553-entra-delta-keep.md))
 - **Implementation:** Landed
 - **Date:** 2026-09-13
 - **Deciders:** Atlas maintainers
@@ -258,6 +258,26 @@ reading like somebody left the mirror in reporting mode.
   written against those keeps working whoever made the change. The Graph cursors appear
   in no audit line and no error message — they are not credentials, but a URL naming a
   tenant, shipped to wherever the logs go, is a disclosure nobody chose.
+
+### Amendment (2026-11-10): a shared tenant is filtered in the Worker
+
+The first run enumerates the whole tenant, and its result is written into the event log
+as variables before any mapping in the model runs (invariant I6). In a tenant shared with
+people the mirroring is not about — the M365 test environment's — that puts everybody's
+name and address into a test server's log. A filter in the model or in this route comes
+too late; Graph's delta endpoint takes no `$filter`.
+
+So `delta-users` and `delta-groups` take a `keep` predicate (`department eq '…'`,
+`startswith(displayName,'…')`, `and` / `or`), and the Entra Worker filters every page
+before it answers; only matches leave it. A removed object is always kept, reduced to its
+id and `@removed`, and this route skips an id it does not mirror (`decideDeparture`'s
+`skipped` note, and the group path's). The cursor is Graph's, so every run of it is
+filtered the same way. The model under `examples/` does not set one: in a tenant that is
+the installation's own, every person is a subject. The test environment's copy does
+(`deploy/opentofu/m365-devenv/scripts/install-verzeichnisabgleich.py`). The limits — the
+Worker still reads everything, an update whose page lacks the keep field is withheld as
+`undecided`, a user who moves out of the scope is not reported — are in
+[ADR-0553](0553-entra-delta-keep.md).
 
 ### Consequences
 

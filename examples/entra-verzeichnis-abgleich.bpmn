@@ -42,6 +42,9 @@
     * Ein REST-Worker namens "atlas", der auf diese Atlas-Instanz zeigt und ein
       API-Token mit dem Scope "directory" trägt. Dieser Scope erreicht genau die
       beiden Routen unten und sonst nichts; insbesondere kann er nicht deployen.
+    * In einem Mandanten, den die Installation mit Menschen teilt, die sie nicht
+      führen soll: ein keep an beiden Delta-Tasks (siehe dort). Ohne ihn landet beim
+      ersten Lauf jede Person des Mandanten im Ereignisprotokoll.
     * Authentisierung eingeschaltet. Beide Routen weisen einen Server ohne
       Authentisierung ausdrücklich ab — es gibt keinen unauthentisierten Weg in die
       Kontenbereitstellung.
@@ -107,6 +110,8 @@ Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvar
 
 Gelöschte Objekte kommen mit @removed markiert mit; sie sind das eine der beiden Austrittssignale (das andere ist accountEnabled: false).
 
+Geteilter Mandant: Teilt sich die Installation den Mandanten mit Menschen, die sie nicht führen soll (eine Testumgebung im echten Mandanten), gehört ein keep an diesen Task, etwa keep="department eq 'test-umgebung'" und department im select. Der Entra-Worker filtert damit jede Seite, bevor er antwortet; nur Treffer verlassen ihn. Im Modell zu filtern wäre zu spät: das Ergebnis eines Jobs steht als Variable im Ereignisprotokoll, bevor eine Ausgabe-Abbildung läuft. Gelöschte Objekte bleiben drin, gekürzt auf id und @removed; atlas überspringt eine id, die es nicht kennt. Ohne keep liest der Task wie bisher den ganzen Mandanten (ADR-0553).
+
 Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:entraConnector connector="contoso" operation="delta-users"
@@ -123,6 +128,8 @@ Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
       <bpmn:documentation>delta-groups ab stand.groupsDeltaLink. Die Mitgliedschaften kommen als members@delta mit — Entra-Objekt-Ids, nicht atlas-Benutzer-Ids; die Übersetzung macht atlas.
 
 Konten werden vor den Gruppen gelesen, aber darauf kommt es nicht an: eine Mitgliedschaft, deren Konto noch niemand gelesen hat, bleibt am Gruppendatensatz stehen und löst sich in einem späteren Lauf von selbst auf. Verworfen wird sie nie — eine Delta-Abfrage nennt sie kein zweites Mal.
+
+Geteilter Mandant: wie beim Konten-Task ein keep, hier etwa keep="startswith(displayName,'test-umgebung-')". Eine Änderung nur an den Mitgliedschaften kommt in einem späteren Lauf womöglich ohne displayName; der Worker hält sie dann zurück und zählt sie im Ergebnis als undecided.
 
 Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
       <bpmn:extensionElements>

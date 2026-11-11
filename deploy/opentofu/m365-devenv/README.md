@@ -264,6 +264,7 @@ python3 scripts/install-m365-dienste.py --site-inventory <host>:/sites/<test-sit
 python3 scripts/install-lizenzmanagement.py
 python3 scripts/install-ad-dienste.py         # mit enable_ad_dc
 python3 scripts/install-informationstransfer.py
+python3 scripts/install-verzeichnisabgleich.py   # Trockenlauf; --apply erst nach dem Bericht
 python3 scripts/testlauf-rollen.py            # nach jedem Installationsskript
 ./scripts/mssql-testdb.sh                     # mit enable_sharepoint_server
 python3 -I onprem/run-mssql-smoke.py
@@ -281,7 +282,7 @@ Agent über MCP in mehreren Rollen durchführt, beschreibt [TESTLAUF-KATALOG.md]
 ## Beispiele einspielen
 
 Die Pakete unter `examples/` lassen sich mit ihrem `installieren.sh` in jede Atlas-Instanz
-einspielen. Für diese Umgebung gibt es drei Skripte, die die Pakete vorher an den Tenant
+einspielen. Für diese Umgebung gibt es Skripte, die die Pakete vorher an den Tenant
 anpassen und als lokaler Administrator installieren (Passwort aus
 `tofu output -json atlas_admin`, nie ausgegeben). Alle brauchen `python3` und `tofu`, laufen
 aus `deploy/opentofu/m365-devenv` nach `wait-atlas.sh`, dürfen beliebig oft laufen und ändern
@@ -500,6 +501,65 @@ der Vorgabe von `entra_graph_permissions` stehen.
 
 ```bash
 python3 -m unittest discover -s scripts -p 'test_install_informationstransfer.py' -v
+```
+
+### `scripts/install-verzeichnisabgleich.py`
+
+Der Verzeichnis-Abgleich (`examples/entra-verzeichnis-abgleich.bpmn`, ADR-0332) führt die
+Atlas-Konten und -Gruppen stündlich aus Entra nach. Sein erster Lauf liest den ganzen Tenant,
+und was ein Job zurückgibt, steht im Ereignisprotokoll, bevor das Modell etwas verwerfen
+kann. In einem geteilten Tenant wären das die Namen und Adressen echter Menschen. Das Skript
+spielt deshalb eine Kopie ein, deren Delta-Tasks ein `keep` tragen: Der Entra-Worker filtert
+jede Seite, bevor er antwortet, und nur die Testkonten und -gruppen dieser Umgebung verlassen
+ihn ([ADR-0553](../../../docs/adr/0553-entra-delta-keep.md)).
+
+```bash
+python3 scripts/install-verzeichnisabgleich.py --cafile out/caddy-root.crt            # Trockenlauf einspielen
+python3 scripts/install-verzeichnisabgleich.py --cafile out/caddy-root.crt --bericht  # Bericht des letzten Laufs lesen
+python3 scripts/install-verzeichnisabgleich.py --cafile out/caddy-root.crt --apply    # danach: schreiben
+```
+
+| Option | Vorgabe | Wirkung |
+|---|---|---|
+| `--cafile` | – | wie oben |
+| `--apply` | aus | deployt mit `apply: true`; der nächste Lauf schreibt Konten und Gruppen |
+| `--interval` | `PT1H` | Intervall des Timers; der erste Lauf startet ein Intervall nach dem Deployment |
+| `--bericht` | – | meldet sich an und gibt Ergebnis, Zahlen und Notizarten des neuesten beendeten Laufs aus; ändert nichts |
+| `--show` | – | gibt die Kopie des Modells aus; meldet sich nirgends an |
+| `--token-days`, `--new-token` | 90, – | Laufzeit eines neuen API-Tokens; ein neues Token, auch wenn eines besteht |
+
+Es
+
+1. prägt ein API-Token mit dem Scope `directory` (es erreicht nur die beiden Routen
+   `/api/v1/directory-sync` und kann nicht deployen) und versiegelt es im Vault als
+   `verzeichnisabgleich`, wenn noch keines dieses Namens besteht. Das Token wird nie ausgegeben;
+2. schreibt eine Kopie des Modells: `delta-users` mit
+   `keep="department eq '<Umgebungs-ID>' or startswith(userPrincipalName,'<Umgebungs-ID>-')"` und
+   `department` im `select`, `delta-groups` mit `keep="startswith(displayName,'<Umgebungs-ID>-')"`,
+   beide am Entra-Worker dieser Umgebung (`tofu output atlas_workers`, Art `entra`). Die beiden
+   Aufrufe an Atlas werden REST-Connector-Tasks gegen `http://127.0.0.1:8080` mit
+   `authSecret="verzeichnisabgleich"` (ADR-0411; einen REST-Worker in der Console gibt es nicht).
+   Die Prozess-ID erhält das Suffix `_devenv`;
+3. deployt sie in die Applikation «Verzeichnis-Abgleich (<Umgebungs-ID>)», die es bei Bedarf anlegt.
+
+**Der Bericht.** `apply` bleibt `false`, bis `--apply` übergeben wird: Der Lauf entscheidet
+alles und schreibt nichts. Zu lesen ist die Instanzvariable `bericht` des neuesten beendeten
+Laufs (Console → Operations → «Entra ID: Verzeichnis-Abgleich (<Umgebungs-ID>)» → Instanz →
+Variablen, oder `--bericht`): `applied` und `reason`, die Zahlen in `counts`, die Zeilen in
+`notes`. Die Variablen `konten` und `gruppen` sagen mit `withheld`, wie viele Objekte der Filter
+zurückgehalten hat, und mit `undecided`, wie viele davon nur, weil die Seite kein Feld trug, das
+der Filter liest. Gelöschte Objekte fremder Personen kommen als blosse IDs an; Atlas notiert sie
+als `skipped` und schreibt nichts. Solange `apply` false ist, bewegen sich die Cursor nicht, und
+jeder Lauf liest den Tenant von vorn.
+
+**Grenzen.** Der Entra-Worker liest weiterhin den ganzen Tenant; nur was der Filter behält,
+verlässt ihn. Spätere Läufe liefern nur, was sich geändert hat: Eine Änderung an einem Testkonto
+ohne `department` auf der Seite wird zurückgehalten (`undecided`). Wer das sieht, löscht den
+`directory-sync`-Zustand, und der nächste Lauf zählt neu auf. Das Skript ändert nichts in Azure
+oder im Tenant.
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_install_verzeichnisabgleich.py' -v
 ```
 
 ## Geteilter Tenant (`shared_tenant = true`)
@@ -975,6 +1035,7 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 | `scripts/shared-tenant-setup.ps1` | von Hand nach `tofu apply`, geteilter Tenant | Rechte in Exchange und SharePoint, Liste «Site-Inventar» (`-Part`) |
 | `scripts/install-m365-dienste.py` | von Hand | `examples/m365-dienste` und seine Exchange-Server-Variante einspielen |
 | `scripts/install-lizenzmanagement.py` | von Hand, nach `install-m365-dienste.py` | `examples/lizenzmanagement` einspielen |
+| `scripts/install-verzeichnisabgleich.py` | von Hand | Verzeichnis-Abgleich mit `keep` für diese Umgebung einspielen (Trockenlauf; `--apply`, `--bericht`) |
 | `scripts/purge-deleted.sh` | von Hand nach `tofu destroy` | Papierkorb von Entra nach Präfix leeren (erst auflisten, mit `--yes` löschen) |
 | `scripts/emergency-cleanup.sh` | von Hand, ohne State | Ressourcengruppen, gelöschte Key Vaults, App-Registrierungen, Benutzer und Gruppen nach Präfix |
 | `scripts/shared-tenant-cleanup.ps1` | von Hand, geteilter Tenant | Rollenzuweisungen, Rollengruppen, Dienstprinzipale und Scopes in Exchange Online nach Präfix (`-Yes` löscht) |

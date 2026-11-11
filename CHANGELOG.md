@@ -30,6 +30,18 @@ _Changed_ / _Removed_ for each version.
   leaves the way the panel's Edit does, with the way back, and says beside it whether the stored
   model it opens decides differently from the version shown. A decision that exists only as a
   deployment can be stored from the peek, unchanged, and then edited (ADR-draft-decision-peek).
+- **A directory delta can keep only the objects it is about.** `delta-users` and `delta-groups`
+  take a `keep` predicate — `department eq 'IT'`, `startswith(displayName,'test-')`, joined with
+  `and` / `or` and parentheses, compared case-insensitively — and the Entra Worker applies it to
+  every page before it answers. Graph's delta endpoint has no `$filter`, and a job's result is in
+  the event log before any output mapping runs, so this is the only place a test environment
+  sharing a tenant with real people can stop their names and addresses from reaching Atlas.
+  Deleted objects are always kept, reduced to `id` and `@removed`; the deltaLink is Graph's own;
+  `maxUsers` counts what is kept, and the result says how many objects were `withheld` and how
+  many were `undecided` because a later page carried no field the keep reads. The compiler refuses
+  a keep on any other operation, as FEEL, or reading a field outside the task's `select`. The M365
+  test environment installs the directory mirroring this way with
+  `scripts/install-verzeichnisabgleich.py` (ADR-0553).
 - **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
   names `"provider": "google-calendar"` uses a service account the booking calendars are shared
   with; the model stays the same. Recurring and all-day appointments block their time, and a
@@ -507,6 +519,13 @@ directory gains the document store. Four changes can break what worked against 0
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
+- **An HR entry in a shared tenant creates its account under the environment's prefix.** The
+  HR entry of `examples/m365-dienste` (`hr-eintritt.bpmn`) built the account's name without
+  `NAME_PREFIX`, which every other process of the package puts in front of what it creates. In
+  the shared tenant of `deploy/opentofu/m365-devenv` the account was therefore
+  `vorname.nachname@…`, which neither the environment's cleanup (it looks for the prefix) nor
+  its directory mirroring found. The UPN, the alias, the display name and the search for taken
+  names now start with `NAME_PREFIX`; without a prefix the names are unchanged.
 - **A decision model opens with its graph in view.** The decision editor left a model's graph
   where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
   to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
