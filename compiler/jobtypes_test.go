@@ -56,7 +56,8 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 
 		WikiwikibangbangJobType: WikiwikibangbangJobTypeIndex,
 
-		CalendarJobType: CalendarJobTypeIndex,
+		CalendarJobType:    CalendarJobTypeIndex,
+		AtlasReportJobType: AtlasReportJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Monatsbericht — Kennzahlen aus Atlas als Schnappschuss an einen Verteiler, mit
+  Bestätigung durch Erledigen und Nachfassen bei nicht Gelesenem (ADR-0555).
+
+    Start "Bericht versenden"           (Startformular mb-verteiler: Verteiler, Verantwortlich)
+     → Atlas-Bericht "Instanzen lesen"  (instances-summary → bericht)
+     → Atlas-Bericht "Incidents lesen"  (incident-summary → incidents)
+     → Script "Verteiler lesen"         (verteilerText → offen, eine Person pro Zeile)
+     → Subprozess "Zustellen", parallel je Person in offen
+          User-Task "Monatsbericht lesen"   (mb-bericht, assignee = empfaenger)
+              Erledigt  → quittung {empfaenger, gelesen: true}
+              Frist P3D → quittung {empfaenger, gelesen: false}
+     → Script "Nicht Gelesene bestimmen" (quittungen → offen)
+     → Gateway: alle gelesen → Ende "Alle haben gelesen"
+     → sonst Scripts für den Hinweis und den Vorschlag, dann
+       User-Task "Verteiler anpassen" (mb-anpassen, assignee = verantwortlich)
+     → Gateway: abschliessen → Ende "Zustellung abgeschlossen"
+                sonst zurück zu "Verteiler lesen", mit demselben Bericht
+
+  Gelesen heisst bestätigt: Erledigen ist die Bestätigung (ADR-0554 hält fest, wer wann
+  erledigt hat). Der Bericht ist eine gewöhnliche Instanzvariable und ändert sich beim
+  Nachfassen nicht; wer erst später liest, sieht dieselben Zahlen wie alle anderen.
+
+  Der Worker "atlas" ist eine Einstellung des Servers, nicht des Modells: die Adresse
+  eines Atlas-Servers und ein API-Token mit der Rolle operator im Vault.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_monatsbericht" targetNamespace="http://atlas/examples">
+  <process id="proc_monatsbericht" name="Monatsbericht" isExecutable="true">
+    <documentation>Liest Atlas' eigene Kennzahlen als Schnappschuss und stellt sie jeder Person im Verteiler als Aufgabe zu. Erledigen ist die Bestätigung, gelesen zu haben. Wer nach drei Tagen nicht gelesen hat, erscheint bei der verantwortlichen Person, die den Verteiler anpasst und erneut zustellt, mit demselben Bericht.</documentation>
+
+    <startEvent id="start" name="Bericht versenden">
+      <extensionElements>
+        <zeebe:formDefinition formId="mb-verteiler"/>
+      </extensionElements>
+      <outgoing>f_start</outgoing>
+    </startEvent>
+
+    <serviceTask id="instanzen_lesen" name="Instanzen lesen">
+      <documentation>Atlas-Bericht instances-summary: aktive und abgeschlossene Instanzen je Prozess, über alle Versionen eines Prozesses zusammengezählt. Schreibt bericht im Vertrag atlas.report/1; die Diagramme des Formulars mb-bericht lesen daraus die Datasets active und byProcess.</documentation>
+      <extensionElements>
+        <atlas:atlasReportConnector connector="atlas" operation="instances-summary" resultVariable="bericht"
+          input="{&quot;title&quot;: &quot;Instanzen je Prozess&quot;, &quot;language&quot;: &quot;de&quot;}"/>
+      </extensionElements>
+      <incoming>f_start</incoming>
+      <outgoing>f_instanzen</outgoing>
+    </serviceTask>
+
+    <serviceTask id="incidents_lesen" name="Incidents lesen">
+      <documentation>Atlas-Bericht incident-summary: offene Incidents je Prozess und je Schritt. Die Fehlermeldungen der Incidents liest der Worker nicht; ein Bericht an viele Empfänger soll keine technischen Einzelheiten weitertragen.</documentation>
+      <extensionElements>
+        <atlas:atlasReportConnector connector="atlas" operation="incident-summary" resultVariable="incidents"
+          input="{&quot;title&quot;: &quot;Offene Incidents&quot;, &quot;language&quot;: &quot;de&quot;}"/>
+      </extensionElements>
+      <incoming>f_instanzen</incoming>
+      <outgoing>f_incidents</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="gw_runde" name="Zustellrunde">
+      <incoming>f_incidents</incoming>
+      <incoming>f_nachfassen</incoming>
+      <outgoing>f_runde</outgoing>
+    </exclusiveGateway>
+
+    <scriptTask id="verteiler_lesen" name="Verteiler lesen">
+      <documentation>Macht aus dem Text des Formulars eine Liste von Benutzernamen: eine Person pro Zeile oder durch Komma getrennt, Leerzeichen am Rand entfernt, leere Zeilen und Doppelte weggelassen.</documentation>
+      <extensionElements>
+        <zeebe:script expression='=distinct values(flatten(for e in split(if verteilerText = null then "" else verteilerText, "[\r\n,]+") return (if replace(e, "^\s+|\s+$", "") = "" then [] else [replace(e, "^\s+|\s+$", "")])))' resultVariable="offen"/>
+      </extensionElements>
+      <incoming>f_runde</incoming>
+      <outgoing>f_verteiler</outgoing>
+    </scriptTask>
+
+    <subProcess id="zustellen" name="Zustellen">
+      <documentation>Eine Zustellung je Person in offen, parallel. quittung ist lokal je Zustellung, damit sich die gleichzeitigen Zustellungen nicht gegenseitig überschreiben; gesammelt ergibt sie quittungen.</documentation>
+      <extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="=null" target="quittung"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_verteiler</incoming>
+      <outgoing>f_zugestellt</outgoing>
+      <multiInstanceLoopCharacteristics isSequential="false">
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=offen" inputElement="empfaenger"
+            outputCollection="quittungen" outputElement="=quittung"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+
+      <startEvent id="z_start">
+        <outgoing>f_z1</outgoing>
+      </startEvent>
+
+      <userTask id="lesen" name="Monatsbericht lesen">
+        <documentation>Lies den Monatsbericht und erledige die Aufgabe. Erledigen bestätigt, dass du ihn gelesen hast; der Bericht bleibt danach unter Erledigt einsehbar.</documentation>
+        <extensionElements>
+          <zeebe:assignmentDefinition assignee="=empfaenger"/>
+          <zeebe:formDefinition formId="mb-bericht"/>
+        </extensionElements>
+        <incoming>f_z1</incoming>
+        <outgoing>f_z2</outgoing>
+      </userTask>
+
+      <boundaryEvent id="frist" name="nach 3 Tagen" attachedToRef="lesen">
+        <documentation>Unterbrechend: Nach drei Tagen gilt der Bericht für diese Person als nicht gelesen, und ihre Aufgabe wird zurückgezogen. Ob jemand nachfasst und bei wem, entscheidet die verantwortliche Person im nächsten Schritt.</documentation>
+        <outgoing>f_z3</outgoing>
+        <timerEventDefinition>
+          <timeDuration>P3D</timeDuration>
+        </timerEventDefinition>
+      </boundaryEvent>
+
+      <scriptTask id="quittung_gelesen" name="Gelesen vermerken">
+        <extensionElements>
+          <zeebe:script expression="={empfaenger: empfaenger, gelesen: true}" resultVariable="quittung"/>
+        </extensionElements>
+        <incoming>f_z2</incoming>
+        <outgoing>f_z4</outgoing>
+      </scriptTask>
+
+      <scriptTask id="quittung_offen" name="Nicht gelesen vermerken">
+        <extensionElements>
+          <zeebe:script expression="={empfaenger: empfaenger, gelesen: false}" resultVariable="quittung"/>
+        </extensionElements>
+        <incoming>f_z3</incoming>
+        <outgoing>f_z5</outgoing>
+      </scriptTask>
+
+      <endEvent id="z_gelesen" name="gelesen">
+        <incoming>f_z4</incoming>
+      </endEvent>
+      <endEvent id="z_offen" name="nicht gelesen">
+        <incoming>f_z5</incoming>
+      </endEvent>
+
+      <sequenceFlow id="f_z1" sourceRef="z_start" targetRef="lesen"/>
+      <sequenceFlow id="f_z2" sourceRef="lesen" targetRef="quittung_gelesen"/>
+      <sequenceFlow id="f_z3" sourceRef="frist" targetRef="quittung_offen"/>
+      <sequenceFlow id="f_z4" sourceRef="quittung_gelesen" targetRef="z_gelesen"/>
+      <sequenceFlow id="f_z5" sourceRef="quittung_offen" targetRef="z_offen"/>
+    </subProcess>
+
+    <scriptTask id="nicht_gelesene" name="Nicht Gelesene bestimmen">
+      <extensionElements>
+        <zeebe:script expression="=flatten(for q in quittungen return (if q.gelesen then [] else [q.empfaenger]))" resultVariable="offen"/>
+      </extensionElements>
+      <incoming>f_zugestellt</incoming>
+      <outgoing>f_ausgewertet</outgoing>
+    </scriptTask>
+
+    <exclusiveGateway id="gw_alle" name="Alle gelesen?" default="f_nachverfolgen">
+      <incoming>f_ausgewertet</incoming>
+      <outgoing>f_alle</outgoing>
+      <outgoing>f_nachverfolgen</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="ende_alle" name="Alle haben gelesen">
+      <incoming>f_alle</incoming>
+    </endEvent>
+
+    <scriptTask id="hinweis" name="Hinweis aufbereiten">
+      <extensionElements>
+        <zeebe:script expression="=string join(offen, &quot;, &quot;)" resultVariable="nichtGelesen"/>
+      </extensionElements>
+      <incoming>f_nachverfolgen</incoming>
+      <outgoing>f_hinweis</outgoing>
+    </scriptTask>
+
+    <scriptTask id="vorschlag" name="Verteiler vorschlagen">
+      <documentation>Schlägt als neuen Verteiler die Personen vor, die nicht gelesen haben, eine pro Zeile. Die verantwortliche Person ändert ihn im Formular.</documentation>
+      <extensionElements>
+        <zeebe:script expression="=string join(offen, &quot;\n&quot;)" resultVariable="verteilerText"/>
+      </extensionElements>
+      <incoming>f_hinweis</incoming>
+      <outgoing>f_vorschlag</outgoing>
+    </scriptTask>
+
+    <userTask id="anpassen" name="Verteiler anpassen">
+      <documentation>Diese Personen haben den Monatsbericht nicht innerhalb der Frist gelesen. Streiche, ersetze oder ergänze Personen und stelle erneut zu, oder schliesse die Zustellung ab.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition assignee="=verantwortlich"/>
+        <zeebe:formDefinition formId="mb-anpassen"/>
+      </extensionElements>
+      <incoming>f_vorschlag</incoming>
+      <outgoing>f_angepasst</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="gw_abschliessen" name="Abschliessen?" default="f_nachfassen">
+      <incoming>f_angepasst</incoming>
+      <outgoing>f_abschliessen</outgoing>
+      <outgoing>f_nachfassen</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="ende_abgeschlossen" name="Zustellung abgeschlossen">
+      <incoming>f_abschliessen</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start" sourceRef="start" targetRef="instanzen_lesen"/>
+    <sequenceFlow id="f_instanzen" sourceRef="instanzen_lesen" targetRef="incidents_lesen"/>
+    <sequenceFlow id="f_incidents" sourceRef="incidents_lesen" targetRef="gw_runde"/>
+    <sequenceFlow id="f_runde" sourceRef="gw_runde" targetRef="verteiler_lesen"/>
+    <sequenceFlow id="f_verteiler" sourceRef="verteiler_lesen" targetRef="zustellen"/>
+    <sequenceFlow id="f_zugestellt" sourceRef="zustellen" targetRef="nicht_gelesene"/>
+    <sequenceFlow id="f_ausgewertet" sourceRef="nicht_gelesene" targetRef="gw_alle"/>
+    <sequenceFlow id="f_alle" name="alle gelesen" sourceRef="gw_alle" targetRef="ende_alle">
+      <conditionExpression>=count(offen) = 0</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_nachverfolgen" name="nicht alle" sourceRef="gw_alle" targetRef="hinweis"/>
+    <sequenceFlow id="f_hinweis" sourceRef="hinweis" targetRef="vorschlag"/>
+    <sequenceFlow id="f_vorschlag" sourceRef="vorschlag" targetRef="anpassen"/>
+    <sequenceFlow id="f_angepasst" sourceRef="anpassen" targetRef="gw_abschliessen"/>
+    <sequenceFlow id="f_abschliessen" name="abschliessen" sourceRef="gw_abschliessen" targetRef="ende_abgeschlossen">
+      <conditionExpression>=abschliessen = true or verteilerText = null or replace(verteilerText, "\s", "") = ""</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_nachfassen" name="erneut zustellen" sourceRef="gw_abschliessen" targetRef="gw_runde"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_monatsbericht">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="100" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="instanzen_lesen_di" bpmnElement="instanzen_lesen"><dc:Bounds x="180" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="incidents_lesen_di" bpmnElement="incidents_lesen"><dc:Bounds x="320" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_runde_di" bpmnElement="gw_runde"><dc:Bounds x="465" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verteiler_lesen_di" bpmnElement="verteiler_lesen"><dc:Bounds x="560" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zustellen_di" bpmnElement="zustellen" isExpanded="true"><dc:Bounds x="710" y="90" width="520" height="260"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="z_start_di" bpmnElement="z_start"><dc:Bounds x="740" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lesen_di" bpmnElement="lesen"><dc:Bounds x="810" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="frist_di" bpmnElement="frist"><dc:Bounds x="842" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="quittung_gelesen_di" bpmnElement="quittung_gelesen"><dc:Bounds x="960" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="quittung_offen_di" bpmnElement="quittung_offen"><dc:Bounds x="960" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="z_gelesen_di" bpmnElement="z_gelesen"><dc:Bounds x="1110" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="z_offen_di" bpmnElement="z_offen"><dc:Bounds x="1110" y="282" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="nicht_gelesene_di" bpmnElement="nicht_gelesene"><dc:Bounds x="1280" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_alle_di" bpmnElement="gw_alle"><dc:Bounds x="1425" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_alle_di" bpmnElement="ende_alle"><dc:Bounds x="1530" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="hinweis_di" bpmnElement="hinweis"><dc:Bounds x="1400" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="vorschlag_di" bpmnElement="vorschlag"><dc:Bounds x="1250" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anpassen_di" bpmnElement="anpassen"><dc:Bounds x="1100" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_abschliessen_di" bpmnElement="gw_abschliessen"><dc:Bounds x="975" y="435" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_abgeschlossen_di" bpmnElement="ende_abgeschlossen"><dc:Bounds x="982" y="560" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_di" bpmnElement="f_start"><di:waypoint x="136" y="200"/><di:waypoint x="180" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_instanzen_di" bpmnElement="f_instanzen"><di:waypoint x="280" y="200"/><di:waypoint x="320" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_incidents_di" bpmnElement="f_incidents"><di:waypoint x="420" y="200"/><di:waypoint x="465" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_runde_di" bpmnElement="f_runde"><di:waypoint x="515" y="200"/><di:waypoint x="560" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_verteiler_di" bpmnElement="f_verteiler"><di:waypoint x="660" y="200"/><di:waypoint x="710" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z1_di" bpmnElement="f_z1"><di:waypoint x="776" y="200"/><di:waypoint x="810" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z2_di" bpmnElement="f_z2"><di:waypoint x="910" y="200"/><di:waypoint x="960" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z3_di" bpmnElement="f_z3"><di:waypoint x="860" y="258"/><di:waypoint x="860" y="300"/><di:waypoint x="960" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z4_di" bpmnElement="f_z4"><di:waypoint x="1060" y="200"/><di:waypoint x="1110" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_z5_di" bpmnElement="f_z5"><di:waypoint x="1060" y="300"/><di:waypoint x="1110" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_zugestellt_di" bpmnElement="f_zugestellt"><di:waypoint x="1230" y="200"/><di:waypoint x="1280" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ausgewertet_di" bpmnElement="f_ausgewertet"><di:waypoint x="1380" y="200"/><di:waypoint x="1425" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_alle_di" bpmnElement="f_alle"><di:waypoint x="1475" y="200"/><di:waypoint x="1530" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nachverfolgen_di" bpmnElement="f_nachverfolgen"><di:waypoint x="1450" y="225"/><di:waypoint x="1450" y="420"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_hinweis_di" bpmnElement="f_hinweis"><di:waypoint x="1400" y="460"/><di:waypoint x="1350" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_vorschlag_di" bpmnElement="f_vorschlag"><di:waypoint x="1250" y="460"/><di:waypoint x="1200" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_angepasst_di" bpmnElement="f_angepasst"><di:waypoint x="1100" y="460"/><di:waypoint x="1025" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abschliessen_di" bpmnElement="f_abschliessen"><di:waypoint x="1000" y="485"/><di:waypoint x="1000" y="560"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nachfassen_di" bpmnElement="f_nachfassen"><di:waypoint x="975" y="460"/><di:waypoint x="490" y="460"/><di:waypoint x="490" y="225"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

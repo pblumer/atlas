@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "mb-verteiler",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Monatsbericht versenden\n\nAtlas liest seine eigenen Kennzahlen als **Schnappschuss** und stellt sie jeder Person im Verteiler als Aufgabe zu. Wer die Aufgabe erledigt, hat den Bericht gelesen. Wer ihn nach drei Tagen nicht gelesen hat, erscheint bei der verantwortlichen Person, die den Verteiler anpassen und erneut zustellen kann."
+    },
+    {
+      "key": "verteilerText",
+      "type": "textarea",
+      "label": "Verteiler",
+      "description": "Ein Benutzername pro Zeile.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "verantwortlich",
+      "type": "textfield",
+      "label": "Verantwortlich",
+      "description": "Benutzername der Person, die nicht gelesene Berichte nachverfolgt.",
+      "validate": { "required": true }
+    }
+  ]
+}

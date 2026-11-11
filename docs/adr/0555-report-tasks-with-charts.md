@@ -347,6 +347,58 @@ On a narrow screen they stack in one column, as the Tasks app does
   - The form editor offers the chart in its palette, with title, report variable,
     dataset, type and the options of that type.
 
+- **RT3 (2026-11-11): the *Atlas report* Worker Type (§3) and an example (§5).**
+  - `connector/atlasreport` holds the operation table (`catalog`), the folds of the four
+    route answers into the contract, and the client. The kind `atlasreport` is
+    worker-only and supervised by default: the engine resolves the task's input object
+    when it leases the job (`atlasreport.Resolve`) and sends it as the job's connector
+    detail; the worker reads the route over HTTP with the Worker's token and completes
+    the job with the report. The engine holds no token and builds no client.
+  - The BPMN extension is `<atlas:atlasReportConnector connector operation input
+    resultVariable retries>`, with one input object as the calendar task has
+    ([ADR-0552](0552-calendar-worker-type.md)). The compiler checks its keys against the
+    operation's row and the literal values it can judge; the engine checks the values an
+    `=expression` made.
+  - Datasets as built: `instances-summary` → `byProcess`, `active`, `completed`;
+    `process-statistics` → `started`, `finished`, `running`, with `buckets` the series
+    `overTime`, and `durationByElement` (median and 90th percentile); `incident-summary`
+    → `byProcess`, `byElement`, `openIncidents`; `delivery-report` →
+    `deliveryByProduct`, `leadTimeByProduct`, `metShare`. More than 50 rows fold into one
+    row *Other*, summed only where the values add up.
+  - A refusal for want of a role throws `ATLASREPORT_REFUSED` and a process that is not
+    deployed `ATLASREPORT_NOT_FOUND`, each only where the process catches it
+    ([ADR-0461](0461-script-bpmn-errors.md)); otherwise the job fails
+    and retries.
+  - The example `examples/monatsbericht` reads two reports, delivers them to a
+    distribution list with a parallel multi-instance subprocess, notes after an
+    interrupting three-day deadline who has not read it, and lets the person responsible
+    adjust the list and deliver the same snapshot again. `TestMonatsberichtNachfassen`
+    runs it through the engine.
+  - Deviations from §3, decided while building:
+    - **Operation names are kebab-case** (`instances-summary`, `process-statistics`,
+      `incident-summary`, `delivery-report`), as every built-in manifest's operation ids
+      are.
+    - **The manifest declares `idempotency: natural` and `effect: reversible`.** The
+      manifest's vocabulary ([ADR-0538](0538-operations-declare-idempotency-and-effect.md))
+      has no `effect: none`; a read changes nothing, so a second delivery computes the
+      report again, which is what `natural` and `reversible` say.
+    - **Two inputs more:** `title`, and `language` (`de` or `en`) for the labels the
+      fold writes (series names, *Other*, the bucket labels).
+    - **`process-statistics` measures the newest version** of the process named, and
+      says so in a note, because the statistics route reads one definition.
+    - **The credential may be the bare token** as well as `{"token": "…"}`: that is what
+      the API-token page seals into the vault when it is given a vault secret name, so
+      the token never crosses a clipboard.
+    - **`delivery-report` is not withheld when the catalogue is switched off.** The
+      route then does not exist, the worker reads a 404, and the task throws
+      `ATLASREPORT_NOT_FOUND` where the process catches it.
+    - **The token's roles.** A token of scope `full` carries its minter's roles without
+      admin ([ADR-0194](0194-api-tokens.md)): `operator` is needed, and `productmanager`
+      of the catalogues for the delivery report. Such a token could do more than read;
+      the worker calls read routes only, and the runbook says the token belongs in the
+      vault and nowhere else. A read-only scope of its own is a follow-up.
+  - **Not built yet:** the vector *Save as PDF* of §6.
+
 ### Consequences
 
 - **Positive:**
@@ -367,6 +419,8 @@ On a narrow screen they stack in one column, as the Tasks app does
   - Computing in the triggering person's name once ADR-0475 lands.
   - Further *Atlas report* operations (user-task throughput and overdue tasks per
     process) when a route answers them.
+  - An API-token scope that reads the report routes and nothing else, so the *Atlas
+    report* Worker's token cannot act on what it reads (RT3).
   - A recipient who wants to see the report again after acknowledging. That is
     [ADR-0554](0554-completed-tasks-stay-readable.md),
     which this record depends on for "reading it again".

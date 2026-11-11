@@ -502,6 +502,16 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.WikiwikibangbangJobTypeIndex},
 	},
 	{
+		// An Atlas report task reads one of Atlas's own read routes and folds the answer
+		// into a report a form's chart draws (ADR-0555 §3). Worker-only for the
+		// wiki's reason: the token reads as a technical principal and has no business on
+		// the engine's run loop, and a report read over HTTP is a read like any client's.
+		name:           connectorKindAtlasReport,
+		workerOnly:     true,
+		validateCreate: validateAtlasReportConnector,
+		jobTypes:       []int32{compiler.AtlasReportJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -763,7 +773,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindCalendar, connectorKindWiki, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindCalendar, connectorKindWiki, connectorKindAtlasReport, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -1119,6 +1129,23 @@ func validateWikiConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a wikiwikibangbang worker requires a credentialsRef naming a vault bundle: {token}"
+	}
+	return ""
+}
+
+// validateAtlasReportConnector checks an Atlas server a Console operator is adding for
+// reports: the wiki's shape — an endpoint, the server's base URL, and a credentialsRef
+// naming the vault bundle with a technical principal's API token. Whether the endpoint
+// is http(s) and the bundle well-formed is decided where the client is built
+// (atlasreport.CheckBundle), which is also what supervision asks; whether the token's
+// roles may read the route an operation reads is asked of the server on the first call.
+func validateAtlasReportConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "an atlasreport worker requires an endpoint: the Atlas server's base URL (https://atlas.example.ch)"
+	}
+	if p.CredentialsRef == "" {
+		return "an atlasreport worker requires a credentialsRef naming a vault bundle: {token}, a technical principal's API token"
 	}
 	return ""
 }
