@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Modeler's Variables panel narrows to the selected element.** With a task, gateway,
+  event or subprocess selected, the panel lists what that element reads — the variables its
+  FEEL expressions, branch conditions, correlation keys and template placeholders name —
+  what it writes, and what it holds only for itself, such as an input mapping's target or a
+  multi-instance round's item. A name it reads that nothing in the model writes is marked, so
+  a missing start variable, a message payload or a typo shows before anything runs. "Show
+  all" brings back the whole list until another element is selected; with nothing selected
+  the panel lists everything, as before.
 - **The calendar Worker Type books into CalDAV servers too.** A calendar Worker whose bundle
   names `"provider": "caldav"` with a username and an app-specific password books into
   Nextcloud, iCloud, Fastmail, Synology, Radicale or any other CalDAV server; its endpoint is
@@ -203,6 +211,14 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **The Modeler's Variables panel lists the variables that arrive through a construct.** It
+  listed result variables, output mappings, form fields and data objects, and missed a
+  multi-instance's output collection, its round item and `loopCounter`, input-mapping
+  locals, an agent's result collection, and everything a call activity brings back from the
+  process it calls when the child's variables propagate (the default) — those are now read
+  from the called process's deployed model, or its draft. Drilled into a collapsed
+  subprocess, the panel also kept losing the process's start variables and constants, and
+  declaring a constant there wrote it onto the subprocess instead of the process.
 - **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
   worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
   is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
