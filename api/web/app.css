@@ -4562,6 +4562,14 @@ tr[hidden] { display: none; }
   background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1;
 }
 .vars-reload:hover { border-color: var(--accent); color: var(--accent-text); }
+/* The deploy panel's note on what the model reads and nothing in it writes: a warning,
+   not a refusal, so it reads as one and leaves the buttons alone. */
+.deploy-unwritten {
+  margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--warn);
+  border-radius: 6px; font-size: 12.5px; line-height: 1.45;
+}
+.deploy-unwritten p { margin: 0 0 4px; }
+.deploy-unwritten ul { margin: 0; padding-left: 18px; }
 /* Which element the list is narrowed to, with the way back to the whole list. */
 .vars-scope {
   display: flex; align-items: center; gap: 8px; margin: 0 12px 8px;

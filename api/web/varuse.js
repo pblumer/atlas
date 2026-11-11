@@ -17,7 +17,7 @@ import { tokenize } from "./feel.js";
 
 // The formal expressions that hold FEEL whether or not they start with "=". A timer's
 // duration (PT5M) or date is a literal unless it is "="-prefixed, so it is not here.
-const FEEL_EXPRESSIONS = new Set(["conditionExpression", "completionCondition", "loopCardinality", "loopCondition"]);
+const FEEL_EXPRESSIONS = new Set(["conditionExpression", "completionCondition", "loopCardinality", "loopCondition", "condition"]);
 
 // The words a FEEL expression binds for itself.
 const BINDERS = new Set(["for", "some", "every"]);
@@ -87,10 +87,12 @@ export function rootOf(path) {
 }
 
 // expressionReads walks one moddle object — an element's extension elements, its loop
-// characteristics, a condition — and returns the paths its expressions read. It follows
+// characteristics, a condition — and returns the paths its expressions read. propName
+// names the property obj was found under, which decides whether a formal expression
+// without "=" is FEEL (a branch condition) or a literal (a timer's duration). It follows
 // containment only: a reference ($parent, a sourceRef, a messageRef) leads to another
 // object of the model, which the caller decides about.
-export function expressionReads(obj) {
+export function expressionReads(obj, propName = "") {
   const out = [];
   const add = (paths) => { for (const p of paths) if (!out.includes(p)) out.push(p); };
   const visit = (o, propName, depth) => {
@@ -116,7 +118,7 @@ export function expressionReads(obj) {
       if (typeof v === "string" && !/^xmlns(:|$)/.test(k)) readValue(o, k, v, add);
     }
   };
-  visit(obj, "", 0);
+  visit(obj, propName, 0);
   return out;
 }
 

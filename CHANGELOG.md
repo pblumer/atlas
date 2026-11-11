@@ -22,6 +22,15 @@ _Changed_ / _Removed_ for each version.
   atlas hub dialog marks an installed release in the listing and lists its components in the
   preview. Anybody who may model reads the installations into applications they may view
   (ADR-0499 amendment h).
+- **The Modeler warns about a variable the model reads and nothing in it writes.** The Problems
+  bar names each element whose expressions, conditions, correlation keys or template
+  placeholders read a variable that no start variable, constant, result, mapping, form field,
+  loop, agent tool or called process writes (`variable.unwritten`), and the deploy panel lists
+  them before the deploy. It is only a warning: a value can come from outside the model — a
+  message's payload, an undeclared start variable — so both deploy buttons stay as they are.
+  The check runs in the Modeler, because the compiler knows a linked form only by its id and
+  nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
+  parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
 - **atlas hub records where an installed application came from.** The server-side hub import
   records, under the application's key, the registry, the configured index URL, the fingerprint
   of the pinned key that signed the index, the release and its exact digest, the catalogues it
@@ -279,6 +288,14 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **The examples address a position with a variant correctly.** A product with variants names
+  its position `<product>#<variant>` (ADR-0384), and the examples put that id into the address
+  of their calls to Atlas unencoded. The `#` turned the rest of the address into a fragment, so
+  reporting `done`, refusing through `…/decision` and returning reached the wrong route and were
+  answered 400; a transfer in `examples/informationstransfer` (every one has a variant) could
+  neither finish nor be refused. All 93 such addresses in `ad-dienste`, `informationstransfer`,
+  `lizenzmanagement`, `m365-dienste` and `verwaltung-dienstleistungen` now encode it, as the
+  shop's fulfilment process does, and a test keeps them so.
 - **The fulfilment repair no longer starts orchestrations that can do nothing.** An order whose
   lines failed stays open, with nothing ready and no outcome coming. `POST
   /api/v1/orders/fulfilment/repair` started an orchestration for it on every run, which asked,

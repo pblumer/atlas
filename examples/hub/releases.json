@@ -309,6 +309,36 @@
       "version": "1.0.19",
       "digest": "sha256:dc5e79888af54ffc1e8664f8e259a6bbf9fe977c8ca8cea5fd0c690198a2c21a",
       "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.5",
+      "digest": "sha256:07157a26caa24309695d54e5f01681fa4852665a1507cfb7d8d107916ae32cc7",
+      "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "informationstransfer",
+      "version": "1.0.2",
+      "digest": "sha256:aba9a74c533284ceb0f498ece4eda35857cc99f30700350b63f45e0d204bbec6",
+      "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "lizenzmanagement",
+      "version": "1.0.1",
+      "digest": "sha256:cbfb958442f9d5e31b22e57d4623725c930c470d0a8109fd08951abee39f8ca4",
+      "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.20",
+      "digest": "sha256:909a3253543df40c40c41f4ca3e42e8a9717ebb10d790a7d754273277f4d865f",
+      "minAtlas": "0.25.0-0"
+    },
+    {
+      "bundle": "verwaltung-dienstleistungen",
+      "version": "1.0.1",
+      "digest": "sha256:0a76abc5e38a26a8894ca9d33f559378a8177795a9f8fe01cebf6a5b1bfb46e0",
+      "minAtlas": "0.25.0-0"
     }
   ]
 }
