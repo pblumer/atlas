@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A reference probe measures the single writer whatever the traffic.** Every five seconds the
+  server hands its run loop the same fixed, read-only work and exports how long it queued
+  (`atlas_runloop_probe_wait_seconds`) and how long each part took
+  (`atlas_runloop_probe_work_seconds{part="store"|"compute"}`): sixteen point reads of the state
+  store, and a fixed computation. Because the work never changes, a rising duration means the
+  writer became slower rather than busier, and it shows while the server is idle too. If both
+  parts rise, the host is the likelier cause; if only the store part rises, it is the store or its
+  disk. Probes that are not finished within ten seconds count as
+  `atlas_runloop_probe_timeouts_total`. The probe writes nothing, is not counted as a run-loop
+  turn, and runs only while `/metrics` is served (ADR-draft-runloop-reference-probe).
 - **A directory delta can keep only the objects it is about.** `delta-users` and `delta-groups`
   take a `keep` predicate — `department eq 'IT'`, `startswith(displayName,'test-')`, joined with
   `and` / `or` and parentheses, compared case-insensitively — and the Entra Worker applies it to

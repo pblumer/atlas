@@ -100,21 +100,9 @@ func (l *Loop) Do(fn func()) {
 // readiness probe must be able to give up on one that did not. It is also not
 // reported as a turn (see [Metrics]): the closure is empty, so counting it would fill
 // the histogram with work nobody performed.
+//
+// It is a [Loop.Probe] with no work, of which only the answer is kept.
 func (l *Loop) Ping(ctx context.Context, d time.Duration) bool {
-	done := make(chan struct{})
-	deadline := time.NewTimer(d)
-	defer deadline.Stop()
-	select {
-	case l.tasks <- func() { close(done) }:
-	case <-ctx.Done(): // the caller hung up; nothing was queued
-		return false
-	case <-deadline.C:
-		return false
-	}
-	select {
-	case <-done:
-		return true
-	case <-deadline.C:
-		return false
-	}
+	_, ok := l.Probe(ctx, d, nil)
+	return ok
 }
