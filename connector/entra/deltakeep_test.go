@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// A delta query with a keep (ADR-draft-entra-delta-keep). The scenario every test here
+// A delta query with a keep (ADR-0553). The scenario every test here
 // stands for: a test environment sharing a tenant with real people. Graph's delta
 // endpoint cannot be filtered, the job's result is in the log before an output mapping
 // could drop anything (I6), so what this worker answers is what the log keeps.

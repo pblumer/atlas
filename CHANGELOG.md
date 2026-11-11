@@ -24,7 +24,7 @@ _Changed_ / _Removed_ for each version.
   many were `undecided` because a later page carried no field the keep reads. The compiler refuses
   a keep on any other operation, as FEEL, or reading a field outside the task's `select`. The M365
   test environment installs the directory mirroring this way with
-  `scripts/install-verzeichnisabgleich.py` (ADR-draft-entra-delta-keep).
+  `scripts/install-verzeichnisabgleich.py` (ADR-0553).
 - **The calendar Worker Type books into Google Workspace too.** A calendar Worker whose bundle
   names `"provider": "google-calendar"` uses a service account the booking calendars are shared
   with; the model stays the same. Recurring and all-day appointments block their time, and a

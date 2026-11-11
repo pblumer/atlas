@@ -110,7 +110,7 @@ Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvar
 
 Gelöschte Objekte kommen mit @removed markiert mit; sie sind das eine der beiden Austrittssignale (das andere ist accountEnabled: false).
 
-Geteilter Mandant: Teilt sich die Installation den Mandanten mit Menschen, die sie nicht führen soll (eine Testumgebung im echten Mandanten), gehört ein keep an diesen Task, etwa keep="department eq 'test-umgebung'" und department im select. Der Entra-Worker filtert damit jede Seite, bevor er antwortet; nur Treffer verlassen ihn. Im Modell zu filtern wäre zu spät: das Ergebnis eines Jobs steht als Variable im Ereignisprotokoll, bevor eine Ausgabe-Abbildung läuft. Gelöschte Objekte bleiben drin, gekürzt auf id und @removed; atlas überspringt eine id, die es nicht kennt. Ohne keep liest der Task wie bisher den ganzen Mandanten (ADR-draft-entra-delta-keep).
+Geteilter Mandant: Teilt sich die Installation den Mandanten mit Menschen, die sie nicht führen soll (eine Testumgebung im echten Mandanten), gehört ein keep an diesen Task, etwa keep="department eq 'test-umgebung'" und department im select. Der Entra-Worker filtert damit jede Seite, bevor er antwortet; nur Treffer verlassen ihn. Im Modell zu filtern wäre zu spät: das Ergebnis eines Jobs steht als Variable im Ereignisprotokoll, bevor eine Ausgabe-Abbildung läuft. Gelöschte Objekte bleiben drin, gekürzt auf id und @removed; atlas überspringt eine id, die es nicht kennt. Ohne keep liest der Task wie bisher den ganzen Mandanten (ADR-0553).
 
 Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
       <bpmn:extensionElements>

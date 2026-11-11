@@ -7510,7 +7510,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
 			// keep travels so the worker filters each delta page before it answers: only
 			// what it keeps ever reaches a completion, and so the log
-			// (ADR-draft-entra-delta-keep).
+			// (ADR-0553).
 			"keep":           j.Keep,
 			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}

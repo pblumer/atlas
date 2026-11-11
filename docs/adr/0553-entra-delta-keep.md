@@ -1,4 +1,4 @@
-# ADR-DRAFT: A delta query's keep is applied by the Entra Worker, before it answers
+# ADR-0553: A delta query's keep is applied by the Entra Worker, before it answers
 
 - **Status:** Accepted
 - **Implementation:** Landed

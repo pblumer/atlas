@@ -483,7 +483,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 }
 
 // entraKeep checks a delta query's keep predicate at deploy and returns it as the job
-// will carry it (ADR-draft-entra-delta-keep). The Worker applies it to every page
+// will carry it (ADR-0553). The Worker applies it to every page
 // before it answers, because Graph's delta endpoint filters on nothing but ids and a
 // job's result is in the log before any output mapping could drop what a model does
 // not want (I6). So a keep that cannot work is refused here rather than discovered as

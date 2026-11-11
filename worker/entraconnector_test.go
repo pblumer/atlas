@@ -213,7 +213,7 @@ func TestRunEntraJobCarriesTheDeltaCursor(t *testing.T) {
 
 // keep has to survive the hop above all: a keep decoding to "" turns a filtered delta
 // into an unfiltered one, and every object of a shared tenant would reach the
-// completion and the log (ADR-draft-entra-delta-keep). Asserted through what the worker
+// completion and the log (ADR-0553). Asserted through what the worker
 // answers.
 func TestRunEntraJobCarriesTheKeep(t *testing.T) {
 	c := &pageSpy{page: map[string]any{

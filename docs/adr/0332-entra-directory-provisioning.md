@@ -1,6 +1,6 @@
 # ADR-0332: Accounts and groups are pulled from Entra by delta query, and the first run writes nothing
 
-- **Status:** Accepted (amended 2026-11-10: in a tenant shared with people the mirroring is not about, the delta reads name a `keep` the Entra Worker applies before it answers, see [ADR-draft-entra-delta-keep](draft-entra-delta-keep.md))
+- **Status:** Accepted (amended 2026-11-10: in a tenant shared with people the mirroring is not about, the delta reads name a `keep` the Entra Worker applies before it answers, see [ADR-0553](0553-entra-delta-keep.md))
 - **Implementation:** Landed
 - **Date:** 2026-09-13
 - **Deciders:** Atlas maintainers
@@ -277,7 +277,7 @@ the installation's own, every person is a subject. The test environment's copy d
 (`deploy/opentofu/m365-devenv/scripts/install-verzeichnisabgleich.py`). The limits — the
 Worker still reads everything, an update whose page lacks the keep field is withheld as
 `undecided`, a user who moves out of the scope is not reported — are in
-[ADR-draft-entra-delta-keep](draft-entra-delta-keep.md).
+[ADR-0553](0553-entra-delta-keep.md).
 
 ### Consequences
 
