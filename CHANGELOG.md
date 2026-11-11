@@ -23,6 +23,23 @@ _Changed_ / _Removed_ for each version.
   disk. Probes that are not finished within ten seconds count as
   `atlas_runloop_probe_timeouts_total`. The probe writes nothing, is not counted as a run-loop
   turn, and runs only while `/metrics` is served (ADR-draft-runloop-reference-probe).
+- **A business rule task's decision is one click from the task.** In the Modeler's Implement
+  view a business rule task that calls a decision carries a small decision mark, as a user task
+  carries its form mark. A click opens the decision over the diagram, without saving or leaving
+  it: the requirements graph with the called decision marked, and below it whatever node is
+  picked — what it requires, what requires it, and its logic, so the graph can be walked from
+  the task. The logic comes from the engine's own reading of the model, for every DMN 1.5 boxed
+  expression it supports (decision table, literal expression, context, list, relation,
+  invocation, conditional, filter, iterator), through the new read
+  `GET /api/v1/dmnrefs/{id}/logic` and the MCP tool `atlas_dmnref_logic`. The window shows the
+  model the task's binding resolves to — the deployed version latest or a pinned version
+  answers with, or the model a deploy would bundle — resolved on the server by the worker's own
+  rule (`GET /api/v1/decisions/{id}/binding`, MCP `atlas_decision_binding`), and says which
+  version that is and since when; a version that is not deployed is said before the deploy
+  refuses it. A switch shows the stored model the editor opens. "Open in the decision editor"
+  leaves the way the panel's Edit does, with the way back, and says beside it whether the stored
+  model it opens decides differently from the version shown. A decision that exists only as a
+  deployment can be stored from the peek, unchanged, and then edited (ADR-0556).
 - **A directory delta can keep only the objects it is about.** `delta-users` and `delta-groups`
   take a `keep` predicate — `department eq 'IT'`, `startswith(displayName,'test-')`, joined with
   `and` / `or` and parentheses, compared case-insensitively — and the Entra Worker applies it to
@@ -186,6 +203,30 @@ _Changed_ / _Removed_ for each version.
   flow's condition was false. A definition already stored keeps loading and running exactly
   as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
   refuses only the next deploy of an affected model (ADR-0547).
+
+### Fixed
+- **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
+  worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
+  is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
+  model named an AD bind secret or a mail export store, so a REST task whose `authSecret` no
+  earlier model had named failed with `auth secret "…" for bearer auth is not configured` until
+  Atlas was restarted. A deploy now refreshes the workers when the model names any reference a
+  worker is handed; the refresh restarts only a worker whose environment changed (ADR-0233).
+- **An HR entry in a shared tenant creates its account under the environment's prefix.** The
+  HR entry of `examples/m365-dienste` (`hr-eintritt.bpmn`) built the account's name without
+  `NAME_PREFIX`, which every other process of the package puts in front of what it creates. In
+  the shared tenant of `deploy/opentofu/m365-devenv` the account was therefore
+  `vorname.nachname@…`, which neither the environment's cleanup (it looks for the prefix) nor
+  its directory mirroring found. The UPN, the alias, the display name and the search for taken
+  names now start with `NAME_PREFIX`; without a prefix the names are unchanged.
+- **An HR entry in a shared tenant gets the environment's department, and the mirroring keeps
+  only that.** The directory mirroring of `deploy/opentofu/m365-devenv` kept every account whose
+  UPN carries the environment's prefix, so its first run would have made Atlas accounts of room,
+  equipment and shared mailboxes and of partner accounts. It now keeps only accounts whose
+  `department` is the environment id, as the test persons carry it. So that an account the HR
+  entry creates still reaches Atlas, `hr-eintritt.bpmn` sets `department` from the new
+  application constant `DEPARTMENT` when it is not empty (the installer sets the environment id),
+  and from the OE otherwise, as before.
 
 ## [0.25.0] — 2026-11-09
 
@@ -512,13 +553,6 @@ directory gains the document store. Four changes can break what worked against 0
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
-- **An HR entry in a shared tenant creates its account under the environment's prefix.** The
-  HR entry of `examples/m365-dienste` (`hr-eintritt.bpmn`) built the account's name without
-  `NAME_PREFIX`, which every other process of the package puts in front of what it creates. In
-  the shared tenant of `deploy/opentofu/m365-devenv` the account was therefore
-  `vorname.nachname@…`, which neither the environment's cleanup (it looks for the prefix) nor
-  its directory mirroring found. The UPN, the alias, the display name and the search for taken
-  names now start with `NAME_PREFIX`; without a prefix the names are unchanged.
 - **A decision model opens with its graph in view.** The decision editor left a model's graph
   where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
   to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of

@@ -851,7 +851,8 @@ Paket [`ad-dienste`](../ad-dienste/) (siehe [Kopplung an ad-dienste](#kopplung-a
    wo es das Präfix der Testumgebung ist (`atlas-test-58o4-anna.mueller@…`). So findet das
    Aufräumen der Testumgebung auch die Konten, die dieser Prozess angelegt hat.
    Gesetzt werden `accountEnabled` true, Anzeige-, Vor- und Nachname, `employeeId` (Personalnummer),
-   `department` (Organisationseinheit), `usageLocation` (`USAGE_LOCATION`) und das Passwort.
+   `department` (Organisationseinheit; ist die Konstante `DEPARTMENT` nicht leer, ihr Wert, in einem
+   geteilten Tenant die Kennung der Testumgebung), `usageLocation` (`USAGE_LOCATION`) und das Passwort.
 5. Daneben, ohne den Ablauf aufzuhalten: **Zugangsdaten übergeben** (Aufgabe für
    `M365-Administration` mit UPN, Initialpasswort, Eintrittsdatum und vorgesetzter Person).
 6. **Auf das Atlas-Konto warten.** Die Bestellung braucht das Atlas-Konto der Person, und das legt
@@ -1435,6 +1436,7 @@ mit ihr. Die Capability-Landkarte gehört dem Server:
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
    | `NAME_PREFIX` | `""` (Typ **json**) | Präfix vor jedem Namen und Alias, den die Namensregel bildet, vor UPN und Anzeigename eines Partnerkontos (so finden es auch die Aufräumskripte der Testumgebung, die nach dem Anzeigenamen suchen) und als Grenze der Governance-Prüfung. Für einen geteilten Tenant, z.B. `"atlas-test-58o4-"` (mit Anführungszeichen: der Typ ist json, weil ein leerer Text kein Fallback einer gebundenen Konstante sein kann) |
+   | `DEPARTMENT` | `""` (Typ **json**) | Abteilung (`department`) eines Kontos, das der HR-Eintritt anlegt, an Stelle der Organisationseinheit. Leer: die Organisationseinheit. Für einen geteilten Tenant die Kennung der Testumgebung, z.B. `"atlas-test-58o4"`: Deren Verzeichnisabgleich spiegelt nur Konten mit dieser Abteilung, wie die Testpersonen (`deploy/opentofu/m365-devenv/entra.tf`) |
    | `SHAREPOINT_HOST` | `contoso.sharepoint.com` | SharePoint-Host des Tenants; die Sites liegen unter `https://<SHAREPOINT_HOST>/sites/<alias>` |
    | `SITE_INVENTAR` | `contoso.sharepoint.com:/sites/m365-governance` | Site, die die Liste «Site-Inventar» trägt (Host und Pfad, eine Site-ID oder die URL) |
    | `LIZENZ_MODUS` | `direkt` | Wie `lizenz.bpmn` die Lizenz vergibt: `direkt` (`assign-license`), `entra-gruppe` (Mitgliedschaft in einer Cloud-Gruppe) oder `ad-gruppe` (Mitgliedschaft in einer Gruppe im lokalen AD, die Entra Connect synchronisiert); siehe «Lizenzen: direkt oder über Gruppen» |
