@@ -365,6 +365,13 @@ func (s *Server) buildMetrics() error {
 	}
 	s.runLoop.SetMetrics(rm)
 	s.runLoopStats = rm
+	// The reference probe's own exposition. The probe itself is started by New, once
+	// this registry exists (runloopprobe.go).
+	pm := newRunLoopProbeMetrics()
+	if err := reg.Register(pm.collectors()...); err != nil {
+		return err
+	}
+	s.probeStats = pm
 	// What the FEEL assistant's requests came to (feelgeneration.go): design-time
 	// counters, pushed per request, nowhere near the engine.
 	fm := newFeelAssistantMetrics()
