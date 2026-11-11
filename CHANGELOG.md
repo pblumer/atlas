@@ -243,6 +243,12 @@ _Changed_ / _Removed_ for each version.
   thousands of pixels wide, so the filter, Copy all and every Copy button slid off screen. The
   value column now takes the width the other columns leave: the one-line preview is cut with an
   ellipsis, and the opened structure scrolls sideways inside its own box.
+- **Decisions, Messages and the Event log keep a long value inside their card.** The same
+  unbroken line as a decision's input or result, a message's correlation key, id or payload, or
+  a correlation key in the event log set its column's minimum to its whole length: the decision
+  table ran past the result and its "How this was decided" link, the message table past its
+  card. These values now break anywhere and stay readable in full where they stand; short
+  values read on one line as before.
 - **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
   worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
   is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the

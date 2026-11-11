@@ -71,6 +71,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   could not be read are left out rather than shown as none, and a process with a single
   version offers no migration at all.
 
+- **`long-values-tables.spec.mjs`**: a value that is one unbroken line — a Graph delta
+  link — keeps every list it appears in inside its box: the replay's Variables tab (closed,
+  the preview is cut and the type column stays in view; opened, the line scrolls inside the
+  structure's box), a decision's evaluations (input and result in full, the way to "How this
+  was decided" in view), a buffered message and the event log. Each test fails without the
+  fix.
+
 - **`long-values.spec.mjs`**: a variable value longer than its place in Operations — a
   whole CSV upload in one string, a list of every record read — is shown as its beginning
   and its size and opened whole in one value window that copies and saves it. Covered on
