@@ -190,18 +190,27 @@ func formatCompletedCursor(a state.TaskAnswer) string {
 	return strconv.FormatInt(a.At, 10) + "." + strconv.FormatUint(a.Value.JobKey, 10)
 }
 
+// The instants unix nanoseconds can hold. Outside them UnixNano overflows silently, and a
+// bound in the year 2999 would read as one in the past.
+var (
+	earliestInstant = time.Unix(0, -1<<63)
+	latestInstant   = time.Unix(0, 1<<63-1)
+)
+
 // parseInstant reads an RFC 3339 instant or a date (YYYY-MM-DD, midnight UTC) as unix
-// nanoseconds; "" is 0, an open bound.
+// nanoseconds; "" is 0, an open bound. An instant nanoseconds cannot hold is refused.
 func parseInstant(raw string) (int64, error) {
 	if raw == "" {
 		return 0, nil
 	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return t.UnixNano(), nil
-	}
-	t, err := time.Parse(time.DateOnly, raw)
+	t, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
-		return 0, fmt.Errorf("%q is neither an RFC 3339 instant nor a date", raw)
+		if t, err = time.Parse(time.DateOnly, raw); err != nil {
+			return 0, fmt.Errorf("%q is neither an RFC 3339 instant nor a date", raw)
+		}
+	}
+	if t.Before(earliestInstant) || t.After(latestInstant) {
+		return 0, fmt.Errorf("%q is outside the years 1678 to 2262", raw)
 	}
 	return t.UnixNano(), nil
 }

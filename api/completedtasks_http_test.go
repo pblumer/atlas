@@ -135,6 +135,23 @@ func TestACompletedTaskIsReadableToItsCompleterInTheFormItWasAnsweredIn(t *testi
 	if got := list("imke"); len(got) != 1 || got[0] != want {
 		t.Fatalf("imke's completed tasks = %v, want [%s]", got, want)
 	}
+	// Narrowed by process and by period; a process or a period without it lists nothing.
+	for query, n := range map[string]int{
+		"?process=freigabe&from=2000-01-01&to=2200-01-01": 1,
+		"?process=other":           0,
+		"?to=2000-01-01T00:00:00Z": 0,
+	} {
+		code, body := cReq(t, clients["imke"], ts, "GET", "/api/v1/tasks/completed"+query, "")
+		var page struct {
+			Items []json.RawMessage `json:"items"`
+		}
+		if code != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Items) != n {
+			t.Errorf("%s = %d, %d items (%s); want %d", query, code, len(page.Items), body, n)
+		}
+	}
+	if code, _ := cReq(t, clients["imke"], ts, "GET", "/api/v1/tasks/completed/x", ""); code != http.StatusBadRequest {
+		t.Errorf("a key that is no number = %d, want 400", code)
+	}
 	for _, who := range []string{"mallory", "otto"} {
 		if got := list(who); len(got) != 0 {
 			t.Errorf("%s lists %v, completed nothing", who, got)
@@ -240,7 +257,7 @@ func TestTheCompletedListPages(t *testing.T) {
 	if len(seen) != 3 {
 		t.Fatalf("paged through %d tasks, want 3", len(seen))
 	}
-	for _, bad := range []string{"?limit=0", "?limit=201", "?cursor=x", "?from=gestern"} {
+	for _, bad := range []string{"?limit=0", "?limit=201", "?cursor=x", "?from=gestern", "?to=2999-01-01", "?to=gestern"} {
 		if code, _ := cReq(t, clients["imke"], ts, "GET", "/api/v1/tasks/completed"+bad, ""); code != http.StatusBadRequest {
 			t.Errorf("%s = %d, want 400", bad, code)
 		}
