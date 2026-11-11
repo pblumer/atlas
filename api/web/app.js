@@ -8779,11 +8779,11 @@ async function viewBufferedMessages() {
   const payload = (vars) => (vars || []).map((v) => `${esc(v.name)} = ${esc(String(v.value).slice(0, 80))}`).join("<br>") || '<span class="muted">none</span>';
   const row = (m) => `<tr>
       <td><b>${esc(m.name)}</b>${m.expired ? ' <span class="pill warn" title="Past its time: nothing receives it now, and the next sweep drops it">expired</span>' : ""}</td>
-      <td>${m.correlationKey ? `<span class="chip">${esc(m.correlationKey)}</span>` : '<span class="muted">none</span>'}</td>
-      <td>${m.messageId ? esc(m.messageId) : '<span class="muted">—</span>'}</td>
+      <td class="wrap-any">${m.correlationKey ? `<span class="chip">${esc(m.correlationKey)}</span>` : '<span class="muted">none</span>'}</td>
+      <td class="wrap-any">${m.messageId ? esc(m.messageId) : '<span class="muted">—</span>'}</td>
       <td>${esc(fmtNano(m.bufferedAt))}</td>
       <td>${esc(fmtNano(m.expiresAt))}</td>
-      <td>${payload(m.variables)}</td>
+      <td class="wrap-any">${payload(m.variables)}</td>
     </tr>`;
   let rows = [];
 
@@ -9482,8 +9482,8 @@ async function viewDecisionDetail(id) {
           <td class="muted" data-sort="${r.at || 0}">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
           <td class="muted">${esc(r.elementId || "—")}${r.decisionVersion ? ` <span class="res-rule" title="The deployed version that answered">v${esc(String(r.decisionVersion))}</span>` : ""}</td>
-          <td>${pills}</td>
-          <td>${result}</td>
+          <td class="wrap-any">${pills}</td>
+          <td class="wrap-any">${result}</td>
           <td class="row-actions"><button type="button" class="dec-open" data-decat="${esc(r.atKey || String(r.at))}"
             title="Open this decision's requirements graph with this case drawn on it">How this was decided &rarr;</button></td>
         </tr>`;

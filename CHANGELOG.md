@@ -26,6 +26,14 @@ _Changed_ / _Removed_ for each version.
   as `formRevision`. New reads `GET /api/v1/tasks/completed` and
   `GET /api/v1/tasks/completed/{key}`, and MCP tools `atlas_list_completed_tasks` and
   `atlas_get_completed_task`. Tasks completed before this release are not listed (ADR-0554).
+- **The Modeler's Variables panel narrows to the selected element.** With a task, gateway,
+  event or subprocess selected, the panel lists what that element reads — the variables its
+  FEEL expressions, branch conditions, correlation keys and template placeholders name —
+  what it writes, and what it holds only for itself, such as an input mapping's target or a
+  multi-instance round's item. A name it reads that nothing in the model writes is marked, so
+  a missing start variable, a message payload or a typo shows before anything runs. "Show
+  all" brings back the whole list until another element is selected; with nothing selected
+  the panel lists everything, as before.
 - **A reference probe measures the single writer whatever the traffic.** Every five seconds the
   server hands its run loop the same fixed, read-only work and exports how long it queued
   (`atlas_runloop_probe_wait_seconds`) and how long each part took
@@ -226,6 +234,14 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **The Modeler's Variables panel lists the variables that arrive through a construct.** It
+  listed result variables, output mappings, form fields and data objects, and missed a
+  multi-instance's output collection, its round item and `loopCounter`, input-mapping
+  locals, an agent's result collection, and everything a call activity brings back from the
+  process it calls when the child's variables propagate (the default) — those are now read
+  from the called process's deployed model, or its draft. Drilled into a collapsed
+  subprocess, the panel also kept losing the process's start variables and constants, and
+  declaring a constant there wrote it onto the subprocess instead of the process.
 - **The fulfilment orchestration waits for a line that is still running.** "Shop: Auftrag
   erfüllen" ended as soon as `/next` answered that nothing could start, which is also the answer
   while the rest of an order waits on a precondition still being provisioned. An HR entry's
@@ -256,6 +272,12 @@ _Changed_ / _Removed_ for each version.
   thousands of pixels wide, so the filter, Copy all and every Copy button slid off screen. The
   value column now takes the width the other columns leave: the one-line preview is cut with an
   ellipsis, and the opened structure scrolls sideways inside its own box.
+- **Decisions, Messages and the Event log keep a long value inside their card.** The same
+  unbroken line as a decision's input or result, a message's correlation key, id or payload, or
+  a correlation key in the event log set its column's minimum to its whole length: the decision
+  table ran past the result and its "How this was decided" link, the message table past its
+  card. These values now break anywhere and stay readable in full where they stand; short
+  values read on one line as before.
 - **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
   worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
   is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
