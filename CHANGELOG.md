@@ -213,6 +213,19 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **The fulfilment orchestration waits for a line that is still running.** "Shop: Auftrag
+  erfüllen" ended as soon as `/next` answered that nothing could start, which is also the answer
+  while the rest of an order waits on a precondition still being provisioned. An HR entry's
+  memberships, which need its licence, stayed pending for good whenever the package reported
+  before the licence: the orchestration had ended, and the licence's report woke nobody. The
+  model now reads `GET /api/v1/orders/{id}/round` — the ready lines `/next` answers and the
+  positions still running, from one read — and ends only when nothing is ready and nothing is
+  running; otherwise it waits at "Warten". The wake `atlas.order.advanced` is now kept for a day
+  in the message buffer when nothing waits for it yet, so a report that lands while the
+  orchestration is still reading or starting a round is no longer lost (ADR-0370). `/next` is
+  unchanged, and orchestrations already running on the earlier version keep its behaviour; an
+  order one of them left open is started again by `POST /api/v1/orders/fulfilment/repair`. New
+  MCP tool `atlas_order_round` (ADR-0312, amended).
 - **An order line whose process an operator cancelled no longer waits for ever.** Cancelling
   the instance working a line — `DELETE /api/v1/instances/{key}`, the bulk terminate, a
   definition's drain, deleting a process with its instances, or the MCP tools that call them —

@@ -1,6 +1,6 @@
 # ADR-0312: Catalogue, order, inventory — three models, not one
 
-- **Status:** Accepted (amended 2026-10-28: what a held bundle lacks is offered again)
+- **Status:** Accepted (amended 2026-10-28: what a held bundle lacks is offered again; amended 2026-11-11: the orchestration ends only when nothing is still coming back)
 - **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
@@ -500,6 +500,52 @@ approval along, make it visible when it can go no further, and let a person rest
 — without anything there ever deciding it. The inventory is built (below); what keeps
 this record at `Partial` is reconciliation, adoption and the commissioning load, none of
 which exists yet.
+
+> **Amended 2026-11-11: the orchestration ends only when nothing is still coming back.**
+> The orchestrator asked one question — which lines may start — and ended on an empty
+> answer. That answer is the same in three states: everything provisioned, the rest stuck
+> behind a rejection, and the rest waiting on a precondition that is **still running**.
+> The model's own documentation named the first two and forgot the third. Live, an HR
+> entry's bundle started its package and its licence together; when the package reported
+> first, the memberships — which require the licence — were not yet startable, the
+> orchestration ended, and the licence's report a moment later woke nobody. Three orders of
+> eight stayed with their memberships pending for good.
+>
+> - **A third question, answered with the first.** `Outstanding` names the positions whose
+>   outcome is still coming: those `running`, each of which reports through the outcome
+>   route and so publishes `atlas.order.advanced`. `GET /api/v1/orders/{id}/round` answers
+>   `{"ready": …, "outstanding": […]}` from **one** read of the order — `ready` is exactly
+>   what `/next` answers. Two calls would reopen the race: a line reporting between them
+>   reads as "nothing ready" and then "nothing running", and the line it released is never
+>   started. The model now goes from "Etwas startbereit?" to a second gateway, "Läuft noch
+>   etwas?", which waits at "Warten" while `outstanding` is not empty and ends otherwise.
+> - **What is deliberately not outstanding.** A gated line whose approval is open is still
+>   `pending` and therefore in `ready`; the start answers with the approval already running,
+>   and the orchestration waits through it. A `failed` line is an incident whose process has
+>   ended in every model that reports one: nothing reports on it again by itself, so waiting
+>   on it would park the orchestration on a message nobody sends. An open order left with
+>   nothing working it stays the case of `POST /api/v1/orders/fulfilment/repair`. A
+>   `returning` line reports too, but `returned` satisfies no precondition, so it releases
+>   nothing to wait for.
+> - **The wake is kept until somebody waits for it.** The orchestration opens its
+>   subscription at "Warten" only after the read's job is completed and the round's starts
+>   are done. A report inside that window — a provisioning process that finishes at once
+>   reports before its start has come back — was published to nobody and dropped, because
+>   the wake was an ordinary publish (ADR-0020). Every wake of the orchestration now
+>   publishes with a time to live of a day, bounded by `--message-ttl-max`, and no message
+>   id, so the buffer hands it to the catch when it opens
+>   ([ADR-0370](0370-durable-message-buffer.md)). A wake the orchestration did not need —
+>   it already read what the report changed — costs one more round, which is idempotent; one
+>   for an orchestration that has ended expires unconsumed.
+> - **`/next` keeps its shape.** A changed system process is deployed as a new version at
+>   start ([ADR-0122](0122-protected-system-project-and-bootstrap-deployment.md)), and instances already running
+>   stay on the version they started on, which reads `/next` as a list. They keep the old
+>   gateway until they end; an order one of them leaves open is started again, on the new
+>   version, by the repair route.
+>
+> Tests: `api/fulfilmentwaits_http_test.go` (the bundle's race end to end, failing before
+> the fix), `api/fulfilmentwake_http_test.go` (a wake published before the catch opens is
+> received), `api/order/advance_test.go` and `api/order/service_test.go` (the round).
 
 **The deadline that drives them is a boundary timer on the approval task**, because a
 deadline is a modelled fact: an installation changes P3D and P7D by editing its copy of

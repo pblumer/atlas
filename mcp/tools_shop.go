@@ -294,6 +294,27 @@ func shopTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_order_round",
+			Description: "What the fulfilment orchestrator decides its next step on, from one " +
+				"read of the order: ready — the lines that may start now, exactly as " +
+				"atlas_order_ready_lines answers them — and outstanding — the positions still " +
+				"running whose outcome will be reported. Nothing ready and nothing outstanding " +
+				"is the answer on which the orchestration ends. Needs the OPERATOR role. " +
+				"READ-ONLY." + shopNote,
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"orderId": orderIDProp},
+				"required":   []any{"orderId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(orderPath(id, "/round")))
+			},
+		},
+		{
 			Name: "atlas_shop_tasks",
 			Description: "The open tasks of YOUR orders and of the orders you hold a task in " +
 				"(ADR-0416) — an approval waiting for your manager, a step waiting for a group " +

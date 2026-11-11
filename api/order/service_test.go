@@ -1115,3 +1115,62 @@ func TestOrderingForYourselfNeedsNothingExtra(t *testing.T) {
 		}
 	}
 }
+
+// TestARoundSaysWhatIsReadyAndWhatIsStillComing: the orchestration decides from one
+// read whether to start, to wait or to end. Asked in two calls, a line could report
+// between them, and the one it released would never be started.
+func TestARoundSaysWhatIsReadyAndWhatIsStillComing(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_a"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+
+	type roundResp struct {
+		Ready       []map[string]any `json:"ready"`
+		Outstanding []string         `json:"outstanding"`
+	}
+	read := func() (roundResp, string) {
+		t.Helper()
+		rec := do(t, s.HandleRound, someone("usr_a"), "GET", "", "id", placed.ID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("round = %d (%s)", rec.Code, rec.Body)
+		}
+		return decode[roundResp](t, rec), rec.Body.String()
+	}
+
+	// A fresh order: the same ready lines /next answers, and nothing running — the
+	// outstanding list present and empty, never null, so the model counts it.
+	got, raw := read()
+	next := decode[[]map[string]any](t, do(t, s.HandleNext, someone("usr_a"), "GET", "", "id", placed.ID))
+	if len(got.Ready) == 0 || len(got.Ready) != len(next) {
+		t.Fatalf("ready = %v, want what /next answers: %v", got.Ready, next)
+	}
+	for i := range next {
+		if got.Ready[i]["id"] != next[i]["id"] {
+			t.Errorf("ready[%d] = %v, /next says %v", i, got.Ready[i]["id"], next[i]["id"])
+		}
+	}
+	if !strings.Contains(raw, `"outstanding":[]`) {
+		t.Errorf("outstanding is not an empty list on a fresh order: %s", raw)
+	}
+
+	// The workplace and the account running: the laptop waits on the account, so
+	// nothing is ready — and both are outstanding, which is what keeps the
+	// orchestration waiting.
+	op := someone("usr_op")
+	for _, item := range []string{"workplace", "account"} {
+		if rec := do(t, s.HandleReport, op, "POST", `{"status":"running"}`, "id", placed.ID, "item", item); rec.Code != http.StatusOK {
+			t.Fatalf("report %s running = %d (%s)", item, rec.Code, rec.Body)
+		}
+	}
+	got, _ = read()
+	if len(got.Ready) != 0 {
+		t.Errorf("ready = %v, want nothing while the laptop's precondition runs", got.Ready)
+	}
+	if len(got.Outstanding) != 2 || got.Outstanding[0] != "account" || got.Outstanding[1] != "workplace" {
+		t.Errorf("outstanding = %v, want the account and the workplace, sorted", got.Outstanding)
+	}
+
+	if rec := do(t, s.HandleRound, op, "GET", "", "id", "ord_nope"); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown order = %d, want 404", rec.Code)
+	}
+}

@@ -2,9 +2,11 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
+	"github.com/pblumer/atlas/model"
 )
 
 // Taking an order back.
@@ -207,6 +209,42 @@ func (s *Server) stopWorkOf(o order.Order, at int64) {
 // start now and finds that nothing may. Without it the process waits on a message
 // about a line that will never run.
 func (s *Server) wakeFulfilment(orderID string) {
-	s.do(func() { s.proc.PublishMessage(order.AdvancedMessage, orderID) })
+	s.do(func() { s.publishOrderAdvanced(orderID) })
 	_ = s.drive()
+}
+
+// orderAdvancedTTL is how long a wake of the fulfilment orchestration is kept when
+// the orchestration is not parked at its catch at the moment it is published.
+//
+// The orchestration reads the order (GET /orders/{id}/round) and only afterwards,
+// once that job is completed and any starts of the round are done, opens its
+// subscription on atlas.order.advanced at "Warten". A line that reports inside that
+// window — a provisioning process that finishes at once reports before the start
+// that launched it has come back — published to nobody, and without a time to live
+// an unmatched publish is dropped (ADR-0020). The orchestration then parked on a
+// message that had already been sent, and the line its report unblocked was never
+// started. Kept in the buffer (ADR-0370), the wake is handed to the subscription when
+// it opens.
+//
+// A wake that arrives after the orchestration already saw what it reports costs one
+// more read of the order and nothing else: the round is idempotent, and a start
+// asked twice answers with the instance it started. A wake for an orchestration that
+// has ended, or never comes back to "Warten", expires unconsumed, which ADR-0370
+// treats as an ordinary outcome. A day covers the window with room for a worker
+// that is down between the read and the starts; it is bounded by the server's
+// --message-ttl-max like any other lifetime.
+const orderAdvancedTTL = 24 * time.Hour
+
+// publishOrderAdvanced enqueues the wake of the order's fulfilment orchestration,
+// kept for orderAdvancedTTL when nothing waits for it yet. It carries no message id:
+// two outcomes reported for one order are two wakes, and an id would make the second
+// a no-op for as long as the first is remembered, which is the lost wake again.
+//
+// Called on the loop, inside s.do; the caller drives.
+func (s *Server) publishOrderAdvanced(orderID string, vars ...model.VariableValue) {
+	ttl := orderAdvancedTTL
+	if limit := s.messageTTLLimit(); limit < ttl {
+		ttl = limit
+	}
+	s.proc.PublishMessageWithTTL(order.AdvancedMessage, orderID, "", ttl, vars...)
 }

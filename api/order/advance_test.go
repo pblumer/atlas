@@ -320,3 +320,41 @@ func TestNeedsApprovalIsAPropertyOfTheLine(t *testing.T) {
 		}
 	}
 }
+
+// TestOutstandingIsWhatIsStillRunning: an empty Next is the same answer for an order
+// that is finished and for one whose rest waits on a line still being provisioned.
+// Outstanding is what tells the two apart, and it names exactly the lines whose
+// report is still coming.
+func TestOutstandingIsWhatIsStillRunning(t *testing.T) {
+	o := Order{Lines: []Line{
+		{ItemID: "paket", Status: StatusDone},
+		{ItemID: "lizenz", Status: StatusRunning},
+		{ItemID: "mitgliedschaften", Status: StatusPending},
+	}, Requires: map[string][]string{"mitgliedschaften": {"lizenz"}}}
+
+	if got := Next(o); len(got) != 0 {
+		t.Fatalf("Next = %v, want nothing: the memberships wait on the licence", got)
+	}
+	if got := Outstanding(o); len(got) != 1 || got[0] != "lizenz" {
+		t.Fatalf("Outstanding = %v, want the licence that is still running", got)
+	}
+
+	// What does not report again by itself, or cannot release anything, is not
+	// outstanding: a failure whose process ended, a decision, a return under way.
+	for _, st := range []LineStatus{StatusDone, StatusSkipped, StatusFailed, StatusRejected,
+		StatusAbandoned, StatusCancelled, StatusReturning, StatusReturnFailed, StatusReturned,
+		StatusBlocked, StatusPending} {
+		if got := Outstanding(Order{Lines: []Line{{ItemID: "a", Status: st}}}); len(got) != 0 {
+			t.Errorf("a %s line is outstanding: %v", st, got)
+		}
+	}
+
+	// Positions, not products: two phones running are two reports to wait for.
+	two := Order{Lines: []Line{
+		{ItemID: "phone", VariantID: "silver", Status: StatusRunning},
+		{ItemID: "phone", VariantID: "black", Status: StatusRunning},
+	}}
+	if got := Outstanding(two); len(got) != 2 || got[0] != "phone#black" || got[1] != "phone#silver" {
+		t.Errorf("Outstanding = %v, want both positions, sorted", got)
+	}
+}

@@ -237,7 +237,7 @@ var Entries = []Entry{
 			EN: "A position of an order moved on, so the fulfilment asks again what may start.",
 			DE: "Eine Position einer Bestellung ist weitergekommen; die Erfüllung fragt erneut, was starten darf.",
 		},
-		Moment:      Moment{Places: []Place{At("atlas-auftrag-erfuellung", "Warten")}, Producer: "the order service, when a position is reported, cancelled or repaired; correlated on the order id, with no variables"},
+		Moment:      Moment{Places: []Place{At("atlas-auftrag-erfuellung", "Warten")}, Producer: "the order service, when a position is reported, cancelled or repaired; correlated on the order id, with no variables, and kept for a day in the message buffer when nothing waits for it yet (ADR-0370), so a report that arrives before the orchestration is back at Warten still reaches it"},
 		Channels:    []Channel{Message},
 		Payload:     []Field{},
 		NeverSecret: "TestTheOrderMessagesCarryNoSecret",
