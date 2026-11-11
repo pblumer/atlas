@@ -5,7 +5,8 @@
 - **Date:** 2026-11-11
 - **Deciders:** pblumer (maintainer; asked for this record on 2026-11-11 and settled four
   choices: read means acknowledged, the data comes from Atlas, a report is a snapshot,
-  and a report can be printed and saved as PDF)
+  and a report can be printed and saved as PDF; accepted on 2026-11-11 that a report is
+  computed with a technical principal's reach until ADR-0475 lands)
 - **Open question:** whether a report must also leave Atlas as a PDF *file* — attached to
   a mail for a recipient without an account, or stored as a document — which needs the
   charts drawn on the server. This record draws them in the browser only (§6); the
@@ -220,6 +221,7 @@ into the report contract:
   many cases a process had, never whose. Computing in the name of the person who
   triggered the report is the stronger rule. It waits for identity-aware Worker
   execution ([ADR-0475](0475-identity-aware-worker-execution.md), Proposed).
+  The maintainer accepted the technical principal as the interim rule on 2026-11-11.
 
 Option 2, REST against Atlas, stays possible and is not forbidden. It is not the
 recommended path:
