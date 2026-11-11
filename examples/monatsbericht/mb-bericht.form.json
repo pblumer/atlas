@@ -1,0 +1,14 @@
+{
+  "type": "default",
+  "id": "mb-bericht",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Monatsbericht\n\nDie Zahlen sind ein Schnappschuss vom Zeitpunkt der Zustellung. Mit **Erledigen** bestätigst du, dass du den Bericht gelesen hast."
+    },
+    { "type": "chart", "id": "mb_aktiv", "key": "bericht", "dataset": "active", "chartType": "kpi", "title": "Laufende Instanzen" },
+    { "type": "chart", "id": "mb_incidents", "key": "incidents", "dataset": "openIncidents", "chartType": "kpi", "title": "Offene Incidents" },
+    { "type": "chart", "id": "mb_prozesse", "key": "bericht", "dataset": "byProcess", "chartType": "stackedBar", "title": "Instanzen je Prozess" },
+    { "type": "chart", "id": "mb_incidents_prozess", "key": "incidents", "dataset": "byProcess", "chartType": "bar", "title": "Offene Incidents je Prozess", "showValues": true }
+  ]
+}

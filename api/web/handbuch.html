@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">52</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">53</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">52</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">53</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -3769,6 +3769,56 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <li><span data-l="de">Lege unter <b>Workers</b> einen Worker <code>filiale</code> vom Typ <b>Calendar booking</b> an, mit einem Secret <code>{"provider": "mock", "calendars": {"werkstatt@velo-beispiel.ch": {}}}</code>.</span><span data-l="en">Under <b>Workers</b>, add a worker <code>filiale</code> of type <b>Calendar booking</b>, with a secret <code>{"provider": "mock", "calendars": {"werkstatt@velo-beispiel.ch": {}}}</code>.</span></li>
             <li><span data-l="de">Klicke <b>⬇ Installieren</b>, dann in der Tasks-App unter <i>Start process</i> bei <b>Terminbuchung</b> auf <i>Publish public link</i>.</span><span data-l="en">Click <b>⬇ Install</b>, then in the Tasks app under <i>Start process</i> click <i>Publish public link</i> for <b>Terminbuchung</b>.</span></li>
             <li><span data-l="de">Öffne den Link in einem privaten Browserfenster und buche einen Termin.</span><span data-l="en">Open the link in a private browser window and book a slot.</span></li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="bsp" id="bsp-monatsbericht">
+        <h4><span class="rz-emoji" aria-hidden="true">📊</span>
+          <span data-l="de">Monatsbericht: Kennzahlen als Schnappschuss an einen Verteiler</span><span data-l="en">Monthly report: figures as a snapshot to a distribution list</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err" data-l="de">Atlas-report-Worker</span><span class="tag err" data-l="en">Atlas report worker</span>
+          <span class="tag" data-l="de">Diagramme</span><span class="tag" data-l="en">charts</span>
+          <span class="tag">Multi-Instance</span>
+          <span class="tag" data-l="de">Frist</span><span class="tag" data-l="en">deadline</span>
+          <span class="tag">examples/monatsbericht/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Die Leitung erhält jeden Monat die wichtigsten Zahlen: wie viele Fälle laufen, in welchen
+              Prozessen, und wo Incidents offen sind. <b>Gelesen heisst bestätigt</b>: Wer die Aufgabe erledigt, hat
+              den Bericht gelesen. Wer ihn nach drei Tagen nicht gelesen hat, erscheint bei der verantwortlichen
+              Person, die den Verteiler anpasst, etwa die Stellvertretung statt der Person in den Ferien.</p>
+            <p data-l="en">Management receives the key figures every month: how many cases are running, in which
+              processes, and where incidents are open. <b>Read means acknowledged</b>: whoever completes the task has
+              read the report. Whoever has not read it after three days appears with the person responsible, who
+              adjusts the list, for example the deputy instead of the person on holiday.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Zwei Tasks des <a href="#runbook-atlasreport">Atlas-report-Workers</a> lesen
+              <code>instances-summary</code> und <code>incident-summary</code> als <b>Schnappschuss</b> im Vertrag
+              <code>atlas.report/1</code>; das Formular zeigt sie mit der Komponente <i>Chart</i>. Ein paralleler
+              Multi-Instance-Subprozess stellt jeder Person eine Aufgabe zu, eine unterbrechende Frist von drei Tagen
+              vermerkt, wer nicht gelesen hat. Die zweite Runde stellt denselben Bericht zu, ohne die Zahlen erneut zu
+              lesen.</p>
+            <p data-l="en">Two tasks of the <a href="#runbook-atlasreport">Atlas report worker</a> read
+              <code>instances-summary</code> and <code>incident-summary</code> as a <b>snapshot</b> in the contract
+              <code>atlas.report/1</code>; the form shows them with the <i>Chart</i> component. A parallel
+              multi-instance subprocess hands each person a task, and an interrupting three-day deadline notes who
+              has not read it. The second round delivers the same report without reading the figures again.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Lege unter <b>Workers</b> einen Worker <code>atlas</code> vom Typ <b>Atlas report</b> an, mit der Adresse dieses Servers und einem API-Token mit der Rolle operator im Vault (<a href="#runbook-atlasreport">Anleitung</a>).</span><span data-l="en">Under <b>Workers</b>, add a worker <code>atlas</code> of type <b>Atlas report</b>, with this server's address and an API token with the operator role in the vault (<a href="#runbook-atlasreport">instructions</a>).</span></li>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b> und starte in der Tasks-App <b>Monatsbericht</b>, mit deinem Benutzernamen im Verteiler und als verantwortliche Person.</span><span data-l="en">Click <b>⬇ Install</b> and start <b>Monatsbericht</b> in the Tasks app, with your username on the list and as the person responsible.</span></li>
+            <li><span data-l="de">Öffne die Aufgabe <i>Monatsbericht lesen</i>, drucke sie oder sichere sie als PDF, und erledige sie.</span><span data-l="en">Open the task <i>Monatsbericht lesen</i>, print it or save it as PDF, and complete it.</span></li>
           </ol>
         </div>
       </div>
@@ -8084,6 +8134,49 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
+      <div class="card" id="runbook-atlasreport">
+        <h4 data-l="de">Atlas-Bericht</h4><h4 data-l="en">Atlas report</h4>
+        <p data-l="de">Ein Atlas-report-Worker liest die Kennzahlen eines Atlas-Servers für einen Bericht, den ein
+          Diagramm im Formular eines User-Tasks zeigt: Instanzen pro Prozess, einen Prozess über einen Zeitraum oder
+          Woche für Woche, die offenen Incidents und die eingehaltenen Lieferversprechen des Katalogs. Der Bericht ist
+          ein <b>Schnappschuss</b> im Vertrag <code>atlas.report/1</code> und eine gewöhnliche Instanzvariable; ein
+          erledigter Task zeigt also weiterhin, was seine Empfängerin gesehen hat (ADR-0555).</p>
+        <p data-l="en">An Atlas report worker reads an Atlas server's figures for a report a chart in a user task's
+          form shows: instances per process, one process over a period or week by week, the open incidents and the
+          catalogue's delivery promises kept. The report is a <b>snapshot</b> in the contract
+          <code>atlas.report/1</code> and an ordinary instance variable, so a completed task still shows what its
+          recipient saw (ADR-0555).</p>
+        <ol>
+          <li data-l="de">Als Administratorin oder Administrator unter <i>Administration → API tokens</i> ein Token im
+            Scope <b>full</b> erzeugen. Es trägt die Rollen dessen, der es erzeugt, ohne admin: nötig sind
+            <b>operator</b> und, für den Lieferbericht, <b>productmanager</b>.</li>
+          <li data-l="en">As an administrator, create a token of scope <b>full</b> under <i>Administration → API
+            tokens</i>. It carries the roles of whoever creates it, without admin: <b>operator</b> is needed and, for
+            the delivery report, <b>productmanager</b>.</li>
+          <li data-l="de">Dabei <b>direkt im Vault versiegeln</b>, z.&nbsp;B. unter <code>atlas_report</code>. Wer es
+            nicht versiegelt, legt ein Secret <code>{"token": "atl_…"}</code> selbst an. Ein Token im Scope
+            <b>worker</b> genügt nicht.</li>
+          <li data-l="en"><b>Seal it in the vault directly</b> while doing so, e.g. as <code>atlas_report</code>.
+            Without sealing, create a secret <code>{"token": "atl_…"}</code> yourself. A token of scope
+            <b>worker</b> will not do.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Atlas report</b>, ein Name (den ein Task nennt), die Basis-URL des
+            Servers als Endpoint und die Credential-Referenz <code>atlas_report</code>. Speichern genügt; atlas
+            startet den beaufsichtigten Worker selbst neu.</li>
+          <li data-l="en">Create the worker: type <b>Atlas report</b>, a name (which a task states), the server's base
+            URL as endpoint and the credential reference <code>atlas_report</code>. Saving is enough; atlas restarts
+            the supervised worker by itself.</li>
+        </ol>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Das Token kann mehr als lesen</span><span class="lbl" data-l="en">The token can do more than read</span>
+          <p data-l="de" style="margin:.3em 0 0">Mit der Rolle operator könnte das Token auch Instanzen abbrechen.
+            Der Worker ruft nur lesende Routen auf; das Token gehört trotzdem nur in den Vault. Ein eigener lesender
+            Scope ist in ADR-0555 als Nachfolge vermerkt.</p>
+          <p data-l="en" style="margin:.3em 0 0">With the operator role the token could also cancel instances. The
+            worker calls read routes only; the token still belongs in the vault and nowhere else. A read-only scope of
+            its own is recorded in ADR-0555 as a follow-up.</p>
+        </div>
+        <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
       <div class="card" id="runbook-wikiwikibangbang">
         <h4>wikiwikibangbang</h4>
         <p data-l="de">Ein wikiwikibangbang-Worker steht für <b>ein Wiki und ein Konto</b> darin. Ein Prozess legt damit
@@ -14955,7 +15048,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">52</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">52</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">53</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">53</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

@@ -57,6 +57,11 @@
       "examples": ["terminbuchung"]
     },
     {
+      "id": "monatsbericht",
+      "tags": ["bericht", "diagramme"],
+      "examples": ["monatsbericht"]
+    },
+    {
       "id": "verwaltung-dienstleistungen",
       "tags": ["verwaltung"],
       "examples": ["verwaltung-dienstleistungen"]

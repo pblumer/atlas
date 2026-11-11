@@ -112,6 +112,12 @@ const (
 	// the API token of the wiki account it writes as (connector/wikiwikibangbang.Bundle).
 	// The engine builds no client from it.
 	connectorKindWiki = "wikiwikibangbang"
+	// connectorKindAtlasReport is the Atlas report Worker Type (ADR-0555 §3).
+	// Worker-only like the wiki: a record holds the endpoint — the base URL of the Atlas
+	// server whose read routes it reads — and a credentialsRef naming the vault bundle
+	// with a technical principal's API token (connector/atlasreport.Bundle). The engine
+	// builds no client from it.
+	connectorKindAtlasReport = "atlasreport"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

@@ -1322,6 +1322,15 @@ type ConnectorTaskDetail struct {
 	WikiComment       RestExpr
 	WikiQuery         RestExpr
 	WikiMaxResults    int32
+	// Atlas report fields (JobType == AtlasReportJobType, ADR-0555 §3). Connector
+	// (above) names the configured Atlas server, and AtlasReportConnector carries it as
+	// literal-or-FEEL. AtlasReportOp is the interned operation — a row of
+	// connector/atlasreport/catalog. AtlasReportInput is the authored input object
+	// compiled to one FEEL context at deploy (I5), nil when the task authored none. All
+	// are the zero value for a task of another kind.
+	AtlasReportConnector RestExpr
+	AtlasReportOp        int32
+	AtlasReportInput     RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

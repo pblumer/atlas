@@ -571,6 +571,20 @@ const CalendarJobType = "io.atlas.calendar"
 // every compiled process: NewBuilder reserves it forty-first, so it is always 40.
 const CalendarJobTypeIndex int32 = 40
 
+// AtlasReportJobType is the reserved job type an Atlas report task carries
+// (ADR-0555 §3). One job type serves every operation: each reads one of Atlas's own
+// read routes and folds the answer into a report in the contract atlas.report/1.
+//
+// Nothing in the engine subscribes to it: the kind is worker-only, so the API token the
+// report is read with never enters the engine, and the run loop never waits on a read
+// route of its own server.
+const AtlasReportJobType = "io.atlas.atlasreport"
+
+// AtlasReportJobTypeIndex is the interned index AtlasReportJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it forty-second, so it is always
+// 41.
+const AtlasReportJobTypeIndex int32 = 41
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -624,6 +638,8 @@ var reservedJobTypes = []string{
 	SharePointServerJobType, // 39
 
 	CalendarJobType, // 40
+
+	AtlasReportJobType, // 41
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2695,6 +2711,43 @@ func (b *Builder) AddCalendarConnectorTask(cfg CalendarConfig) int32 {
 		Retries:           cfg.Retries,
 		CalendarOp:        b.intern(cfg.Op),
 		CalendarInput:     cfg.Input,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AtlasReportConfig is the deploy-time configuration of an Atlas report task
+// (ADR-0555 §3). Worker names the configured Atlas server and WorkerExpr carries it as
+// literal-or-FEEL; Op is a row of connector/atlasreport/catalog, and Input the
+// authored input object compiled to one FEEL context (I5), or zero when the task
+// authored none.
+type AtlasReportConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	Input      RestExpr
+	ResultVar  string
+	Retries    int32
+}
+
+// AddAtlasReportConnectorTask adds an Atlas report task and returns its element id. Like
+// a service task it creates a job on activation and waits; the job carries the reserved
+// AtlasReportJobType, which nothing in the engine subscribes to.
+func (b *Builder) AddAtlasReportConnectorTask(cfg AtlasReportConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:              b.intern(AtlasReportJobType),
+		Connector:            b.intern(cfg.Worker),
+		AtlasReportConnector: cfg.WorkerExpr,
+		Subject:              -1, // not a clio task
+		EventType:            -1,
+		ClioQuery:            -1,
+		ReduceSpec:           -1,
+		Method:               -1, // a report operation, not an HTTP method, is authored
+		Auth:                 -1, // the token lives on the worker
+		ResultVar:            b.intern(cfg.ResultVar),
+		Retries:              cfg.Retries,
+		AtlasReportOp:        b.intern(cfg.Op),
+		AtlasReportInput:     cfg.Input,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

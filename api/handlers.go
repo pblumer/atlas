@@ -22,6 +22,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/agent"
+	"github.com/pblumer/atlas/connector/atlasreport"
 	"github.com/pblumer/atlas/connector/calendar"
 	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
@@ -7655,6 +7656,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "calendar", Fields: fields}
+	case compiler.AtlasReportJobTypeIndex:
+		// The calendar's arm for a report: the evaluated input travels, and nothing that
+		// says which server or as whom (ADR-0555 §3). A report is a read, so
+		// there is no create key to carry.
+		j, err := atlasreport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		raw, err := json.Marshal(j)
+		if err != nil {
+			return nil
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "atlasreport", Fields: fields}
 	case compiler.WikiwikibangbangJobTypeIndex:
 		// The evaluated values travel, and nothing that says which wiki or as whom
 		// (ADR-0498). So does whether the job has been leased

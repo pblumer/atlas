@@ -1,0 +1,76 @@
+{
+  "id": "atlas.atlasreport",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Atlas report",
+  "author": "Atlas core",
+  "description": "Read Atlas's own figures as a report a task form's chart draws (ADR-0555): the instances per process (instances-summary), one process measured over a period or bucket by bucket — day, week or month — (process-statistics), the open incidents per process and step (incident-summary), and the catalogue's delivery promises kept per product (delivery-report). A model names the Worker, the operation and one input object; which Atlas server answers and the technical account's API token live in the Worker and the vault and reach only the worker. The report is a snapshot in the contract atlas.report/1, taken when the task runs, and an ordinary instance variable, so a completed task still shows what its recipient saw. A refusal for want of a role is the BPMN error ATLASREPORT_REFUSED and a process that is not deployed ATLASREPORT_NOT_FOUND, each thrown only where the process catches it.",
+  "engineCompat": ">=0.24",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Atlas report",
+    "id": "atlas.atlasreport",
+    "appliesTo": [
+      "bpmn:ServiceTask"
+    ],
+    "properties": [
+      {
+        "label": "Worker",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:connector"
+        },
+        "description": "Name of the configured Atlas report Worker (Console → Workers) the task reads through, never a credential."
+      },
+      {
+        "label": "Operation",
+        "type": "Dropdown",
+        "value": "instances-summary",
+        "binding": {
+          "type": "property",
+          "name": "atlas:operation"
+        },
+        "choices": [
+          {
+            "name": "Summarise the instances per process",
+            "value": "instances-summary"
+          },
+          {
+            "name": "Measure one process over a period",
+            "value": "process-statistics"
+          },
+          {
+            "name": "Count the open incidents",
+            "value": "incident-summary"
+          },
+          {
+            "name": "Measure the catalogue's delivery promises",
+            "value": "delivery-report"
+          }
+        ]
+      },
+      {
+        "label": "Input",
+        "type": "Text",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:input"
+        },
+        "description": "One JSON object; a value may be an =expression. instances-summary and incident-summary: optionally process, title, language. process-statistics: process, and optionally from, to, buckets with bucket (day, week, month), title, language. delivery-report: optionally catalog, from, to, title, language. from and to are a date or RFC 3339 with an offset; language is de or en."
+      },
+      {
+        "label": "Result variable",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:resultVariable"
+        },
+        "description": "Receives the report (atlas.report/1), which a chart component of a task form names as its key. Required on every operation."
+      }
+    ]
+  }
+}

@@ -410,6 +410,18 @@ export const WORKER_TYPE_DOCS = {
     ],
     trap: "workerDoc.sharepointserver.trap",
   },
+  atlasreport: {
+    anchor: "runbook-atlasreport", title: "workerDoc.atlasreport.title",
+    checked: "2026-11",
+    needs: "workerDoc.atlasreport.needs",
+    steps: [
+      "workerDoc.atlasreport.step1",
+      "workerDoc.atlasreport.step2",
+      "workerDoc.atlasreport.step3",
+      "workerDoc.atlasreport.step4",
+    ],
+    trap: "workerDoc.atlasreport.trap",
+  },
   wikiwikibangbang: {
     anchor: "runbook-wikiwikibangbang", title: "wikiwikibangbang",
     checked: "2026-10",

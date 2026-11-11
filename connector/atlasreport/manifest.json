@@ -1,0 +1,32 @@
+{
+  "apiVersion": "atlas.io/v1alpha1",
+  "kind": "WorkerType",
+  "metadata": {
+    "id": "atlas.atlasreport",
+    "version": "1.0.0",
+    "name": "Atlas report"
+  },
+  "spec": {
+    "atlasCompatibility": ">0.24.0",
+    "workerProtocol": "v1",
+    "runtime": {
+      "mode": "bundled"
+    },
+    "jobTypes": [
+      "io.atlas.atlasreport"
+    ],
+    "operations": [
+      {"id": "delivery-report", "jobType": "io.atlas.atlasreport", "idempotency": "natural", "effect": "reversible"},
+      {"id": "incident-summary", "jobType": "io.atlas.atlasreport", "idempotency": "natural", "effect": "reversible"},
+      {"id": "instances-summary", "jobType": "io.atlas.atlasreport", "idempotency": "natural", "effect": "reversible"},
+      {"id": "process-statistics", "jobType": "io.atlas.atlasreport", "idempotency": "natural", "effect": "reversible"}
+    ],
+    "configurationSchema": "#/spec/configuration",
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "modelerTemplate": "api/repository_catalog/atlasreport.json"
+  }
+}
