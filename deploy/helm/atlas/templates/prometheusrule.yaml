@@ -1,0 +1,174 @@
+{{- /*
+Alerting rules for the single writer (ADR-0557). See values.yaml, prometheusRule.
+
+Every expression is narrowed by one selector, so two installations in one cluster each
+alert on their own targets.
+
+The recording rules drop the instance label and keep every other one. On Kubernetes
+instance is the pod's IP and port, which a restart changes; a series keyed by it would
+start over after every restart, and the 7-day median the slower alerts compare against
+would start over with it. The StatefulSet's pod name (atlas-0) does survive a restart,
+so it stays, and the annotations name the pod when there is one, else the job. The Prometheus template expressions in the annotations are
+emitted literally with {{` ... `}}, because Helm would otherwise try to evaluate them.
+*/ -}}
+{{- if .Values.prometheusRule.enabled }}
+{{- $sel := .Values.prometheusRule.selector | default (printf "job=%q" (include "atlas.fullname" .)) }}
+{{- $t := .Values.prometheusRule.thresholds }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "atlas.fullname" . }}
+  labels:
+    {{- include "atlas.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ include "atlas.fullname" . }}.runloop.recording
+      interval: 1m
+      rules:
+        # Means rather than quantiles for the reference work: on Windows the clock is
+        # coarser than the work, so quantiles there are clock steps, while the mean over
+        # a window still estimates the duration on every platform.
+        - record: atlas:runloop_probe_store_seconds:mean15m
+          expr: |
+            sum without (instance) (rate(atlas_runloop_probe_store_seconds_sum{ {{- $sel -}} }[15m]))
+              /
+            sum without (instance) (rate(atlas_runloop_probe_store_seconds_count{ {{- $sel -}} }[15m]))
+        - record: atlas:runloop_probe_compute_seconds:mean15m
+          expr: |
+            sum without (instance) (rate(atlas_runloop_probe_compute_seconds_sum{ {{- $sel -}} }[15m]))
+              /
+            sum without (instance) (rate(atlas_runloop_probe_compute_seconds_count{ {{- $sel -}} }[15m]))
+        # The probe's wait, sampled at a steady rate whether or not anybody else calls.
+        - record: atlas:runloop_probe_wait_seconds:p95_15m
+          expr: |
+            histogram_quantile(0.95,
+              sum without (instance) (rate(atlas_runloop_probe_wait_seconds_bucket{ {{- $sel -}} }[15m])))
+        # Seconds the writer is held per second by callers' turns (0 to 1). The probe is
+        # not a turn, so it is not in here.
+        - record: atlas:runloop_turn_held:utilisation5m
+          expr: |
+            sum without (instance) (rate(atlas_runloop_turn_held_seconds_sum{ {{- $sel -}} }[5m]))
+
+    - name: {{ include "atlas.fullname" . }}.runloop.alerts
+      rules:
+        # --- Is the writer reachable? ---
+        - alert: AtlasRunLoopProbeTimeout
+          expr: increase(atlas_runloop_probe_timeouts_total{ {{- $sel -}} }[5m]) > 0
+          labels:
+            severity: critical
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"The Atlas writer on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} is not responding"`}}
+            description: >-
+              {{`{{ $value | humanize }} reference probe(s) in the last 5 minutes were not finished
+              within 10s, so the writer stood still for at least that long; /readyz already
+              reports 503. Usual causes: an fsync blocked on a hung volume, one very long turn.
+              Next: GET /api/v1/debug/runtime and a goroutine profile (ADR-0502).`}}
+
+        - alert: AtlasRunLoopProbeStoreFailing
+          expr: increase(atlas_runloop_probe_failures_total{ {{- $sel -}} }[15m]) > 0
+          labels:
+            severity: critical
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"Reads of the Atlas state store on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} are failing"`}}
+            description: >-
+              {{`The probe's reference read failed {{ $value | humanize }} time(s) in 15 minutes.
+              Check /readyz and the server log for store errors.`}}
+
+        # --- Do requests wait noticeably? ---
+        - alert: AtlasRunLoopWaitHigh
+          expr: atlas:runloop_probe_wait_seconds:p95_15m{ {{- $sel -}} } > {{ $t.waitWarningSeconds }}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"Requests on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} wait noticeably for the Atlas writer"`}}
+            description: >-
+              {{`p95 of the reference probe's wait: {{ $value | humanizeDuration }}. Whether load or a
+              slowdown causes it is what AtlasRunLoopSaturated and AtlasRunLoopStoreSlower /
+              AtlasRunLoopComputeSlower tell apart.`}}
+
+        - alert: AtlasRunLoopWaitCritical
+          expr: atlas:runloop_probe_wait_seconds:p95_15m{ {{- $sel -}} } > {{ $t.waitCriticalSeconds }}
+          for: 5m
+          labels:
+            severity: critical
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"Requests on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} wait over a second for the Atlas writer"`}}
+            description: >-
+              {{`p95 of the reference probe's wait: {{ $value | humanizeDuration }}.`}}
+
+        # --- Load or slowdown? ---
+        - alert: AtlasRunLoopSaturated
+          expr: atlas:runloop_turn_held:utilisation5m{ {{- $sel -}} } > {{ $t.utilisation }}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"The Atlas writer on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} is {{ $value | humanizePercentage }} busy"`}}
+            description: >-
+              {{`Callers' turns hold the writer for most of the time. This is load, not a slowdown, as
+              long as the reference work (AtlasRunLoop*Slower) is unchanged. A CPU profile shows
+              which turns cost the time (ADR-0502).`}}
+
+        # A reference part counts as slower when it takes more than slowerFactor times its
+        # own 7-day median and also exceeds an absolute floor, so that 5µs becoming 12µs,
+        # which means nothing operationally, does not page anybody. With less than seven
+        # days of history the median is taken over what there is.
+        - alert: AtlasRunLoopStoreSlower
+          expr: |
+            atlas:runloop_probe_store_seconds:mean15m{ {{- $sel -}} }
+              > {{ $t.slowerFactor }} * quantile_over_time(0.5, atlas:runloop_probe_store_seconds:mean15m{ {{- $sel -}} }[7d])
+            and
+            atlas:runloop_probe_store_seconds:mean15m{ {{- $sel -}} } > {{ $t.storeFloorSeconds }}
+          for: 30m
+          labels:
+            severity: warning
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"The Atlas state store on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} has become slower"`}}
+            description: >-
+              {{`The fixed reference read takes {{ $value | humanizeDuration }} on average, well above its
+              7-day median, for the same work. Unless AtlasRunLoopComputeSlower fires as well, the
+              cause is more likely the store or its disk (a compaction backlog, a slower volume)
+              than the host.`}}
+
+        - alert: AtlasRunLoopComputeSlower
+          expr: |
+            atlas:runloop_probe_compute_seconds:mean15m{ {{- $sel -}} }
+              > {{ $t.slowerFactor }} * quantile_over_time(0.5, atlas:runloop_probe_compute_seconds:mean15m{ {{- $sel -}} }[7d])
+            and
+            atlas:runloop_probe_compute_seconds:mean15m{ {{- $sel -}} } > {{ $t.computeFloorSeconds }}
+          for: 30m
+          labels:
+            severity: warning
+            {{- with .Values.prometheusRule.alertLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{`"The Atlas writer on {{ with $labels.pod }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} gets less CPU than usual"`}}
+            description: >-
+              {{`The fixed computation takes {{ $value | humanizeDuration }} on average, well above its
+              7-day median. Usual causes: CPU throttling by a container limit, a noisy neighbour,
+              garbage-collector pressure. Check container_cpu_cfs_throttled_seconds_total and
+              GET /api/v1/debug/runtime.`}}
+{{- end }}

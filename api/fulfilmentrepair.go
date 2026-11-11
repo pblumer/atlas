@@ -47,6 +47,12 @@ type fulfilmentRepairResp struct {
 	Cancelled []orphanedOrchestration `json:"cancelled"`
 	// Restarted names the orders an orchestration was started for again.
 	Restarted []string `json:"restarted"`
+	// Stuck names the open orders left without an orchestration on purpose: nothing
+	// of theirs can start and no outcome is coming. A failed line keeps an order
+	// open, and an orchestration started for it would ask, be told nothing, and end.
+	// Moving such an order on is a decision for a person (abandon or report the
+	// line), so it is named here and left alone; every run names it again.
+	Stuck []string `json:"stuck"`
 	// Healthy counts the orchestrations left alone: they name an order that exists
 	// and none of whose lines waits on an instance that has ended, so they are
 	// working or waiting, and neither is this route's business.
@@ -150,7 +156,7 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	out := fulfilmentRepairResp{DryRun: dryRun, Cancelled: []orphanedOrchestration{},
-		Restarted: []string{}, OrphanedLines: orphans}
+		Restarted: []string{}, Stuck: []string{}, OrphanedLines: orphans}
 	worked := map[string]bool{}
 	for _, inst := range running {
 		switch {
@@ -180,9 +186,23 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 	}
 	// An open order with nothing working it. Settled orders are left alone: an
 	// orchestration for one would ask what may start, be told nothing, and end —
-	// which is work for no purpose and a process instance in somebody's list.
+	// which is work for no purpose and a process instance in somebody's list. So is
+	// an open order an orchestration could not move either: nothing ready and no
+	// outcome coming, the state a failed line leaves. A line this run settles is no
+	// longer coming, so it does not count as outstanding here.
+	orphaned := make(map[string]map[string]bool, len(orphans))
+	for _, l := range orphans {
+		if orphaned[l.OrderID] == nil {
+			orphaned[l.OrderID] = map[string]bool{}
+		}
+		orphaned[l.OrderID][l.Line] = true
+	}
 	for _, o := range orders {
 		if worked[o.ID] || order.Derive(o.Lines) != order.OrderRunning {
+			continue
+		}
+		if !canMove(o, orphaned[o.ID]) {
+			out.Stuck = append(out.Stuck, o.ID)
 			continue
 		}
 		out.Restarted = append(out.Restarted, o.ID)
@@ -230,6 +250,22 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// canMove says whether an orchestration started for o would have anything to do:
+// a line it may start (what /next and /round answer as ready), or an outcome still
+// coming that it would wait for. The lines in settledNow are left out: this run
+// settles them, and their settlement is the outcome.
+func canMove(o order.Order, settledNow map[string]bool) bool {
+	if len(order.Ready(o)) > 0 {
+		return true
+	}
+	for _, key := range order.Outstanding(o) {
+		if !settledNow[key] {
+			return true
+		}
+	}
+	return false
 }
 
 // orphanedLinesOf finds the lines of open orders that wait on an instance that is no
