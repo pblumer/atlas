@@ -350,11 +350,103 @@ conversation 4711". The conversation identifier of [ADR-0369](0369-cross-instanc
 answers that question across nodes once it exists; this record does not anticipate it.
 
 The replay of ADR-0038 is not replaced. For a collaboration in one file it keeps working as it
-does. Extending its transport to a saved collaboration, whose pools come from the document rather
-than from byte-identical bodies, is a follow-up: the message-flow records it needs are kept per
-receiving definition already, whichever file the definition came from.
+does. The **message-only replay** of collapsed participants is decided in §8. Extending the full
+token replay of ADR-0038 to a saved collaboration, whose pools come from the document rather
+than from byte-identical bodies, remains a follow-up.
 
-### 8. What this record does not change
+### 8. Collapsed participants and the message-only replay
+
+The most telling view of a landscape is often not what happens inside each process but which
+processes talk to whom, how often, and where messages go unanswered. This view therefore
+lets every white box be **collapsed**, and offers a replay that shows **only the messages**.
+
+#### Collapsing
+
+- **Every white box can be collapsed and expanded on its own, and all of them at once.** A
+  collapsed white box is drawn as a collapsed pool: a band with its name, no contents. That is the
+  BPMN DI notation for a pool without a visible process (`isExpanded="false"`), so another tool
+  shows the same picture.
+- **Collapsing hides contents, not facts.** The ports stay on the collapsed pool's edge (§6), the
+  message flows stay attached to the pool, and the observed counts stay on the flows. A black box
+  is always collapsed; this changes nothing for it.
+- **Presentation, not intent.** Which participants are collapsed is view state. A saved
+  collaboration may store a default in its diagram interchange, which is what its readers see
+  first. Expanding or collapsing while reading never changes the document.
+- **The Operations view opens collapsed.** An operator starts from the landscape and expands the
+  process they want to look into, not the other way round.
+
+#### What the message-only replay shows
+
+The replay plays the observed layer forward in time, over the participants on screen:
+
+| Fact | Shown as |
+|---|---|
+| A delivery (`message.received`) | an envelope travelling along the flow from the sending pool to the receiving pool |
+| A message start (`message.started`) | the same envelope, and the receiving pool marks that an instance was started |
+| A send that reached nobody (`message.sent` with nothing reached or started) | an envelope that leaves the sending pool and stops at its edge, marked as not received |
+| A send from a black box (API, watch, product action) | an envelope leaving that black box |
+
+It shows **no tokens and no element states**. That is the point of it: what happens inside a
+process is the full replay of ADR-0038, one expanded pool at a time.
+
+The transport is the one of ADR-0038: play, step, scrub, speed. A replay may end at "now" and
+follow new rows as they are recorded, the way the Console's event log refreshes itself; it is
+then a live view of the landscape's message traffic.
+
+#### Where the facts come from
+
+The message-only replay reads the **event log of ADR-0472**, not the message-flow records of
+ADR-0038:
+
+- A send row names the sending **definition and element**. A message-flow record names only the
+  sending instance, so a collapsed pool could not be found from it without a lookup per
+  instance.
+- Only the event log records a **send that reached nobody**. A message-flow record exists only
+  for a delivery.
+- The event log has a **window and a cursor** (`before`, `after`, bounded pages), so a replay
+  over a long period reads it page by page instead of all at once.
+
+The cost is the window. The replay reaches back as far as the event-log retention, 30 days by
+default (`--event-log-ttl`). Before that, only deliveries are known, from the message-flow
+records, without their sender definition and without the sends that reached nobody. Replaying
+older periods from those records is not part of this record; the view says where its history
+begins rather than playing an incomplete picture as if it were complete.
+
+The ADR-0038 route is **not** reused for this. It reads the whole message-flow history of every
+pool on the run loop in one pass, which is acceptable for the pools of one file and is not for a
+landscape.
+
+#### Volume
+
+A landscape replay can have more messages than an animation can show. Two rules keep it honest:
+
+- **The read is bounded.** The replay asks for a time range and reads it page by page through
+  the event-log cursor. It never asks for the whole retention at once.
+- **Density switches the rendering, not the facts.** When more messages fall into a moment than
+  envelopes can show, a flow pulses with its count for that time step instead of carrying single
+  envelopes. Both renderings are computed from the same rows, and the view says which one it is
+  showing.
+
+#### Participants the reader may not see
+
+The rows follow ADR-0472 §5. A reader who may not see a receiving process does not read its
+receptions, only their own send row, which says how many receivers the send reached in total but
+not which. The replay therefore draws such a send as leaving the reader's pool and arriving
+**"outside your view"**, with the count. It does not attribute it to a greyed, anonymous
+participant on screen, because the reader's rows do not say that participant received it.
+
+#### Scope
+
+The replay runs over the participants on screen: the graph around a starting process, extended
+step by step (§3), or a saved collaboration (§5). A saved collaboration may hold as many
+processes as the modeller chooses, so a landscape of one application, or of several, can be saved
+and replayed. A replay of **the whole installation**, without anybody choosing its participants,
+is not decided here. It belongs with the landscape Panorama already derives
+([ADR-0211](0211-panorama-derived-landscape-mesh.md)) and its live overlays
+([ADR-0189](0189-panorama-architecture-modeling-and-live-overlays.md)). The data source would be
+the same event log; what is open there is the rendering and the bound.
+
+### 9. What this record does not change
 
 - **ADR-0023 stands.** A collaboration in one file deploys and runs as before, and its pools
   appear in the derived graph like any other deployed process.
@@ -366,7 +458,7 @@ receiving definition already, whichever file the definition came from.
   vocabulary here (`atlas:processRef`, flows by `messageRef`) is chosen so that such a record can
   build on it.
 
-### 9. Naming
+### 10. Naming
 
 "Collaboration" is already taken twice in this tree: `api/collab` and the MCP `atlas_join_session`
 family are the live co-editing of [ADR-0140](0140-live-collaborative-modeling-sessions.md), and
@@ -437,6 +529,11 @@ served from more than one partition.** Measured against
 - **Service boundaries.** The view is a function of definitions, event-log aggregates and one
   document. Any gateway with read access to those can compute it, and no handler touches another
   partition's in-process fields.
+- **The message-only replay (§8)** reads the same event log and inherits the same seam. With
+  several partitions it has one more limit: rows of different partitions have no common log
+  position, so the replay orders them by timestamp alone, and two messages recorded in the same
+  millisecond in different partitions have no defined order between them. The replay must not
+  present such an order as causal.
 - **Standalone.** No remote calls, no coordination and no new work on the command path.
 - **Verification deferred.** The tests that a merged cross-partition view equals the
   single-partition answer, and that it survives a failover, belong to the Milestone-5 slice of
@@ -455,6 +552,8 @@ served from more than one partition.** Measured against
     finding instead of an outdated drawing.
   - White box and black box are defined by what Atlas can inspect, which is the same line
     ADR-0371 draws for the remote case.
+  - With every white box collapsed, the message-only replay shows the landscape's traffic over
+    time, including the messages nobody received, without any process's internals in the way.
 - **Negative / trade-offs accepted:**
   - The observed layer is only as long as the event-log window and only as wide as one
     partition (ADR-0472 §7). Rare exchanges are invisible in it. This is why the possible layer
@@ -471,6 +570,9 @@ served from more than one partition.** Measured against
     external parties is incomplete until it is.
   - A saved collaboration does not follow its processes. A modeller who ignores its findings
     keeps an outdated document, which the findings then say is outdated.
+  - The message-only replay reaches back only as far as the event-log retention (§8). An
+    installation that wants a longer replay has to keep the event log longer, with the storage
+    that costs.
 - **Follow-ups / risks to watch:**
   - Worker ports, "calls out through Worker *W*", from the process → Worker edge of ADR-0211 (§6).
   - Reading a saved collaboration through the definition filter once definitions are
@@ -479,8 +581,10 @@ served from more than one partition.** Measured against
     edge table. Independently of the measurement, the folded table, a sender definition key on
     each reception, and a delivery outcome that returns to the sender are preconditions for
     serving the observed layer from more than one partition (Scale-out assessment).
-  - The replay transport for saved collaborations (§7).
+  - The full token replay of ADR-0038 for saved collaborations (§7), and replaying periods
+    older than the event-log window from the message-flow records (§8).
   - Signals and call activities as annotations on the graph (§3).
+  - A message-only replay of the whole installation, as a Panorama overlay (§8).
   - Binding a black box to a published interface, once ADR-0371 is built.
   - Where a saved collaboration is stored: as a draft kind beside the process drafts of
     [ADR-0021](0021-diagram-drafts.md), which would give it the editor, co-editing and version
@@ -541,7 +645,8 @@ served from more than one partition.** Measured against
 - narrows the use of ADR-0023 (collaborations and pools) for processes deployed separately;
   ADR-0023 itself stands
 - builds on ADR-0446 (possible layer) and ADR-0472 (observed layer)
-- extends the view of ADR-0038 (collaboration message-flow replay) as a follow-up
+- extends the view of ADR-0038 (collaboration message-flow replay) with a message-only replay
+  of collapsed participants (§8); the full token replay for saved collaborations is a follow-up
 - the local counterpart of ADR-0371, ADR-0373 and ADR-0374, which decide the remote case
 - applies the derive-then-annotate principle of ADR-0211 and ADR-0189
 - respects ADR-0544 (artifacts belong to an application), ADR-0071 and ADR-0275 (visibility)
