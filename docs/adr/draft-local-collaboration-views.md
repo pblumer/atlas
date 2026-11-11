@@ -383,6 +383,65 @@ reproducible Playground run of [ADR-0215](0215-modeler-playground.md), with its 
 collaboration across its processes would be a Playground scenario *of* a collaboration, a
 follow-up with its own record.
 
+### Scale-out assessment
+
+**Assessment: compatible for the first slice; the observed layer requires a seam before it is
+served from more than one partition.** Measured against
+[`docs/architecture/scale-out-readiness.md`](../architecture/scale-out-readiness.md):
+
+- **State owner.** The record adds no partition-owned state. The three layers read what others
+  own:
+  - the possible layer reads the deployed definitions, which are shared immutable artifacts;
+  - the observed layer reads the event-log table, which is partition-owned and folded in
+    `applyToState` by ADR-0472;
+  - the intended layer is a design-time document, whose placement in a multi-node deployment is
+    the open question it is for every design-time store (ADR-0544 says the same of the
+    application tag).
+- **Identity.** A saved collaboration references a process by **process id**, never by
+  definition key, partition or node address. It therefore means the same after a node is
+  replaced, after an export to another server, and after the partition count changes.
+- **Reads, today.** The aggregation of §4 follows the event-log route (`api/eventlog.go`): a
+  `state.ReadView` is taken on the run loop and scanned off it, so neither the run loop nor the
+  partition writer waits for the scan. The scan is bounded per request and says when it is
+  partial. Today a node runs one partition (`api/node.go`), so this is complete.
+- **Reads, with several partitions.** This is where the first slice does not carry over, for
+  three reasons:
+  1. *Grouping.* §4 groups a reception under its send by the shared source position. That holds
+     only within one partition. A message sent in partition A and delivered in partition B
+     (asynchronously, [ADR-0006](0006-partition-routing-and-cross-partition.md)) leaves rows in
+     two logs that share no position.
+  2. *Cost.* Aggregating raw rows on request grows with the message volume of the window.
+     Gathering them from every partition would be the instance-count-dependent scatter/gather the
+     readiness rules forbid as a default UI path.
+  3. *"Reached nobody".* `Reached` and `Started` count what the sending partition delivered
+     itself. Across partitions the sender cannot know the outcome synchronously, so "reached
+     nobody" is no longer a fact the send row can carry.
+- **The seam.** Before the observed layer reads more than one partition:
+  - It is served from the **folded per-edge table** of §4, kept per partition and keyed by
+    sender definition, receiver definition and message name, rather than from raw rows. Its
+    values (counts, newest timestamp) are mergeable by sum and maximum, so a cluster-wide view
+    combines per-partition partial results without moving rows. Its size grows with definitions
+    × names, not with instances.
+  - To be counted in its own partition, a reception must **carry the sender definition key
+    itself**. Today `MessageFlowValue` carries only the sending instance's key, and resolving it
+    would need the sender's partition.
+  - "Reached nobody" across partitions needs the delivery outcome to come back to the sender as
+    a fact. That is the delivery acknowledgement of ADR-0372 for the cross-node case, and the
+    record that makes delivery cross-partition has to supply it locally as well.
+
+  All three are engine changes and belong to their own record. They are named here so that
+  nothing in the first slice relies on the shared source position beyond one partition.
+- **Durability and side effects.** None in the first slice: nothing enters the WAL, nothing is
+  folded, nothing is sent. The folded table, when it comes, is deterministic and replays like the
+  event-log table it is derived from (invariants I4, I6).
+- **Service boundaries.** The view is a function of definitions, event-log aggregates and one
+  document. Any gateway with read access to those can compute it, and no handler touches another
+  partition's in-process fields.
+- **Standalone.** No remote calls, no coordination and no new work on the command path.
+- **Verification deferred.** The tests that a merged cross-partition view equals the
+  single-partition answer, and that it survives a failover, belong to the Milestone-5 slice of
+  [ADR-0175](0175-replicated-partition-cells.md) that introduces several partitions.
+
 ### Consequences
 
 - **Positive:**
@@ -417,7 +476,9 @@ follow-up with its own record.
   - Reading a saved collaboration through the definition filter once definitions are
     object-gated (§6).
   - Measure the aggregation of §4 at the maintainer's installation before deciding on the folded
-    edge table.
+    edge table. Independently of the measurement, the folded table, a sender definition key on
+    each reception, and a delivery outcome that returns to the sender are preconditions for
+    serving the observed layer from more than one partition (Scale-out assessment).
   - The replay transport for saved collaborations (§7).
   - Signals and call activities as annotations on the graph (§3).
   - Binding a black box to a published interface, once ADR-0371 is built.
