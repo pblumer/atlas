@@ -123,9 +123,8 @@ in a 30-day window, and the view must say "not in the last 30 days", not "never"
 
 - **White box.** A process deployed on this installation, referenced by **process id**. It is
   expandable: the `+` shows the newest version's diagram read-only, the way a call activity's `+`
-  opens what it calls ([ADR-0245](0245-call-activity-drilldown.md)). A reader who may not view the
-  process sees a named pool without contents, as the event log already shows a sending instance's
-  key without its data (ADR-0472 §5).
+  opens what it calls ([ADR-0245](0245-call-activity-drilldown.md)). A reader who may not see the
+  process sees it anonymous and greyed out (§6).
 - **Black box.** Everything that is not a local process. It is never expandable, and it is
   described only by what crosses the boundary. Derived black boxes come from the non-model
   sources ADR-0446 already lists:
@@ -230,9 +229,113 @@ reason: it is not decidable from definitions.
 A saved collaboration may be **proposed** from the derived graph: "save what you see around this
 process" writes a document with the current participants and flows, which the modeller then
 trims, names and lays out. This is how the dynamic discovery becomes documentation without
-anybody drawing from nothing.
+anybody drawing from nothing. §6 describes the same thing step by step.
 
-### 6. The operational view
+### 6. Composing a collaboration step by step
+
+The usual way to build a saved collaboration is not to draw it, nor to accept a whole derived
+graph at once, but to grow it from one process outwards, with Atlas offering what it knows at
+every step.
+
+#### The steps
+
+1. **Open a collaboration** in an application. It starts empty.
+2. **Add a participant and assign a process**, for example the process `ferienbuchung`. This
+   writes `atlas:processRef` and proposes a name (below).
+3. **Atlas shows the participant's ports.** At the pool's edge, each message name the newest
+   active version **sends** is an outgoing port, and each name it **waits for** is an incoming
+   port, read from `MessageSenders` and `MessageReceivers` (ADR-0446). A port shows the name, how
+   many elements stand behind it, and, when the observed layer is on, how often it was used in the
+   window. Ports are derived each time the document is opened; they are not stored.
+4. **A `+` on a port lists the counterparts**:
+   - on an **outgoing** port, every deployed process whose newest active version waits for that
+     name;
+   - on an **incoming** port, every deployed process that sends it, every enabled inbound watch
+     and every active product action that sends it (the non-model sources of message-sources).
+
+   Counterparts observed in the window come first, with their counts, then those that are only
+   possible. "Published through the API" is always offered by hand on an incoming port, never as a
+   derived candidate: the route can send any name, and its calls are rows only an operator may
+   read (ADR-0472 §5).
+5. **Choosing a counterpart inserts it**: a participant, if it is not in the collaboration yet,
+   and a message flow carrying the name as `messageRef`. Choosing several inserts several. A
+   counterpart that is not chosen stays visible through `collaboration.reaches-outside`, because
+   it receives the message all the same.
+
+This is the docking pattern of ADR-0374 and the `+` of ADR-0245, applied to local processes.
+
+#### When nobody is on the other side
+
+An outgoing port whose name no deployed process waits for offers a **placeholder black box**,
+"receiver of `<name>`", for the modeller to name. The port keeps saying "no process on this
+installation receives it", and that is not a formality: a message throw correlates only on this
+node ([ADR-0020](0020-message-correlation.md)), and nothing delivers it elsewhere until
+[ADR-0372](0372-peer-message-delivery-worker.md) is built. A black box drawn at the end of such a
+flow documents an intention that the engine does not carry out.
+
+In practice a process reaches an external system through a **job** that a Worker works: a
+service task, or a send task of the job kind ([ADR-0112](0112-send-tasks.md)). Those are not
+message ports. Showing them as a second kind of port, "calls out through Worker *W*", is a
+follow-up; the Panorama mesh already derives the process → Worker edge it would need (ADR-0211).
+
+#### Names
+
+A participant's **name is a label**; its **binding** is `atlas:processRef`. Renaming changes
+nothing Atlas derives, and the binding is never inferred from the name.
+
+Atlas proposes a name in this order, and the modeller may overwrite it:
+
+| Counterpart | Proposed name |
+|---|---|
+| A deployed process | the pool name it was deployed under, which the deploy path already uses as the definition's display name and which falls back to the process name (`api/handlers.go`) |
+| An inbound watch | the Worker's name, which stands for the external system it watches |
+| A product action | the product and its catalogue |
+| The publish route | "published through the API", to be renamed after the real caller, which Atlas cannot check |
+| A placeholder | "receiver of `<name>`" or "sender of `<name>`" |
+
+A process is bound **at most once** in a collaboration. Two participants bound to one process
+would make every derived flow ambiguous between them.
+
+A participant may be named after a role ("Sekretariat") as much as after an organisation or a
+system; this is documentation, and the name is the modeller's. The pool is **not** bound to a
+group or an identity, for the reason [ADR-0121](0121-bpmn-lanes.md) gives for lanes: the people who
+work a process belong to its lanes and its task assignments, not to the pool.
+
+#### Participants the reader may not see
+
+A participant the reader may not see is drawn **greyed out and anonymous**, "a process you may
+not see": no name, no process id, no application, no `+`. Its flows stay, with the message name,
+because the name is on the reader's own side of the flow.
+
+What "may not see" means is decided by the surface the fact comes from, not by this record:
+
+- **Possible layer.** Message-sources shows every deployed process to every modeller
+  (ADR-0446 §4). Today, therefore, a modeller composing a collaboration sees every counterpart
+  named, and the anonymous participant does not appear in the possible layer. When definitions
+  become object-gated, as ADR-0446 anticipates, the possible layer narrows with them and the rule
+  above applies there too.
+- **Observed layer.** The event log shows a reception only to a reader who may view the receiving
+  definition's application (ADR-0472 §5). For an edge to a participant the reader may not see,
+  the observed layer shows only what the reader's own send rows say: how many receivers the send
+  reached in total, not which.
+- **Expanding a white box** shows the diagram only to a reader who may read that process.
+
+A saved collaboration holds the `atlas:processRef` of every participant, and the document is read
+by whoever may read its application. While definitions are not object-gated, that discloses
+nothing message-sources does not. When they are, the document must be read through the same
+filter, or the reference becomes a leak; that belongs to the record that introduces the gating.
+
+#### Drift is reported, never applied
+
+When a process changes, the saved collaboration is **not** updated by itself. A new outgoing port
+appears as an unconnected port, a removed one turns a flow into `collaboration.flow-not-sent`, and
+each such finding offers the edit that would resolve it: add the flow, remove the flow. The
+modeller applies it or leaves it. A document that rewrote itself would be a cache of the derived
+graph, and the modeller's choices, which exchanges to leave out, would be lost on the next
+deploy. The document records intent; the derivation records reality; the findings are where they
+meet.
+
+### 7. The operational view
 
 The Operations app gains the same graph with the observed layer in front: per edge the
 deliveries, instances started, sends that reached nobody, and the newest timestamp, in the
@@ -251,7 +354,7 @@ does. Extending its transport to a saved collaboration, whose pools come from th
 than from byte-identical bodies, is a follow-up: the message-flow records it needs are kept per
 receiving definition already, whichever file the definition came from.
 
-### 7. What this record does not change
+### 8. What this record does not change
 
 - **ADR-0023 stands.** A collaboration in one file deploys and runs as before, and its pools
   appear in the derived graph like any other deployed process.
@@ -263,7 +366,7 @@ receiving definition already, whichever file the definition came from.
   vocabulary here (`atlas:processRef`, flows by `messageRef`) is chosen so that such a record can
   build on it.
 
-### 8. Naming
+### 9. Naming
 
 "Collaboration" is already taken twice in this tree: `api/collab` and the MCP `atlas_join_session`
 family are the live co-editing of [ADR-0140](0140-live-collaborative-modeling-sessions.md), and
@@ -272,6 +375,13 @@ definition key. The service of this record therefore does not live in `api/colla
 are a separate decision of the first slice; whatever they are called, they must not reuse the
 replay's `{key}` for a document id, because a definition key and a document id are different
 spaces.
+
+A saved collaboration is the **whole interplay** of its participants, which is what users tend to
+call a "scenario". The product must not call it that: a *scenario* is already the stored,
+reproducible Playground run of [ADR-0215](0215-modeler-playground.md), with its own store
+(`playground-scenarios`), and the two would be confused at the first search. Simulating a saved
+collaboration across its processes would be a Playground scenario *of* a collaboration, a
+follow-up with its own record.
 
 ### Consequences
 
@@ -297,10 +407,18 @@ spaces.
   - The derived graph exposes the engine-wide coupling of message names that ADR-0446 names
     (`message.crosses-projects`). Making it visible is the point, but it will surface couplings
     that nobody intended.
+  - In the first slice a white box shows message ports only. The usual way a process reaches an
+    external system, a job worked by a Worker, is not a port yet (§6), so a collaboration with
+    external parties is incomplete until it is.
+  - A saved collaboration does not follow its processes. A modeller who ignores its findings
+    keeps an outdated document, which the findings then say is outdated.
 - **Follow-ups / risks to watch:**
+  - Worker ports, "calls out through Worker *W*", from the process → Worker edge of ADR-0211 (§6).
+  - Reading a saved collaboration through the definition filter once definitions are
+    object-gated (§6).
   - Measure the aggregation of §4 at the maintainer's installation before deciding on the folded
     edge table.
-  - The replay transport for saved collaborations (§6).
+  - The replay transport for saved collaborations (§7).
   - Signals and call activities as annotations on the graph (§3).
   - Binding a black box to a published interface, once ADR-0371 is built.
   - Where a saved collaboration is stored: as a draft kind beside the process drafts of
