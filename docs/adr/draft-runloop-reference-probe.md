@@ -92,6 +92,12 @@ writer's condition independent of traffic without writing anything.
   compared with the same expression `offset 7d`.
 - Compute part, the same way with `atlas_runloop_probe_compute_seconds_bucket`.
 - Writer reachability: `increase(atlas_runloop_probe_timeouts_total[5m]) > 0`.
+- On Windows the clock advances in steps coarser than the work parts' few microseconds,
+  so single probes read as zero or as one whole step and the quantiles above are steps,
+  not durations. The mean, `rate(atlas_runloop_probe_store_seconds_sum[15m]) /
+  rate(atlas_runloop_probe_store_seconds_count[15m])`, still estimates the true duration
+  there, because a probe crosses a step with a probability proportional to how long it
+  ran; it is the reading to compare against its own past on that platform.
 
 Thresholds and alerts belong in Prometheus and Alertmanager, not in the server.
 

@@ -39,6 +39,12 @@ import (
 // every few seconds (measured on a small store: about 5µs for the store part and 14µs
 // for the compute part). It runs only when the server exports metrics, because without the
 // registry nothing would read what it measures.
+//
+// On Windows the clock advances in steps coarser than those few microseconds, so a single
+// probe usually reads as zero and now and then as one whole step. The quantiles are then
+// steps rather than durations. The mean is still sound: a probe crosses a step with a
+// probability proportional to its duration, so rate(_sum) / rate(_count) over a window
+// estimates the true duration on every platform, and it is the reading to alert on there.
 
 const (
 	// runLoopProbeInterval is the probe's cadence. Five seconds gives a 15-second scrape

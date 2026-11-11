@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -52,6 +53,15 @@ func TestTheReferenceProbeReachesTheExposition(t *testing.T) {
 	}
 	// The compute part is real work, so after two runs its total cannot be zero; a zero
 	// would mean the computation was optimised away and the part measures nothing.
+	//
+	// Not on Windows: there the clock advances in steps coarser than the part's few
+	// microseconds, so two runs usually read as zero each (seen on the windows · api CI
+	// job). The part is measured there too, only in whole clock steps; see
+	// runloopprobe.go. That the computation runs at all is TestReferenceComputeIsFixedWork's
+	// to hold, on every platform.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	if sum := sampleValue(t, exposition, "atlas_runloop_probe_compute_seconds_sum"); sum <= 0 {
 		t.Errorf("compute work seconds sum = %v, want a positive total", sum)
 	}
