@@ -531,6 +531,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
   nothing selected the tab must stay one list whose scope chip names the kind of scope.
 
+- **`vars-scope.spec.mjs`**: the **Modeler's Variables panel** — what it lists, and what it
+  narrows to with an element selected (`vars-scope-harness.html`, a diagram with a
+  multi-instance task, input mappings, a collapsed subprocess and two call activities on a
+  deployed child process). The whole list must hold the variables that arrive through a
+  construct: a multi-instance's output collection, its item and `loopCounter`, an input
+  mapping's local, and what the called process writes when its variables propagate — not the
+  child's own locals, and nothing from a call activity that propagates nothing. Drilled into
+  the collapsed subprocess, the process's start variables and constants must stay, and
+  declaring a namespace member there must land on the process, not on the subprocess. With
+  a task selected the list falls into *Reads* (the names its FEEL names, not a word in a
+  string literal, with a name nothing writes marked as such), *Writes* and *Local*; a gateway
+  reads its branches' conditions; "Show all" lifts the narrowing until the next selection.
+
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
   its process id and a form under the id a user task binds to, so saving onto an id

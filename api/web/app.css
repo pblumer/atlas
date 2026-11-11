@@ -4562,6 +4562,15 @@ tr[hidden] { display: none; }
   background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1;
 }
 .vars-reload:hover { border-color: var(--accent); color: var(--accent-text); }
+/* Which element the list is narrowed to, with the way back to the whole list. */
+.vars-scope {
+  display: flex; align-items: center; gap: 8px; margin: 0 12px 8px;
+  font-size: 12px; color: var(--muted); line-height: 1.4;
+}
+.vars-scope .vsc-text { min-width: 0; flex: 1; word-break: break-word; }
+.vars-scope .vars-scope-all { flex: none; padding: 2px 8px; font-size: 12px; }
+/* A name read and written nowhere in the model: from outside it, or a typo. */
+.var-row[data-unwritten="1"] .var-name { color: var(--warn); }
 .var-origin { color: var(--accent-text); cursor: pointer; }
 .var-origin:hover { text-decoration: underline; }
 .vars-empty { padding: 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
