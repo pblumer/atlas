@@ -16,7 +16,7 @@ _Changed_ / _Removed_ for each version.
 - **A reference probe measures the single writer whatever the traffic.** Every five seconds the
   server hands its run loop the same fixed, read-only work and exports how long it queued
   (`atlas_runloop_probe_wait_seconds`) and how long each part took
-  (`atlas_runloop_probe_work_seconds{part="store"|"compute"}`): sixteen point reads of the state
+  (`atlas_runloop_probe_store_seconds`, `atlas_runloop_probe_compute_seconds`): sixteen point reads of the state
   store, and a fixed computation. Because the work never changes, a rising duration means the
   writer became slower rather than busier, and it shows while the server is idle too. If both
   parts rise, the host is the likelier cause; if only the store part rises, it is the store or its

@@ -22,10 +22,10 @@ import (
 //   - wait: how long the probe queued before the writer took it. This is the delay any
 //     request would have experienced at that moment, sampled at a steady rate rather
 //     than only when somebody happened to call.
-//   - work{part="store"}: a fixed set of point reads of the state store
+//   - store: a fixed set of point reads of the state store
 //     (state.Store.ReferenceRead). Its duration grows when the store becomes slower to
 //     read, for instance with a backlog of compactions or a slower volume.
-//   - work{part="compute"}: a fixed computation over a fixed buffer. Its duration grows
+//   - compute: a fixed computation over a fixed buffer. Its duration grows
 //     when the writer's goroutine gets less CPU than it did: CPU throttling under a
 //     container quota, a noisy neighbour, garbage-collection assists.
 //
@@ -79,27 +79,27 @@ func referenceCompute() uint64 {
 	return h
 }
 
-// runLoopProbeMetrics is the probe's exposition. The work histogram carries one label,
-// part, whose values are a closed set fixed here, so ADR-0142's cardinality rule holds;
-// both observers are resolved at construction so a probe does no label lookup.
+// runLoopProbeMetrics is the probe's exposition. The two work parts are separate
+// histograms rather than one labelled by part: the label would be a closed set and so
+// within ADR-0142's rule, but two names cost nothing and keep the label allowlist
+// (TestMetricsCarryOnlyAllowlistedLabels) where it is.
 type runLoopProbeMetrics struct {
 	wait     prometheus.Histogram
-	work     *prometheus.HistogramVec
-	store    prometheus.Observer
-	compute  prometheus.Observer
+	store    prometheus.Histogram
+	compute  prometheus.Histogram
 	timeouts prometheus.Counter
 	failures prometheus.Counter
 }
 
 func newRunLoopProbeMetrics() *runLoopProbeMetrics {
-	work := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: metrics.Namespace, Name: "runloop_probe_work_seconds",
-		Help: "How long the reference probe's fixed work took on the single writer, by part: " +
-			"store (fixed point reads of the state store) or compute (a fixed computation).",
-		// 1µs to ~1s. The healthy value is a few microseconds, so the bottom has to
-		// resolve it; the top reaches a read stalled on a failing volume.
-		Buckets: prometheus.ExponentialBuckets(0.000001, 2, 21),
-	}, []string{"part"})
+	work := func(name, help string) prometheus.Histogram {
+		return prometheus.NewHistogram(prometheus.HistogramOpts{
+			Namespace: metrics.Namespace, Name: name, Help: help,
+			// 1µs to ~1s. The healthy value is a few microseconds, so the bottom has to
+			// resolve it; the top reaches a read stalled on a failing volume.
+			Buckets: prometheus.ExponentialBuckets(0.000001, 2, 21),
+		})
+	}
 	return &runLoopProbeMetrics{
 		wait: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Namespace: metrics.Namespace, Name: "runloop_probe_wait_seconds",
@@ -109,9 +109,10 @@ func newRunLoopProbeMetrics() *runLoopProbeMetrics {
 			// idle writer takes a probe within microseconds, and past the deadline.
 			Buckets: prometheus.ExponentialBuckets(0.000001, 2, 25),
 		}),
-		work:    work,
-		store:   work.WithLabelValues("store"),
-		compute: work.WithLabelValues("compute"),
+		store: work("runloop_probe_store_seconds",
+			"How long the reference probe's fixed point reads of the state store took on the single writer."),
+		compute: work("runloop_probe_compute_seconds",
+			"How long the reference probe's fixed computation took on the single writer."),
 		timeouts: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: metrics.Namespace, Name: "runloop_probe_timeouts_total",
 			Help: "Reference probes the single writer did not take and finish within ten seconds.",
@@ -124,7 +125,7 @@ func newRunLoopProbeMetrics() *runLoopProbeMetrics {
 }
 
 func (m *runLoopProbeMetrics) collectors() []prometheus.Collector {
-	return []prometheus.Collector{m.wait, m.work, m.timeouts, m.failures}
+	return []prometheus.Collector{m.wait, m.store, m.compute, m.timeouts, m.failures}
 }
 
 // runLoopProber dispatches the reference probe. sink receives the compute part's result

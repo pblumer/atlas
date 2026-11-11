@@ -53,7 +53,7 @@ writer's condition independent of traffic without writing anything.
   It records how long the probe queued before the writer took it
   (`atlas_runloop_probe_wait_seconds`).
 - On the writer the probe runs fixed work in two parts, each timed separately
-  (`atlas_runloop_probe_work_seconds{part}`):
+  (`atlas_runloop_probe_store_seconds`, `atlas_runloop_probe_compute_seconds`):
   - `store`: `state.Store.ReferenceRead`, sixteen point reads of two fixed keys. One is
     the applied log position, which every batch rewrites. The other is a meta key that
     is never written; a read of an absent key consults every memtable and every table
@@ -88,9 +88,9 @@ writer's condition independent of traffic without writing anything.
 ### How to read it
 
 - Store part rising against its own past:
-  `histogram_quantile(0.9, sum by (le) (rate(atlas_runloop_probe_work_seconds_bucket{part="store"}[15m])))`
+  `histogram_quantile(0.9, sum by (le) (rate(atlas_runloop_probe_store_seconds_bucket[15m])))`
   compared with the same expression `offset 7d`.
-- Compute part, the same way with `part="compute"`.
+- Compute part, the same way with `atlas_runloop_probe_compute_seconds_bucket`.
 - Writer reachability: `increase(atlas_runloop_probe_timeouts_total[5m]) > 0`.
 
 Thresholds and alerts belong in Prometheus and Alertmanager, not in the server.

@@ -40,11 +40,11 @@ func TestTheReferenceProbeReachesTheExposition(t *testing.T) {
 
 	exposition := scrapeServer(t, srv)
 	for name, want := range map[string]float64{
-		"atlas_runloop_probe_wait_seconds_count":                 2,
-		`atlas_runloop_probe_work_seconds_count{part="store"}`:   2,
-		`atlas_runloop_probe_work_seconds_count{part="compute"}`: 2,
-		"atlas_runloop_probe_timeouts_total":                     0,
-		"atlas_runloop_probe_failures_total":                     0,
+		"atlas_runloop_probe_wait_seconds_count":    2,
+		"atlas_runloop_probe_store_seconds_count":   2,
+		"atlas_runloop_probe_compute_seconds_count": 2,
+		"atlas_runloop_probe_timeouts_total":        0,
+		"atlas_runloop_probe_failures_total":        0,
 	} {
 		if got := sampleValue(t, exposition, name); got != want {
 			t.Errorf("%s = %v after two probes, want %v", name, got, want)
@@ -52,7 +52,7 @@ func TestTheReferenceProbeReachesTheExposition(t *testing.T) {
 	}
 	// The compute part is real work, so after two runs its total cannot be zero; a zero
 	// would mean the computation was optimised away and the part measures nothing.
-	if sum := sampleValue(t, exposition, `atlas_runloop_probe_work_seconds_sum{part="compute"}`); sum <= 0 {
+	if sum := sampleValue(t, exposition, "atlas_runloop_probe_compute_seconds_sum"); sum <= 0 {
 		t.Errorf("compute work seconds sum = %v, want a positive total", sum)
 	}
 }
