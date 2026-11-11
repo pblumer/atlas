@@ -66,8 +66,9 @@ process, plays a replay with a delivery, a start and a send that reached nobody,
 the same rules, in both directions (`api/interaction/replay_test.go`,
 `api/interactions_http_test.go`).
 
-**As built:** an expanded white box shows its message ports, not its diagram (ADR-0559
-*As built*); narrowing the replay to a correlation key is left for later.
+**As built:** the view is a generated BPMN collaboration rendered by bpmn-js, pools stacked
+with the process in the middle, and an expanded white box draws its deployed diagram
+(ADR-0559 *As built*); narrowing the replay to a correlation key is left for later.
 
 ### LCV3 — Saved collaboration and its findings
 

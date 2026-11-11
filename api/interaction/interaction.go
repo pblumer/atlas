@@ -153,9 +153,12 @@ type Participant struct {
 
 	ProcessID string `json:"processId,omitempty"`
 	Version   int32  `json:"version,omitempty"`
-	ProjectID string `json:"projectId,omitempty"`
-	System    bool   `json:"system,omitempty"`
-	Inactive  bool   `json:"inactive,omitempty"`
+	// DefinitionKey is the newest deployed version's, so a client can read its
+	// diagram to expand the process (ADR-0559 §8).
+	DefinitionKey uint64 `json:"definitionKey,omitempty"`
+	ProjectID     string `json:"projectId,omitempty"`
+	System        bool   `json:"system,omitempty"`
+	Inactive      bool   `json:"inactive,omitempty"`
 
 	ConnectorID string `json:"connectorId,omitempty"`
 	WorkerKind  string `json:"workerKind,omitempty"`
@@ -294,7 +297,7 @@ func (b *builder) process(d Definition) *Participant {
 	}
 	return b.add(Participant{
 		ID: ProcessID(d.ProcessID), Kind: KindProcess, Name: d.Name, ProcessID: d.ProcessID,
-		Version: d.Version, ProjectID: d.ProjectID, System: d.System, Inactive: d.Inactive,
+		Version: d.Version, DefinitionKey: d.Key, ProjectID: d.ProjectID, System: d.System, Inactive: d.Inactive,
 	})
 }
 
@@ -584,7 +587,7 @@ func (b *builder) lazyParty(defKey uint64) *Participant {
 		d = n
 	}
 	return &Participant{ID: ProcessID(d.ProcessID), Kind: KindProcess, Name: d.Name, ProcessID: d.ProcessID,
-		Version: d.Version, ProjectID: d.ProjectID, System: d.System, Inactive: d.Inactive}
+		Version: d.Version, DefinitionKey: d.Key, ProjectID: d.ProjectID, System: d.System, Inactive: d.Inactive}
 }
 
 func (b *builder) materialize(p *Participant) *Participant { return b.add(*p) }

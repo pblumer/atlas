@@ -581,17 +581,25 @@ programme is [`docs/programs/lcv`](../programs/lcv/program.json), its plan
 
 - **The page** is `#/operations/interactions/{processId}` (`api/web/interactions.js`), reached
   from an *Interactions* link on every process of the Operations list. It draws the LCV1 graph
-  as three columns of collapsed pools: whoever only sends to the process on the left, the
-  process in the middle, everybody it sends to on the right. Observed exchanges are solid,
-  possible-only ones dashed, and an observed exchange the newest definitions no longer allow
-  is drawn in the attention colour. The sends that reached nobody are listed under the graph.
-  The period is a day, a week or the event-log retention.
-- **Expanding a white box shows its message ports, not its diagram.** §8 says an expanded white
-  box shows its contents; drawing a whole BPMN diagram inside a pool of this layout is a layout
-  problem of its own, and the ports are what the exchanges attach to. A neighbour's ports are
-  read from its own graph, asked with a window of one nanosecond so that no row is scanned.
-  `↗` opens a neighbour as the center of its own graph, which is how the picture is extended
-  (§3). Expanding to the diagram is left open.
+  as a BPMN collaboration (`api/web/interactions-bpmn.js` generates the document, the vendored
+  bpmn-js renders it through `collaborationCanvas` in `editor.js`): one horizontal pool per
+  participant, the pools that only send to the process above it, the process in the middle,
+  the pools it sends to below, and one BPMN message flow per exchange. Every pool opens
+  collapsed (`isExpanded="false"`). The period is a day, a week or the event-log retention.
+- **The layers by colour.** A message flow is dashed in BPMN, so possible and observed are told
+  apart by colour and caption: an observed flow is drawn dark with its count, a possible-only
+  one light, an observed one the newest definitions no longer allow in the attention colour.
+- **Expanding a white box** draws the newest deployed version's diagram in its pool: the model's
+  process and its diagram interchange are copied in with their ids prefixed, so two expanded
+  processes that use the same element id do not collide, and moved into the band. Its message
+  flows then dock on the element behind the message name, read from the process's ports
+  (a neighbour's from its own graph, asked with a window of one nanosecond so no row is
+  scanned); where the element is not drawn, the flow docks on the pool's edge. A model that
+  cannot be placed — no drawing of that process — stays a collapsed pool. `↗` opens a
+  neighbour as the center of its own graph, which is how the picture is extended (§3).
+- **What BPMN cannot draw** is listed under the collaboration instead: the sends that reached
+  nobody (a message flow joins two pools, and nobody is not one), and a process sending a name
+  to itself, which would be a message flow inside one pool.
 - **The replay route.** `GET /api/v1/process-interactions/replay` (and the MCP tool
   `atlas_process_interaction_replay`) lists the graph's arrivals one by one, oldest first:
   `received`, `started`, `unreceived`, and `outside` for what a send of the process reached
@@ -600,9 +608,11 @@ programme is [`docs/programs/lcv`](../programs/lcv/program.json), its plan
   commands; `before` and `after` are event-log positions, as on `/api/v1/event-log`.
 - **The page's replay** reads the history backwards until the route says it began, keeps at most
   5 000 events, and states from when its history is complete and how far the event log reaches.
-  It plays one event per step as an envelope travelling along its exchange, or, at five or
-  twenty-five events per step, bundles the step into counts that pulse on each exchange and
-  says which of the two it shows. *Live* follows with `after`, and redraws the graph first when
+  It plays one event per step as an envelope travelling along its message flow, with the
+  collaboration replay's own animation (ADR-0038), or, at five or
+  twenty-five events per step, bundles the step into counts that pulse on each message flow
+  and says which of the two it shows. A send that reached nobody leaves its pool and stops
+  just below it. *Live* follows with `after`, and redraws the graph first when
   an event names an exchange it does not have. Correlation keys are listed with the events;
   narrowing the replay to one key (§7) is not built.
 - **Not built yet:** narrowing to a correlation key (§7), the saved collaboration and its findings

@@ -121,7 +121,7 @@ func TestThePossibleLayerIsReadFromTheNewestActiveDefinitions(t *testing.T) {
 		t.Fatalf("participants = %v, want %v", got, want)
 	}
 	center := g.Participants[0]
-	if !center.Center || center.Name != "Bestellung" || center.Version != 2 || center.ProjectID != "p-sales" {
+	if !center.Center || center.Name != "Bestellung" || center.Version != 2 || center.DefinitionKey != 2 || center.ProjectID != "p-sales" {
 		t.Errorf("center = %+v, want the newest version of order, marked as the center", center)
 	}
 	if w := g.Participants[2]; w.Kind != KindInboundWatch || w.Name != "Lager-Jira" || w.WorkerKind != "jira" {

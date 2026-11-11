@@ -15774,6 +15774,26 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // the model reads as a diagram; nothing drawn here is saved anywhere. The XML is the
 // package's own text, parsed by bpmn-js into shapes whose labels are text, never
 // markup. Answers a handle whose destroy() releases the canvas.
+// collaborationCanvas is the read-only bpmn-js surface the Operations page
+// *Interactions* draws its generated collaboration on (ADR-0559 §8): the same
+// modules, moddle and colours as every other diagram here, the same type icons after
+// each import, and the envelope animation of the collaboration replay (ADR-0038).
+export async function collaborationCanvas(container) {
+  const lib = await loadBpmn();
+  container.innerHTML = "";
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  return {
+    viewer,
+    async show(xml) {
+      await viewer.importXML(String(xml));
+      try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+      try { drawDataStateLabels(viewer); } catch { /* best-effort [state] captions */ }
+    },
+    dot(layer, waypoints, dur, cancelled) { return runDotAnimation(layer, waypoints, dur, cancelled); },
+    destroy() { try { viewer.destroy(); } catch { /* already gone */ } },
+  };
+}
+
 export async function mountDiagramPreview(container, xml) {
   const lib = await loadBpmn();
   container.innerHTML = "";

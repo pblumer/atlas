@@ -14,10 +14,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **Operations shows who a process talks to, and replays only the messages.** Every process in
-  the Operations list has an *Interactions* link. It opens the process between who sends to it and
-  who it sends to, every participant collapsed: observed exchanges are solid, possible ones
-  dashed, and one the newest definitions no longer allow is marked; the sends that reached nobody
-  are listed. A process expands to its message names, and opens as the center of its own picture.
+  the Operations list has an *Interactions* link. It draws a BPMN collaboration: the pools that
+  send to the process above it, the process in the middle, the pools it sends to below, every pool
+  collapsed, and a message flow per exchange — dark with its count when it was observed, light
+  when it is only possible, in the attention colour when the newest definitions no longer allow
+  it. A process expands to its deployed diagram, and its message flows then dock on the elements
+  that send and receive; it also opens as the center of its own picture. The sends that reached
+  nobody are listed.
   The replay plays what the event log recorded — deliveries, started instances, sends nobody
   received — one message at a time or bundled per step, says from when its history is complete,
   and follows new messages live. `GET /api/v1/process-interactions/replay` and the MCP tool
