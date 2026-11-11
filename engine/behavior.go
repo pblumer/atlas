@@ -1033,6 +1033,22 @@ func handleJobCompleted(c *ProcessingContext) {
 		})
 	}
 
+	// A person answered a user task (ADR-0554). Who and through which form revision
+	// came on the command; where the task sat is read here, while its element instance
+	// is still live, and frozen into the event beside the completion (I6). A forced
+	// completion is an operator's act, recorded above, and is not anybody's answer.
+	if a := c.cmd.Answer; a != nil && a.Completer != "" && !c.cmd.Manual && job.JobType == compiler.UserTaskJobTypeIndex {
+		a.ProcessInstanceKey = job.ProcessInstanceKey
+		a.ElementInstanceKey = job.ElementInstanceKey
+		a.JobKey = c.cmd.Key
+		a.Assignee = job.Assignee
+		a.CandidateGroups = job.CandidateGroups
+		if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+			a.ProcessDefKey, a.ElementId = ei.ProcessDefKey, ei.ElementId
+		}
+		c.appendEvent(job.ProcessInstanceKey, model.VTTaskAnswer, model.IntentTaskAnswered, inflightValue{taskAnswer: a})
+	}
+
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		// A result past the variable budget was refused above, with an incident on this
 		// element. Completing anyway would take that incident with it — terminating an

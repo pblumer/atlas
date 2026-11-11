@@ -1655,6 +1655,8 @@ func newValue(vt ValueType) Value {
 		return &AuthorizationValue{}
 	case VTActionApproval:
 		return &ActionApprovalValue{}
+	case VTTaskAnswer:
+		return &TaskAnswerValue{}
 	default:
 		return nil
 	}

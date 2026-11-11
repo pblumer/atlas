@@ -561,6 +561,12 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 	if err := t.deleteApprovalExpiries(piKey); err != nil {
 		return err
 	}
+	// A person's list and the by-key entry of the instance's answered tasks are keyed by
+	// person and by job, so they are found through the facts before those go below
+	// (ADR-0554).
+	if err := t.deleteTaskAnswerIndexes(piKey); err != nil {
+		return err
+	}
 	for _, prefix := range [][]byte{
 		// The terminal history record is a full key, a strict prefix of no other, so a
 		// prefix delete over it removes exactly that record — uniform with the families.
@@ -572,6 +578,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		elementTerminationInstancePrefix(procDefKey, piKey),
 		variableSnapshotScopePrefix(piKey),
 		variableElementSnapshotInstancePrefix(piKey),
+		taskAnswerInstancePrefix(piKey),
 		variableAuditScopePrefix(piKey),
 		decisionEvaluationScopePrefix(piKey),
 		variablePrefix(piKey),

@@ -1161,6 +1161,22 @@ export default {
   "tasks.folders.shared": "Geteilt",
   "tasks.folders.new": "Neuer Ordner",
   "tasks.opened": "Eröffnet",
+  // The Completed view (ADR-0554): the tasks the signed-in person completed, shown
+  // again read-only in the form they were answered in.
+  "tasks.completed.folder": "Erledigt",
+  "tasks.completed.title": "Von dir erledigt",
+  "tasks.completed.loading": "Lade…",
+  "tasks.completed.empty": "Du hast noch keine Aufgabe erledigt, die hier gezeigt werden kann.",
+  "tasks.completed.noMatch": "Keine erledigte Aufgabe passt zu deinem Filter.",
+  "tasks.completed.retention": "Erledigte Aufgaben bleiben so lange sichtbar, wie die Historie ihrer Instanz aufbewahrt wird. Aufgaben, die vor dieser Funktion erledigt wurden, fehlen.",
+  "tasks.completed.at": "erledigt {when}",
+  "tasks.completed.more": "Ältere laden",
+  "tasks.completed.pick": "Wähle eine erledigte Aufgabe, um sie noch einmal zu sehen.",
+  "tasks.completed.byYou": "Erledigt am {when} durch dich",
+  "tasks.completed.formMissing": "Das Formular dieser Aufgabe wurde gelöscht. Gezeigt werden deine Antworten.",
+  "tasks.completed.erased": "Nicht mehr lesbar, weil die betroffene Person gelöscht wurde: {fields}",
+  "tasks.completed.noValues": "Diese Aufgabe hat keine Antworten.",
+  "tasks.completed.help": "Gezeigt wird das Formular, wie du es ausgefüllt hast, mit den Werten beim Abschluss. Hat sich ein Wert geändert, während die Aufgabe offen war, siehst du den Wert beim Abschluss.",
 
   // The Start view groups the startable processes by the application they were
   // deployed under; the ones under none, or under one the viewer may not see, sit

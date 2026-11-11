@@ -165,11 +165,14 @@ func (s *Server) handleDecideApprovals(w http.ResponseWriter, r *http.Request) {
 			// this same person in another tab. GetJob reports ok=false for absent,
 			// completed and unreadable alike, which are one answer here — it is not
 			// open, so it was not decided by this call.
-			if _, ok, gErr := s.store.GetJob(a.Task.Key); gErr != nil || !ok {
+			jv, ok, gErr := s.store.GetJob(a.Task.Key)
+			if gErr != nil || !ok {
 				return
 			}
 			found = true
-			s.proc.CompleteJob(a.Task.Key, vars...)
+			// The approver's answer, as a task completed in the inbox is (ADR-0554).
+			revision := s.answeredRevisionOnLoop(s.taskFormIDOnLoop(jv), "")
+			s.proc.CompleteUserTask(a.Task.Key, completerOf(r), revision, vars...)
 		})
 		if !found {
 			out.Error = "no longer an open task; it was decided or withdrawn while this decision was being taken"

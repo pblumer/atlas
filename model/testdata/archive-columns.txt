@@ -21,3 +21,4 @@
 *model.VariableValue: Bool, Index, Indexed, Kind, Name, ProducerKey, ScopeKey, Text
 *model.AuthorizationValue: ActionDigest, ConnectionID, DecidedAt, DecisionKey, Detail, Effect, ElementInstanceKey, Enforced, ExecutedAs, ExecutedFor, IdentityMode, InitiatedBy, JobKey, LeaseEpoch, Operation, PolicyID, PolicyVersion, ProcessInstanceKey, ReasonCode, Resource, Worker, WorkerInstance, WorkerType
 *model.ActionApprovalValue: ActionDigest, ApprovalKey, Approvals, ApproverGroup, At, DecisionKey, ExpiresAt, JobKey, Kind, ObligationID, Operation, Outcome, PolicyID, PolicyVersion, Principal, ProcessInstanceKey, Reason, RequestedBy, Resource, Worker
+*model.TaskAnswerValue: Assignee, CandidateGroups, Completer, ElementId, ElementInstanceKey, FormRevision, JobKey, ProcessDefKey, ProcessInstanceKey

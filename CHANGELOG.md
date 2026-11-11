@@ -13,6 +13,19 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A completed task can be seen again by the person who completed it.** The Tasks app has a
+  view *Completed*: the tasks the signed-in person completed, newest first, each opened read-only
+  in the revision of its form it was answered through, with the values as they stood once it was
+  answered and the answer itself marked. A form changed since shows the old revision; a form
+  deleted since leaves the answers as a plain list. Nobody else reads it, administrators
+  included, and it stays as long as the instance's history is kept. Every completion by a
+  person is now recorded as a fact of its own (`TaskAnswered`) beside the job's completion, with
+  who answered and through which form revision, and the list is folded from it, so a replay
+  rebuilds it; forms keep every schema they were saved or answered with as a revision
+  (`form-revisions`). `GET /api/v1/forms/{id}` answers the `revision` a completion names back
+  as `formRevision`. New reads `GET /api/v1/tasks/completed` and
+  `GET /api/v1/tasks/completed/{key}`, and MCP tools `atlas_list_completed_tasks` and
+  `atlas_get_completed_task`. Tasks completed before this release are not listed (ADR-0554).
 - **The calendar Worker Type books into CalDAV servers too.** A calendar Worker whose bundle
   names `"provider": "caldav"` with a username and an app-specific password books into
   Nextcloud, iCloud, Fastmail, Synology, Radicale or any other CalDAV server; its endpoint is

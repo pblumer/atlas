@@ -641,7 +641,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0551](0551-complex-gateway.md) | Run the Complex Gateway, on an inclusive join that re-checks when a token leaves | Proposed | Not started |
 | [0552](0552-calendar-worker-type.md) | A calendar Worker Type finds free slots and books them on Microsoft 365, Google, CalDAV and Exchange Server | Accepted | Partial |
 | [0553](0553-entra-delta-keep.md) | A delta query's keep is applied by the Entra Worker, before it answers | Accepted | Landed |
-| [0554](0554-completed-tasks-stay-readable.md) | A completed task stays readable to the person who completed it, in the form they answered | Proposed | Not started |
+| [0554](0554-completed-tasks-stay-readable.md) | A completed task stays readable to the person who completed it, in the form they answered | Proposed | Partial |
 | [0555](0555-report-tasks-with-charts.md) | A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task | Proposed | Not started |
 | [0556](0556-decision-peek.md) | A business rule task's decision is one click from the task, and its graph can be walked there | Accepted | Landed |
 

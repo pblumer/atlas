@@ -1354,6 +1354,60 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_list_completed_tasks",
+			Description: "List the user tasks the connected person completed, newest first (ADR-0554), for as " +
+				"long as each instance's history is kept. Returns {items, nextCursor}; each item names the task, its " +
+				"process, when it was completed and the form revision it was answered through. Hand nextCursor back as " +
+				"'cursor' for the next, older page. Tasks completed before this list existed are not in it. Use a key " +
+				"with atlas_get_completed_task to see what was answered.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit":   map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "description": "Maximum tasks to return (default 50, max 200)."},
+					"cursor":  map[string]any{"type": "string", "description": "nextCursor of the previous page."},
+					"process": map[string]any{"type": "string", "description": "Only tasks of this process id."},
+					"from":    map[string]any{"type": "string", "description": "Completed at or after this instant (RFC 3339 or YYYY-MM-DD)."},
+					"to":      map[string]any{"type": "string", "description": "Completed before this instant (RFC 3339 or YYYY-MM-DD)."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				query := url.Values{}
+				limit, present, err := optPositiveUint(args, "limit")
+				if err != nil {
+					return "", err
+				}
+				if present {
+					query.Set("limit", strconv.FormatUint(limit, 10))
+				}
+				for _, name := range []string{"cursor", "process", "from", "to"} {
+					if v := optString(args, name); v != "" {
+						query.Set(name, v)
+					}
+				}
+				path := "/api/v1/tasks/completed"
+				if encoded := query.Encode(); encoded != "" {
+					path += "?" + encoded
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_get_completed_task",
+			Description: "Show one task the connected person completed again, read-only (ADR-0554): the task, the " +
+				"form revision it was answered through (null with formMissing when that form was deleted), the " +
+				"variables the form binds as they stood once it was answered, which of them were the answer, and " +
+				"which can no longer be read because their data subject was erased. Refused with a not-found error " +
+				"for a task the person did not complete.",
+			InputSchema: keyArg("The task key (from atlas_list_completed_tasks) to show."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/tasks/completed/" + strconv.FormatUint(key, 10)))
+			},
+		},
+		{
 			Name: "atlas_assignable_users",
 			Description: "List the users an open task can be assigned to — each with a username and optional " +
 				"display name. Feed a returned username as the 'assignee' for atlas_claim_task. Assigning work is " +

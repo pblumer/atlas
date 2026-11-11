@@ -3709,6 +3709,16 @@ details.fold-sub[open] > summary::before { transform: rotate(90deg); }
 .tasks-item-top .chip { flex: 0 2 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 44%; }
 .tasks-item-sub { font-size: 12px; margin-top: 3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tasks-empty { padding: 16px 14px; }
+/* The Completed view (ADR-0554): a read-only task, its note, and the plain list of
+   answers shown when the form it was answered through no longer exists. */
+.tasks-completed-note { padding: 12px 14px; font-size: 12px; }
+.tasks-more { padding: 10px 14px; }
+.tasks-completed-badge { display: inline-block; margin: 4px 0 0; padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--text); font-size: 12px; }
+.tasks-completed-help { margin-top: 14px; font-size: 12px; }
+.tasks-completed-values { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
+.tasks-completed-values dt { font-weight: 600; }
+.tasks-completed-values dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Priority & due date (ADR-0091) */
 .prio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b26b00; margin-right: 6px; vertical-align: middle; flex: 0 0 auto; }

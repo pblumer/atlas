@@ -242,8 +242,10 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		}
 		// Save first, then drop the record the author renamed away from: the reverse
 		// order would lose the form if the write failed.
+		// Only the record moves: the revisions of the id it came from stay, because a
+		// task answered through it is still shown in it (ADR-0554 §2).
 		if renaming && fromExisted {
-			orphaned = s.forms.Delete(origin) != nil
+			orphaned = s.forms.Store.Delete(origin) != nil
 		}
 	})
 	switch {
@@ -327,7 +329,10 @@ func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 			"name":      rec.Name,
 			"projectId": rec.ProjectID,
 			"savedAt":   rec.SavedAt,
-			"schema":    json.RawMessage(rec.Schema),
+			// The revision this schema is, which a completion names back so the task
+			// is shown again in the form it was answered in (ADR-0554).
+			"revision": formDigest(rec.Schema),
+			"schema":   json.RawMessage(rec.Schema),
 		})
 	}
 }

@@ -642,6 +642,25 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	})
 }
 
+// CompleteUserTask completes a user task's job as a person's answer (ADR-0554): exactly
+// as CompleteJob does, and additionally freezes who answered and through which form
+// revision into a TaskAnswered event, which the person's list of completed tasks is
+// folded from. completer is the principal id; an empty one completes like CompleteJob,
+// because there is nobody to list the task for. Use it for every completion a person
+// submits through a form; a worker uses CompleteJob and an operator CompleteJobManually.
+func (p *Processor) CompleteUserTask(jobKey uint64, completer, formRevision string, outputs ...model.VariableValue) {
+	cmd := Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+	}
+	if completer != "" {
+		cmd.Answer = &model.TaskAnswerValue{Completer: completer, FormRevision: formRevision}
+	}
+	p.queue = append(p.queue, cmd)
+}
+
 // CompleteJobManually completes a job the way a worker would, but on an operator's
 // say-so rather than because the work was reported (ADR-0159): the job is completed
 // exactly as CompleteJob does, and the intervention is additionally frozen into an
