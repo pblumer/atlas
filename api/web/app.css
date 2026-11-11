@@ -3378,7 +3378,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .form-badge:hover { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .form-badge svg { display: block; width: 13px; height: 13px; }
-/* The decision mark on a business rule task (ADR-draft-decision-peek, drawDecisionBadges): the form
+/* The decision mark on a business rule task (ADR-0556, drawDecisionBadges): the form
    mark's look, as a button — a click opens the decision over the diagram. */
 .decision-badge {
   display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0;
@@ -7952,7 +7952,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .drg-rules .mgrid { font-size: 12px; }
 .drg-rules .mgrid th, .drg-rules .mgrid td { padding: 3px 8px; }
 
-/* The decision peek (ADR-draft-decision-peek): the same window, opened from a business rule task in
+/* The decision peek (ADR-0556): the same window, opened from a business rule task in
    the Modeler. Every node is a button; the called decision is ringed in amber and the
    one whose logic is shown below in the accent, so both read at once when they differ. */
 .drg-peek-views { margin: 0 0 10px; }

@@ -195,7 +195,7 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDmnRefLogic returns one DMN reference's logic, element by element, for the
-// Modeler's decision peek (ADR-draft-decision-peek): each decision's and business knowledge
+// Modeler's decision peek (ADR-0556): each decision's and business knowledge
 // model's boxed expression as temis's typed view. It reads exactly as
 // handleDmnRefGraph does — the reference on the run loop, the model resolved and
 // compiled off it — and like it answers an unresolved or invalid model with a 200

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A business rule task's decision is one click from the task, and its graph can be walked there
+# ADR-0556: A business rule task's decision is one click from the task, and its graph can be walked there
 
 - **Status:** Accepted
 - **Implementation:** Landed

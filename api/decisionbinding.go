@@ -15,7 +15,7 @@ import (
 // version the author picked, or the model bundled with the process. The Modeler's
 // decision peek shows that model rather than whatever the decision's reference holds
 // today, because "what does this step decide" is a question about the model that
-// answers it (ADR-draft-decision-peek).
+// answers it (ADR-0556).
 //
 // Two perspectives, because the Modeler shows two kinds of diagram:
 //

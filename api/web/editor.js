@@ -1160,7 +1160,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // and so is the context pad's "Open form": both walk through leaveForForm, published
   // further down this mount, which is what saves the diagram before it is left.
   // The decision mark on a business rule task is the same kind of door, one step
-  // removed (ADR-draft-decision-peek): it opens the decision over the diagram first, and only the peek's
+  // removed (ADR-0556): it opens the decision over the diagram first, and only the peek's
   // "Open in the decision editor" leaves — through leaveForDecision, as the panel's
   // Edit does.
   const refreshBadges = makeImplementBadges(root, modeler, api, (el) => openLinkedForm(api, toast, el),
@@ -2982,7 +2982,7 @@ function drawFormBadges(modeler, open) {
 // back to this task on its address. Without a draft to come back to — a deployed
 // version opened read-only — the decision is opened plainly. The panel's "＋ New
 // decision" and "Edit" walk it, and so does the decision peek's editor button
-// (ADR-draft-decision-peek).
+// (ADR-0556).
 async function walkDecisionDoor(element, suffix) {
   const left = await leaveForDecision();
   if (!left.ok) return;
@@ -3005,7 +3005,7 @@ function calledDecisionOf(element) {
 }
 
 // peekCalledDecision opens the decision a business rule task calls over the diagram
-// (ADR-draft-decision-peek): the model its binding resolves to, with the called
+// (ADR-0556): the model its binding resolves to, with the called
 // decision marked, and the logic of whatever node the author picks. processKey is the
 // deployed definition on screen, whose own resolution then applies, or null for a
 // draft. Nothing is saved or left to look; the peek's editor button is the door out,
@@ -3038,7 +3038,7 @@ const DECISION_GLYPH = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hid
 const DECISION_BADGE_SPOT = { top: 4, right: 24 };
 
 // drawDecisionBadges marks, in the Implement view, every business rule task that calls
-// a decision on this server, and returns the overlay ids it added (ADR-draft-decision-peek). The mark
+// a decision on this server, and returns the overlay ids it added (ADR-0556). The mark
 // is a button: a click opens the decision over the diagram (open), where its graph can
 // be walked. It is not a link, because the decision's own page is one step further —
 // the peek's editor button — and a middle click on a mark that saved and left the

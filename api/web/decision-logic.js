@@ -1,6 +1,6 @@
 // decision-logic.js — what one DRG element computes, drawn from the engine's own view.
 //
-// The Modeler's decision peek (ADR-draft-decision-peek) shows a business rule task's decision as a
+// The Modeler's decision peek (ADR-0556) shows a business rule task's decision as a
 // graph the author can walk: pick a node and its logic shows underneath. That logic
 // is not parsed here. The server hands each decision's and knowledge model's boxed
 // expression over as temis's typed view (GET /api/v1/dmnrefs/{id}/logic) — the same

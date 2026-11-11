@@ -1,6 +1,6 @@
 // The decision a business rule task calls, one click from the task (api/web/editor.js
 // drawDecisionBadges, api/web/decision-graph.js openDecisionPeek, api/web/decision-logic.js;
-// ADR-draft-decision-peek).
+// ADR-0556).
 //
 // A form had its mark on the canvas since ADR-0465; a business rule task's decision was
 // reachable only from the properties panel, and only by leaving the diagram for the

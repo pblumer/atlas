@@ -257,7 +257,7 @@ func TestArtifactScopeFormsAndRefs(t *testing.T) {
 
 	// The decision peek's binding read names the stored model a deploy would bundle —
 	// to the owner. A non-member learns that one exists, which the deploy itself
-	// would tell them, and nothing of what it holds (ADR-draft-decision-peek).
+	// would tell them, and nothing of what it holds (ADR-0556).
 	if err := os.MkdirAll(filepath.Join(dir, "dmn-models"), 0o755); err != nil {
 		t.Fatalf("mkdir models: %v", err)
 	}

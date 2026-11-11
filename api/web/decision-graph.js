@@ -161,7 +161,7 @@ function drgSvg(placed, inner) {
 // annotates.
 //
 // `opts` makes the picture something to explore rather than only to look at — the
-// Modeler's decision peek (ADR-draft-decision-peek): `pick` makes every node a button carrying its
+// Modeler's decision peek (ADR-0556): `pick` makes every node a button carrying its
 // id in data-node, `called` names the node(s) the business rule task calls, and
 // `selected` the one whose logic is shown, and `kindOf(id)` may name a decision's
 // logic kind under its name where the caller knows it. Without them the picture is exactly what
@@ -565,7 +565,7 @@ async function createStoredModel(api, bound, projectId, fallbackName) {
 }
 
 // openDecisionPeek opens the decision a business rule task calls, over the Modeler
-// (ADR-draft-decision-peek): the requirements graph of the model the task's binding
+// (ADR-0556): the requirements graph of the model the task's binding
 // resolves to, with the called decision marked, and the logic of whichever node the
 // author picks — so a reader can walk the DRG from the task without leaving the
 // diagram. It edits nothing.

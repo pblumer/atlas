@@ -29,7 +29,7 @@ type TaskModel struct {
 // question the worker answers when the task's job is worked: which deployment's model
 // does it evaluate (ADR-0423)? It is decisionModelKey — the worker's own function —
 // so the Modeler's decision peek and the engine cannot disagree about it
-// (ADR-draft-decision-peek).
+// (ADR-0556).
 //
 // It reads the definition's pins and the registry's version index. The compiled
 // process belongs to the run loop, so the caller holds it there; the registry

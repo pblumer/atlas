@@ -8,7 +8,7 @@ import (
 )
 
 // ElementLogic is one DRG element's logic, read for the Modeler's decision peek
-// (ADR-draft-decision-peek): what a decision or a business knowledge model computes, as the typed
+// (ADR-0556): what a decision or a business knowledge model computes, as the typed
 // boxed-expression view temis itself serves its editors. Kind names the boxed
 // expression — literal, table, context, list, relation, invocation, conditional,
 // filter or iterator, the DMN 1.5 kinds temis has a view for — and View carries that

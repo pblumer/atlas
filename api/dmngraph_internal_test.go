@@ -90,7 +90,7 @@ func TestDmnRefGraphResolveError(t *testing.T) {
 	}
 }
 
-// TestDmnRefLogicEndpoint covers the decision peek's logic read (ADR-draft-decision-peek): a
+// TestDmnRefLogicEndpoint covers the decision peek's logic read (ADR-0556): a
 // reference to a valid model returns each decision's logic as the engine's view, an
 // unknown reference is a 404, and a model source that cannot be read is a 500.
 func TestDmnRefLogicEndpoint(t *testing.T) {

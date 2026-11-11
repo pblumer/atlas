@@ -11,7 +11,7 @@ import (
 )
 
 // The decision peek shows the model a business rule task's binding resolves to
-// (ADR-draft-decision-peek): GET /api/v1/decisions/{id}/binding. These pin each way
+// (ADR-0556): GET /api/v1/decisions/{id}/binding. These pin each way
 // a binding resolves, for a draft and for a deployed definition, against what the
 // deploy and the worker actually do.
 

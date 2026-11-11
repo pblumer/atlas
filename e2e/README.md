@@ -27,7 +27,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
-- **`decision-peek.spec.mjs`** ([ADR-draft-decision-peek](../docs/adr/draft-decision-peek.md)):
+- **`decision-peek.spec.mjs`** ([ADR-0556](../docs/adr/0556-decision-peek.md)):
   the Implement view marks a business rule task that calls a decision, and only there; the mark
   opens the decision over the diagram without saving or leaving it, on the model the task's
   binding resolves to (the server's answer, named with its version), with the called decision

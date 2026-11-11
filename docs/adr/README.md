@@ -643,6 +643,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0553](0553-entra-delta-keep.md) | A delta query's keep is applied by the Entra Worker, before it answers | Accepted | Landed |
 | [0554](0554-completed-tasks-stay-readable.md) | A completed task stays readable to the person who completed it, in the form they answered | Proposed | Not started |
 | [0555](0555-report-tasks-with-charts.md) | A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task | Proposed | Not started |
+| [0556](0556-decision-peek.md) | A business rule task's decision is one click from the task, and its graph can be walked there | Accepted | Landed |
 
 ## The two states of a record
 

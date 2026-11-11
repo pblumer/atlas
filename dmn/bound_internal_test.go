@@ -39,7 +39,7 @@ func parseBound(t *testing.T) *compiler.CompiledProcess {
 
 // TestTaskModelOf pins the decision peek's reading of a deployed task to the worker's:
 // each binding resolves as decisionModelKey resolves it, and what is not a local
-// decision task is said rather than guessed at (ADR-draft-decision-peek).
+// decision task is said rather than guessed at (ADR-0556).
 func TestTaskModelOf(t *testing.T) {
 	reg := NewRegistry()
 	if err := reg.DeployDecision(3001, []byte(eligibilityModel)); err != nil {
