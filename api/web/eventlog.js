@@ -99,7 +99,7 @@ function rowsHTML(rows) {
     return `<tr class="el-row${sameAsAbove ? " el-child" : ""}" data-kind="${esc(r.kind)}" data-pos="${esc(r.position)}" data-cause="${esc(r.cause)}">
       <td class="muted" style="white-space:nowrap">${esc(fmtDateTime(r.at))}</td>
       <td><span class="chip">${esc(r.channel)}</span></td>
-      <td>${sameAsAbove ? "" : nameCell}</td>
+      <td class="wrap-any">${sameAsAbove ? "" : nameCell}</td>
       <td>${whatHTML(r, kept)}</td>
       <td>${fromHTML(r)}</td>
       <td>${toHTML(r)}</td></tr>`;

@@ -3,6 +3,7 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { expressionReads, rootOf } from "./varuse.js";
 import { groupReplayHistory, foldLegendTokens } from "./replay-history.js";
 import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
@@ -1005,6 +1006,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <div class="vars-head"><b>${esc(tr("bpmn.vars"))}</b>
             <button class="icon-btn" id="vars-close" title="${esc(tr("bpmn.vars.close"))}" aria-label="${esc(tr("bpmn.vars.close"))}">✕</button></div>
           <input class="vars-filter" id="vars-filter" placeholder="${esc(tr("bpmn.vars.filter"))}"/>
+          <div class="vars-scope" id="vars-scope" hidden></div>
           <div class="vars-sample" id="vars-sample" hidden></div>
           <div class="vars-list" id="vars-list"></div>
         </aside>
@@ -2601,7 +2603,7 @@ function devVariables(modeler, element) {
 // Returns null when the process was never deployed or has never run — the modal
 // treats that as "no samples", not as an error.
 function instanceSamples(modeler, api, opts = {}) {
-  const bo = rootProcess(modeler);
+  const bo = owningProcess(modeler);
   return lookupSamples(api, bo && bo.id, opts);
 }
 
@@ -3094,11 +3096,18 @@ function ensureFormFields(api, ids, onLoaded) {
 
 // collectDiagramVariables statically analyses the diagram for the variables it
 // writes and where — the data behind the Variables panel (like Camunda's). Each
-// entry is { name, origin, originId, source, category }: the variable name, the
-// element that writes it (name/id and the id to select it), how (start variable,
-// linked-form field, script result, decision result, output mapping), and which
-// panel section it groups under. De-duplicated by name, sorted.
-function collectDiagramVariables(modeler) {
+// entry is { name, origin, originId, source, category, type, local }: the variable
+// name, the element that writes it (name/id and the id to select it), how (start
+// variable, linked-form field, script result, decision result, output mapping, …),
+// which panel section it groups under, and whether it lives only inside its element.
+// De-duplicated by name, sorted.
+//
+// A local — an input mapping's target, a multi-instance round's item, a loop's
+// loopCounter — is in reach only inside the element that declares it, so it is left
+// out unless `opts.locals` asks for it: completion and the Developer View offer a
+// name in every expression of the diagram, and a local offered everywhere would read
+// as a process variable. The panel asks for them and says where each one lives.
+function collectDiagramVariables(modeler, opts = {}) {
   const out = [];
   const seen = new Set();
   // `type` is what the *model* declares this variable holds, where anything declares
@@ -3106,14 +3115,25 @@ function collectDiagramVariables(modeler) {
   // Worker Type writes. Left empty where nothing does — a FEEL script's result is
   // whatever its expression evaluates to, and a guess there would be worse than the
   // silence, because a badge reads as knowledge.
-  const push = (name, origin, originId, source, category = "Process", type = "") => {
+  // A name that is both one element's local and a variable of the process is listed as
+  // the process's: that is where it is in reach for everything else.
+  const at = new Map();
+  const push = (name, origin, originId, source, category = "Process", type = "", local = false) => {
     name = (name || "").trim();
-    if (!name || seen.has(name)) return;
+    if (!name) return;
+    const row = { name, origin, originId, source, category, type, local };
+    if (seen.has(name)) {
+      if (!local && out[at.get(name)].local) out[at.get(name)] = row;
+      return;
+    }
     seen.add(name);
-    out.push({ name, origin, originId, source, category, type });
+    at.set(name, out.length);
+    out.push(row);
   };
   try {
-    const rootBo = rootProcess(modeler);
+    // The process, also while the canvas shows a collapsed subprocess's own plane:
+    // its start variables and constants are in reach in there as much as outside.
+    const rootBo = owningProcess(modeler);
     if (rootBo) {
       // The declared type used to ride along inside the source text ("start variable ·
       // string"); it is a badge of its own now, like every other type the panel knows.
@@ -3131,45 +3151,208 @@ function collectDiagramVariables(modeler) {
     }
   } catch { /* best-effort */ }
   try {
+    // The registry holds every plane, so a collapsed subprocess's contents are in it
+    // whichever plane the canvas shows.
     modeler.get("elementRegistry").forEach((el) => {
-      const bo = el.businessObject;
-      if (!bo) return;
-      const label = bo.name || bo.id;
-      const s = findExt(bo, "zeebe:Script");
-      if (s && s.resultVariable) push(s.resultVariable, label, bo.id, "FEEL script");
-      const js = findExt(bo, "atlas:JobScript");
-      if (js && js.resultVariable) push(js.resultVariable, label, bo.id, (js.language || "job") + " script");
-      const cd = findExt(bo, "zeebe:CalledDecision");
-      if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
-      const cr = workerResult(bo);
-      if (cr.name) push(cr.name, label, bo.id, "worker result", "Process", cr.type);
-      const io = findExt(bo, "zeebe:IoMapping");
-      for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
-      // A data object is first-class per-instance state (ADR-0053): its name is the
-      // engine's variable-like identity, so surface it here too. The name lives on the
-      // underlying <dataObject>; the reference's shape id drives click-to-select.
-      if (bo.$type === "bpmn:DataObjectReference") {
-        const obj = bo.dataObjectRef;
-        const st = (bo.dataState && bo.dataState.name) || "";
-        push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
-      }
-      // A linked form (start form or user-task form, ADR-0028) contributes each of
-      // its input fields as a variable: a start form's fields become the instance's
-      // start variables, a task form's become variables when the task completes. The
-      // schema is fetched lazily (ensureFormFields); until it lands the form adds
-      // nothing here. Grouped under "Form" so it reads as its own panel section.
-      const fd = findExt(bo, "zeebe:FormDefinition");
-      if (fd && fd.formId) {
-        const cached = formFieldCache.get(fd.formId);
-        if (cached && cached.fields) {
-          for (const key of cached.fields) {
-            push(key, cached.name || fd.formId, bo.id, "form field", "Form", (cached.types || {})[key] || "");
-          }
-        }
+      if (el.labelTarget) return; // a label shares its element's business object
+      for (const w of elementWrites(el.businessObject)) {
+        if (w.local && !opts.locals) continue;
+        push(w.name, w.origin, w.originId, w.source, w.category, w.type, w.local);
       }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// elementWrites lists what one element writes, as rows of collectDiagramVariables:
+// its result variables, output mappings, the fields of the form it links, what a data
+// object reference stands for — and what reaches a scope through the element's own
+// construct: a multi-instance's output collection, an agent's result collection, the
+// variables a called process hands back. Its locals are marked `local`: an input
+// mapping's target, a multi-instance round's item and the loopCounter every round of a
+// loop is given (ADR-0068, ADR-0077, ADR-0133).
+//
+// `visited` carries the processes a chain of call activities has already been read
+// through, so a process that calls itself is not read again.
+function elementWrites(bo, visited) {
+  const out = [];
+  if (!bo) return out;
+  try {
+    const label = bo.name || bo.id;
+    const add = (name, source, o = {}) => {
+      name = (name || "").trim();
+      if (!name) return;
+      out.push({
+        name, source,
+        origin: o.origin || label,
+        originId: o.originId === undefined ? bo.id : o.originId,
+        category: o.category || "Process",
+        type: o.type || "",
+        local: !!o.local,
+      });
+    };
+    const s = findExt(bo, "zeebe:Script");
+    if (s && s.resultVariable) add(s.resultVariable, "FEEL script");
+    const js = findExt(bo, "atlas:JobScript");
+    if (js && js.resultVariable) add(js.resultVariable, (js.language || "job") + " script");
+    const cd = findExt(bo, "zeebe:CalledDecision");
+    if (cd && cd.resultVariable) add(cd.resultVariable, "decision result");
+    const cr = workerResult(bo);
+    if (cr.name) add(cr.name, "worker result", { type: cr.type });
+    const io = findExt(bo, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) add(p.target, "input mapping", { local: true, category: "Local" });
+    for (const p of (io && io.outputParameters) || []) add(p.target, "output mapping");
+    // A data object is first-class per-instance state (ADR-0053): its name is the
+    // engine's variable-like identity, so surface it here too. The name lives on the
+    // underlying <dataObject>; the reference's shape id drives click-to-select.
+    if (bo.$type === "bpmn:DataObjectReference") {
+      const obj = bo.dataObjectRef;
+      const st = (bo.dataState && bo.dataState.name) || "";
+      add((obj && obj.name) || bo.name, st ? "data object · [" + st + "]" : "data object", { origin: "Data object" });
+    }
+    // A linked form (start form or user-task form, ADR-0028) contributes each of
+    // its input fields as a variable: a start form's fields become the instance's
+    // start variables, a task form's become variables when the task completes. The
+    // schema is fetched lazily (ensureFormFields); until it lands the form adds
+    // nothing here. Grouped under "Form" so it reads as its own panel section.
+    const fd = findExt(bo, "zeebe:FormDefinition");
+    if (fd && fd.formId) {
+      const cached = formFieldCache.get(fd.formId);
+      if (cached && cached.fields) {
+        for (const key of cached.fields) {
+          add(key, "form field", { origin: cached.name || fd.formId, category: "Form", type: (cached.types || {})[key] || "" });
+        }
+      }
+    }
+    // A loop's rounds: a multi-instance hands each round its item and collects the
+    // rounds' results into its output collection, which the body leaves in the scope
+    // around it; every round of either kind of loop is given its loopCounter.
+    const lc = bo.loopCharacteristics;
+    if (lc) {
+      if (lc.$type === "bpmn:MultiInstanceLoopCharacteristics") {
+        const loop = ((lc.extensionElements && lc.extensionElements.values) || [])
+          .find((v) => v.$type === "zeebe:LoopCharacteristics");
+        if (loop && loop.outputCollection) add(loop.outputCollection, "multi-instance result", { type: "array" });
+        if (loop && loop.inputElement) add(loop.inputElement, "multi-instance item", { local: true, category: "Local" });
+      }
+      add("loopCounter", "loop counter", { local: true, category: "Local", type: "number" });
+    }
+    // An agent-driven ad-hoc subprocess appends each tool call's result to its result
+    // collection (ADR-0253/0256).
+    const ag = findExt(bo, "atlas:AgentConnector");
+    if (ag && ag.resultCollection) add(ag.resultCollection, "agent result", { type: "array" });
+    // A call activity whose child's variables propagate (the default) merges every
+    // instance-scope variable of the child into the caller when the child completes
+    // (ADR-0076). The caller's own model names none of them; the called process's does,
+    // once it has been read (ensureCalledProcesses).
+    const pid = propagatingCallee(bo);
+    if (pid) {
+      for (const w of calledProcessWrites(pid, visited)) add(w.name, `called process · ${pid}`, { type: w.type });
+    }
+  } catch { /* best-effort */ }
+  return out;
+}
+
+// calledProcessCache holds the called processes the Variables panel has read, by
+// process id: { process } once read, { process: null } while being read or when there
+// is nothing to read. It lives for the page, like formFieldCache.
+const calledProcessCache = new Map();
+
+// calledProcessWrites is what a called process leaves in its instance scope, and so
+// what reaches a caller that propagates its variables: everything its elements write
+// that is not a local. Read through further call activities, once per process.
+function calledProcessWrites(pid, visited) {
+  const entry = calledProcessCache.get(pid);
+  if (!entry || !entry.process) return [];
+  const seen = visited || new Set();
+  if (seen.has(pid)) return [];
+  seen.add(pid);
+  const out = [];
+  const names = new Set();
+  forEachFlowElement(entry.process, (bo) => {
+    for (const w of elementWrites(bo, seen)) {
+      if (w.local || names.has(w.name)) continue;
+      names.add(w.name);
+      out.push(w);
+    }
+  });
+  return out;
+}
+
+// forEachFlowElement visits every flow element of a process or subprocess, the ones
+// nested in its subprocesses too, and its artifacts' data object references with them.
+function forEachFlowElement(container, fn) {
+  for (const fe of (container && container.flowElements) || []) {
+    fn(fe);
+    if (fe.flowElements) forEachFlowElement(fe, fn);
+  }
+}
+
+// ensureCalledProcesses reads the processes this diagram's propagating call activities
+// call, each once per page, and calls onLoad when one arrives. The version read is the
+// newest deployed one — what a call with the default binding runs — and a draft when the
+// process was never deployed, which is the normal case while caller and callee are being
+// written together. A callee that cannot be read adds nothing: the panel is a modelling
+// aid and says what it can.
+function ensureCalledProcesses(api, modeler, onLoad) {
+  if (!api) return;
+  const read = (pid) => {
+    if (calledProcessCache.has(pid)) return;
+    calledProcessCache.set(pid, { process: null });
+    readCalledProcess(api, modeler, pid)
+      .then((process) => {
+        if (!process) return;
+        calledProcessCache.set(pid, { process });
+        // What the callee itself calls, and the forms its tasks link, count too.
+        const ids = [];
+        forEachFlowElement(process, (bo) => {
+          const next = propagatingCallee(bo);
+          if (next) read(next);
+          const fd = findExt(bo, "zeebe:FormDefinition");
+          if (fd && fd.formId) ids.push(fd.formId);
+        });
+        if (ids.length) ensureFormFields(api, ids, onLoad);
+        onLoad();
+      })
+      .catch(() => { /* nothing to add */ });
+  };
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const pid = propagatingCallee(el.businessObject);
+      if (pid) read(pid);
+    });
+  } catch { /* best-effort */ }
+}
+
+// propagatingCallee is the process a call activity calls when the child's variables
+// come back to the caller wholesale (propagateAllChildVariables, on unless set to
+// false), and "" for anything else — with propagation off only the output mappings
+// come back, and those are the caller's own.
+function propagatingCallee(bo) {
+  if (!isCallActivity(bo)) return "";
+  const ce = findExt(bo, "zeebe:CalledElement");
+  if (ce && ce.propagateAllChildVariables === false) return "";
+  return calledProcessId(bo);
+}
+
+async function readCalledProcess(api, modeler, pid) {
+  let xml = "";
+  const deployed = await deployedCallee(api, pid);
+  if (deployed) {
+    try { xml = await api("GET", `/api/v1/processes/${deployed.key}/xml`); } catch { xml = ""; }
+  }
+  if (!xml) {
+    let drafts = [];
+    try { drafts = await api("GET", "/api/v1/drafts"); } catch { drafts = []; }
+    const draft = (Array.isArray(drafts) ? drafts : []).find((d) => (d.processId || "") === pid);
+    if (draft) {
+      try { xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draft.id || pid)}/xml`); } catch { xml = ""; }
+    }
+  }
+  if (typeof xml !== "string" || !xml) return null;
+  const { rootElement } = await modeler.get("moddle").fromXML(xml, "bpmn:Definitions");
+  const procs = ((rootElement && rootElement.rootElements) || []).filter((r) => r.$type === "bpmn:Process");
+  return procs.find((p) => p.id === pid) || procs[0] || null;
 }
 
 // varSourceLabel is the panel's name for where a variable comes from. The collected
@@ -3188,6 +3371,11 @@ const VAR_SOURCES = {
   "output mapping": "bpmn.vars.src.outputMapping",
   "data object": "bpmn.vars.src.dataObject",
   "form field": "bpmn.vars.src.formField",
+  "input mapping": "bpmn.vars.src.inputMapping",
+  "multi-instance result": "bpmn.vars.src.miResult",
+  "multi-instance item": "bpmn.vars.src.miItem",
+  "loop counter": "bpmn.vars.src.loopCounter",
+  "agent result": "bpmn.vars.src.agentResult",
 };
 function varSourceLabel(source) {
   const s = source || "";
@@ -3196,6 +3384,8 @@ function varSourceLabel(source) {
   if (m) return tr("bpmn.vars.src.dataObjectState", { state: m[1] });
   m = /^(\S+) script$/.exec(s);
   if (m) return tr("bpmn.vars.src.jobScript", { language: m[1] });
+  m = /^called process · (.*)$/.exec(s);
+  if (m) return tr("bpmn.vars.src.calledProcess", { process: m[1] });
   return s;
 }
 
@@ -3206,8 +3396,40 @@ const VAR_PLACES = {
   Process: "bpmn.vars.place.process",
   "Data object": "bpmn.vars.place.dataObject",
   Form: "bpmn.vars.place.form",
+  Local: "bpmn.vars.place.local",
 };
 function varPlaceLabel(place) { return VAR_PLACES[place] ? tr(VAR_PLACES[place]) : place; }
+
+// elementUse is what one selected element does with variables, for the Variables panel
+// narrowed to it: the paths its expressions read (varuse.js), what it writes, and the
+// locals it holds. A subprocess answers for everything inside it — what its elements
+// read and write is what the subprocess needs and leaves behind — but not for their
+// locals, which are theirs. A gateway reads what its branches' conditions name, and an
+// element waiting for a message reads the message's correlation key: both live on
+// objects the element only refers to.
+function elementUse(element) {
+  const res = { reads: [], writes: [], locals: [] };
+  const bo = element && element.businessObject;
+  if (!bo) return res;
+  const reads = [];
+  const addReads = (paths) => { for (const p of paths) if (!reads.includes(p)) reads.push(p); };
+  const referenced = (b) => {
+    for (const ed of b.eventDefinitions || []) {
+      if (ed.messageRef) addReads(expressionReads(ed.messageRef.extensionElements));
+    }
+    if (b.messageRef) addReads(expressionReads(b.messageRef.extensionElements));
+    if (/Gateway$/.test(b.$type || "")) for (const f of b.outgoing || []) addReads(expressionReads(f));
+  };
+  for (const w of elementWrites(bo)) (w.local ? res.locals : res.writes).push(w);
+  addReads(expressionReads(bo));
+  referenced(bo);
+  forEachFlowElement(bo, (fe) => {
+    for (const w of elementWrites(fe)) if (!w.local) res.writes.push(w);
+    referenced(fe);
+  });
+  res.reads = reads;
+  return res;
+}
 
 // wireEditorVars drives the design-time Variables panel: a toolbar toggle opens it,
 // it lists the diagram's variables (origin is click-to-select), a filter narrows
@@ -3256,6 +3478,16 @@ function wireEditorVars(root, modeler, api) {
   // diagram change, so without this an expansion would close under the reader mid-edit.
   const expanded = new Set();
 
+  // The element the list is narrowed to: the one selected on the canvas, until the
+  // reader asks for everything again with "Show all", which holds until the selection
+  // changes. Nothing selected, or the process or a pool, is the whole list.
+  let focus = null;
+  let showAll = false;
+  const scopeBox = root.querySelector("#vars-scope");
+  // A called process is read once per opening of the Modeler, so one deployed meanwhile
+  // is seen the next time the diagram is opened.
+  calledProcessCache.clear();
+
   // typeOf answers "what does this variable hold". An observed value wins: it is what
   // the name actually held on a real run, where the declaration is what the model
   // promises. Both are labelled in the badge's tooltip, so a declaration the run
@@ -3274,7 +3506,11 @@ function wireEditorVars(root, modeler, api) {
     // source label itself is the click-to-select target. A form field names its form
     // (also click-to-select). Other sources name the writing element.
     let meta;
-    if (v.source === "form field") {
+    if (v.unwritten) {
+      meta = esc(tr("bpmn.vars.unwritten"));
+    } else if (v.local) {
+      meta = `${esc(varSourceLabel(v.source))} · ${esc(tr("bpmn.vars.localIn"))} <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
+    } else if (v.source === "form field") {
       meta = `${esc(varSourceLabel(v.source))} · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
     } else if (v.origin === "Data object") {
       meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(varSourceLabel(v.source))}</span>`;
@@ -3308,7 +3544,7 @@ function wireEditorVars(root, modeler, api) {
     } else if (s) {
       valHTML = `<div class="var-val" title="${esc(tr("bpmn.vars.held", { name: v.name }))}">${esc(jsonPeek(s.value))}</div>`;
     }
-    return `<div class="var-row${expanded.has(v.name) ? " open" : ""}" draggable="true" data-var="${esc(v.name)}"
+    return `<div class="var-row${expanded.has(v.name) ? " open" : ""}" draggable="true" data-var="${esc(v.name)}"${v.unwritten ? ' data-unwritten="1"' : ""}
         title="${esc(tr("bpmn.vars.drag"))}">
       <div class="var-head"><div class="var-name">${esc(v.name)}</div>${badge}</div>
       <div class="var-meta">${meta}</div>${valHTML}${structHTML}</div>`;
@@ -3342,24 +3578,88 @@ function wireEditorVars(root, modeler, api) {
       <button type="button" class="vars-reload" id="vars-reload" title="${esc(tr("bpmn.vars.reloadTitle"))}">↻</button>`;
   };
 
+  // groupHTML is one collapsible section of the list.
+  const groupHTML = (cat, title, rows, q) => {
+    const col = q ? filterClosed.has(cat) : collapsedCats.has(cat);
+    return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
+      <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
+        <span class="vg-chevron" aria-hidden="true">▸</span>
+        <span class="vg-title">${esc(title)}</span>
+        <span class="vg-count">${rows.length}</span>
+      </button>
+      <div class="vars-group-body">${rows.map(rowHTML).join("")}</div>
+    </div>`;
+  };
+
+  // focusedElement is the element the list is narrowed to now, or null for the whole
+  // list. A selection that has since been deleted narrows nothing.
+  const focusedElement = () => {
+    if (!focus || showAll) return null;
+    try { return modeler.get("elementRegistry").get(focus.id) || null; } catch { return null; }
+  };
+
+  // renderScope draws the list for one element: what it reads, what it writes and what
+  // it holds itself. A name it reads is shown as the diagram knows it — its type, who
+  // writes it — and one nothing writes says so, because that is either a value from
+  // outside the model (a message's payload, a start the form does not declare) or a typo.
+  const renderScope = (el, q, match) => {
+    const name = (el.businessObject && (el.businessObject.name || el.businessObject.id)) || el.id;
+    if (scopeBox) {
+      scopeBox.hidden = false;
+      scopeBox.innerHTML = `<span class="vsc-text">${esc(tr("bpmn.vars.scope", { name }))}</span>
+        <button type="button" class="btn neutral vars-scope-all" id="vars-scope-all"
+          title="${esc(tr("bpmn.vars.scopeAllTitle"))}">${esc(tr("bpmn.vars.scopeAll"))}</button>`;
+    }
+    const use = elementUse(el);
+    const catalog = new Map(collectDiagramVariables(modeler, { locals: true }).map((v) => [v.name, v]));
+    const localNames = new Set(use.locals.map((v) => v.name));
+    const distinct = (rows) => {
+      const seen = new Set();
+      return rows.filter((v) => !seen.has(v.name) && seen.add(v.name))
+        .filter(match).sort((a, b) => a.name.localeCompare(b.name));
+    };
+    const reads = [];
+    for (const path of use.reads) {
+      const r = rootOf(path);
+      if (localNames.has(r)) continue;
+      if (catalog.has(path)) reads.push(catalog.get(path));
+      else if (catalog.has(r)) reads.push(catalog.get(r));
+      else if (r === "application" || r === "server") reads.push({ name: path, origin: "Process", originId: "", source: `${r} constant` });
+      else reads.push({ name: r, origin: "", originId: "", source: "", unwritten: true });
+    }
+    const sections = [
+      ["@reads", tr("bpmn.vars.use.reads"), distinct(reads)],
+      ["@writes", tr("bpmn.vars.use.writes"), distinct(use.writes)],
+      ["@local", tr("bpmn.vars.use.local"), distinct(use.locals)],
+    ].filter(([, , rows]) => rows.length);
+    list.innerHTML = sections.length
+      ? sections.map(([cat, title, rows]) => groupHTML(cat, title, rows, q)).join("")
+      : `<p class="vars-empty">${esc(tr(q ? "bpmn.vars.noMatch" : "bpmn.vars.useNone"))}</p>`;
+  };
+
   const render = () => {
     // Warming the form-schema cache here (fired on every diagram change) also feeds
     // the completion/picker lists, which read the same collectDiagramVariables.
     ensureFormFields(api, linkedFormIds(modeler), render);
+    ensureCalledProcesses(api, modeler, render);
     if (panel.hidden) return;
     loadSample();
     renderSample();
     const q = (filter.value || "").trim().toLowerCase();
     if (!q) filterClosed.clear();
-    const vars = collectDiagramVariables(modeler).filter((v) =>
+    const match = (v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
       varPlaceLabel(v.origin || "").toLowerCase().includes(q) ||
-      (v.source || "").toLowerCase().includes(q) || varSourceLabel(v.source).toLowerCase().includes(q));
+      (v.source || "").toLowerCase().includes(q) || varSourceLabel(v.source).toLowerCase().includes(q);
+    const el = focusedElement();
+    if (el) { renderScope(el, q, match); return; }
+    if (scopeBox) { scopeBox.hidden = true; scopeBox.innerHTML = ""; }
+    const vars = collectDiagramVariables(modeler, { locals: true }).filter(match);
     // What the process could read from its namespaces and does not declare yet — the
     // constants this installation holds and the facts each namespace carries — under the
     // list, each with the one click that declares it (ADR-0456).
     let available = [];
-    try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
+    try { available = undeclaredMembers(owningProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
     // A group like Form / Process, closed until the author opens it or a filter finds a
     // member in it: an installation with many constants would otherwise push the
     // process's own variables out of view.
@@ -3391,22 +3691,12 @@ function wireEditorVars(root, modeler, api) {
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(v);
     }
-    const order = ["Form", "Process"];
+    const order = ["Form", "Process", "Local"];
     const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
     const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     list.innerHTML = (cats.length === 1
       ? groups.get(cats[0]).map(rowHTML).join("")
-      : cats.map((cat) => {
-          const col = q ? filterClosed.has(cat) : collapsedCats.has(cat);
-          return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
-            <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
-              <span class="vg-chevron" aria-hidden="true">▸</span>
-              <span class="vg-title">${esc(varPlaceLabel(cat))}</span>
-              <span class="vg-count">${groups.get(cat).length}</span>
-            </button>
-            <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
-          </div>`;
-        }).join("")) + availableHTML;
+      : cats.map((cat) => groupHTML(cat, varPlaceLabel(cat), groups.get(cat), q)).join("")) + availableHTML;
   };
   // The installation's constants arrive after the editor mounts; draw them when they do.
   root.addEventListener("held-constants", render);
@@ -3441,6 +3731,11 @@ function wireEditorVars(root, modeler, api) {
   };
   document.addEventListener("keydown", onVarsKey, true);
   filter.addEventListener("input", render);
+  if (scopeBox) scopeBox.addEventListener("click", (e) => {
+    if (!e.target.closest("#vars-scope-all")) return;
+    showAll = true;
+    render();
+  });
   if (sampleBox) sampleBox.addEventListener("click", (e) => {
     if (!e.target.closest("#vars-reload")) return;
     // Force past the per-session cache: this is how an author picks up the instance
@@ -3454,7 +3749,7 @@ function wireEditorVars(root, modeler, api) {
   list.addEventListener("click", (e) => {
     const dec = e.target.closest(".var-declare");
     if (dec) {
-      const bo = rootProcess(modeler);
+      const bo = owningProcess(modeler);
       const m = undeclaredMembers(bo).find((x) => x.path === dec.dataset.declare);
       if (m) declareMember(modeler, bo, m); // element.changed redraws the list
       return;
@@ -3516,6 +3811,21 @@ function wireEditorVars(root, modeler, api) {
   modeler.on("element.changed", render);
   modeler.on("elements.changed", render);
   modeler.on("import.done", render);
+  // Drilling into a collapsed subprocess or back out changes which plane is on screen,
+  // not the model; the list is still drawn again so it follows the selection there.
+  modeler.on("root.set", render);
+  // The selected element narrows the list. A label stands for its element; the process
+  // itself, a pool or a lane is the whole list, since what they hold is everything.
+  modeler.on("selection.changed", (e) => {
+    const sel = (e && e.newSelection) || [];
+    let el = sel.length === 1 ? sel[0] : null;
+    if (el && el.labelTarget) el = el.labelTarget;
+    const t = el && el.businessObject && el.businessObject.$type;
+    if (!t || /:(Process|Collaboration|Participant|Lane)$/.test(t)) el = null;
+    focus = el;
+    showAll = false;
+    render();
+  });
 }
 
 // enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
@@ -8649,6 +8959,22 @@ function rootProcess(modeler) {
   } catch { return null; }
 }
 
+// owningProcess is rootProcess also while the canvas shows a collapsed subprocess's
+// own plane, whose root is the subprocess and not the process: it walks up to the
+// process the subprocess belongs to. The Variables panel reads the process's start
+// variables and constants through it, which are in reach inside the subprocess as much
+// as outside it. Kept apart from rootProcess, whose callers write to the root element
+// and would write to the subprocess.
+function owningProcess(modeler) {
+  const direct = rootProcess(modeler);
+  if (direct) return direct;
+  try {
+    let bo = modeler.get("canvas").getRootElement().businessObject;
+    while (bo && /SubProcess$|:Transaction$/.test(bo.$type || "")) bo = bo.$parent;
+    return bo && /:Process$/.test(bo.$type || "") ? bo : null;
+  } catch { return null; }
+}
+
 // processBusinessObject returns the <bpmn:process> business object a rendered diagram
 // holds for the given process id: the root itself when the diagram is a single process,
 // or the matching pool's processRef when it is a collaboration — a running instance
@@ -8784,6 +9110,9 @@ function declareMember(modeler, bo, m) {
   if (!bo || rootEl.businessObject === bo) { writeConstants(modeler, list); return; }
   const pool = modeler.get("elementRegistry").find((el) => el.businessObject && el.businessObject.processRef === bo);
   if (pool) writeConstants(modeler, list, pool, bo);
+  // Drilled into a collapsed subprocess the root is the subprocess: the declaration
+  // still belongs on the process, carried by the shape on screen.
+  else if (/:Process$/.test(bo.$type || "")) writeConstants(modeler, list, rootEl, bo);
   else writeConstants(modeler, list);
 }
 

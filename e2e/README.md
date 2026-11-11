@@ -71,6 +71,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   could not be read are left out rather than shown as none, and a process with a single
   version offers no migration at all.
 
+- **`long-values-tables.spec.mjs`**: a value that is one unbroken line — a Graph delta
+  link — keeps every list it appears in inside its box: the replay's Variables tab (closed,
+  the preview is cut and the type column stays in view; opened, the line scrolls inside the
+  structure's box), a decision's evaluations (input and result in full, the way to "How this
+  was decided" in view), a buffered message and the event log. Each test fails without the
+  fix.
+
 - **`long-values.spec.mjs`**: a variable value longer than its place in Operations — a
   whole CSV upload in one string, a list of every record read — is shown as its beginning
   and its size and opened whole in one value window that copies and saves it. Covered on
@@ -517,6 +524,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   the filter finds in the folded environment must show; sorting the table must keep every row
   in its own section, which is the shared sort/filter helper's `data-dt-group`; and with
   nothing selected the tab must stay one list whose scope chip names the kind of scope.
+
+- **`vars-scope.spec.mjs`**: the **Modeler's Variables panel** — what it lists, and what it
+  narrows to with an element selected (`vars-scope-harness.html`, a diagram with a
+  multi-instance task, input mappings, a collapsed subprocess and two call activities on a
+  deployed child process). The whole list must hold the variables that arrive through a
+  construct: a multi-instance's output collection, its item and `loopCounter`, an input
+  mapping's local, and what the called process writes when its variables propagate — not the
+  child's own locals, and nothing from a call activity that propagates nothing. Drilled into
+  the collapsed subprocess, the process's start variables and constants must stay, and
+  declaring a namespace member there must land on the process, not on the subprocess. With
+  a task selected the list falls into *Reads* (the names its FEEL names, not a word in a
+  string literal, with a name nothing writes marked as such), *Writes* and *Local*; a gateway
+  reads its branches' conditions; "Show all" lifts the narrowing until the next selection.
 
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
