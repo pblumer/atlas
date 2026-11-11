@@ -7,6 +7,7 @@
 // nothing to complete. app.js hands it the list and detail panes while the view is
 // selected and takes them back when another folder is chosen.
 
+import { fmtDateTime } from "./datefmt.js";
 import { loadFormViewer } from "./formviewer.js";
 import { t as tr } from "./i18n.js";
 
@@ -15,9 +16,10 @@ const PAGE = 50;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// when renders the completion instant in the time zone the reader chose, as every
+// other timestamp of the Console does.
 function when(iso) {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  return fmtDateTime(iso) || iso;
 }
 
 // createCompletedView keeps the view's own state — the loaded rows, the cursor, the
