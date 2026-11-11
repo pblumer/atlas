@@ -9,6 +9,7 @@
 
 import { fmtDateTime } from "./datefmt.js";
 import { loadFormViewer } from "./formviewer.js";
+import { printTaskDetail } from "./printtask.js";
 import { t as tr } from "./i18n.js";
 
 const PAGE = 50;
@@ -25,7 +26,7 @@ function when(iso) {
 // createCompletedView keeps the view's own state — the loaded rows, the cursor, the
 // selection — so switching folders and back does not refetch, and the inbox's periodic
 // refresh does not reset what the person is reading.
-export function createCompletedView({ api, listEl, detailEl, titleEl }) {
+export function createCompletedView({ api, listEl, detailEl, titleEl, me = () => "" }) {
   const state = { items: null, next: "", selected: null, loading: false, error: "" };
   let mounted = null;
   // rendered is the task the detail pane shows, so a redraw the inbox asks for — its
@@ -128,17 +129,25 @@ export function createCompletedView({ api, listEl, detailEl, titleEl }) {
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(task.name || task.elementId || task.key)}</h1>
-        <span class="tasks-completed-badge">${esc(tr("tasks.completed.byYou", { when: when(task.completedAt) }))}</span>
+        <div class="tasks-detail-actions">
+          <span class="tasks-completed-badge">${esc(tr("tasks.completed.byYou", { when: when(task.completedAt) }))}</span>
+          <button class="btn ghost" id="task-completed-print" title="${esc(tr("tasks.print.title"))}">${esc(tr("tasks.print"))}</button>
+        </div>
       </header>
       <div class="tasks-fields">
         ${row("Process", esc((task.processName || task.processId || "—") + (task.version ? " · v" + task.version : "")))}
         ${row("Element", `<span class="chip">${esc(task.elementId || "—")}</span>`)}
+        ${row(tr("tasks.completed.folder"), esc(when(task.completedAt)))}
         ${row("Instance", `<span class="chip">${esc(task.processInstanceKey)}</span>`)}
         ${row("Task key", `<span class="chip">${esc(task.key)}</span>`)}
       </div>
       ${missing}${erased}
       <div id="task-completed-form"></div>
-      <p class="muted tasks-completed-help">${esc(tr("tasks.completed.help"))}</p>`;
+      <p class="muted tasks-completed-help" data-print="omit">${esc(tr("tasks.completed.help"))}</p>`;
+    // Printed, the actions and the badge stay off the paper; the completion is still
+    // there in its own row above (ADR-0555 §6).
+    const printBtn = detailEl.querySelector("#task-completed-print");
+    if (printBtn) printBtn.addEventListener("click", () => printTaskDetail(detailEl, { who: me() }));
     const host = detailEl.querySelector("#task-completed-form");
     if (!view.form) {
       host.innerHTML = answersList(view.values);

@@ -22,6 +22,11 @@ _Changed_ / _Removed_ for each version.
   The check runs in the Modeler, because the compiler knows a linked form only by its id and
   nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
   parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
+- **A task prints.** The Tasks app's task view, open or completed, has a *Print* button. It
+  prints the task as it stands: its fields, the form with what was typed into it, and a line
+  saying when and by whom it was printed; the buttons, the tabs and the process diagram stay
+  off the paper, and a long form runs over as many sheets as it needs instead of stopping at
+  the first. The browser's *Save as PDF* turns it into a PDF (ADR-0555).
 - **atlas hub records where an installed application came from.** The server-side hub import
   records, under the application's key, the registry, the configured index URL, the fingerprint
   of the pinned key that signed the index, the release and its exact digest, the catalogues it

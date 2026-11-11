@@ -1,7 +1,7 @@
 # ADR-0555: A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** pblumer (maintainer; asked for this record on 2026-11-11 and settled four
   choices: read means acknowledged, the data comes from Atlas, a report is a snapshot,
@@ -304,6 +304,23 @@ On a narrow screen they stack in one column, as the Tasks app does
   attachment or a stored document ([ADR-0543](0543-a-file-is-a-document-not-a-variable.md))
   would need. It means drawing the charts in Go and a second implementation of the
   geometry. See the open question.
+
+### As built
+
+- **RT1 (2026-11-11): print (§6, first half).**
+  - Every task form prints: the Tasks app's detail pane, open or completed
+    ([ADR-0554](0554-completed-tasks-stay-readable.md)), has a *Drucken* / *Print*
+    button. `api/web/printtask.js` copies the pane into a print root at the end of
+    `<body>`, carries what was typed into the copy, and leaves the way back, the
+    buttons, the tabs, the process diagram and the form library's badge off the paper.
+    A footer states when and by whom it was printed. While the dialog is open nothing
+    else is laid out (`app.css`, `@media print`), and the root goes on `afterprint`.
+  - The pane is copied rather than printed in place: the Tasks app's panes have a fixed
+    height and scroll on their own, so a print of the page cut the task off at the first
+    sheet.
+  - The browser's *Print → Save as PDF* makes the PDF of any task form from this.
+  - **Not built yet:** the vector *Save as PDF* of §6, which draws the charts from the
+    geometry of §4. It comes with the `chart` component.
 
 ### Consequences
 
