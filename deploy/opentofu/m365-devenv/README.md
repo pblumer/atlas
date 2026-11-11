@@ -534,8 +534,10 @@ Es
    `/api/v1/directory-sync` und kann nicht deployen) und versiegelt es im Vault als
    `verzeichnisabgleich`, wenn noch keines dieses Namens besteht. Das Token wird nie ausgegeben;
 2. schreibt eine Kopie des Modells: `delta-users` mit
-   `keep="department eq '<Umgebungs-ID>' or startswith(userPrincipalName,'<Umgebungs-ID>-')"` und
-   `department` im `select`, `delta-groups` mit `keep="startswith(displayName,'<Umgebungs-ID>-')"`,
+   `keep="department eq '<Umgebungs-ID>'"` und `department` im `select` (die Testpersonen tragen die
+   Umgebungs-ID als Abteilung, `entra.tf`, ebenso die Konten des HR-Eintritts über die Konstante
+   `DEPARTMENT`; nicht das Präfix, das auch Raum-, Geräte- und Funktionspostfächer und
+   Partnerkonten tragen, die keine Personen sind), `delta-groups` mit `keep="startswith(displayName,'<Umgebungs-ID>-')"`,
    beide am Entra-Worker dieser Umgebung (`tofu output atlas_workers`, Art `entra`). Die beiden
    Aufrufe an Atlas werden REST-Connector-Tasks gegen `http://127.0.0.1:8080` mit
    `authSecret="verzeichnisabgleich"` (ADR-0411; einen REST-Worker in der Console gibt es nicht).

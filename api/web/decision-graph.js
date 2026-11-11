@@ -29,6 +29,7 @@
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
 import { fmtDateTime } from "./datefmt.js";
 import { t } from "./i18n.js";
+import { renderLogic, logicKindLabel } from "./decision-logic.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,18 +159,33 @@ function drgSvg(placed, inner) {
 // it, just the decisions, the input data and the requirements between them. It is
 // the Modeler's DMN view, and the plain half of the picture the evaluation view
 // annotates.
-export function renderDrgSvg(g) {
+//
+// `opts` makes the picture something to explore rather than only to look at — the
+// Modeler's decision peek (ADR-0556): `pick` makes every node a button carrying its
+// id in data-node, `called` names the node(s) the business rule task calls, and
+// `selected` the one whose logic is shown, and `kindOf(id)` may name a decision's
+// logic kind under its name where the caller knows it. Without them the picture is exactly what
+// it was, so the read-only DMN view is untouched.
+export function renderDrgSvg(g, opts = {}) {
   const placed = placeDrg(g);
   if (!placed.length) return `<p class="muted" style="padding:16px">${esc(t("drg.plain.empty"))}</p>`;
   const pos = {};
   placed.forEach((p) => { pos[p.n.id] = p; });
+  const called = new Set(opts.called || []);
+  const open = (n) => {
+    if (!opts.pick) return "<g>";
+    const cls = ["drg-node", "is-pick", called.has(n.id) ? "is-called" : "", opts.selected === n.id ? "is-selected" : ""]
+      .filter(Boolean).join(" ");
+    return `<g class="${cls}" data-node="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(n.name || n.id)}">`;
+  };
   const nodes = placed.map(({ n, x, y, w, h }) => {
     const input = n.type === "inputData";
     const bkm = n.type === "businessKnowledgeModel";
     const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
     const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
-    const sub = input ? (n.dataType || t("drg.kind.inputData")) : bkm ? t("drg.kind.bkm") : (n.hasTable ? t("drg.kind.table") : t("drg.kind.decision"));
-    return `<g>
+    const sub = input ? (n.dataType || t("drg.kind.inputData")) : bkm ? t("drg.kind.bkm")
+      : (opts.kindOf && opts.kindOf(n.id)) || (n.hasTable ? t("drg.kind.table") : t("drg.kind.decision"));
+    return `${open(n)}
       ${nodeShape(n.type, x, y, w, h, `fill="${fill}" stroke="${stroke}" stroke-width="1.5"`)}
       <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
       <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
@@ -415,4 +431,379 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
     </section>`);
   const close = el.querySelector(".drg-x");
   if (close) close.focus();
+}
+
+// ---------- the decision a task calls, before it runs ----------
+
+// boundQuery is the binding read's query: the deployed definition's task when the
+// Modeler shows a deployed version (its compiled task is the authority then), or
+// the binding the draft's task carries.
+function boundQuery({ binding, version, processKey, elementId }) {
+  const q = new URLSearchParams();
+  if (processKey) {
+    q.set("processKey", String(processKey));
+    q.set("elementId", elementId || "");
+  } else {
+    q.set("binding", binding || "latest");
+    if (binding === "version" && version) q.set("version", String(version));
+  }
+  return q.toString();
+}
+
+// boundBindingText names the binding as the panel does (ADR-0423).
+function boundBindingText(b) {
+  if (b.binding === "version") return t("peek.binding.version", { version: b.version || "?" });
+  if (b.binding === "deployment") return t("peek.binding.deployment");
+  return t("peek.binding.latest");
+}
+
+// boundSourceText says which model answers, in one line, as the server resolved it.
+// It is the sentence the reader needs most — "this is v3, deployed on …" — so it is
+// built from the answer and nothing else.
+function boundSourceText(b) {
+  const when = b.deployedAt ? fmtDateTime(b.deployedAt * 1000) : "";
+  switch (b.source) {
+    case "decisionDeployment":
+      return t(when ? "peek.source.deployedAt" : "peek.source.deployed", { version: b.deployedVersion || "?", when });
+    case "storedModel":
+      return t(b.fallback ? "peek.source.storedFallback" : "peek.source.stored");
+    case "bundle":
+      return t(b.fallback ? "peek.source.bundleFallback" : "peek.source.bundle");
+    case "newestModel":
+      return t("peek.source.newestModel");
+    default:
+      return "";
+  }
+}
+
+// boundNoneText says why nothing answers.
+function boundNoneText(b) {
+  switch (b.reason) {
+    case "versionNotDeployed":
+      return t((b.versions || []).length ? "peek.none.version" : "peek.none.versionNoneDeployed",
+        { version: b.version || "?", versions: (b.versions || []).map((v) => "v" + v).join(", ") });
+    case "notADecisionTask":
+      return t("peek.none.notADecisionTask");
+    case "notResolved":
+      return t("peek.none.notResolved", { message: b.message || "" });
+    default:
+      return t("peek.none.noModel", { id: b.decisionId || "" });
+  }
+}
+
+// resolveCalled finds the stored model behind a task's decision id: the catalog
+// entry that names it (by id, or by name — ADR-0385) and has a model handle, and the
+// reference pointing at that handle, preferring one filed under the diagram's own
+// application. Returns { dec, ref } or { dec } when the decision is known only as a
+// deployment, with no stored model to show, or {} when this server has no such
+// decision at all.
+async function resolveCalled(api, decisionId, projectId) {
+  const [catalog, refs] = await Promise.all([
+    api("GET", "/api/v1/decisions").then((x) => x || []),
+    api("GET", "/api/v1/dmnrefs").then((x) => x || []),
+  ]);
+  const named = catalog.filter((d) => d.id === decisionId || d.name === decisionId);
+  const stored = named.filter((d) => d.modelRef);
+  const fits = (r) => stored.some((d) => d.modelRef === r.modelRef);
+  const ref = refs.find((r) => fits(r) && (r.projectId || "") === (projectId || "")) || refs.find(fits) || null;
+  if (!ref) return named.length ? { dec: named[0] } : {};
+  return { dec: stored.find((d) => d.modelRef === ref.modelRef), ref };
+}
+
+// peekDetail draws the selected node: what kind of element it is, what it requires
+// and what requires it — each a button that walks the graph there — and its logic.
+function peekDetail(g, logic, id) {
+  const node = (g.nodes || []).find((n) => n.id === id);
+  if (!node) return "";
+  const name = (nid) => { const n = (g.nodes || []).find((x) => x.id === nid); return n ? (n.name || n.id) : nid; };
+  const chips = (ids) => ids.length
+    ? ids.map((nid) => `<button type="button" class="drg-chip" data-node="${esc(nid)}">${esc(name(nid))}</button>`).join(" ")
+    : `<span class="muted">${esc(t("peek.rel.none"))}</span>`;
+  const edges = g.edges || [];
+  const requires = edges.filter((e) => e.target === id).map((e) => e.source);
+  const requiredBy = edges.filter((e) => e.source === id).map((e) => e.target);
+  const el = (logic || []).find((x) => x.id === id);
+  const kindTag = node.type === "inputData" ? t("drg.kind.inputData")
+    : node.type === "businessKnowledgeModel" ? t("drg.kind.bkm")
+    : el && el.kind ? logicKindLabel(el.kind) : t("drg.kind.decision");
+  const body = node.type === "inputData"
+    ? `<p class="drg-params">${esc(t("peek.input.type"))} ${node.dataType ? `<span class="drg-type">${esc(node.dataType)}</span>` : esc(t("peek.input.untyped"))}</p>
+       <p class="muted drg-foot">${esc(t("peek.input.hint"))}</p>`
+    : renderLogic(el);
+  return `<h3>${esc(node.name || node.id)} <span class="drg-tag">${esc(kindTag)}</span>${node.dataType && node.type !== "inputData" ? ` <span class="drg-type">${esc(node.dataType)}</span>` : ""}</h3>
+    <dl class="drg-rel">
+      <dt>${esc(t("peek.rel.requires"))}</dt><dd>${chips(requires)}</dd>
+      <dt>${esc(t("peek.rel.requiredBy"))}</dt><dd>${chips(requiredBy)}</dd>
+    </dl>
+    <div class="drg-logic">${body}</div>`;
+}
+
+// modelShape is a model reduced to what it decides: its requirements graph without
+// its layout, and each element's logic as the engine reads it. Two models with the
+// same shape decide the same way, whatever their diagrams or file bytes say — which is
+// the comparison the editor button's hint needs, and the one a checksum cannot make.
+function modelShape(g, l) {
+  const nodes = ((g && g.nodes) || []).map((n) => [n.id, n.type, n.name || "", n.dataType || ""]).sort();
+  const edges = ((g && g.edges) || []).map((e) => [e.type, e.source, e.target]).sort();
+  const logic = ((l && l.elements) || []).map((e) => JSON.stringify([e.id, e.kind || "", e.view || null, e.params || null])).sort();
+  return JSON.stringify([nodes, edges, logic]);
+}
+
+// createStoredModel files a decision that exists only as a deployment as a stored
+// model, unchanged: the deployed source is written to the model store and a
+// reference points at it — the two writes the decision editor's "Save to model" makes
+// for a decision that has never been in the model (ADR-0321). It is filed under the
+// application the deployment was published from, else the diagram's. A handle that
+// is taken is refused by the store (ADR-0222) and the refusal is passed on: whose
+// model to replace is not this window's to decide.
+async function createStoredModel(api, bound, projectId, fallbackName) {
+  const xml = await api("GET", `/api/v1/decision-deployments/${encodeURIComponent(bound.key)}/xml`);
+  if (typeof xml !== "string" || !xml.trim()) throw new Error(t("peek.create.noSource"));
+  const name = bound.modelName || fallbackName;
+  const up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(name) + "&from=", xml, true);
+  return api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId: bound.applicationId || projectId || "" });
+}
+
+// openDecisionPeek opens the decision a business rule task calls, over the Modeler
+// (ADR-0556): the requirements graph of the model the task's binding
+// resolves to, with the called decision marked, and the logic of whichever node the
+// author picks — so a reader can walk the DRG from the task without leaving the
+// diagram. It edits nothing.
+//
+// Which model that is, the server says (GET /api/v1/decisions/{id}/binding), with the
+// worker's own resolution for a deployed definition and a deploy's for a draft — the
+// browser does not re-implement ADR-0423. The model the decision editor would open,
+// the stored one, is a second view a switch in the window reaches, because it is
+// what an author changes and not always what runs. `onEdit(ref)` is the door into the
+// editor; the caller owns it, because leaving the diagram means saving it first
+// (ADR-0320).
+export async function openDecisionPeek(args) {
+  const { api, decisionId, projectId = "", taskLabel = "", binding = "latest", version = "", processKey = null, elementId = "", onEdit = null, restoreFocusTo = null, notice = "" } = args;
+  closeDecisionGraph();
+  const el = document.createElement("div");
+  el.className = "drg-ov drg-peek";
+  el.innerHTML = shell(decisionId || t("drg.title"), `<span class="muted">${esc(t("drg.loading"))}</span>`, `<p class="ops-empty">${esc(t("drg.loadingBody"))}</p>`);
+  document.body.appendChild(el);
+  openOverlay = { el, restore: restoreFocusTo || document.activeElement };
+  document.addEventListener("keydown", onKeydown, true);
+  window.addEventListener("hashchange", closeDecisionGraph);
+  el.addEventListener("click", (e) => {
+    if (e.target === el || e.target.closest("[data-drg-close]")) closeDecisionGraph();
+  });
+  const x0 = el.querySelector(".drg-x");
+  if (x0) x0.focus();
+  const still = () => openOverlay && openOverlay.el === el;
+  const taskSub = taskLabel ? t("drg.sub.task", { task: esc(taskLabel) }) : "";
+
+  let found, bound;
+  try {
+    [found, bound] = await Promise.all([
+      resolveCalled(api, decisionId, projectId),
+      api("GET", `/api/v1/decisions/${encodeURIComponent(decisionId)}/binding?${boundQuery({ binding, version, processKey, elementId })}`),
+    ]);
+  } catch (err) {
+    if (still()) el.innerHTML = shell(decisionId || t("drg.title"), taskSub, `<p class="ops-empty">${esc(t("drg.loadFailed", { error: err.message }))}</p>`);
+    return;
+  }
+  if (!still()) return; // closed while it loaded
+
+  const dec = found.dec || {};
+  const ref = found.ref || null;
+  // The two views. "bound" is what the task evaluates; "stored" is the reference's
+  // model, which the editor opens. When the binding answers from that very model the
+  // two are one, and no switch is offered.
+  const sameAsStored = bound.source === "storedModel" && bound.ref && ref && bound.ref.id === ref.id;
+  const views = {
+    bound: { graph: bound.graph || null, logic: bound.logic || null, loaded: true },
+    stored: sameAsStored ? null : (ref ? { graph: null, logic: null, loaded: false } : null),
+  };
+  let current = "bound";
+  let selected = "";
+
+  const perspective = bound.perspective === "definition" ? t("peek.perspective.definition") : t("peek.perspective.draft");
+  const sub = (g) => [
+    g && g.modelName ? t("drg.sub.model", { name: esc(g.modelName) }) : "",
+    dec.service ? `<span class="drg-tag">${esc(t("drg.sub.service"))}</span>` : "",
+    taskSub,
+  ].filter(Boolean).join(" · ");
+  // What the bound view shows, named for the editor hint.
+  const boundWhat = () => bound.source === "decisionDeployment"
+    ? t("peek.what.deployed", { version: bound.deployedVersion || "?" })
+    : bound.source === "bundle" ? t("peek.what.bundle")
+    : bound.source === "newestModel" ? t("peek.what.newest")
+    : t("peek.what.stored");
+  // compared is how the stored model stands against the bound one: "same",
+  // "differs", or "" until both are read (or when there is nothing to compare).
+  let compared = "";
+  // editHint says, beside the editor button, what the editor will open — because it
+  // opens the stored model, and the window may be showing another one.
+  const editHint = () => {
+    if (!ref || sameAsStored) return "";
+    if (bound.source === "none" || bound.hidden) return { tone: "info", text: t("peek.editHint.noBound") };
+    if (compared === "differs") return { tone: "warn", text: t("peek.editHint.differs", { what: boundWhat() }) };
+    if (compared === "same") return { tone: "info", text: t("peek.editHint.same", { what: boundWhat() }) };
+    return { tone: "info", text: t("peek.editHint.comparing") };
+  };
+  const editBtn = () => {
+    if (!onEdit || !ref) return "";
+    const hint = editHint();
+    const title = hint ? t("peek.editTitle") + " " + hint.text : t("peek.editTitle");
+    return `${hint ? `<p class="drg-edit-hint is-${hint.tone}" data-peek-edit-hint>${esc(hint.text)}</p>` : ""}
+      <button type="button" class="btn" data-peek-edit title="${esc(title)}">${esc(t("peek.edit"))}</button>`;
+  };
+  // A decision that exists only as a deployment has nothing for the editor to open;
+  // it can be filed as a stored model first, from the deployed source as it is.
+  const canCreate = !ref && bound.source === "decisionDeployment" && !bound.hidden && bound.key;
+  const createBtn = () => canCreate
+    ? `<p class="drg-edit-hint is-info">${esc(t("peek.create.hint"))}</p>
+       <button type="button" class="btn" data-peek-create title="${esc(t("peek.create.title"))}">${esc(t("peek.create"))}</button>` : "";
+  const tab = (view, label) =>
+    `<button type="button" role="tab" data-peek-view="${view}"${current === view ? ` class="active" aria-selected="true"` : ` aria-selected="false"`}>${esc(label)}</button>`;
+  const switcher = () => views.stored
+    ? `<div class="seg drg-peek-views" role="tablist" aria-label="${esc(t("peek.view.label"))}">${tab("bound", t("peek.view.bound"))}${tab("stored", t("peek.view.stored"))}</div>`
+    : "";
+
+  // bindingLine is what the window is showing and why: the binding, how it resolves
+  // and from which perspective — or, on the stored view, that this is not
+  // necessarily what runs.
+  const bindingLine = () => {
+    if (current === "stored") return `<p class="drg-peek-binding is-stored">${esc(t("peek.view.storedNote"))}</p>`;
+    const src = bound.hidden ? t("peek.hidden") : boundSourceText(bound);
+    return `<p class="drg-peek-binding"><b>${esc(boundBindingText(bound))}</b>${src ? " — " + esc(src) : ""}<span class="muted"> · ${esc(perspective)}</span></p>`;
+  };
+
+  const calledIn = (g) => {
+    const nodes = (g && g.nodes) || [];
+    const direct = nodes.filter((n) => n.id === decisionId || n.id === dec.id || (n.name && n.name === decisionId)).map((n) => n.id);
+    if (direct.length) return direct;
+    // A decision service is not a node of the graph: it is drawn as what it is made of.
+    return (dec.members || []).filter((m) => nodes.some((n) => n.id === m));
+  };
+
+  const noticeHTML = notice ? `<p class="drg-peek-notice" role="status">${esc(notice)}</p>` : "";
+  const body = () => {
+    const v = views[current];
+    if (current === "bound" && (bound.source === "none" || bound.hidden)) {
+      return `${switcher()}${bindingLine()}<p class="ops-empty">${esc(bound.hidden ? t("peek.hiddenBody") : boundNoneText(bound))}</p>`;
+    }
+    if (!v || !v.loaded) return `${switcher()}${bindingLine()}<p class="ops-empty">${esc(t("drg.loadingBody"))}</p>`;
+    if (!v.graph || !v.graph.valid) {
+      return `${switcher()}${bindingLine()}<p class="ops-empty">${esc(t("peek.invalid", { message: (v.graph && v.graph.message) || "" }))}</p>`;
+    }
+    const called = calledIn(v.graph);
+    const nodes = v.graph.nodes || [];
+    if (!nodes.some((n) => n.id === selected)) selected = called[0] || (nodes[0] && nodes[0].id) || "";
+    const elements = (v.logic && v.logic.elements) || [];
+    const kindOf = (id) => { const x = elements.find((e) => e.id === id); return x && x.kind ? logicKindLabel(x.kind) : ""; };
+    return `${switcher()}${bindingLine()}
+      <section class="drg-canvas">${renderDrgSvg(v.graph, { pick: true, called, selected, kindOf })}</section>
+      <p class="drg-legend">
+        <span class="drg-key"><i class="sw called"></i>${esc(t(dec.service ? "peek.legend.service" : "peek.legend.called"))}</span>
+        <span class="drg-key"><i class="sw selected"></i>${esc(t("peek.legend.selected"))}</span>
+        <span class="drg-key">${esc(t("peek.legend.hint"))}</span>
+      </p>
+      <section class="drg-peek-detail" aria-live="polite">${peekDetail(v.graph, elements, selected)}</section>
+      ${v.logic ? "" : `<p class="muted drg-foot">${esc(t("peek.logicFailed"))}</p>`}`;
+  };
+
+  const render = () => {
+    const v = views[current];
+    const g = v && v.graph;
+    el.innerHTML = shell(dec.name || decisionId, sub(g), `${noticeHTML}${body()}
+      <footer class="drg-peek-foot">
+        <p class="muted drg-foot">${esc(t(current === "stored" ? "peek.foot.stored" : "peek.foot.bound"))}</p>
+        <div class="drg-peek-actions">${editBtn()}${createBtn()}</div>
+      </footer>`);
+  };
+
+  const loadStored = async () => {
+    const v = views.stored;
+    if (!v || v.loaded) return;
+    const id = encodeURIComponent(ref.id);
+    try {
+      const [g, l] = await Promise.all([
+        api("GET", `/api/v1/dmnrefs/${id}/graph`),
+        api("GET", `/api/v1/dmnrefs/${id}/logic`).catch(() => null),
+      ]);
+      v.graph = g;
+      v.logic = l;
+    } catch (err) {
+      v.graph = { valid: false, message: err.message };
+    }
+    v.loaded = true;
+    if (v.graph && v.graph.valid && bound.graph && (bound.source === "decisionDeployment" || bound.source === "bundle" || bound.source === "newestModel" || bound.source === "storedModel")) {
+      compared = modelShape(v.graph, v.logic) === modelShape(bound.graph, bound.logic) ? "same" : "differs";
+    }
+    if (!still()) return;
+    if (current === "stored") { render(); return; }
+    // Only the footer changes on the bound view; the graph and the selection stay.
+    const actions = el.querySelector(".drg-peek-actions");
+    if (actions) actions.innerHTML = editBtn() + createBtn();
+  };
+
+  const pick = (id) => {
+    if (!id || id === selected) return;
+    selected = id;
+    for (const n of el.querySelectorAll(".drg-canvas .drg-node")) n.classList.toggle("is-selected", n.dataset.node === id);
+    const v = views[current];
+    const detail = el.querySelector(".drg-peek-detail");
+    if (detail && v && v.graph) detail.innerHTML = peekDetail(v.graph, (v.logic && v.logic.elements) || [], selected);
+  };
+  el.addEventListener("click", (e) => {
+    const viewTab = e.target.closest("[data-peek-view]");
+    if (viewTab && el.contains(viewTab)) {
+      if (viewTab.dataset.peekView !== current) {
+        current = viewTab.dataset.peekView;
+        render();
+        if (current === "stored") loadStored();
+      }
+      return;
+    }
+    if (e.target.closest("[data-peek-edit]")) {
+      closeDecisionGraph();
+      onEdit(ref);
+      return;
+    }
+    const create = e.target.closest("[data-peek-create]");
+    if (create && !create.disabled) {
+      create.disabled = true;
+      createStoredModel(api, bound, projectId, dec.name || decisionId)
+        .then((made) => {
+          if (!still()) return;
+          // Opened again, the window finds the new reference like any other: the
+          // stored view, and the editor door.
+          openDecisionPeek({ ...args, notice: t("peek.create.done", { name: (made && made.name) || bound.modelName || decisionId }) });
+        })
+        .catch((err) => {
+          if (!still()) return;
+          create.disabled = false;
+          const msg = err && err.status === 409 ? t("peek.create.taken", { error: err.message }) : t("peek.create.failed", { error: (err && err.message) || "" });
+          const slot = el.querySelector(".drg-peek-actions");
+          if (slot) slot.insertAdjacentHTML("afterbegin", `<p class="drg-edit-hint is-warn" role="alert">${esc(msg)}</p>`);
+        });
+      return;
+    }
+    const n = e.target.closest("[data-node]");
+    if (n && el.contains(n)) pick(n.dataset.node);
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const n = e.target.closest && e.target.closest(".drg-node[data-node]");
+    if (!n) return;
+    e.preventDefault();
+    pick(n.dataset.node);
+  });
+
+  // Nothing at all to show — no model behind the binding and none stored — is said
+  // as one sentence rather than as an empty switch.
+  if (bound.source === "none" && !ref && !bound.hidden) {
+    el.innerHTML = shell(dec.name || decisionId, taskSub, `${bindingLine()}<p class="ops-empty">${esc(boundNoneText(bound))}</p>`);
+    return;
+  }
+  render();
+  const close = el.querySelector(".drg-x");
+  if (close) close.focus();
+  // The stored model is read now rather than when its view is opened: the editor
+  // button's hint is a comparison with it.
+  if (views.stored && onEdit) loadStored();
 }

@@ -556,6 +556,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Deployed decisions", tArray())}},
+		{"GET", "/api/v1/decisions/{id}/binding", s.handleDecisionBinding, apiOp{
+			summary: "Which model a business rule task's binding resolves the decision to, with that model's requirements graph and logic. For a draft's task pass ?binding= (latest, version, deployment) and ?version=, and it is resolved as a deploy now and the worker would: a version to its decision deployment, latest to the newest decision deployment or else the stored model a deploy would bundle. For a deployed definition's task pass ?processKey= and ?elementId=, and it is resolved by the worker's own resolution against the definition's pins and bundle (ADR-0556)",
+			tag:     "Decisions", role: RoleModeler, resp: jsonBody("The resolved model", tObject())}},
 		{"GET", "/api/v1/decisions/{id}/evaluations", s.handleDecisionEvaluations, apiOp{
 			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
@@ -2234,6 +2237,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", role: RoleModeler, resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
 			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model graph", tObject())}},
+		{"GET", "/api/v1/dmnrefs/{id}/logic", s.handleDmnRefLogic, apiOp{
+			summary: "A DMN reference's logic, element by element: each decision's and business knowledge model's boxed expression (literal, decision table, context, list, relation, invocation, conditional, filter, iterator) as the engine's typed view, for the Modeler's read-only decision peek (ADR-0556)", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model logic", tObject())}},
 		{"POST", "/api/v1/dmn-layout", s.handleDmnLayout, apiOp{
 			summary: "Regenerate a DMN model's decision requirements diagram — discards any existing DMNDI and returns the model with a freshly laid-out graph, backing the decision editor's Auto-layout action. A pure transform: nothing is compiled, stored, or deployed (ADR-0325)", tag: "Decisions", role: RoleModeler,
 			req:  xmlBody("DMN XML"),

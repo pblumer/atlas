@@ -194,6 +194,40 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, g)
 }
 
+// handleDmnRefLogic returns one DMN reference's logic, element by element, for the
+// Modeler's decision peek (ADR-0556): each decision's and business knowledge
+// model's boxed expression as temis's typed view. It reads exactly as
+// handleDmnRefGraph does — the reference on the run loop, the model resolved and
+// compiled off it — and like it answers an unresolved or invalid model with a 200
+// carrying a message, so the peek can say why there is nothing to show.
+func (s *Server) handleDmnRefLogic(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var (
+		rec    dmnRef
+		ok     bool
+		getErr error
+	)
+	s.do(func() { rec, ok, getErr = s.dmnrefs.Get(id) })
+	switch {
+	case getErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		return
+	case !ok:
+		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
+		return
+	}
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleViewer); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	l, err := s.dmnValidator.Logic(r.Context(), rec.ModelRef)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, l)
+}
+
 // handleDmnModelXML returns the raw DMN model XML for a model handle (modelRef), so
 // the embedded DMN editor can open an existing decision for editing (ADR-0062).
 // Resolving the model bytes is concurrent-safe I/O that touches no engine state, so
