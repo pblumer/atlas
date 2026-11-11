@@ -252,3 +252,41 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 2
   failureThreshold: 3
+
+# -- Alerting rules for the single writer, as a Prometheus Operator PrometheusRule
+# (ADR-0557). Off by default: it needs the monitoring.coreos.com CRDs, and a cluster
+# without them would refuse the install. The chart ships no ServiceMonitor; scraping
+# /metrics needs an API token of scope metrics (see README, "Metrics and alerts").
+#
+# The rules answer three questions: is the writer reachable (probe timeouts, store
+# read failures), do requests wait noticeably (the probe's wait time), and is it load
+# or a slowdown (the writer's utilisation against the probe's fixed reference work,
+# compared with its own 7-day median). The probe metrics exist from the Atlas release
+# after 0.25.0; against an older server only the utilisation alert can fire.
+prometheusRule:
+  enabled: false
+  # -- Extra labels on the PrometheusRule object, e.g. `release: kube-prometheus-stack`
+  # so the operator's ruleSelector picks it up.
+  labels: {}
+  # -- Extra labels on every alert, e.g. `team: platform`, for Alertmanager routing.
+  alertLabels: {}
+  # -- The series selector that picks this installation's targets in every expression.
+  # Empty means job="<release fullname>", which is the job label a ServiceMonitor on
+  # the chart's Service produces. Set it to match your scrape config otherwise, e.g.
+  # 'job="atlas", namespace="prod"'. On the command line --set splits on commas, so
+  # escape them there: --set prometheusRule.selector='job="atlas"\, namespace="prod"'.
+  selector: ""
+  # -- The thresholds are assumptions derived from a small, healthy installation
+  # (store reference about 5µs, compute reference about 14µs, wait in microseconds
+  # while idle). Calibrate them against your own installation.
+  thresholds:
+    # -- p95 of the probe's wait for the writer, over 15 minutes, in seconds.
+    waitWarningSeconds: 0.1
+    waitCriticalSeconds: 1
+    # -- Share of time the writer is held by callers' turns (0 to 1).
+    utilisation: 0.7
+    # -- How many times its own 7-day median a reference part must take to count as
+    # slower, and the absolute floor below which it never does.
+    slowerFactor: 2
+    storeFloorSeconds: 0.0005
+    computeFloorSeconds: 0.0002

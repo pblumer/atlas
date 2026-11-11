@@ -84,6 +84,26 @@
         "extraArgs": { "type": "array" },
         "extraEnv": { "type": "array" }
       }
+    },
+    "prometheusRule": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "alertLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "selector": { "type": "string" },
+        "thresholds": {
+          "type": "object",
+          "properties": {
+            "waitWarningSeconds": { "type": "number", "exclusiveMinimum": 0 },
+            "waitCriticalSeconds": { "type": "number", "exclusiveMinimum": 0 },
+            "utilisation": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "slowerFactor": { "type": "number", "exclusiveMinimum": 1 },
+            "storeFloorSeconds": { "type": "number", "exclusiveMinimum": 0 },
+            "computeFloorSeconds": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
     }
   }
 }
