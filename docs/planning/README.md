@@ -12,6 +12,7 @@ This directory contains **product and engineering plans for atlas**: implementat
 | [BPMN 2.x Conformance](bpmn-conformance-program.md) | Normative OMG coverage programme (CON), with [baseline](bpmn-conformance-baseline.md), [feature inventory](bpmn-conformance-feature-inventory.md), [CON0 normative audit](bpmn-conformance-con0-audit.md), [event matrix](bpmn-conformance-con0-event-matrix.md), [43 workflow patterns](bpmn-conformance-con0-workflow-patterns.md) and [implementation runbook](bpmn-conformance-implementation-runbook.md) |
 | [Capability-driven Automation](capability-driven-automation-program.md) | Multi-slice capability-driven automation programme |
 | [Identity-aware Execution](identity-aware-execution-program.md) | Identity and policy-aware worker execution programme |
+| [Local collaboration views](local-collaboration-views-program.md) | Who a process talks to, derived from definitions and the event log: graph, Operations replay, saved collaborations (LCV, ADR-0559) |
 | [Technical Capability Contract](technical-capability-contract.md) | Capability contract semantics, conformance and integration plan |
 | [Documents instead of variables (ADR draft)](documents-instead-of-variables.md) | Storing uploaded files once in a document store, with a reference in the variable |
 | [AD search as a document](ad-search-as-document.md) | Reading a whole directory into a CSV document, so a business rule task over a file can check every user (ADR-0548) |

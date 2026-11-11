@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Atlas shows who a process talks to.** `GET /api/v1/process-interactions?processId=…` and the
+  MCP tool `atlas_process_interactions` answer the interaction graph around one process: every
+  participant it exchanges message names with — other deployed processes, also when they were
+  deployed from other files, and the inbound watches, product actions and API publishes that send
+  to it — and per exchange what the newest, active definitions make possible and what the event
+  log observed in a window: how often a message arrived, how many instances it started, and when
+  last. Its sends that reached nobody are counted, and its message names are listed with the
+  elements behind them. A reader sees only the rows the event log shows them; whatever they may
+  not read is a nameless participant "outside your view". The scan is bounded and says where it
+  stopped (ADR-0559).
 - **atlas hub shows what of an installed release is here.** An installation now lists its
   components — the application, its processes, forms, decisions and constants, its release, its
   catalogues and products — each as this server holds it at the moment it is read, never as the

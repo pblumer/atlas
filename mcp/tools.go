@@ -1621,6 +1621,36 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_process_interactions",
+			Description: "The interaction graph around one process (ADR-0559): which participants exchange which " +
+				"message names with it. Each exchange ('from', 'to', 'message') says whether the newest, active " +
+				"definitions make it 'possible' and what the event log 'observed' in the window: 'received' (arrivals, " +
+				"deliveries and instances started), 'started' and 'lastAt'. 'participants' are processes (white boxes, " +
+				"with the pool name they were deployed under) and black boxes: inbound watches and product actions " +
+				"that may send what it waits for, 'publish' (the API or atlas's own order publishes), 'inbound', " +
+				"'directed', 'removed' (a definition no longer deployed) and 'outside-view' (a party whose rows you may " +
+				"not read, without a name). 'unreceived' counts its sends that reached nobody; 'ports' are its message " +
+				"names and the elements behind them. Rows are read as atlas_event_log reads them; 'observed.partial' " +
+				"and 'observed.readFrom' say when the bounded scan stopped early, 'retention' how far the log reaches. " +
+				"Use it to see how a process is connected, and call it again for a neighbour to extend the picture.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"processId": stringProp("The BPMN process id to compute the graph around."),
+					"window":    stringProp("How far back the observed layer reads, as a duration such as 24h (default: the event-log retention)."),
+				},
+				"required": []string{"processId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				q.Set("processId", optString(args, "processId"))
+				if v := optString(args, "window"); v != "" {
+					q.Set("window", v)
+				}
+				return asText(c.get("/api/v1/process-interactions?" + q.Encode()))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +

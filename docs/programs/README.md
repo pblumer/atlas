@@ -6,7 +6,7 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**9 programmes** · active: 8 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
+**10 programmes** · active: 9 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
@@ -14,6 +14,7 @@ See [delivery protocol](../development/program-delivery.md) and
 | [BPMN 2.x Conformance](../planning/bpmn-conformance-program.md) | active | 0/7 | pblumer | Owner review of ADR-0551: accept, amend or reject; on acceptance PR 1 (inclusive-join re-check, fixes the CON2 hang) then PR 2 (Complex Gateway). Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Put branch protection with the code owner's review in force on main (ADR-0483's trust boundary; the maintainer decided 2026-11-10 that the first publication may freeze ADR-0485's v1alpha1 fields). Then publish the drafted io.atlas.collaboration.channel.create@1.0.0+microsoft-teams: move workertype/evidence/testdata/contracts/collaboration-channel-create.json unchanged to workertype/contracts/ and create its record with the entra-create-channel suite. After that, give Entra's create-channel codes for an unknown team and a name in use, so the record's two failed cases can pass. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+| [Local collaboration views](../planning/local-collaboration-views-program.md) | active | 0/4 | pblumer | Review and merge the LCV1 pull request (the interaction graph route, its MCP tool and the acceptance of ADR-0559); then start LCV2, the Operations view over that route with collapsed participants and the message-only replay read page by page from the event log. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/9 | pblumer | MFE1 software is merged (#1492, #1495, #1497, #1498, #1500); collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. MFE1A (Console page for start grants, #1639) is active: PR A #1642 (blockers field) merged, PR B #1655 (page, read-only application hint, Playwright, docs) open; it stays active until an acceptance run against a real server with sign-in. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1459's DMN fork and npm-lockfile licence evidence; inspect actual generated DMN JS/CSS/font bundle, run reproducible rebuild and SBOM/notice checks, verify copied fixtures, and explicitly accept or revise ADR-0513 before authoring changes. |
 | [Operations History at Scale](../planning/operations-history-at-scale-program.md) | active | 1/3 | pblumer | Merge #1514 (variables at a step, OHS3 increment 3); then job/user-task history per iteration (OHS3) and a 50,000-iteration MI-subprocess acceptance through the HTTP server. |
@@ -84,6 +85,19 @@ Govern external Worker actions through explicit identities, managed Connections,
 | **IAE6** — Console, Operations and audit | planned | unassigned | IAE1, IAE3, IAE4, IAE5 | — | Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history. |
 | **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
 | **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
+
+## Local collaboration views (LCV)
+
+Show who a process talks to on one installation, derived from the deployed definitions and the event log rather than drawn in one BPMN file: the interaction graph, an Operations view with every process collapsed and a replay of only the messages, an optional saved collaboration with its findings, and composing one step by step in the Modeler. Documentation and operational view only, no contract and no engine change.
+
+**[Programme plan](../planning/local-collaboration-views-program.md) · [Roadmap track](../../ROADMAP.md#milestone-2--events-and-timers-) · [Manifest](lcv/program.json) · Reviewed: 2026-11-11**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **LCV1** — Interaction graph around one process (possible and observed) | active | pblumer | — | — | GET /api/v1/process-interactions and atlas_process_interactions: participants, exchanges with their possible and observed layers, sends that reached nobody, the process's message ports. Pure computation in api/interaction; the event-log scan runs off the loop on a ReadView, bounded at 100000 rows, and rows are read under the event log's own rule (eventLogReach). ADR-0559 accepted with this slice.; [Evidence 1](../../api/interaction/interaction_test.go), [Evidence 2](../../api/interactions_http_test.go) |
+| **LCV2** — Operations view: collapsed participants and the message-only replay | planned | unassigned | LCV1 | — | ADR-0559 §7 and §8: the graph around a process in the Operations app, opening collapsed, each participant expandable; a replay of deliveries, starts, sends that reached nobody and black-box sends read from the event log page by page over a time range, with a dense mode that pulses counts; 'outside your view' for what the reader may not see; the history's beginning stated. Needs a time-ordered row route or cursor over the graph's rows, and browser end-to-end tests. |
+| **LCV3** — Saved collaboration and its findings | planned | unassigned | LCV1 | — | ADR-0559 §5: a design-time BPMN document of one collaboration, filed under an application, exported with it and never deployed; participants by atlas:processRef, flows by messageRef; the findings collaboration.participant-unresolved, flow-not-sent, flow-not-received, flow-not-observed, undrawn-exchange and reaches-outside. Decide the store first: a draft kind (editor, co-editing, history) or a store of its own. |
+| **LCV4** — Composing a collaboration step by step in the Modeler | planned | unassigned | LCV3 | — | ADR-0559 §6: ports at the pool edge from the graph's ports, a '+' listing the counterparts with their observed counts, name proposals separate from the binding, placeholders for unreceived names, a participant the reader may not see greyed and anonymous, drift reported with the edit that resolves it. |
 
 ## Mobile & Field Experience (MFE)
 

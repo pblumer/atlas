@@ -1042,6 +1042,14 @@ Making processes wait, react, and time out.
   keeping and expiry, folded from the log into a table kept for `--event-log-ttl` (30 days).
   *Operations → Diagnostics → Event log*, `GET /api/v1/event-log` and `atlas_event_log`; a row
   is read as its instance is (ADR-0275). Counters per name are not built.
+- 🚧 **Collaborations over processes that already exist**
+  ([ADR-0559](docs/adr/0559-local-collaboration-views.md), programme
+  [LCV](docs/programs/lcv/program.json)): who a process talks to, derived from the definitions
+  and the event log rather than drawn in one file. ✅ LCV1, the interaction graph around one
+  process — possible and observed exchanges, sends that reached nobody, its message ports —
+  `GET /api/v1/process-interactions` and `atlas_process_interactions`. 🔲 LCV2, the Operations
+  view with every process collapsed and a replay of only the messages; 🔲 LCV3, the saved
+  collaboration with its findings; 🔲 LCV4, composing one step by step in the Modeler.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
