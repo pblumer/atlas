@@ -13,6 +13,14 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Helm chart can install alerting rules for the single writer.** `prometheusRule.enabled=true`
+  renders a Prometheus Operator `PrometheusRule` with four recording rules and seven alerts: probe
+  timeouts and failed store reads (critical), a noticeable wait for the writer, the writer's
+  utilisation as the load signal, and the probe's fixed store and compute work against its own
+  7-day median as the slowdown signal. Off by default because it needs the operator's CRDs. The
+  series selector, the object's labels, extra alert labels and every threshold are values; the
+  thresholds are starting points to calibrate. The recording rules drop `instance`, which a pod
+  restart changes, so the 7-day baseline survives a restart (ADR-0557).
 - **A reference probe measures the single writer whatever the traffic.** Every five seconds the
   server hands its run loop the same fixed, read-only work and exports how long it queued
   (`atlas_runloop_probe_wait_seconds`) and how long each part took
