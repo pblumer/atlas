@@ -7,7 +7,7 @@
 // One operation serves every provider backend, and the contracts carry one profile, so
 // a case passes only when it passes on every backend the Worker Type has. The backends
 // are listed in [backends]; each brings a world the case seeds, runs the operation in,
-// and inspects afterwards. Today that is the mock alone; a provider backend joins with
+// and inspects afterwards: the mock, Graph, Google, CalDAV and EWS. A provider backend joins with
 // an in-process fake of its API, and every record that names one of these suites moves
 // with it, as it should.
 //
@@ -15,7 +15,8 @@
 //
 // Every case runs calendar.RunAt — the operation itself — at a fixed instant, so a
 // record derived today verifies next year. The fakes see every create that returned
-// before a read began, by construction. Whether Microsoft Graph and Google Calendar do
+// before a read began, by construction. Whether Microsoft Graph, Google Calendar, a CalDAV
+// server and Exchange Server do
 // is the open question the record names; the reservation suite reports that case as
 // not exercised rather than passing it on the fakes' word.
 //
@@ -37,6 +38,7 @@ import (
 	"github.com/pblumer/atlas/connector/calendar"
 	"github.com/pblumer/atlas/connector/calendar/caldavfake"
 	"github.com/pblumer/atlas/connector/calendar/catalog"
+	"github.com/pblumer/atlas/connector/calendar/ewsfake"
 	"github.com/pblumer/atlas/connector/calendar/googlefake"
 	"github.com/pblumer/atlas/connector/calendar/graphfake"
 	"github.com/pblumer/atlas/job"
@@ -138,6 +140,52 @@ var backends = []backendUnderTest{
 	{name: calendar.ProviderGraph, build: buildGraphWorld},
 	{name: calendar.ProviderGoogle, build: buildGoogleWorld},
 	{name: calendar.ProviderCalDAV, build: buildCalDAVWorld},
+	{name: calendar.ProviderEWS, build: buildEWSWorld},
+}
+
+// ewsWorld is the EWS backend against the in-process fake of Exchange Web Services,
+// behind NTLM.
+type ewsWorld struct {
+	fake *ewsfake.Server
+	b    calendar.Backend
+}
+
+func buildEWSWorld(specs map[string]calendar.MockCalendarSpec) world {
+	boxes := map[string]ewsfake.Mailbox{}
+	for name, spec := range specs {
+		mb := ewsfake.Mailbox{ReadOnly: spec.ReadOnly, SendAsDenied: spec.RefuseAttendees}
+		for _, b := range spec.Busy {
+			fb := "Busy"
+			if b.Free {
+				fb = "Free"
+			}
+			mb.Busy = append(mb.Busy, ewsfake.Busy{Start: b.Start, End: b.End, FreeBusy: fb, Weekly: b.Weekly})
+		}
+		boxes[name] = mb
+	}
+	fake := ewsfake.New(boxes)
+	b, err := calendar.NewBackend(fake.URL(), ewsfake.Bundle(""), calendar.Options{HTTPClient: fake.HTTPClient()})
+	if err != nil {
+		panic("calendarbooking: the EWS backend does not build against the fake: " + err.Error())
+	}
+	return ewsWorld{fake: fake, b: b}
+}
+
+func (w ewsWorld) backend() calendar.Backend { return w.b }
+
+func (w ewsWorld) close() { w.fake.Close() }
+
+func (w ewsWorld) events(cal string) []observed {
+	items := w.fake.Items(cal)
+	out := make([]observed, len(items))
+	for i, it := range items {
+		att := make([]calendar.Attendee, len(it.Attendees))
+		for j, a := range it.Attendees {
+			att[j] = calendar.Attendee{Email: a.Email, Name: a.Name}
+		}
+		out[i] = observed{ID: it.ID, Key: it.Key, Start: it.Start, End: it.End, Subject: it.Subject, Body: it.Body, Attendees: att}
+	}
+	return out
 }
 
 // caldavWorld is the CalDAV backend against the in-process CalDAV server.
@@ -328,7 +376,11 @@ func Suite(name string) evidence.Suite {
 			"and keeps a deleted event as cancelled. caldav runs against connector/calendar/caldavfake, written from RFC 4791 " +
 			"and RFC 5545, not observed from a server; it expands a series only when asked, refuses a calendar-query that " +
 			"reads more than times and availability, and keeps ETags. A CalDAV server records attendees and does not refuse " +
-			"them, so that case is met vacuously on it. " +
+			"them, so that case is met vacuously on it. exchange-ews runs against connector/calendar/ewsfake, written from " +
+			"Microsoft's EWS reference, not observed from an Exchange server; it authenticates every request with NTLMv2 " +
+			"against the account's password, expands a series only in a calendar view, refuses an item shape wider than " +
+			"times and availability and a calendar item out of the schema's element order, and answers ErrorSendAsDenied " +
+			"to attendees from a mailbox the account may not send for. " +
 			"The backends see every create that returned before a read began; whether a provider does is not shown here.",
 		Run: func(ctx context.Context, contract workertype.TechnicalContract) ([]evidence.Result, error) {
 			return run(ctx, name, contract)

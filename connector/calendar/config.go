@@ -19,19 +19,23 @@ const (
 	// ProviderCalDAV is any CalDAV server (RFC 4791): Nextcloud, iCloud, Fastmail,
 	// Synology, SOGo, Radicale, Baïkal, most hosting providers.
 	ProviderCalDAV = "caldav"
+	// ProviderEWS is Exchange Server on premises through Exchange Web Services, which
+	// Microsoft Graph does not reach.
+	ProviderEWS = "exchange-ews"
 	// ProviderMock is the in-memory calendars of [MockCalendars]: the worker's switch,
 	// not the model's (ADR-0221), so a model runs unchanged against either.
 	ProviderMock = "mock"
 )
 
 // Providers lists the providers this build implements.
-var Providers = []string{ProviderGraph, ProviderGoogle, ProviderCalDAV, ProviderMock}
+var Providers = []string{ProviderGraph, ProviderGoogle, ProviderCalDAV, ProviderEWS, ProviderMock}
 
 // Bundle is what a calendar Worker's vault entry holds: which provider, and as whom.
 //
 //	{"provider": "microsoft-graph", "tenantId": "…", "clientId": "…", "clientSecret": "…"}
 //	{"provider": "google-calendar", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey": "-----BEGIN PRIVATE KEY-----…"}
 //	{"provider": "caldav", "username": "verkauf@firma.ch", "password": "app-specific password", "timeZone": "Europe/Zurich"}
+//	{"provider": "exchange-ews", "username": "CONTOSO\\svc-booking", "password": "…", "authentication": "ntlm"}
 //	{"provider": "mock", "calendars": {"werkstatt@firma.ch": {"busy": [ … ]}}}
 //
 // The provider is the Worker's, not the model's: a booking process names a Worker and a
@@ -61,6 +65,11 @@ type Bundle struct {
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 	TimeZone string `json:"timeZone,omitempty"`
+
+	// Exchange Web Services: the service account's username and password, the same two
+	// fields as CalDAV's, and how they are sent — "ntlm" (the default) or "basic". The
+	// endpoint is the server's EWS URL.
+	Authentication string `json:"authentication,omitempty"`
 
 	// Mock: the calendars and what they already hold.
 	Calendars map[string]MockCalendarSpec `json:"calendars,omitempty"`
@@ -116,6 +125,8 @@ func NewBackend(endpoint, raw string, opts Options) (Backend, error) {
 		return newGoogle(endpoint, b, opts)
 	case ProviderCalDAV:
 		return newCalDAV(endpoint, b, opts)
+	case ProviderEWS:
+		return newEWS(endpoint, b, opts)
 	case ProviderMock:
 		if strings.TrimSpace(endpoint) != "" {
 			return nil, fmt.Errorf("calendar: the mock provider has no endpoint; leave it empty")
@@ -132,6 +143,7 @@ var fieldsOf = map[string][]string{
 	ProviderGraph:  {"tenantId", "clientId", "clientSecret"},
 	ProviderGoogle: {"clientEmail", "privateKey", "subject"},
 	ProviderCalDAV: {"username", "password", "timeZone"},
+	ProviderEWS:    {"username", "password", "authentication"},
 	ProviderMock:   {"calendars"},
 }
 
@@ -143,13 +155,14 @@ func (b Bundle) foreignTo(provider string) string {
 		"tenantId": b.TenantID != "", "clientId": b.ClientID != "", "clientSecret": b.ClientSecret != "",
 		"clientEmail": b.ClientEmail != "", "privateKey": b.PrivateKey != "", "subject": b.Subject != "",
 		"username": b.Username != "", "password": b.Password != "", "timeZone": b.TimeZone != "",
-		"calendars": b.Calendars != nil,
+		"authentication": b.Authentication != "",
+		"calendars":      b.Calendars != nil,
 	}
 	takes, known := fieldsOf[provider]
 	if !known {
 		return ""
 	}
-	for _, f := range []string{"tenantId", "clientId", "clientSecret", "clientEmail", "privateKey", "subject", "username", "password", "timeZone", "calendars"} {
+	for _, f := range []string{"tenantId", "clientId", "clientSecret", "clientEmail", "privateKey", "subject", "username", "password", "timeZone", "authentication", "calendars"} {
 		if set[f] && !slices.Contains(takes, f) {
 			return f
 		}

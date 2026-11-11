@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The calendar Worker Type books into Exchange Server too.** A calendar Worker whose bundle
+  names `"provider": "exchange-ews"` books into Exchange Server 2016, 2019 or Subscription
+  Edition on premises through Exchange Web Services, which Microsoft Graph does not reach. A
+  service account with Editor on each booking mailbox's calendar authenticates with NTLM (or
+  Basic where only that is enabled); the endpoint is the server's EWS URL and a task names a
+  calendar by its mailbox address. Only times and availability are read, never subjects. A
+  repeated delivery finds its reservation by a create key written into an extended property,
+  and a mailbox the account may not send for refuses attendees with
+  `CALENDAR_ATTENDEES_NOT_ALLOWED` (ADR-0552, phase 4).
 - **The Modeler's Variables panel narrows to the selected element.** With a task, gateway,
   event or subprocess selected, the panel lists what that element reads — the variables its
   FEEL expressions, branch conditions, correlation keys and template placeholders name —
