@@ -3,7 +3,9 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"os/exec"
 	"testing"
+	"time"
 )
 
 // REST is offloaded by default (ADR-0233), and the
@@ -108,4 +110,71 @@ func TestRESTAndLdifAreOffloadedByDefault(t *testing.T) {
 	if _, provisioned := (&Server{}).provisionedConnectorKinds()["rest"]; !provisioned {
 		t.Error("rest is defaulted onto a worker but its auth secrets are not handed over")
 	}
+}
+
+// Deploying a model whose REST task names a secret nothing had named yet reaches the
+// supervised REST worker, as a new bind secret reaches the AD worker. The worker is
+// handed only what deployed models name, and only when it is spawned or refreshed;
+// a deploy that did not refresh it left the task failing with "auth secret … is not
+// configured" on a healthy-looking worker until Atlas was restarted.
+func TestDeployingAModelThatNamesANewRESTSecretRestartsTheRESTWorker(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh on this machine")
+	}
+	srv, _ := newValidateServer(t)
+	if _, err := srv.vault.Set("API_KUNDEN", "s3cr3t"); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe, sup.backoff = "sh", time.Millisecond
+	spec := SuperviseSpec{ID: "rest", Connectors: []string{"rest"}}
+	sup.add(spec, []string{"-c", "sleep 30"}, srv.superviseEnv(spec))
+	sup.start()
+	srv.supervisor = sup
+	t.Cleanup(func() { close(quit); sup.wait() })
+
+	waitFor(t, "the child to report running", func() bool {
+		list := sup.list()
+		return len(list) == 1 && list[0].State == "running"
+	})
+	first := sup.list()[0].Starts
+
+	deployRESTModel(t, srv, restModel("kunden", `authType="bearer" authSecret="API_KUNDEN"`))
+	waitFor(t, "the rest worker to come back holding the auth secret", func() bool {
+		return sup.list()[0].Starts > first
+	})
+}
+
+// Every collector a worker's environment is rendered from makes a deploy refresh the
+// workers. A collector added to the environment and not here would bring the failure
+// above back for its kind.
+func TestEverySecretKindADeployHandsOverRefreshesTheWorkers(t *testing.T) {
+	cases := map[string]string{
+		"rest": restModel("p-rest", `authType="bearer" authSecret="S"`),
+		"ad":   adModel("p-ad", `bindSecret="S"`),
+	}
+	for name, xml := range cases {
+		srv, _ := newValidateServer(t)
+		deployRESTModel(t, srv, xml)
+		var named bool
+		srv.do(func() {
+			for _, d := range srv.deployments {
+				named = named || namesWorkerSecrets(d.cp)
+			}
+		})
+		if !named {
+			t.Errorf("%s: a model naming a secret does not count as naming one", name)
+		}
+	}
+	srv, _ := newValidateServer(t)
+	deployRESTModel(t, srv, restModel("p-open", ""))
+	srv.do(func() {
+		for _, d := range srv.deployments {
+			if namesWorkerSecrets(d.cp) {
+				t.Error("a model calling an open endpoint counts as naming a secret; every deploy would refresh")
+			}
+		}
+	})
 }

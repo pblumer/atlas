@@ -195,6 +195,13 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
+  worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
+  is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
+  model named an AD bind secret or a mail export store, so a REST task whose `authSecret` no
+  earlier model had named failed with `auth secret "…" for bearer auth is not configured` until
+  Atlas was restarted. A deploy now refreshes the workers when the model names any reference a
+  worker is handed; the refresh restarts only a worker whose environment changed (ADR-0233).
 - **An HR entry in a shared tenant creates its account under the environment's prefix.** The
   HR entry of `examples/m365-dienste` (`hr-eintritt.bpmn`) built the account's name without
   `NAME_PREFIX`, which every other process of the package puts in front of what it creates. In
