@@ -226,6 +226,18 @@ _Changed_ / _Removed_ for each version.
   unchanged, and orchestrations already running on the earlier version keep its behaviour; an
   order one of them left open is started again by `POST /api/v1/orders/fulfilment/repair`. New
   MCP tool `atlas_order_round` (ADR-0312, amended).
+- **An order line whose process an operator cancelled no longer waits for ever.** Cancelling
+  the instance working a line — `DELETE /api/v1/instances/{key}`, the bulk terminate, a
+  definition's drain, deleting a process with its instances, or the MCP tools that call them —
+  left the line `running` and the fulfilment orchestration waiting on an `atlas.order.advanced`
+  nobody would publish. The line now settles as a failed report would: a cancelled
+  provisioning or approval leaves it `failed`, a cancelled return `returnFailed`; the failed
+  outcome records which instance ended and how, the inventory is told, and the orchestration
+  is woken. A line that already reported, and one the shop withdrew, are left alone. The
+  fulfilment repair (`POST /api/v1/orders/fulfilment/repair`) lists every line still waiting on
+  an instance that is no longer active under `orphanedLines`, no longer counts its
+  orchestration healthy, and settles it when run without `dryRun`
+  (ADR-draft-a-cancelled-line-instance-settles-its-line).
 - **A long value no longer stretches the Variables table past its panel.** A structure holding
   an unbroken line — a Graph delta link, a token — made the table in the replay's Variables tab
   thousands of pixels wide, so the filter, Copy all and every Copy button slid off screen. The
