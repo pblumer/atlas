@@ -394,6 +394,7 @@ export const WORKER_TYPE_DOCS = {
       "workerDoc.calendar.step4",
       "workerDoc.calendar.step5",
       "workerDoc.calendar.step6",
+      "workerDoc.calendar.step7",
     ],
     trap: "workerDoc.calendar.trap",
   },

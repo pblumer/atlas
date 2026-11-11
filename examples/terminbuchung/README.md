@@ -67,7 +67,9 @@ Start "Termin anfragen"            (Startformular termin-dienstleistung, öffent
    Google Workspace: `{"provider": "google-calendar", "clientEmail": "…", "privateKey":
    "…"}` und im Modell die Kalender-ID des freigegebenen Kalenders. Für einen CalDAV-Server:
    `{"provider": "caldav", "username": "…", "password": "…", "timeZone": "Europe/Zurich"}`, das
-   Kalender-Home als Endpoint des Workers und im Modell der Sammlungsname des Kalenders. Die Schritte stehen im
+   Kalender-Home als Endpoint des Workers und im Modell der Sammlungsname des Kalenders. Für Exchange Server:
+   `{"provider": "exchange-ews", "username": "CONTOSO\\svc-booking", "password": "…"}`, die EWS-URL als
+   Endpoint des Workers und im Modell die Adresse des Ressourcenpostfachs. Die Schritte stehen im
    Handbuch unter *Calendar booking*.
 2. Das Beispiel installieren (Handbuch, Kapitel Beispiele, oder atlas hub, Bundle
    `terminbuchung`) und in der Tasks-App unter *Start process* bei **Terminbuchung** den
