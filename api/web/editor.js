@@ -1417,6 +1417,12 @@ function repairItemDefinitions(xml) {
 // import, and on demand, so a modeling smell like a disconnected end event is
 // explained continuously rather than only at deploy time.
 //
+// Two kinds of warning come from the Modeler itself, beside the compiler's and never in
+// place of a rule it has: an element the engine cannot run yet, and a variable read
+// that nothing in the diagram writes (variable.unwritten). The second is a reading the
+// compiler cannot make — it knows a linked form by its id and nothing of a called
+// process — and both only warn.
+//
 // applicationId is the process application the draft is filed under, and passing it
 // widens what the panel can say: a data object's declared type resolves against
 // *that* application's information model, so the panel reports a type nothing
@@ -1440,6 +1446,7 @@ function wireProblems(root, modeler, api, applicationId) {
   let marked = null; // element id currently highlighted on the canvas
   let seq = 0; // guards against a stale validate response overwriting a newer one
   let unsupIds = []; // overlay ids for the "can't run yet" badges we drew
+  let unwrittenRetry = null; // re-check once the forms and called processes have been read
 
   // findUnsupported walks the live model for elements the engine can't run yet (see
   // unsupportedReason) and returns them as Problems-bar warnings — author-time feedback
@@ -1471,6 +1478,30 @@ function wireProblems(root, modeler, api, applicationId) {
         }));
       } catch { /* shape without graphics (mid-import) — skip */ }
     }
+  };
+
+  // findUnwritten turns unwrittenReads into Problems-bar warnings, one per element. It is
+  // a reading of the diagram the compiler cannot make — it knows a form by its id and
+  // nothing of a called process — so it rides beside the compiler's findings, like the
+  // "can't run yet" warnings, and like them it never blocks a deploy. While the forms and
+  // called processes are still being read it says nothing and looks again shortly.
+  const findUnwritten = () => {
+    let r;
+    try {
+      ensureFormFields(api, linkedFormIds(modeler));
+      ensureCalledProcesses(api, modeler, () => {});
+      r = unwrittenReads(modeler);
+    } catch { return []; }
+    if (r.pending) {
+      if (!unwrittenRetry) unwrittenRetry = setTimeout(() => { unwrittenRetry = null; scheduleValidate(); }, 600);
+      return [];
+    }
+    return r.findings.map((f) => ({
+      severity: "warning",
+      element: f.element,
+      rule: "variable.unwritten",
+      message: trPlural("bpmn.prob.unwritten", f.names.length, { names: f.names.join(", ") }),
+    }));
   };
 
   const SEV_LABEL = { error: tr("bpmn.prob.error"), warning: tr("bpmn.prob.warning") };
@@ -1551,14 +1582,15 @@ function wireProblems(root, modeler, api, applicationId) {
     // list if the server validate can't run (not imported / offline).
     const unsupported = findUnsupported();
     redrawUnsupported(unsupported);
+    const client = [...unsupported, ...findUnwritten()];
     let xml;
-    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
+    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = client; render(); return; }
     const mine = ++seq;
     let res;
     const path = applicationId
       ? `/api/v1/validate?applicationId=${encodeURIComponent(applicationId)}`
       : "/api/v1/validate";
-    try { res = await api("POST", path, xml, true); } catch { problems = unsupported; render(); return; }
+    try { res = await api("POST", path, xml, true); } catch { problems = client; render(); return; }
     if (mine !== seq) return; // a newer validate has superseded this one
     const server = Array.isArray(res.problems) ? res.problems : [];
     // Keep the compiler's authoritative findings and add a per-element warning for each
@@ -1570,7 +1602,8 @@ function wireProblems(root, modeler, api, applicationId) {
     // message text rather than tagging it, so also drop a client warning when a server
     // finding quotes that id — avoiding a doubled row for the same element.
     problems = [...server, ...unsupported.filter((u) =>
-      !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
+      !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`))),
+    ...client.filter((c) => c.rule === "variable.unwritten")];
     if (res.version) versionEl.textContent = tr("bpmn.prob.checkedAgainst", { version: res.version });
     render();
   };
@@ -3241,6 +3274,15 @@ function elementWrites(bo, visited) {
     // collection (ADR-0253/0256).
     const ag = findExt(bo, "atlas:AgentConnector");
     if (ag && ag.resultCollection) add(ag.resultCollection, "agent result", { type: "array" });
+    // A tool of an agent-driven container is handed what the model passed for each of its
+    // declared parameters, and the call's id, in its own scope (engine startAgentTool).
+    const parent = bo.$parent;
+    if (parent && findExt(parent, "atlas:AgentConnector")) {
+      for (const v of ((bo.extensionElements && bo.extensionElements.values) || [])) {
+        if (v.$type === "atlas:AgentParam") add(v.name, "agent parameter", { local: true, category: "Local", type: v.type || "" });
+      }
+      add("toolCallId", "agent tool call", { local: true, category: "Local", type: "string" });
+    }
     // A call activity whose child's variables propagate (the default) merges every
     // instance-scope variable of the child into the caller when the child completes
     // (ADR-0076). The caller's own model names none of them; the called process's does,
@@ -3254,9 +3296,12 @@ function elementWrites(bo, visited) {
 }
 
 // calledProcessCache holds the called processes the Variables panel has read, by
-// process id: { process } once read, { process: null } while being read or when there
-// is nothing to read. It lives for the page, like formFieldCache.
+// process id: { process } once read, { process: null, pending: true } while being read,
+// and { process: null } when there is nothing to read. It lives for the page, like formFieldCache.
 const calledProcessCache = new Map();
+// calledFormIds are the forms the called processes' tasks link, whose fields come back
+// to a caller with the rest of the child's variables.
+const calledFormIds = new Set();
 
 // calledProcessWrites is what a called process leaves in its instance scope, and so
 // what reaches a caller that propagates its variables: everything its elements write
@@ -3298,23 +3343,23 @@ function ensureCalledProcesses(api, modeler, onLoad) {
   if (!api) return;
   const read = (pid) => {
     if (calledProcessCache.has(pid)) return;
-    calledProcessCache.set(pid, { process: null });
+    calledProcessCache.set(pid, { process: null, pending: true });
     readCalledProcess(api, modeler, pid)
       .then((process) => {
-        if (!process) return;
         calledProcessCache.set(pid, { process });
+        if (!process) { onLoad(); return; }
         // What the callee itself calls, and the forms its tasks link, count too.
         const ids = [];
         forEachFlowElement(process, (bo) => {
           const next = propagatingCallee(bo);
           if (next) read(next);
           const fd = findExt(bo, "zeebe:FormDefinition");
-          if (fd && fd.formId) ids.push(fd.formId);
+          if (fd && fd.formId) { ids.push(fd.formId); calledFormIds.add(fd.formId); }
         });
         if (ids.length) ensureFormFields(api, ids, onLoad);
         onLoad();
       })
-      .catch(() => { /* nothing to add */ });
+      .catch(() => { calledProcessCache.set(pid, { process: null }); onLoad(); });
   };
   try {
     modeler.get("elementRegistry").forEach((el) => {
@@ -3376,6 +3421,8 @@ const VAR_SOURCES = {
   "multi-instance item": "bpmn.vars.src.miItem",
   "loop counter": "bpmn.vars.src.loopCounter",
   "agent result": "bpmn.vars.src.agentResult",
+  "agent parameter": "bpmn.vars.src.agentParam",
+  "agent tool call": "bpmn.vars.src.agentToolCall",
 };
 function varSourceLabel(source) {
   const s = source || "";
@@ -3413,21 +3460,72 @@ function elementUse(element) {
   if (!bo) return res;
   const reads = [];
   const addReads = (paths) => { for (const p of paths) if (!reads.includes(p)) reads.push(p); };
-  const referenced = (b) => {
-    for (const ed of b.eventDefinitions || []) {
-      if (ed.messageRef) addReads(expressionReads(ed.messageRef.extensionElements));
-    }
-    if (b.messageRef) addReads(expressionReads(b.messageRef.extensionElements));
-    if (/Gateway$/.test(b.$type || "")) for (const f of b.outgoing || []) addReads(expressionReads(f));
-  };
   for (const w of elementWrites(bo)) (w.local ? res.locals : res.writes).push(w);
-  addReads(expressionReads(bo));
-  referenced(bo);
+  addReads(ownReads(bo));
+  if (/Gateway$/.test(bo.$type || "")) for (const f of bo.outgoing || []) addReads(ownReads(f));
   forEachFlowElement(bo, (fe) => {
     for (const w of elementWrites(fe)) if (!w.local) res.writes.push(w);
-    referenced(fe);
+    addReads(ownReads(fe));
   });
   res.reads = reads;
+  return res;
+}
+
+// ownReads is what one element's own expressions read — not those of the elements a
+// subprocess contains, which answer for themselves — plus the correlation key of the
+// message it waits for, which lives on the message it only refers to.
+function ownReads(bo) {
+  const out = [];
+  const add = (paths) => { for (const p of paths) if (!out.includes(p)) out.push(p); };
+  if (!bo) return out;
+  for (const prop of ["extensionElements", "loopCharacteristics", "conditionExpression", "completionCondition", "eventDefinitions"]) {
+    if (bo[prop]) add(expressionReads(bo[prop], prop));
+  }
+  for (const ed of bo.eventDefinitions || []) {
+    if (ed.messageRef) add(expressionReads(ed.messageRef.extensionElements));
+  }
+  if (bo.messageRef) add(expressionReads(bo.messageRef.extensionElements));
+  return out;
+}
+
+// unwrittenReads is what the diagram reads and nothing in it writes, element by
+// element: [{ element, names }]. It is the Problems bar's "read but never written"
+// warning and the deploy panel's note, and only ever a warning — a value can come from
+// outside the model (a message's payload, a start the form does not declare, a worker
+// that writes more than its result), so the deploy goes ahead.
+//
+// While a linked form's fields or a called process are still being read, the answer is
+// not known yet and `pending` says so: warning then would name every field a form will
+// write a moment later.
+function unwrittenReads(modeler) {
+  const res = { pending: false, findings: [] };
+  let registry;
+  try { registry = modeler.get("elementRegistry"); } catch { return res; }
+  for (const id of [...linkedFormIds(modeler), ...calledFormIds]) if (!formFieldCache.get(id)) res.pending = true;
+  for (const e of calledProcessCache.values()) if (e.pending) res.pending = true;
+  if (res.pending) return res;
+  const known = new Set(collectDiagramVariables(modeler).map((v) => v.name));
+  registry.forEach((el) => {
+    if (el.labelTarget) return;
+    const bo = el.businessObject;
+    if (!bo || /:(Process|Collaboration|Participant|Lane)$/.test(bo.$type || "")) return;
+    if (el.id !== bo.id) return; // a collapsed subprocess's plane root stands for its shape
+    // What is in reach here besides the process's variables: this element's locals and
+    // those of every subprocess around it (an input mapping on a subprocess is read by
+    // the tasks inside it, a multi-instance subprocess hands its item to them).
+    const local = new Set();
+    for (let b = bo; b; b = b.$parent) {
+      for (const w of elementWrites(b)) if (w.local) local.add(w.name);
+    }
+    const names = [];
+    for (const path of ownReads(bo)) {
+      const root = rootOf(path);
+      if (known.has(path) || known.has(root) || local.has(root)) continue;
+      if (root === "application" || root === "server") continue; // a namespace: the panel offers to declare it
+      if (!names.includes(root)) names.push(root);
+    }
+    if (names.length) res.findings.push({ element: el.id, names });
+  });
   return res;
 }
 
@@ -13136,7 +13234,23 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     const fromVersion = identity.fromDeployment
       ? `<p class="deploy-from-version" id="deploy-from-version">${tr("bpmn.deploy.fromVersion")}</p>`
       : "";
-    dbody.innerHTML = fromVersion + (fid
+    // What the model reads and nothing in it writes, said before the deploy rather than
+    // found in the first instance's incident. Only a note: the value may come from
+    // outside the model, so both Deploy buttons stay as they are.
+    let unwritten = "";
+    try {
+      const r = unwrittenReads(modeler);
+      if (!r.pending && r.findings.length) {
+        const reg = modeler.get("elementRegistry");
+        const items = r.findings.map((f) => {
+          const el = reg.get(f.element);
+          const label = (el && el.businessObject && (el.businessObject.name || el.businessObject.id)) || f.element;
+          return `<li><code>${esc(f.names.join(", "))}</code> · ${esc(label)}</li>`;
+        }).join("");
+        unwritten = `<div class="deploy-unwritten" id="deploy-unwritten"><p>${esc(tr("bpmn.deploy.unwritten"))}</p><ul>${items}</ul></div>`;
+      }
+    } catch { /* a note, best-effort */ }
+    dbody.innerHTML = fromVersion + unwritten + (fid
       ? `<p class="muted" style="margin:0">${tr("bpmn.deploy.withForm", { form: esc((formFieldCache.get(fid) || {}).name || fid) })}${declared.length
             ? esc(tr("bpmn.deploy.withFormExtra"))
             : ""}</p>`
