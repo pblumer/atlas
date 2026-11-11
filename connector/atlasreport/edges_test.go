@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"html"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -220,5 +222,38 @@ func TestReportCheckHoldsTheContract(t *testing.T) {
 		if err := r.Check(); err == nil {
 			t.Errorf("report %+v passed the check", r)
 		}
+	}
+}
+
+func TestBindingsFollowTheStoredKinds(t *testing.T) {
+	vars := map[string]model.VariableValue{
+		"b": {Kind: model.VarBool, Bool: true},
+		"n": {Kind: model.VarNumber, Text: "2"},
+		"s": {Kind: model.VarString, Text: "x"},
+		"j": {Kind: model.VarJSON, Text: `{"a":1}`},
+		"z": {Kind: model.VarNull},
+	}
+	m := bindVars(42, vars, []string{"b", "n", "s", "j", "z", "fehlt", builtinProcessInstanceKey})
+	if len(m) != 6 {
+		t.Errorf("bound %d names, want every stored one and the instance key, not the absent one: %v", len(m), m)
+	}
+	if bindVars(42, vars, nil) != nil {
+		t.Error("no names bound something")
+	}
+	for k, want := range map[model.VarKind]expr.ValueKind{model.VarBool: expr.KindBool, model.VarNumber: expr.KindNumber,
+		model.VarString: expr.KindString, model.VarJSON: expr.KindJSON, model.VarNull: expr.KindNull} {
+		if got := toExprKind(k); got != want {
+			t.Errorf("toExprKind(%v) = %v, want %v", k, got, want)
+		}
+	}
+	if resolveValue(compiler.RestExpr{Literal: "atlas"}, 1, nil) != "atlas" {
+		t.Error("a literal is not its own value")
+	}
+}
+
+func TestAGapSortsLast(t *testing.T) {
+	nan := math.NaN()
+	if valOr(nil) != math.Inf(-1) || valOr(&nan) != math.Inf(-1) || *num(3) != valOr(num(3)) {
+		t.Error("valOr")
 	}
 }
