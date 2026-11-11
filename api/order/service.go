@@ -1018,6 +1018,12 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 // here on purpose, and a switch that fell through a default would quietly decide
 // for it.
 func (s *Service) recordInventory(o Order, ref string, status LineStatus) error {
+	return s.recordInventoryWith(o, ref, status, "")
+}
+
+// recordInventoryWith is [Service.recordInventory] with the result a failed
+// outcome carries: why it failed, where the server knows and no reporter said.
+func (s *Service) recordInventoryWith(o Order, ref string, status LineStatus, result string) error {
 	key, err := ResolveLine(o, ref)
 	if err != nil {
 		return err
@@ -1060,9 +1066,13 @@ func (s *Service) recordInventory(o Order, ref string, status LineStatus) error 
 			ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeCompleted))
 	case StatusFailed:
 		// Nothing changed hands, so the outcome is the only fact (ADR-0429 §3).
-		return s.reportOutcome(ownOutcome(o, key, line, catalog.EffectProvision, catalog.OutcomeFailed))
+		out := ownOutcome(o, key, line, catalog.EffectProvision, catalog.OutcomeFailed)
+		out.Result = result
+		return s.reportOutcome(out)
 	case StatusReturnFailed:
-		return s.reportOutcome(ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeFailed))
+		out := ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeFailed)
+		out.Result = result
+		return s.reportOutcome(out)
 	}
 	return nil
 }

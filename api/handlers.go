@@ -4618,6 +4618,9 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	// (ADR-0266).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
+			// The order line this instance was working, if any, settles now that its
+			// end is durable (ADR-draft-a-cancelled-line-instance-settles-its-line).
+			s.settleLinesEndedBy([]uint64{key})
 			stats, statErr = s.statsOffLoop()
 		}
 	}
@@ -4719,6 +4722,7 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 	}
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
+			s.settleLinesEndedBy(keys)
 			stats, opErr = s.statsOffLoop()
 		}
 	}
@@ -4799,9 +4803,12 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 		opErr      error
 		stats      statsResp
 	)
-	var driveNeeded bool
+	var (
+		driveNeeded bool
+		active      []uint64
+	)
 	s.do(func() {
-		active := make([]uint64, 0, len(uniq))
+		active = make([]uint64, 0, len(uniq))
 		for k := range uniq {
 			v, ok, err := s.store.ProcessInstance(k)
 			if err != nil {
@@ -4822,6 +4829,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 	})
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
+			s.settleLinesEndedBy(active)
 			stats, opErr = s.statsOffLoop()
 		}
 	}
@@ -4912,6 +4920,7 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 	}
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
+			s.settleLinesEndedBy(keys)
 			stats, opErr = s.statsOffLoop()
 		}
 	}
