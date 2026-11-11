@@ -1863,6 +1863,26 @@ func (s *Server) soapWorkerEnv() []string {
 	return env
 }
 
+// namesWorkerSecrets says whether a compiled process names any secret reference a
+// supervised worker is handed (deployedSecretRefEnvLocked): deploying it may change
+// that worker's environment, so the deploy refreshes the supervised workers. Every
+// collector passed to deployedSecretRefEnvLocked belongs here; a kind left out is
+// handed a new reference only at its next spawn, which a deploy does not cause.
+func namesWorkerSecrets(cp *compiler.CompiledProcess) bool {
+	for _, refsOf := range workerSecretRefCollectors {
+		if len(refsOf(cp)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// workerSecretRefCollectors are the reference collectors the supervised workers'
+// environments are rendered from.
+var workerSecretRefCollectors = []func(*compiler.CompiledProcess) []string{
+	adBindSecretRefs, restAuthSecretRefs, scimAuthSecretRefs, soapAuthSecretRefs, ldapSecretRefs,
+}
+
 // restAuthSecretRefs returns the auth-secret references a compiled process's REST
 // tasks name.
 func restAuthSecretRefs(cp *compiler.CompiledProcess) []string {

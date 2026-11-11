@@ -177,6 +177,15 @@ _Changed_ / _Removed_ for each version.
   as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
   refuses only the next deploy of an affected model (ADR-0547).
 
+### Fixed
+- **Deploying a model that names a new REST, SOAP, SCIM or LDAP secret reaches the supervised
+  worker.** A supervised worker is handed the secrets the deployed models name, rendered when it
+  is spawned and whenever a change refreshes it. A deploy refreshed the workers only when the
+  model named an AD bind secret or a mail export store, so a REST task whose `authSecret` no
+  earlier model had named failed with `auth secret "…" for bearer auth is not configured` until
+  Atlas was restarted. A deploy now refreshes the workers when the model names any reference a
+  worker is handed; the refresh restarts only a worker whose environment changed (ADR-0233).
+
 ## [0.25.0] — 2026-11-09
 
 **Every process, decision and form belongs to an application** (ADR-0544). Nothing new is

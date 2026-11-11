@@ -1402,10 +1402,11 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		s.order = append(s.order, key)
 		// The counter is already past this key: reserveKeys above moved it, durably,
 		// before any of these records existed.
-		// A model that binds to a directory names a bind-password reference, and this
-		// server's supervised AD worker may not be holding that one yet — it is handed
-		// exactly the references the deployed models make (adWorkerEnv).
-		refreshWorkers = refreshWorkers || len(adBindSecretRefs(cp)) > 0 || len(mailExportStores(cp)) > 0
+		// A model that names a secret reference — a directory's bind password, a REST,
+		// SOAP or SCIM task's auth secret, an LDAP secret — may name one this server's
+		// supervised worker is not holding yet: each is handed exactly the references
+		// the deployed models make (deployedSecretRefEnvLocked).
+		refreshWorkers = refreshWorkers || namesWorkerSecrets(cp) || len(mailExportStores(cp)) > 0
 		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 	}
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
@@ -1416,11 +1417,12 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
 	}
-	// Let a supervised AD worker pick up a bind password it is not holding yet — and a
-	// supervised mail worker an S3 Worker a new export-attachment writes into. Off
-	// the loop, because rendering a child's environment needs the loop this deploy is
-	// running on; and only when a new model actually binds to a directory, so the
-	// common deploy queues nothing. The refresh restarts a child only when its
+	// Let a supervised worker pick up a secret it is not holding yet — an AD bind
+	// password, a REST, SOAP or SCIM auth secret, an LDAP secret — and a supervised
+	// mail worker an S3 Worker a new export-attachment writes into. Off the loop,
+	// because rendering a child's environment needs the loop this deploy is running
+	// on; and only when a new model actually names such a reference, so the common
+	// deploy queues nothing. The refresh restarts a child only when its
 	// environment really changed, so a redeploy that names the same reference — or
 	// one whose reference resolves to nothing — costs no restart.
 	if refreshWorkers && s.supervisor != nil {
