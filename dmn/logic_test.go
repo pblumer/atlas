@@ -118,7 +118,10 @@ func TestModelLogicNotServed(t *testing.T) {
 		t.Fatalf("write model: %v", err)
 	}
 	v := dmn.NewValidator(dmn.DirResolver{Dir: dir})
-	for _, ref := range []string{"missing", "broken"} {
+	if err := os.WriteFile(filepath.Join(dir, "garbage.dmn"), []byte(`this is not a model`), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	for _, ref := range []string{"missing", "broken", "garbage"} {
 		ml, err := v.Logic(context.Background(), ref)
 		if err != nil {
 			t.Fatalf("Logic(%s): %v", ref, err)
@@ -129,5 +132,65 @@ func TestModelLogicNotServed(t *testing.T) {
 	}
 	if _, err := dmn.NewValidator(errResolver{}).Logic(context.Background(), "x"); err == nil {
 		t.Error("Logic with a failing resolver = nil error, want an error")
+	}
+}
+
+// shapesModel holds the elements whose logic is read differently from the plain
+// cases above: a knowledge model whose body is a boxed context, one whose body is a
+// nested function definition, and a decision whose logic is one — the two kinds temis
+// names but serves no view for.
+const shapesModel = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="defs" name="Shapes" namespace="http://atlas/dmn">
+  <businessKnowledgeModel id="bkm_ctx" name="Boxed">
+    <variable name="Boxed"/>
+    <encapsulatedLogic>
+      <formalParameter name="x" typeRef="number"/>
+      <context>
+        <contextEntry><variable name="y"/><literalExpression><text>x + 1</text></literalExpression></contextEntry>
+        <contextEntry><literalExpression><text>y * 2</text></literalExpression></contextEntry>
+      </context>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+  <businessKnowledgeModel id="bkm_fn" name="Curried">
+    <variable name="Curried"/>
+    <encapsulatedLogic>
+      <formalParameter name="a"/>
+      <functionDefinition><formalParameter name="b"/><literalExpression><text>a + b</text></literalExpression></functionDefinition>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+  <decision id="Fn" name="Fn">
+    <variable name="Fn"/>
+    <functionDefinition><formalParameter name="n"/><literalExpression><text>n * 3</text></literalExpression></functionDefinition>
+  </decision>
+</definitions>`
+
+// TestModelLogicShapes covers a knowledge model whose body is itself a boxed
+// expression (drawn as that kind), and the function definitions temis names but
+// serves no view for: a knowledge model's keeps its kind, so the peek can say what it
+// is, and a decision's comes back without one.
+func TestModelLogicShapes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "shapes.dmn"), []byte(shapesModel), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	ml, err := dmn.NewValidator(dmn.DirResolver{Dir: dir}).Logic(context.Background(), "shapes")
+	if err != nil {
+		t.Fatalf("Logic: %v", err)
+	}
+	if !ml.Valid {
+		t.Fatalf("logic = %+v, want a valid model", ml)
+	}
+	byID := map[string]dmn.ElementLogic{}
+	for _, el := range ml.Elements {
+		byID[el.ID] = el
+	}
+	if el := byID["bkm_ctx"]; el.Kind != "context" || el.View == nil || len(el.Params) != 1 {
+		t.Errorf("boxed knowledge model = %+v, want a context view with one parameter", el)
+	}
+	if el := byID["bkm_fn"]; el.Kind != "function" || el.View != nil || len(el.Params) != 1 {
+		t.Errorf("knowledge model with a nested function = %+v, want kind function and no view", el)
+	}
+	if el, ok := byID["Fn"]; !ok || el.Kind != "" || el.View != nil {
+		t.Errorf("decision whose logic is a function = %+v (listed %v), want it listed with no kind", el, ok)
 	}
 }

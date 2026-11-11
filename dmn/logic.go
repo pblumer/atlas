@@ -112,16 +112,15 @@ func decisionLogic(defs *tdmn.Definitions, id string) (string, any) {
 // bkmLogic reads a business knowledge model's function: its parameters and its
 // body — a literal body as a literal view, a boxed one as that kind's view. A body
 // kind temis names but has no view for (a nested function) keeps its kind and no
-// view, so the viewer can say what it is without drawing it.
+// view, so the viewer can say what it is without drawing it. A knowledge model
+// without a body does not get here: temis refuses to compile one ("no executable
+// logic"), so the model would have come back invalid.
 func bkmLogic(defs *tdmn.Definitions, id string) (string, any, []tdmn.BKMParam) {
 	bkm, ok := defs.BKMFunction(id)
 	if !ok {
 		return "", nil, nil
 	}
 	if bkm.BodyKind == "" {
-		if bkm.BodyText == "" {
-			return "", nil, bkm.Params
-		}
 		return "literal", tdmn.LiteralView{DecisionID: bkm.BkmID, Name: bkm.Name, Text: bkm.BodyText, TypeRef: bkm.BodyTypeRef}, bkm.Params
 	}
 	if view, ok := defs.LogicView(tdmn.Anchor{Kind: "bkm", ID: id}, "", bkm.BodyKind); ok {

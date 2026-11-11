@@ -167,3 +167,19 @@ func TestDecisionBindingRefusesWhatItCannotRead(t *testing.T) {
 		}
 	}
 }
+
+// A stored model the deploy would read but cannot — the store failing rather than
+// the model missing — is a server error, not "nothing would answer".
+func TestDecisionBindingReportsAStoreThatCannotBeRead(t *testing.T) {
+	srv, dir := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	if err := os.MkdirAll(filepath.Join(dir, "dmn-models", "busy.dmn"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if code, b := x.do(http.MethodPost, "/api/v1/dmnrefs", `{"name":"Busy","modelRef":"busy"}`); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create ref: %d %s", code, b)
+	}
+	if code, b := x.do(http.MethodGet, "/api/v1/decisions/eligibility/binding?binding=deployment", ""); code != http.StatusInternalServerError {
+		t.Fatalf("binding over an unreadable store = %d %s, want 500", code, b)
+	}
+}
