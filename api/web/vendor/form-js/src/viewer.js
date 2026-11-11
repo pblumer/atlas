@@ -4,8 +4,10 @@
 // Every form this bundle renders can show a select whose options come from a remote
 // data source. The page provides the search as the `atlasRemote` option — an adapter the
 // field mounts into its element (api/web/remote-select.js); without one such a select is
-// a box for the id. `atlasLocale` ("de" or "en") is the language the e-mail view speaks;
-// German without one.
+// a box for the id. `atlasLocale` ("de" or "en") is the language the e-mail view and the chart speak;
+// German without one. `atlasNumberMarks` ({group, decimal}) are the marks the chart
+// writes numbers with — the reader's region (api/web/numfmt.js); the neutral
+// international ones without.
 //
 // A field whose options come from a decision (ADR-draft-form-options-from-a-decision)
 // asks the `atlasDecisions` option for them: an object whose options(decisionId) answers
@@ -22,7 +24,7 @@ import { AtlasViewerModule } from './atlas/viewer.jsx';
 
 export class Form extends BaseForm {
   constructor(options = {}) {
-    const { atlasRemote, atlasDecisions, atlasLocale, additionalModules = [], ...rest } = options;
+    const { atlasRemote, atlasDecisions, atlasLocale, atlasNumberMarks, additionalModules = [], ...rest } = options;
     super({
       ...rest,
       additionalModules: [
@@ -30,6 +32,7 @@ export class Form extends BaseForm {
         ...(atlasRemote ? [ { atlasRemote: [ 'value', atlasRemote ] } ] : []),
         ...(atlasDecisions ? [ { atlasDecisions: [ 'value', atlasDecisions ] } ] : []),
         ...(atlasLocale ? [ { atlasLocale: [ 'value', atlasLocale ] } ] : []),
+        ...(atlasNumberMarks ? [ { atlasNumberMarks: [ 'value', atlasNumberMarks ] } ] : []),
         ...additionalModules
       ]
     });

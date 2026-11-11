@@ -180,6 +180,18 @@ func TestAMailViewIsReadNeverWritten(t *testing.T) {
 	}
 }
 
+// A chart draws a report variable and submits nothing (ADR-0555 §4), as the mail view
+// shows a mail: the task's reader may see the report, and no caller may set it.
+func TestAChartIsReadNeverWritten(t *testing.T) {
+	schema := `{"components":[{"type":"chart","key":"report","dataset":"byProcess"},{"type":"checkbox","key":"gelesen"}]}`
+	if bad := shapeCheck(t, schema, `{"report":{"schema":"atlas.report/1"},"gelesen":true}`); !slices.Equal(bad, []string{"report"}) {
+		t.Errorf("notOnForm = %v; a chart's report is not the caller's to set", bad)
+	}
+	if reads := formBindingsOf([]byte(schema)); reads.children["report"] == nil || reads.children["gelesen"] == nil {
+		t.Errorf("bindings = %v; the chart's report is a variable the form reads", reads.children)
+	}
+}
+
 // TestAChoiceFieldsOptionsAreReadNeverWritten: a select whose options are a variable
 // (valuesKey) reads that variable — a public wizard screen is prefilled with it, so the
 // free slots a worker found are what the screen offers — and a submission naming it is

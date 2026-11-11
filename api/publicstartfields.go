@@ -41,6 +41,11 @@ type formShape struct {
 // own, registered in the vendored viewer (api/web/vendor/form-js/src/atlas/mailview.jsx).
 const mailViewType = "mailview"
 
+// chartType is the form component that draws one dataset of a report variable
+// (ADR-0555 §4, api/web/vendor/form-js/src/atlas/chart.jsx). Like the mail view it reads
+// the variable its key names and submits nothing.
+const chartType = "chart"
+
 // formShapeOf reads the submittable paths of a form-js schema. A disabled field is shown
 // but never submitted (_getSubmitData in the vendored viewer skips it), so it is left
 // out: a value the form only displays, a price a worker computed between two screens,
@@ -82,9 +87,9 @@ func (s *formShape) add(components any, withDisabled bool) {
 				}
 			}
 			at.add(comp["components"], withDisabled)
-		case mailViewType:
-			// A mail view shows a variable and submits nothing
-			// (ADR-0489): what it binds is read, never written.
+		case mailViewType, chartType:
+			// A mail view and a chart show a variable and submit nothing
+			// (ADR-0489, ADR-0555): what they bind is read, never written.
 			if k, _ := comp["key"].(string); k != "" && withDisabled {
 				s.at(k).field = true
 			}

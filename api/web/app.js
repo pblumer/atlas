@@ -50,6 +50,7 @@ import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { createCompletedView } from "./completedtasks.js";
+import { numberMarks } from "./numfmt.js";
 import { printTaskDetail } from "./printtask.js";
 import { runImport } from "./infomodel-import.js";
 import { uploadPicture, PERSON } from "./picturescale.js";
@@ -10470,7 +10471,7 @@ async function viewTasks(preselectKey) {
       const lookups = { transport: taskTransport(t.key), data: data || {} };
       // atlasLocale: the e-mail view speaks the language the Tasks app does
       // (ADR-0489).
-      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasDecisions: decisionOptions({ formId: t.formId }), atlasLocale: trLocale() });
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasDecisions: decisionOptions({ formId: t.formId }), atlasLocale: trLocale(), atlasNumberMarks: numberMarks() });
       // A file field whose variable already names a document offers that document
       // (ADR-0548, S2): the failures of a check to download, correct and upload again.
       // form-js knows a picked File, not a reference, so the reference stays out of the

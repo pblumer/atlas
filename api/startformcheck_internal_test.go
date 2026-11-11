@@ -38,6 +38,7 @@ const constraintSchema = `{"components":[
   ]},
   {"type":"textfield","key":"shown","disabled":true,"validate":{"required":true}},
   {"type":"mailview","key":"mail"},
+  {"type":"chart","key":"report","dataset":"d"},
   {"type":"text","text":"no key"}
 ]}`
 
@@ -52,7 +53,7 @@ func TestStartFormRulesReadWhatTheFormDeclares(t *testing.T) {
 			t.Errorf("no rule for %s", want)
 		}
 	}
-	for _, absent := range []string{"rows.cell", "shown", "mail"} {
+	for _, absent := range []string{"rows.cell", "shown", "mail", "report"} {
 		if _, ok := paths[absent]; ok {
 			t.Errorf("a rule for %s, which this check leaves to the shape check or the browser", absent)
 		}

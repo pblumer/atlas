@@ -10,7 +10,8 @@
 import { fmtDateTime } from "./datefmt.js";
 import { loadFormViewer } from "./formviewer.js";
 import { printTaskDetail } from "./printtask.js";
-import { t as tr } from "./i18n.js";
+import { t as tr, locale as trLocale } from "./i18n.js";
+import { numberMarks } from "./numfmt.js";
 
 const PAGE = 50;
 
@@ -156,7 +157,7 @@ export function createCompletedView({ api, listEl, detailEl, titleEl, me = () =>
     try {
       const { Form } = await loadFormViewer();
       if (state.selected !== key) return;
-      const form = new Form({ container: host, properties: { readOnly: true } });
+      const form = new Form({ container: host, properties: { readOnly: true }, atlasLocale: trLocale(), atlasNumberMarks: numberMarks() });
       await form.importSchema(view.form.schema, view.values || {});
       if (state.selected !== key) { try { form.destroy(); } catch { /* noop */ } return; }
       mounted = form;

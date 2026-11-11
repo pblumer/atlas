@@ -45,6 +45,7 @@ import {
   isEmptyValue
 } from './decision-source.js';
 import { MAIL_VIEW_TYPE, MailView } from './mailview.jsx';
+import { CHART_TYPE, Chart } from './chart.jsx';
 
 // The longest value a remote select keeps from the data a form is opened with. An id is
 // short; anything longer is not one, and is dropped as form-js drops a select's value
@@ -389,6 +390,9 @@ class AtlasRemoteFields {
     // The e-mail view (ADR-draft-mail-html-view): Atlas's own component, in every
     // form this bundle renders and in the editor's palette, canvas and preview.
     formFields.register(MAIL_VIEW_TYPE, MailView);
+    // The chart (ADR-0555 §4): one dataset of a report variable, drawn and never
+    // submitted.
+    formFields.register(CHART_TYPE, Chart);
   }
 }
 

@@ -158,6 +158,25 @@
         };
         return mountFormEditor(view, { api, toast: noop, formId: "form-mail" });
       };
+      // __mountChart opens a form with a chart (ADR-0555 §4) over `report`; saves are
+      // captured.
+      window.__mountChart = () => {
+        const api = async (method, url, body) => {
+          if (/\/forms\/[^/]+\/availability$/.test(url)) return { id: "form-report", available: true };
+          if (method === "GET" && /\/forms\/[^/]+$/.test(url)) {
+            return { id: "form-report", name: "Bericht", projectId: "", schema: { type: "default", id: "form-report", components: [
+              { type: "chart", id: "Field_chart", key: "report", dataset: "byProcess", chartType: "bar", title: "Instanzen" },
+            ] } };
+          }
+          if (method === "POST" && url.endsWith("/forms")) {
+            window.__saved = JSON.parse(JSON.stringify(body));
+            return { id: body.id, name: body.name, renamedFrom: "" };
+          }
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+        return mountFormEditor(view, { api, toast: noop, formId: "form-report" });
+      };
       window.__mountDivergent = () => {
         const api = async (method, url, body) => {
           if (/\/forms\/[^/]+\/availability$/.test(url)) {
