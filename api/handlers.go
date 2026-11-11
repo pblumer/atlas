@@ -485,9 +485,17 @@ type timelineStep struct {
 	TokenID            uint64 `json:"tokenId,omitempty"`
 	ParentTokenID      uint64 `json:"parentTokenId,omitempty"` // durable lineage for exact MI body grouping
 	ElementInstanceKey uint64 `json:"elementInstanceKey,omitempty"`
-	SourceElementID    string `json:"sourceElementId,omitempty"`
-	Action             string `json:"action,omitempty"`
-	Relation           string `json:"relation,omitempty"`
+	// InIteration is the element instance key of the multi-instance iteration this step
+	// ran inside — an inner element of a multi-instance subprocess, or a nested body —
+	// so the history can nest it under that iteration instead of listing every
+	// iteration's inner steps side by side (ADR-0517's outline owner, read back). Token
+	// lineage cannot say this: an embedded subprocess's inner start gets a fresh token.
+	// Zero for a step outside any iteration, for an iteration itself (its body groups it
+	// by ParentTokenID), and wherever the store does not hold the owner.
+	InIteration     uint64 `json:"inIteration,omitempty"`
+	SourceElementID string `json:"sourceElementId,omitempty"`
+	Action          string `json:"action,omitempty"`
+	Relation        string `json:"relation,omitempty"`
 	// ChildInstanceKey is the process instance a call activity started as its child
 	// (ADR-0076), so the replay view can drill from the caller's call activity into
 	// the child's own replay. Zero for a non-call-activity step, or a call activity
@@ -2451,10 +2459,19 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			v   state.ElementReplayValue
 		}
 		var replayRows []replayRow
-		scanErr = s.store.ElementStepHistory(key, func(ts int64, pos uint64, elementId int32) error {
-			stepRows = append(stepRows, stepRow{at: ts, pos: pos, elementID: elementId})
+		// Which iteration each inner step ran in. Only the steps inside a multi-instance
+		// iteration have an entry, so for an instance without one this reads nothing.
+		iterationOwner := map[uint64]uint64{}
+		scanErr = s.store.IterationOwners(key, func(elementKey, iterationKey uint64) error {
+			iterationOwner[elementKey] = iterationKey
 			return nil
 		})
+		if scanErr == nil {
+			scanErr = s.store.ElementStepHistory(key, func(ts int64, pos uint64, elementId int32) error {
+				stepRows = append(stepRows, stepRow{at: ts, pos: pos, elementID: elementId})
+				return nil
+			})
+		}
 		if scanErr == nil {
 			scanErr = s.store.ElementReplayHistory(key, func(ts int64, pos uint64, v state.ElementReplayValue) error {
 				replayRows = append(replayRows, replayRow{ts, pos, v})
@@ -2897,6 +2914,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ParentTokenID, step.ElementInstanceKey = rv.TokenID, rv.ParentTokenID, rv.ElementInstanceKey
+				step.InIteration = iterationOwner[rv.ElementInstanceKey]
 				step.Inputs = inputsByEIK[rv.ElementInstanceKey]
 				step.Iteration = iterationByEIK[rv.ElementInstanceKey]
 				// A step a person forced carries its attribution (ADR-0159).

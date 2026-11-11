@@ -306,6 +306,23 @@ acceptance fixture therefore uses a multi-instance script task.
 with a per-scope trigger index (ADR-0082 amendment): 50,000 subprocess
 iterations now complete in 76 s in the engine harness.
 
+*Amendment (classic replay nests a subprocess's iterations):* the classic replay
+(`/timeline`, below the bounded threshold) grouped a body's iterations by token
+lineage but listed every step *inside* an iteration of a multi-instance
+subprocess as a top-level row. That lineage cannot place them: the engine starts
+each iteration's inner start event with a fresh token and no parent token, so
+twelve parallel iterations produced twelve interleaved, indistinguishable
+`k_start`/`k_join` rows. The owner this projection already writes per hidden
+element (`cfOutlineHidden`, element → owning iteration) is that fact. The
+timeline now reads it back once per instance (`IterationOwners`, a read of
+existing rows, nothing new written in `applyToState`) and gives each step
+`inIteration`, the iteration it ran inside; an iteration itself and a step
+outside any iteration carry none. The history lays the steps out as a tree —
+body → iterations → their steps, nested bodies recursively — each level folded
+until opened, and an iteration row says how many steps it ran and where it is
+still waiting. A store whose iteration-step index is not proven complete yields
+no owners, so such a history keeps its flat rows rather than a partial nesting.
+
 ## Pros and cons of the options
 
 ### Option 1

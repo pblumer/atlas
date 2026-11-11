@@ -185,6 +185,19 @@ _Changed_ / _Removed_ for each version.
   manifest's rule and refuse one contract identity on two operations.
 
 ### Changed
+- **The instance history shows the structure of a multi-instance subprocess.** Every step that
+  ran inside an iteration of a multi-instance subprocess was a top-level row of the history, so
+  twelve iterations produced twelve identical `k_start`, `k_join` and task rows side by side and
+  nothing said which iteration they belonged to. The history now nests them: the subprocess is
+  one row, opened it lists its iterations, and an opened iteration shows the steps it ran,
+  indented under it. An iteration row says how many steps it ran and, while it runs, where it
+  waits; its number leads its name so a narrow column never cuts it. The timeline gives each
+  step the iteration it ran inside (`inIteration`) for this.
+- **The replay's token row names a multi-instance subprocess's inner elements once.** The
+  iterations of a multi-instance subprocess each walk a token through its inner shapes, so an
+  inner task held by twelve iterations was twelve "Token … — Datensatz bearbeiten" chips. Such an
+  element is now one chip with its count and the subprocess it runs in, as the subprocess itself
+  already was.
 - **The SharePoint Server team site checks its address before it creates the site.** The
   on-premises product `m365-spserver-site` now reads the address the name rule formed with
   `get-site` before `create-site`, as the SharePoint Online team site does. A site there that

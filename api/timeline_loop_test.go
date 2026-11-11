@@ -44,6 +44,17 @@ func runLoopModel(t *testing.T, model string) loopReplay {
 // over, or to count from.
 func runLoopModelWith(t *testing.T, model, start string) loopReplay {
 	t.Helper()
+	var tl loopReplay
+	if err := json.Unmarshal(runModelTimeline(t, model, start), &tl); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	return tl
+}
+
+// runModelTimeline deploys one definition, runs an instance of it to the end, and
+// returns that instance's timeline as the API sent it.
+func runModelTimeline(t *testing.T, model, start string) []byte {
+	t.Helper()
 	ts := newTestServer(t)
 	c := newClient(t)
 
@@ -79,11 +90,7 @@ func runLoopModelWith(t *testing.T, model, start string) loopReplay {
 	if code != http.StatusOK {
 		t.Fatalf("timeline: %d (%s)", code, raw)
 	}
-	var tl loopReplay
-	if err := json.Unmarshal(raw, &tl); err != nil {
-		t.Fatalf("decode timeline: %v", err)
-	}
-	return tl
+	return raw
 }
 
 // loopReplay is the part of an instance's timeline these tests read: the steps, and the

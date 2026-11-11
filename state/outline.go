@@ -225,3 +225,37 @@ func (q queries) stepPage(prefix []byte, family columnFamily, after *OutlinePosi
 	}
 	return nil, nil
 }
+
+// IterationOwners visits every element instance of one process instance that ran
+// inside a multi-instance iteration, with the element-instance key of the iteration
+// that owns it — the same fact the outline uses to hide it (cfOutlineHidden), read
+// back so a full replay can nest such a step under its iteration. The engine gives an
+// embedded subprocess's inner start event a fresh token with no lineage, so token
+// lineage alone cannot say which iteration of a multi-instance subprocess an inner
+// step belongs to; the flow scope can, and the outline already folded it into this
+// owner. An iteration owns itself and is not visited (its body groups it by token
+// lineage); a nested body is owned by the iteration it runs in, and each of its own
+// iterations by itself. Rows written before iterations had owners carry none and are
+// skipped. A store whose iteration-step index is not proven complete visits nothing,
+// so a reader never presents a partial nesting as the structure.
+func (q queries) IterationOwners(piKey uint64, fn func(elementKey, iterationKey uint64) error) error {
+	ready, err := q.IterationStepsIndexReady()
+	if err != nil || !ready {
+		return err
+	}
+	prefix := appendBE64([]byte{byte(cfOutlineHidden)}, piKey)
+	return q.scanPrefix(prefix, func(k, v []byte) error {
+		if len(k) != len(prefix)+8 {
+			return errors.New("state: corrupt outline-hidden row")
+		}
+		if len(v) != 8 {
+			return nil // hidden before iterations had owners
+		}
+		elKey := binary.BigEndian.Uint64(k[len(prefix):])
+		owner := binary.BigEndian.Uint64(v)
+		if owner == 0 || owner == elKey {
+			return nil
+		}
+		return fn(elKey, owner)
+	})
+}

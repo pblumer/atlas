@@ -47,6 +47,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Multi-Instance Explorer from the grouped row. The token row under the diagram names a
   multi-instance activity holding several tokens once, with its count, instead of one chip
   per iteration.
+- **`mi-subprocess-replay.spec.mjs`** ([ADR-0517](../docs/adr/0517-scalable-instance-replay.md)):
+  a parallel multi-instance subprocess in the classic replay. The token row names the
+  subprocess and each inner element its iterations share once, with its count. The instance
+  history nests the iterations under the subprocess and each iteration's steps under it, by the
+  timeline's `inIteration`, in tree order rather than the interleaved log order; the playhead
+  on a folded step marks the outermost row holding it.
 - **`mi-explorer.spec.mjs`** ([OHS2](../docs/planning/operations-history-at-scale-program.md),
   [ADR-0517](../docs/adr/0517-scalable-instance-replay.md)): an instance with 50,000
   iterations opens without requesting `/timeline`, shows its loop as one collapsed group
