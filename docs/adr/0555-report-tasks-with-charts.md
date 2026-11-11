@@ -1,4 +1,4 @@
-# ADR-DRAFT: A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task
+# ADR-0555: A task form shows a report: charts over a snapshot Atlas computed, acknowledged by completing the task
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -326,7 +326,7 @@ On a narrow screen they stack in one column, as the Tasks app does
   - Further *Atlas report* operations (user-task throughput and overdue tasks per
     process) when a route answers them.
   - A recipient who wants to see the report again after acknowledging. That is
-    [ADR-draft-completed-tasks-stay-readable](draft-completed-tasks-stay-readable.md),
+    [ADR-0554](0554-completed-tasks-stay-readable.md),
     which this record depends on for "reading it again".
 
 ## Pros and cons of the options
@@ -408,4 +408,4 @@ On a narrow screen they stack in one column, as the Tasks app does
 - a Worker Type under [ADR-0546](0546-new-built-in-worker-types-ship-a-manifest.md) and
   [ADR-0538](0538-operations-declare-idempotency-and-effect.md)
 - extends the PDF writer of [ADR-0143](0143-process-documentation-export.md)
-- reading a report again: [ADR-draft-completed-tasks-stay-readable](draft-completed-tasks-stay-readable.md)
+- reading a report again: [ADR-0554](0554-completed-tasks-stay-readable.md)

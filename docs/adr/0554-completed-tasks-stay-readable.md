@@ -1,4 +1,4 @@
-# ADR-DRAFT: A completed task stays readable to the person who completed it, in the form they answered
+# ADR-0554: A completed task stays readable to the person who completed it, in the form they answered
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -16,7 +16,7 @@
 
 A person completes a task and later wants to see it again. They want to know what they
 answered, what the form showed them, and which figures a report contained
-([ADR-draft-report-tasks-with-charts](draft-report-tasks-with-charts.md)). Today that is
+([ADR-0555](0555-report-tasks-with-charts.md)). Today that is
 not possible:
 
 - **The Tasks app lists open tasks only.** `GET /api/v1/tasks/{key}` answers a completed
@@ -205,7 +205,7 @@ not close it off.
   so this is a view of its own and not a folder):
   - newest first, with filters for process and period;
   - opening an entry shows the read-only form under the line *Erledigt am … durch Sie*;
-  - print and *Save as PDF* as in ADR-draft-report-tasks-with-charts §6;
+  - print and *Save as PDF* as in ADR-0555 §6;
   - no action that changes anything. A correction is something the model offers, never
     a reopened task.
 - **MCP** ([ADR-0016](0016-mcp-server-over-http-api.md)) gets `atlas_list_completed_tasks`
@@ -302,4 +302,4 @@ not close it off.
   [ADR-0542](0542-variables-by-provenance.md); lives and goes with it
   ([ADR-0085](0085-process-instance-ttl.md), [ADR-0486](0486-operator-history-purge-and-compaction.md))
 - beside the manual-completion audit of [ADR-0159](0159-manual-task-completion-audit.md)
-- lets a report be read again: [ADR-draft-report-tasks-with-charts](draft-report-tasks-with-charts.md)
+- lets a report be read again: [ADR-0555](0555-report-tasks-with-charts.md)
