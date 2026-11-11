@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The Modeler warns about a variable the model reads and nothing in it writes.** The Problems
+  bar names each element whose expressions, conditions, correlation keys or template
+  placeholders read a variable that no start variable, constant, result, mapping, form field,
+  loop, agent tool or called process writes (`variable.unwritten`), and the deploy panel lists
+  them before the deploy. It is only a warning: a value can come from outside the model — a
+  message's payload, an undeclared start variable — so both deploy buttons stay as they are.
+  The check runs in the Modeler, because the compiler knows a linked form only by its id and
+  nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
+  parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
 - **atlas hub records where an installed application came from.** The server-side hub import
   records, under the application's key, the registry, the configured index URL, the fingerprint
   of the pinned key that signed the index, the release and its exact digest, the catalogues it
