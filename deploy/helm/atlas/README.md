@@ -194,6 +194,44 @@ longer depend on a proxy rule: a Prometheus scraper presents an API token scoped
 scrape config). Only `/healthz` and `/readyz` stay unauthenticated, by design,
 because a kubelet has no credential to offer — encryption is not authorization.
 
+## Metrics and alerts
+
+`/metrics` needs an API token of scope `metrics`; the chart ships no ServiceMonitor,
+so the scrape config is yours ([Credentials for machines](../../../docs/install.md#credentials-for-machines)).
+
+With the Prometheus Operator installed, `prometheusRule.enabled=true` renders a
+`PrometheusRule` for the single writer ([ADR-0557](../../../docs/adr/0557-runloop-reference-probe.md)).
+It answers three questions:
+
+| Question | Alerts |
+|---|---|
+| Is the writer reachable? | `AtlasRunLoopProbeTimeout`, `AtlasRunLoopProbeStoreFailing` (critical) |
+| Do requests wait noticeably? | `AtlasRunLoopWaitHigh` (warning), `AtlasRunLoopWaitCritical` (critical) |
+| Is it load or a slowdown? | `AtlasRunLoopSaturated` (load), `AtlasRunLoopStoreSlower`, `AtlasRunLoopComputeSlower` (the fixed reference work against its own 7-day median) |
+
+```bash
+helm upgrade --install atlas ./deploy/helm/atlas \
+  --set prometheusRule.enabled=true \
+  --set prometheusRule.labels.release=kube-prometheus-stack
+```
+
+`prometheusRule.labels` is how the operator's `ruleSelector` finds the object;
+`prometheusRule.selector` picks this installation's series and defaults to
+`job="<release fullname>"`, the job a ServiceMonitor on the chart's Service produces.
+The thresholds under `prometheusRule.thresholds` are assumptions from a small, healthy
+installation and are meant to be calibrated. The probe metrics come with the Atlas
+release after 0.25.0; against an older server only `AtlasRunLoopSaturated` can fire.
+
+If both slower alerts fire, the host is the likelier common cause, and an Alertmanager
+inhibit rule can keep the store alert quiet:
+
+```yaml
+inhibit_rules:
+  - source_matchers: ['alertname="AtlasRunLoopComputeSlower"']
+    target_matchers: ['alertname="AtlasRunLoopStoreSlower"']
+    equal: ['job', 'namespace', 'pod']
+```
+
 ## Values
 
 See [`values.yaml`](values.yaml) for the full, inline-documented list. The most
