@@ -53,7 +53,9 @@ ausdrücklicher Zustimmung:
 8. **Eine Bestellung nicht blind wiederholen.** `atlas_place_order` hat keinen
    Idempotenzschlüssel: Nach einem Fehler erst `atlas_list_orders` lesen, ob die Bestellung
    doch angekommen ist. Aktionen und Änderungen tragen `commandId` und `changeId`; eine
-   Wiederholung nimmt denselben Wert.
+   Wiederholung nimmt denselben Wert. Die Werte enthalten `RUN`, etwa `HW<RUN>-W6`: Atlas
+   merkt sich einen Wert über den Lauf hinaus und beantwortet einen alten erneut, statt die
+   Aktion auszuführen.
 
 ## Werkzeuge
 
@@ -75,7 +77,7 @@ Die Shop-Werkzeuge handeln immer als die Person der Verbindung, mit deren Rechte
 | Angaben korrigieren | `atlas_amend_order_line` |
 | zurückgeben | `atlas_return_order_line` |
 | Aktion einer gehaltenen Position | `atlas_order_line_actions`, dann `atlas_ask_order_line_action` mit `trigger = customer` (Person) oder `operator` (Carla), Ergebnis mit `atlas_order_line_outcomes` |
-| HR-Ereignis | `atlas_trigger_start` (Eintritt), `atlas_publish_message` (Austritt) |
+| HR-Ereignis | `atlas_trigger_start` (Eintritt), `atlas_publish_message` (Austritt; mit `messageId` auch `timeToLiveMs`, sonst wird die Nachricht abgelehnt) |
 | Applikation aus dem atlas hub | `atlas_hub_list_releases`, `atlas_hub_preview_release`, `atlas_hub_import_release`, `atlas_list_applications` |
 | OE-Tabelle | `atlas_get_decision_model`, `atlas_upload_decision_model`, `atlas_deploy_decision`, `atlas_try_decision` |
 | Prüfungen | `atlas_info`, `atlas_workers`, `atlas_list_incidents`, `atlas_incident_summary`, `atlas_application_constants`, `atlas_instance_timeline` |
@@ -90,6 +92,7 @@ Die Shop-Werkzeuge handeln immer als die Person der Verbindung, mit deren Rechte
 | Informationstransfer **nicht** installiert: der Lauf installiert ihn in Phase 0 aus dem atlas hub. Ist er von einem früheren Lauf aus dem hub da, ist H3 ein Import ohne Änderung; stammt er aus `install-informationstransfer.py` ohne `--nach-hub`, die Applikation vorher in der Console löschen | `atlas_list_applications` |
 | Hub-Register gepinnt und erreichbar | `atlas_hub_list_releases` antwortet ohne 502/503 |
 | Konstante `ORTSANGABEN` = `false` in `beispiel-m365-dienste` | `atlas_application_constants` |
+| Konstante `LIZENZ_VERTRAG_PRUEFEN` = `ein` in `beispiel-m365-dienste`; sonst belastet ein Eintritt keinen Vertrag, und E4 scheitert | `atlas_application_constants` |
 | Freie Lizenzen: mindestens 13 (12 Eintritte, eine Reserve) | Lizenzmanagement, Bestand |
 | Shop über MCP nicht abgeschaltet | Server ohne Opt-out (`mcpShop` in `atlas_info`) |
 
@@ -267,7 +270,7 @@ Ein Grossauftrag: ein zweites Projektteam und ein Lernender.
 | M5 | Anna | Beats Lizenz (falls im Shop gehalten, sonst übersprungen): `abwesenheit`, dann `abwesenheit-beenden` | Abwesenheitsnotiz an, dann aus | Kundenaktion des Empfängers |
 | M6 | admin | `atlas_publish_message` `hr.austritt` für Luca (04) | Konto gesperrt, Paket zurückgegeben | Austritt |
 | M7 | Anna | G12 Fokusraum zurückgeben (Umbau) | Rückbau `completed`, Raumpostfach weg | Rückgabe |
-| M8 | Anna | G9 Info zurückgeben, solange A1 besteht | verweigert mit Hinweis auf den Zugriff A1 | Abhängigkeit |
+| M8 | – | entfällt: Atlas prüft Abhängigkeiten nur innerhalb einer Bestellung (siehe Grenzen). G9 zurückzugeben, solange A1 besteht, gelingt und löscht das Postfach; danach sind M2 und der Rückbau von A1 nicht mehr möglich | | |
 | M9 | Anna | G7 Projektablage: `loeschen`, dann `wiederherstellen` | Site im Papierkorb, dann zurück | |
 
 ### Phase 6b: Informationstransfer
@@ -306,11 +309,11 @@ Nicht Teil eines echten Hochlaufs, aber Pflicht im Test: Die Umgebung ist danach
 | Fall | Person | Schritt | Erwartung |
 |---|---|---|---|
 | Z1 | admin | `hr.austritt` für alle übrigen Personalnummern | Konten gesperrt, Pakete zurückgegeben, Lizenzen frei |
-| Z2 | Anna | jede noch gehaltene Position zurückgeben, abhängige zuerst (A1 und A2 vor G9, A8 vor G16, die Transferkonten aus T0 vor G16) | Rückbau `completed` |
+| Z2 | Anna | erst wenn jedes Eintrittspaket aus Z1 zurückgegeben ist (das Paket prüft alle fünf Minuten): jede noch gehaltene Position zurückgeben, abhängige zuerst (A1 und A2 vor G9, A8 vor G16, die Transferkonten aus T0 vor G16) | Rückbau `completed` |
 | Z3 | Anna | G1 Vertrag: `senken` auf den Stand vor dem Lauf, dann zurückgeben | Kontingent wie vorher |
 | Z4 | admin | `M365OeMitgliedschaften` auf die Version vor dem Lauf zurücksetzen | Platzhalter wieder aktiv |
 | Z5 | admin | Incidents gegen V2, Aufgaben gegen V3 | keine neuen; sonst jede mit Instanz und Meldung im Protokoll |
-| Z6 | admin | Restobjekte mit `HW<RUN>` oder `<RUN>-` | keine; sonst Liste ins Protokoll für das Aufräumskript |
+| Z6 | admin | Restobjekte mit `HW<RUN>` oder `<RUN>-` | nur die Teams aus G2–G5 und W2, archiviert: Die Rückgabe eines Teams archiviert es, sie löscht es nicht. Sonst keine; jedes Restobjekt ins Protokoll für das Aufräumskript |
 
 ## Abdeckung
 
@@ -329,7 +332,7 @@ Nicht Teil eines echten Hochlaufs, aber Pflicht im Test: Die Umgebung ist danach
 | Exchange und SharePoint Server (On-Premises) | G15, G17 |
 | Atlas hub: Applikation installieren | H1–H5 |
 | Informationstransfer: vier Szenarien, Regel, Genehmigung und Ablehnung | T0–T5, R1–R5 |
-| Rückgabe und Abhängigkeiten | M7, M8, Z2 |
+| Rückgabe und Reihenfolge | M7, Z2 |
 
 ## Protokoll
 
@@ -375,5 +378,15 @@ ein Unternehmen einführt, kann sie als Leitfaden nehmen:
   Transfer bleibt stehen.
 - Gasteinladungen (A7) lehnt dieser Tenant ab, solange er nur ein Testabonnement hat
   (Graph 403 «Guest invitations not allowed for your company»); A7 scheitert darum hier.
+- Abhängigkeiten zwischen Bestellungen kennt Atlas nicht: `requires` gilt nur innerhalb
+  einer Bestellung, und A1 nennt das Postfach als Text. Ein Funktionspostfach lässt sich darum
+  zurückgeben, solange ein Zugriff darauf besteht; die Reihenfolge in Z2 hält der Agent ein.
+- Marcos Lizenzwechsel (W6) legt eine zweite Position für dieselbe Lizenz an. Gibt Z1 das
+  Eintrittspaket zurück, ist die Lizenz weg, und die Rückgabe der W6-Position scheitert mit
+  Entra 400 «User does not have a corresponding license». Der Fall gehört ins Protokoll.
+- Exchange Online braucht für `Remove-Mailbox` manchmal länger als die zwei Minuten des
+  Workers und entfernt das Postfach trotzdem. Ein Worker vor dem Fix «A removal Exchange
+  Online made after the worker stopped waiting counts as made» parkt die Rückgabe dann mit
+  404 und hält den Leistungsschalter für alle Exchange-Jobs offen.
 - Ein Lauf braucht je nach Exchange-Antwortzeiten drei bis fünf Stunden. Die VMs fahren um
   22:00 UTC herunter; ein Lauf sollte bis 16:00 UTC begonnen haben.
