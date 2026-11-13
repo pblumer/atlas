@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -115,6 +116,63 @@ func retriesNotFound(cmdlet string) bool {
 	return strings.HasPrefix(cmdlet, "Set-") || strings.HasPrefix(cmdlet, "Add-")
 }
 
+// removedProbe names, for a Remove- cmdlet whose answer the client gave up waiting
+// for, the Get- that tells whether the removal happened all the same. Observed against
+// a real tenant: Remove-Mailbox on a room, an equipment and a shared mailbox each ran
+// past the two-minute bound, the job failed, and the mailbox was gone — every retry then
+// answered 404 NotFound, which is not repeated (retriesNotFound), so the return parked
+// as an incident for a removal that had been made, and the 404s tripped the breaker.
+// Only removals of an object a Get- can address by the same Identity are listed: a
+// revoked permission or a removed member has no Get- of its own that answers 404.
+var removedProbe = map[string]string{
+	"Remove-Mailbox":           "Get-Mailbox",
+	"Remove-DistributionGroup": "Get-DistributionGroup",
+	"Remove-MailContact":       "Get-MailContact",
+}
+
+// timedOut reports whether a request failed because the client stopped waiting for
+// the answer — not because Exchange answered: the one failure after which the cmdlet
+// may have run.
+func timedOut(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// removed reports whether the object a timed-out Remove- addressed is gone: its Get-
+// answers 404. Exchange may still be removing it when the client gives up, so a Get-
+// that still finds it is asked again after each of the notFoundWaits. Anything else —
+// no Identity, another failure, the object still there after the waits — is "not
+// known to be removed", and the timeout stands.
+func (c *OnlineClient) removed(ctx context.Context, inv catalog.Invocation, target, anchor string) bool {
+	probe, ok := removedProbe[inv.Cmdlet]
+	if !ok {
+		return false
+	}
+	id, ok := inv.Parameters["Identity"]
+	if !ok || id == nil {
+		return false
+	}
+	body, err := json.Marshal(cmdletRequest{CmdletInput: cmdletInput{CmdletName: probe, Parameters: encodeParameters(map[string]any{"Identity": id})}})
+	if err != nil {
+		return false
+	}
+	for wait := 0; ; wait++ {
+		_, _, err := c.post(ctx, probe, target, anchor, body)
+		var ce *cmdletError
+		if errors.As(err, &ce) && ce.status == http.StatusNotFound {
+			return true
+		}
+		if err != nil || wait >= len(c.notFoundWaits) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(c.notFoundWaits[wait]):
+		}
+	}
+}
+
 // NewOnlineClient builds a client for one organization.
 func NewOnlineClient(c OnlineConfig) *OnlineClient {
 	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
@@ -170,6 +228,11 @@ func (c *OnlineClient) Invoke(ctx context.Context, inv catalog.Invocation, limit
 			case <-time.After(c.notFoundWaits[wait]):
 			}
 			page, next, err = c.post(ctx, inv.Cmdlet, target, anchor, body)
+		}
+		// A removal the client stopped waiting for may have been made: if the object
+		// is gone, the job did what it was sent to do (removedProbe).
+		if pages == 0 && err != nil && timedOut(err) && ctx.Err() == nil && c.removed(ctx, inv, target, anchor) {
+			return items, nil
 		}
 		if err != nil {
 			return nil, err

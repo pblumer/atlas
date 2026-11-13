@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ type exoCall struct {
 // request and answers each with the next canned reply.
 type fakeExchange struct {
 	srv     *httptest.Server
+	mu      sync.Mutex // a delayed answer is still being written while the next request arrives
 	calls   []exoCall
 	replies []fakeReply
 }
@@ -45,6 +47,8 @@ type fakeExchange struct {
 type fakeReply struct {
 	status int
 	body   string
+	// delay holds the answer back, so a client with a shorter timeout gives up on it.
+	delay time.Duration
 }
 
 func newFakeExchange(t *testing.T, replies ...fakeReply) *fakeExchange {
@@ -54,18 +58,26 @@ func newFakeExchange(t *testing.T, replies ...fakeReply) *fakeExchange {
 		raw, _ := io.ReadAll(r.Body)
 		var body map[string]any
 		_ = json.Unmarshal(raw, &body)
+		f.mu.Lock()
 		f.calls = append(f.calls, exoCall{
 			path: r.URL.Path, query: r.URL.RawQuery, auth: r.Header.Get("Authorization"),
 			anchor: r.Header.Get("X-AnchorMailbox"), ctype: r.Header.Get("Content-Type"), body: body,
 		})
+		i := len(f.calls) - 1
+		f.mu.Unlock()
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		i := len(f.calls) - 1
 		if i >= len(f.replies) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+		if d := f.replies[i].delay; d > 0 {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(d):
+			}
 		}
 		if f.replies[i].status != 0 {
 			w.WriteHeader(f.replies[i].status)
@@ -74,6 +86,13 @@ func newFakeExchange(t *testing.T, replies ...fakeReply) *fakeExchange {
 	}))
 	t.Cleanup(f.srv.Close)
 	return f
+}
+
+// n is how many requests arrived, read under the lock the handler writes them with.
+func (f *fakeExchange) n() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
 }
 
 func (f *fakeExchange) client(anchor string) *OnlineClient {
@@ -107,8 +126,8 @@ func TestOnlineInvokesTheCmdletOverREST(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.calls) != 1 {
-		t.Fatalf("%d calls", len(f.calls))
+	if f.n() != 1 {
+		t.Fatalf("%d calls", f.n())
 	}
 	c := f.calls[0]
 	if c.path != "/adminapi/beta/contoso.onmicrosoft.com/InvokeCommand" {
@@ -191,8 +210,8 @@ func TestOnlineFollowsPagesAndStopsAtTheLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) != 4 || len(f.calls) != 3 {
-		t.Fatalf("got %d items over %d calls", len(out), len(f.calls))
+	if len(out) != 4 || f.n() != 3 {
+		t.Fatalf("got %d items over %d calls", len(out), f.n())
 	}
 	if f.calls[1].query != "$skiptoken=a" {
 		t.Errorf("continuation query = %q", f.calls[1].query)
@@ -209,8 +228,8 @@ func TestOnlineFollowsPagesAndStopsAtTheLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.calls) != 1 || len(out) != 2 {
-		t.Errorf("with limit 2: %d items over %d calls", len(out), len(f.calls))
+	if f.n() != 1 || len(out) != 2 {
+		t.Errorf("with limit 2: %d items over %d calls", len(out), f.n())
 	}
 }
 
@@ -222,7 +241,7 @@ func TestOnlineRefusesAForeignContinuation(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "attacker.example") {
 		t.Errorf("err = %v", err)
 	}
-	if len(f.calls) != 1 {
+	if f.n() != 1 {
 		t.Error("the foreign continuation was requested")
 	}
 }
@@ -283,7 +302,7 @@ func TestOnlineTokenFailureIsTheError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "said no") {
 		t.Errorf("err = %v", err)
 	}
-	if len(f.calls) != 0 {
+	if f.n() != 0 {
 		t.Error("a request went out without a token")
 	}
 	if c.Target() != catalog.Online {
@@ -325,23 +344,69 @@ func TestOnlineWaitsForAnObjectJustCreated(t *testing.T) {
 	}, 0); err != nil {
 		t.Fatalf("a change found on the third try failed: %v", err)
 	}
-	if len(f.calls) != 3 {
-		t.Fatalf("%d calls, want 3", len(f.calls))
+	if f.n() != 3 {
+		t.Fatalf("%d calls, want 3", f.n())
 	}
 
 	g := newFakeExchange(t, notFound, notFound, notFound)
 	c = g.client("")
 	c.notFoundWaits = []time.Duration{time.Millisecond}
 	if _, err := c.Invoke(context.Background(), catalog.Invocation{Cmdlet: "Set-Mailbox", Parameters: map[string]any{"Identity": "x"}}, 0); err == nil ||
-		!strings.Contains(err.Error(), "HTTP 404") || len(g.calls) != 2 {
-		t.Fatalf("a change still not found after its waits: err %v after %d calls, want the 404 after 2", err, len(g.calls))
+		!strings.Contains(err.Error(), "HTTP 404") || g.n() != 2 {
+		t.Fatalf("a change still not found after its waits: err %v after %d calls, want the 404 after 2", err, g.n())
 	}
 
 	h := newFakeExchange(t, notFound, fakeReply{body: `{"value":[]}`})
 	c = h.client("")
 	c.notFoundWaits = []time.Duration{time.Millisecond}
-	if _, err := c.Invoke(context.Background(), catalog.Invocation{Cmdlet: "New-DistributionGroup", Parameters: map[string]any{"Name": "x"}}, 0); err == nil || len(h.calls) != 1 {
-		t.Fatalf("a New- answered 404 was sent again: err %v, %d calls", err, len(h.calls))
+	if _, err := c.Invoke(context.Background(), catalog.Invocation{Cmdlet: "New-DistributionGroup", Parameters: map[string]any{"Name": "x"}}, 0); err == nil || h.n() != 1 {
+		t.Fatalf("a New- answered 404 was sent again: err %v, %d calls", err, h.n())
+	}
+}
+
+// A removal the client stopped waiting for is checked with its Get-: observed against a
+// real tenant, Remove-Mailbox ran past the client's bound and removed the mailbox all
+// the same, and every retry then answered 404. Gone means done; still there after the
+// waits, or a cmdlet with no Get- to ask, keeps the timeout as the failure.
+func TestOnlineChecksARemovalItGaveUpWaitingFor(t *testing.T) {
+	slow := fakeReply{delay: 2 * time.Second, body: `{"value":[]}`}
+	notFound := fakeReply{status: http.StatusNotFound, body: `{"error":{"code":"NotFound","message":"Error executing cmdlet"}}`}
+	found := fakeReply{body: `{"value":[{"PrimarySmtpAddress":"raum@contoso.com"}]}`}
+	impatient := func(f *fakeExchange) *OnlineClient {
+		c := f.client("")
+		hc := f.srv.Client()
+		hc.Timeout = 50 * time.Millisecond
+		c.httpc = hc
+		c.notFoundWaits = []time.Duration{time.Millisecond, time.Millisecond}
+		return c
+	}
+	remove := catalog.Invocation{Cmdlet: "Remove-Mailbox", Parameters: map[string]any{"Identity": "raum@contoso.com"}}
+
+	f := newFakeExchange(t, slow, found, notFound)
+	if _, err := impatient(f).Invoke(context.Background(), remove, 0); err != nil {
+		t.Fatalf("a removal that took effect after the client gave up failed: %v", err)
+	}
+	if f.n() != 3 {
+		t.Fatalf("%d calls, want the removal and two reads", f.n())
+	}
+	if name, params := sentInput(t, f.calls[1]); name != "Get-Mailbox" || params["Identity"] != "raum@contoso.com" || len(params) != 1 {
+		t.Fatalf("the check sent %s %v, want Get-Mailbox for the same Identity alone", name, params)
+	}
+
+	g := newFakeExchange(t, slow, found, found, found)
+	if _, err := impatient(g).Invoke(context.Background(), remove, 0); err == nil || !timedOut(err) || g.n() != 4 {
+		t.Fatalf("a mailbox still there after the waits: err %v after %d calls, want the timeout after 4", err, g.n())
+	}
+
+	h := newFakeExchange(t, slow, notFound)
+	perm := catalog.Invocation{Cmdlet: "Remove-MailboxPermission", Parameters: map[string]any{"Identity": "fp@contoso.com", "User": "x@contoso.com"}}
+	if _, err := impatient(h).Invoke(context.Background(), perm, 0); err == nil || h.n() != 1 {
+		t.Fatalf("a removal with no Get- to ask was checked: err %v, %d calls", err, h.n())
+	}
+
+	k := newFakeExchange(t, notFound)
+	if _, err := impatient(k).Invoke(context.Background(), remove, 0); err == nil || !strings.Contains(err.Error(), "HTTP 404") || k.n() != 1 {
+		t.Fatalf("a removal answered 404 is not a timeout and stays a failure: err %v, %d calls", err, k.n())
 	}
 }
 
