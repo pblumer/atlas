@@ -126,6 +126,10 @@ HR-Ereignis eintritt, ist Empfänger und meldet sich im Lauf nicht an.
 | `atlas-beat` | Beat Beispiel | Mitarbeiter der ersten Stunde, Empfänger von «Bestellen für» | `M365-Mitarbeitende`, `M365-UCC` |
 | `atlas-admin` | lokaler Administrator | HR-System und Betrieb: Eintritte, OE-Tabelle, Prüfungen | admin, Mitgliedschaften unverändert |
 
+Die Operator-Aktionen (A4, W6, W7) setzen die Atlas-Rolle `operator` voraus. Weder Carla
+noch Anna haben sie, und `scripts/testlauf-rollen.py` setzt sie nicht; bis das so ist,
+führt `atlas-admin` diese Fälle aus, und das Protokoll vermerkt es.
+
 Die Installationsskripte nehmen jede angemeldete Testperson in alle Gruppen auf. Die
 Trennung oben setzt `scripts/testlauf-rollen.py` (nur Atlas-Gruppen); nach jedem Lauf eines
 Installationsskripts erneut ausführen, `--dry-run` zeigt nur, was sich ändern würde.
@@ -183,7 +187,7 @@ Sitzungszimmer zum Buchen. Anna bestellt, Max genehmigt, Carla genehmigt als Fac
 | Fall | Person | Schritt | Erwartung | Prüft |
 |---|---|---|---|---|
 | S1 | Anna | Kataloge lesen | sieht M365 für Mitarbeitende, Kommunikation (UCC), Exchange und SharePoint Server (OnPrem), Active Directory, Lizenzmanagement: Verträge, Informationstransfer | Zielgruppen |
-| S2 | Beat | Kataloge lesen | nur die M365-Kataloge | Zielgruppen |
+| S2 | Beat | Kataloge lesen | die M365-Kataloge und Active Directory, das dieselbe Zielgruppe hat | Zielgruppen |
 | S3 | Anna | Katalog HR-Eintritte, Lizenzmanagement: Betrieb | nicht sichtbar oder nicht bestellbar | `orderableBy`, Zielgruppe |
 | G1 | Anna | `lz-lizenzvertrag` `HW<RUN> Vertrag`, 15 Lizenzen | Vertrag gehalten, Kontingent gebucht | ohne Genehmigung |
 | G2 | Anna | `m365-team` `HW<RUN> Geschaeftsleitung`, privat | Max genehmigt; Team in Entra | Vorgesetzten-Genehmigung |
@@ -224,7 +228,7 @@ Carla die M365-Administration.
 | Fall | Person | Schritt | Erwartung | Prüft |
 |---|---|---|---|---|
 | E1 | admin | je Person `atlas_trigger_start` auf `proc_m365_hr_eintritt`, Trigger `hr.eintritt`, mit Personalnummer, Name, OE, Variante `standard`, Vorgesetzter Max | acht Konten in Entra, je ein Eintrittspaket im Namen der Applikation | HR-Ereignis |
-| E2 | Carla | Aufgaben «Initialpasswort» und «Zugangsdaten» je Person | Pakete gehalten; kein Passwort im Protokoll | Aufgaben der Fachstelle |
+| E2 | Carla | Aufgaben «Initialpasswort» und «Zugangsdaten» je Person | Pakete gehalten; kein Passwort im Protokoll. Das Formular verlangt das Passwort als Eingabe, und über MCP stünde es im Chat: Der Agent erzeugt es lokal, legt es unter `out/testlauf/` ab und erledigt die Aufgabe über die REST-API, ohne den Wert auszugeben | Aufgaben der Fachstelle |
 | E3 | admin | Mitgliedschaften lesen | jede Person in den Teams ihrer OE und im Verteiler Alle | OE-Zuordnung |
 | E4 | admin | Lizenzbestand | acht Lizenzen mehr belegt, Vertrag G1 belastet | Lizenzmanagement |
 
@@ -378,6 +382,9 @@ ein Unternehmen einführt, kann sie als Leitfaden nehmen:
   Transfer bleibt stehen.
 - Gasteinladungen (A7) lehnt dieser Tenant ab, solange er nur ein Testabonnement hat
   (Graph 403 «Guest invitations not allowed for your company»); A7 scheitert darum hier.
+- Der HR-Eintritt setzt in Entra keinen Vorgesetzten. Genehmigungen für Bestellungen, deren
+  Empfänger über den Eintritt kam (A1, A2, W2), gehen darum an die Ersatzgruppe, und Carla
+  genehmigt statt Max.
 - Abhängigkeiten zwischen Bestellungen kennt Atlas nicht: `requires` gilt nur innerhalb
   einer Bestellung, und A1 nennt das Postfach als Text. Ein Funktionspostfach lässt sich darum
   zurückgeben, solange ein Zugriff darauf besteht; die Reihenfolge in Z2 hält der Agent ein.
