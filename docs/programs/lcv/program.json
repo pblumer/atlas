@@ -1,0 +1,74 @@
+{
+  "id": "lcv",
+  "name": "Local collaboration views",
+  "summary": "Show who a process talks to on one installation, derived from the deployed definitions and the event log rather than drawn in one BPMN file: the interaction graph, an Operations view with every process collapsed and a replay of only the messages, an optional saved collaboration with its findings, and composing one step by step in the Modeler. Documentation and operational view only, no contract and no engine change.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-11",
+  "plan": "../../planning/local-collaboration-views-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-2--events-and-timers-",
+  "next_action": "Merge #1710 (LCV1 and LCV2 together, as the owner asked for no separate LCV1 pull request); then decide LCV3's store — a draft kind or a store of its own — and record it in ADR-0559 before building the saved collaboration.",
+  "slices": [
+    {
+      "id": "LCV1",
+      "title": "Interaction graph around one process (possible and observed)",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1703,
+        1707,
+        1710
+      ],
+      "note": "In review in #1710, not yet merged. GET /api/v1/process-interactions and atlas_process_interactions: participants, exchanges with their possible and observed layers, sends that reached nobody, the process's message ports. Pure computation in api/interaction; the event-log scan runs off the loop on a ReadView, bounded at 100000 rows, and rows are read under the event log's own rule (eventLogReach). ADR-0559 accepted with this slice.",
+      "evidence": [
+        "../../../api/interaction/interaction_test.go",
+        "../../../api/interactions_http_test.go"
+      ]
+    },
+    {
+      "id": "LCV2",
+      "title": "Operations view: collapsed participants and the message-only replay",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "LCV1"
+      ],
+      "issues": [],
+      "prs": [
+        1710
+      ],
+      "note": "In review in #1710, not yet merged: the Operations page #/operations/interactions/{processId} draws a BPMN collaboration on bpmn-js — pools stacked with the process in the middle, every pool collapsed, one message flow per exchange coloured by layer; a white box expands to its deployed diagram and its flows dock on the sending and receiving elements; a neighbour opens as the center. The message-only replay is read from GET /api/v1/process-interactions/replay (atlas_process_interaction_replay) backwards until its history begins, played singly or bundled along the message flows, followed live. Not built: narrowing to a correlation key (§7).",
+      "evidence": [
+        "../../../api/interaction/replay_test.go",
+        "../../../api/interactions_http_test.go",
+        "../../../e2e/operations-interactions.spec.mjs"
+      ]
+    },
+    {
+      "id": "LCV3",
+      "title": "Saved collaboration and its findings",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "LCV1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "ADR-0559 §5: a design-time BPMN document of one collaboration, filed under an application, exported with it and never deployed; participants by atlas:processRef, flows by messageRef; the findings collaboration.participant-unresolved, flow-not-sent, flow-not-received, flow-not-observed, undrawn-exchange and reaches-outside. Decide the store first: a draft kind (editor, co-editing, history) or a store of its own."
+    },
+    {
+      "id": "LCV4",
+      "title": "Composing a collaboration step by step in the Modeler",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "LCV3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "ADR-0559 §6: ports at the pool edge from the graph's ports, a '+' listing the counterparts with their observed counts, name proposals separate from the binding, placeholders for unreceived names, a participant the reader may not see greyed and anonymous, drift reported with the edit that resolves it."
+    }
+  ]
+}
