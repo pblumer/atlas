@@ -50,6 +50,10 @@ var classified = map[string]string{
 	"api/contentsource/wikiwikibangbang.go:maxResponse + 1": "the content-source adapter reading one JSON answer " +
 		"from the wiki it was configured with — a client's own ceiling on somebody else's server, like the " +
 		"CLI's; the attachments it copies are bounded by the installation's Asset budget",
+	"connector/atlasreport/config.go:maxAnswer + 1": "the Atlas report worker reading one JSON answer of a " +
+		"read route from the Atlas server its Worker names — a client's own ceiling on another server's answer, " +
+		"like the CLI's and the wiki adapter's; the report it folds that answer into is bounded by the " +
+		"atlas.report/1 contract's own limits (ADR-0555)",
 	"api/blueprintregistry/package.go:hdr.Size": "io.CopyN consumes exactly the current tar entry's declared size, " +
 		"not an independent input ceiling; the size is checked against the bounded archive budget and " +
 		"the underlying io.LimitedReader limits total decompressed tar bytes before any member is read",

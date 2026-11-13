@@ -232,8 +232,10 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.CardDAVContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
 	// The calendar Worker's (ADR-0552).
-	"connectorTasks.CalendarConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
-	"connectorTasks.CalendarInput.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CalendarConnector.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CalendarInput.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.AtlasReportConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.AtlasReportInput.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
 	// The wikiwikibangbang Worker's (ADR-0498).
 	"connectorTasks.WikiConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

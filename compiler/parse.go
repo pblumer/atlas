@@ -2479,6 +2479,10 @@ type xmlServiceTask struct {
 	// create, read, update or move an item, comment on it, query items, read a page as
 	// Markdown or append to one — as an account a *worker* holds the token of.
 	Wiki *xmlWikiConnector `xml:"extensionElements>wikiwikibangbangConnector"`
+	// AtlasReport, when present, marks this service task an Atlas report task
+	// (ADR-0555 §3): one of Atlas's own read routes folded into a report a form's chart
+	// draws, read with a token a *worker* holds.
+	AtlasReport *xmlAtlasReportConnector `xml:"extensionElements>atlasReportConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2845,6 +2849,21 @@ type xmlCardDAVConnector struct {
 // engine. operation is a row of connector/calendar/catalog, and input is one JSON
 // object — the operation's contract input — whose values may be =expressions.
 type xmlCalendarConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Input          string `xml:"input,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlAtlasReportConnector is the <atlas:atlasReportConnector> extension on a service task
+// (ADR-0555 §3). connector names the Atlas report Worker (literal-or-FEEL), and there is
+// no credential attribute, because none enters the engine. operation is a row of
+// connector/atlasreport/catalog, and input one JSON object of the operation's values,
+// which may be =expressions; an operation that needs none may leave it out.
+type xmlAtlasReportConnector struct {
 	Connector      string `xml:"connector,attr"`
 	Operation      string `xml:"operation,attr"`
 	Input          string `xml:"input,attr"`

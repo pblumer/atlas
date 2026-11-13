@@ -156,6 +156,7 @@ var catalogSources = []catalogSource{
 	// The calendar Worker Type in a public wizard (ADR-0552). No
 	// Start button: its tasks need a calendar Worker named filiale, the mock will do.
 	{ID: "terminbuchung", App: "Beispiel: Terminbuchung", Dir: "terminbuchung"},
+	{ID: "monatsbericht", App: "Beispiel: Monatsbericht", Dir: "monatsbericht"},
 	// The internal counterpart of the trip booking's public wizard (ADR-0449). No Start
 	// button: its first screen is a supervisor's, so a bare start would only park it.
 	{ID: "arbeitsplatz", App: "Beispiel: Arbeitsplatz-Ausstattung", Dir: "arbeitsplatz"},

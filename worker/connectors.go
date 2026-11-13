@@ -589,6 +589,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.WikiwikibangbangJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunWikiJob(ctx, j, reg)
 			})
+		case "atlasreport":
+			reg, names, err := atlasReportRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve reports, holding no server to read: not an error, for
+				// CardDAV's reason — the kind is supervised by default.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.AtlasReportJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunAtlasReportJob(ctx, j, reg)
+			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -688,6 +703,9 @@ var endpointKeys = map[string]struct{ prefix, field string }{
 	// A People API base an operator behind a proxy names; empty for most, and then
 	// nothing is reported. A block of its own so the table above keeps its alignment.
 	"googlecontacts": {googleContactsEnvPrefix, "URL"},
+	// The Atlas server a report reads, which may be another installation than the
+	// one that leases the job.
+	"atlasreport": {atlasReportEnvPrefix, "URL"},
 }
 
 // noteEndpoints records, for each worker name this worker holds, the endpoint its
@@ -749,7 +767,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "calendar", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "sharepointserver", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
+	return []string{"ad", "agent", "atlasreport", "calendar", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "sharepointserver", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

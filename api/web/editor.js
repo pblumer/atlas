@@ -19,6 +19,7 @@ import { sharepointServerOperationOptions, sharepointServerParametersPlaceholder
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { calendarOperationOptions, calendarResultType, calendarResultShape, calendarInputHint, calendarInputPlaceholder } from "./calendar-ops.js";
+import { atlasReportOperationOptions, atlasReportResultType, atlasReportResultShape, atlasReportInputHint, atlasReportInputPlaceholder } from "./atlasreport-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
 import { wikiOperationOptions, wikiUses, wikiResultType, wikiResultShape, wikiMaxPlaceholder, wikiMaxHint, wikiPropertiesPlaceholder } from "./wikiwikibangbang-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
@@ -6178,6 +6179,39 @@ const SERVICE_TASK_KINDS = [
         resultType: (v) => calendarResultType(v.operation || "find-free-slots"),
         showIf: (v) => !!calendarResultType(v.operation || "find-free-slots"),
         hint: (v) => calendarResultShape(v.operation || "find-free-slots"),
+      },
+    ],
+  },
+  {
+    id: "atlasreport", name: "Atlas report", group: "Applications",
+    desc: "Read Atlas's own figures — instances per process, a process measured over a period or week by week, the open incidents, the catalogue's delivery promises — as a report a task form's chart draws; a snapshot taken when the task runs",
+    icon: "R",
+    // Three bars rising on teal: a report, told apart from the calendar's amber page and
+    // the wiki's indigo one.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f766e"/><rect x="3.2" y="8.6" width="2.4" height="4.2" rx=".6" fill="#fff"/><rect x="6.8" y="6" width="2.4" height="6.8" rx=".6" fill="#fff"/><rect x="10.4" y="3.2" width="2.4" height="9.6" rx=".6" fill="#99f6e4"/></svg>`,
+    ext: "atlas:AtlasReportConnector",
+    fields: [
+      { group: "Report" },
+      {
+        key: "connector", label: "Worker", datalist: "atlasreport", placeholder: "atlas",
+        hint: "The configured Atlas report Worker this task reads through, by its name under Workers in the Console. Which Atlas server and the technical principal's token are the Worker's; the token reaches that worker and never the engine. A value starting with = is a FEEL expression.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: atlasReportOperationOptions(),
+      },
+      {
+        key: "input", label: "Input", type: "json", rows: 8,
+        placeholder: (v) => atlasReportInputPlaceholder(v.operation || "instances-summary"),
+        hint: (v) => atlasReportInputHint(v.operation || "instances-summary"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "bericht",
+        resultType: (v) => atlasReportResultType(v.operation || "instances-summary"),
+        showIf: (v) => !!atlasReportResultType(v.operation || "instances-summary"),
+        hint: (v) => atlasReportResultShape(v.operation || "instances-summary"),
       },
     ],
   },

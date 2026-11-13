@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "mb-anpassen",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Verteiler anpassen\n\nDiese Personen haben den Monatsbericht innerhalb von drei Tagen nicht gelesen: **{{nichtGelesen}}**\n\nUnten stehen sie bereits im Verteiler. Streiche, wer ihn nicht mehr erhalten soll, ersetze eine Person durch ihre Stellvertretung oder ergänze weitere. Der Bericht bleibt derselbe Schnappschuss."
+    },
+    {
+      "key": "verteilerText",
+      "type": "textarea",
+      "label": "Erneut zustellen an",
+      "description": "Ein Benutzername pro Zeile. Leer lassen oder unten abschliessen, um nicht mehr nachzufassen."
+    },
+    {
+      "key": "abschliessen",
+      "type": "checkbox",
+      "label": "Zustellung abschliessen, nicht mehr nachfassen"
+    }
+  ]
+}

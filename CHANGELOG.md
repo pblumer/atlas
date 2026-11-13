@@ -54,6 +54,16 @@ _Changed_ / _Removed_ for each version.
   The check runs in the Modeler, because the compiler knows a linked form only by its id and
   nothing of a called process; a deploy over the API or MCP does not give it. An agent tool's
   parameters and its `toolCallId` now show in the Variables panel as the tool's own variables.
+- **The *Atlas report* Worker Type reads Atlas's own figures as a report.** A service task of
+  type *Atlas report* reads the instances per process, one process measured over a period or
+  bucket by bucket (day, week, month), the open incidents per process and step, or the
+  catalogue's delivery promises kept, and writes them as a report in the format
+  `atlas.report/1` that a task form's chart draws. The report is a snapshot taken when the task
+  runs. It is read over Atlas's read routes with the API token of a technical account, which the
+  Worker holds in the vault; a token sealed in the vault from the API-token page is read as it
+  is. The new example `examples/monatsbericht` delivers two reports to a distribution list,
+  takes completing the task as having read it, and after three days lets the person responsible
+  adjust the list and deliver the same report again (ADR-0555).
 - **A task form can show a chart.** The form editor offers a *Chart* that draws one dataset of a
   report variable in the format `atlas.report/1`: a key figure with its change, bars, a stacked
   bar (also as shares), a line over time, or actual against target. Every value can be read as

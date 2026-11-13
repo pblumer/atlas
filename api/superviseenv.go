@@ -242,6 +242,9 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// The wiki likewise: the bundle holds the token and the endpoint says which wiki,
 		// and a supervised worker has neither of its own.
 		connectorKindWiki: s.wikiWorkerEnv,
+		// The Atlas report likewise: the bundle holds the technical principal's token
+		// and the endpoint says which server, and a supervised worker has neither.
+		connectorKindAtlasReport: s.atlasReportWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else

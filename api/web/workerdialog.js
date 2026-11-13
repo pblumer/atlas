@@ -146,6 +146,9 @@ export function workerShape(kind, provider) {
   // The wiki is CardDAV's shape: a base URL to reach and an account's token to reach it
   // with — every wiki is an installation of its own.
   const wiki = kind === "wikiwikibangbang";
+  // The Atlas report is the wiki's shape: a base URL to reach and an account's token to
+  // reach it with — the server a report reads may be another installation than this one.
+  const atlasReport = kind === "atlasreport";
   // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
   // two meanings at once: empty is AWS at the region the bundle names, and anything else
   // is the store the installation runs — which is also what decides that its buckets are
@@ -232,7 +235,7 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview || spMock || spServer ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav || calendar || wiki ? "required" : "optional")),
+    credRef: preview || spMock || spServer ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav || calendar || wiki || atlasReport ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"
@@ -254,6 +257,8 @@ export function workerShape(kind, provider) {
       ? "empty for Microsoft 365 and Google; the calendar home for CalDAV; the EWS URL for Exchange Server"
       : wiki
       ? "https://wiki.example.ch"
+      : atlasReport
+      ? "https://atlas.example.ch"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: agent
@@ -276,6 +281,8 @@ export function workerShape(kind, provider) {
       ? "Credential reference (vault {provider, …}: Microsoft 365, Google or mock)"
       : wiki
       ? "Credential reference (vault {token})"
+      : atlasReport
+      ? "Credential reference (vault {token}, or the token alone)"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -306,6 +313,8 @@ export function workerShape(kind, provider) {
       ? "kalender_filiale (vault {provider, …})"
       : wiki
       ? "wiki_bot (vault {token})"
+      : atlasReport
+      ? "atlas_report (vault {token})"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -336,6 +345,8 @@ export function workerShape(kind, provider) {
       ? "The credential reference names a vault bundle that says <b>which provider</b> answers and as whom \u2014 never a value. <b>Microsoft 365:</b> <code>{\"provider\": \"microsoft-graph\", \"tenantId\": \"\u2026\", \"clientId\": \"\u2026\", \"clientSecret\": \"\u2026\"}</code> for an app registration with the application permission <code>Calendars.ReadWrite</code>; restrict it in Exchange Online to the booking calendars, because unrestricted it reaches every mailbox. Leave the <b>endpoint empty</b>. A task names a calendar by its mailbox address, normally a <b>resource mailbox</b>. <b>Google Workspace:</b> <code>{\"provider\": \"google-calendar\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code> for a service account the booking calendars are <b>shared with</b> (\u201cmake changes to events\u201d); add <code>\"subject\"</code> and domain-wide delegation only if the Worker shall invite attendees. A task names a calendar by its calendar id. <b>CalDAV</b> (Nextcloud, iCloud, Fastmail, Synology, Radicale and most providers): <code>{\"provider\": \"caldav\", \"username\": \"\u2026\", \"password\": \"\u2026\", \"timeZone\": \"Europe/Zurich\"}</code> with an <b>app-specific password</b> where the provider issues one; the <b>endpoint is the calendar home</b> (<code>https://cloud.example.ch/remote.php/dav/calendars/verkauf/</code>), and a task names a calendar by its collection name below it. <b>Exchange Server</b> on premises: <code>{\"provider\": \"exchange-ews\", \"username\": \"CONTOSO\\\\svc-booking\", \"password\": \"\u2026\"}</code> for a service account with <b>Editor</b> on each booking mailbox\u0027s calendar, authenticating with NTLM (<code>\"authentication\": \"basic\"</code> where only Basic is enabled); the <b>endpoint is the EWS URL</b> (<code>https://mail.contoso.ch/EWS/Exchange.asmx</code>), and a task names a calendar by its mailbox address. <b>Mock:</b> <code>{\"provider\": \"mock\", \"calendars\": {\"werkstatt@firma.ch\": {}}}</code> keeps the calendars in the worker\u0027s memory, the way to try a booking process before the tenant is ready."
       : wiki
       ? "The <b>endpoint</b> is the wiki\u0027s base URL, where its web UI is \u2014 <code>https://wiki.example.ch</code>, with the path when it runs below one. It must be <b>https</b>. The credential reference names a vault bundle \u2014 never a value: <code>{\"token\": \"wwbb_\u2026\"}</code>, an API token of a <b>technical account of its own</b> that is an editor in the spaces processes write to. An account with the system role <code>admin</code> or <code>erasure</code> is refused, and it must not be the read-only account the catalogue reads the wiki with. One Worker per wiki and account."
+      : atlasReport
+      ? "The <b>endpoint</b> is the base URL of the Atlas server whose figures the reports read \u2014 <code>https://atlas.example.ch</code>, this one or another. The credential reference names a vault secret \u2014 never a value: <code>{\"token\": \"atl_\u2026\"}</code>, or the token alone as the API-token page seals it when you give it a vault secret name. It is an API token of scope <code>full</code> minted by a <b>technical account of its own</b> with the role <b>operator</b>, and <b>product manager</b> of the catalogues for the delivery report. A token of scope <code>worker</code> is not one: it reaches the job protocol and no read route. One Worker per server and account."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad
