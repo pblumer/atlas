@@ -336,6 +336,7 @@ func TestTheReplayListsWhatTheGraphCounts(t *testing.T) {
 
 	for q, want := range map[string]int{
 		"?processId=bestellung&before=x":         http.StatusBadRequest,
+		"?processId=bestellung&after=x":          http.StatusBadRequest,
 		"?processId=bestellung&before=1&after=1": http.StatusBadRequest,
 		"?processId=bestellung&limit=2001":       http.StatusBadRequest,
 		"?processId=bestellung&limit=0":          http.StatusBadRequest,

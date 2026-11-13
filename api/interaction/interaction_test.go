@@ -356,3 +356,52 @@ func TestTheAnswerIsStable(t *testing.T) {
 		}
 	}
 }
+
+// TestSeveralNamesBetweenTheSameParticipantsAreKeptApartAndOrdered: two names the
+// order process sends, two it sends to nobody, a receiver that is no longer deployed
+// and a source of a kind the graph does not know.
+func TestSeveralNamesBetweenTheSameParticipantsAreKeptApartAndOrdered(t *testing.T) {
+	defs := []Definition{
+		{Key: 2, ProcessID: "order", Name: "Bestellung", Version: 1, Newest: true, Points: []Point{
+			{Element: "b", Message: "Storno", Role: "throw"},
+			{Element: "a", Message: "Auftrag", Role: "throw"},
+			{Element: "w", Message: "Rueckfrage", Role: "catch"},
+		}},
+		{Key: 10, ProcessID: "shipping", Name: "Versand", Version: 1, Newest: true, Points: []Point{
+			{Element: "s1", Message: "Auftrag", Role: "start"},
+			{Element: "s2", Message: "Storno", Role: "catch"},
+		}},
+	}
+	rows := []state.EventLogEntry{
+		send(41, 40, at(40), model.DispatchValue{Source: model.DispatchFromProcess, Name: "Zwei", SenderProcessInstanceKey: 1, SenderProcessDefKey: 2}),
+		send(31, 30, at(30), model.DispatchValue{Source: model.DispatchFromProcess, Name: "Eins", SenderProcessInstanceKey: 1, SenderProcessDefKey: 2}),
+		send(21, 20, at(20), model.DispatchValue{Source: model.DispatchFromProcess, Name: "Auftrag", SenderProcessInstanceKey: 1, SenderProcessDefKey: 2, Reached: 1}),
+		recv(20, 20, at(20), model.MessageFlowValue{SenderProcessInstanceKey: 1, ReceiverProcessInstanceKey: 9, ReceiverProcessDefKey: 77, MessageName: "Auftrag"}),
+	}
+	g := build(t, Input{Definitions: defs, Sources: []Source{{Kind: "carrier-pigeon", Message: "Rueckfrage", Enabled: true}},
+		Scan: scanOf(rows...), ReadsAll: true, From: at(0)})
+
+	var got []string
+	for _, e := range g.Exchanges {
+		got = append(got, e.From+" -> "+e.To+" : "+e.Message)
+	}
+	want := []string{
+		"process:order -> process:shipping : Auftrag",
+		"process:order -> process:shipping : Storno",
+		"process:order -> removed : Auftrag",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("exchanges = %v, want %v, ordered by sender, receiver and name", got, want)
+	}
+	if len(g.Unreceived) != 2 || g.Unreceived[0].Message != "Eins" || g.Unreceived[1].Message != "Zwei" {
+		t.Errorf("unreceived = %+v, want Eins before Zwei", g.Unreceived)
+	}
+	if len(g.Ports) != 3 || g.Ports[0].Message != "Auftrag" || g.Ports[1].Message != "Storno" || g.Ports[2].Message != "Rueckfrage" {
+		t.Errorf("ports = %+v, want the two outgoing names in order, then the incoming one", g.Ports)
+	}
+	for _, p := range g.Participants {
+		if p.Kind == "carrier-pigeon" || p.ID == "" {
+			t.Errorf("a source of an unknown kind became a participant: %+v", p)
+		}
+	}
+}
