@@ -323,6 +323,7 @@ _Changed_ / _Removed_ for each version.
   refuses only the next deploy of an affected model (ADR-0547).
 
 ### Fixed
+- **A removal Exchange Online made after the worker stopped waiting counts as made.** `Remove-Mailbox` on a room, an equipment and a calendar mailbox ran past the two-minute bound in a real tenant and removed the mailbox all the same; every retry then answered 404 NotFound, the return parked as an incident, and the 404s kept the Exchange breaker open for every other job. After a timeout the worker now asks `Get-Mailbox` (`Get-DistributionGroup`, `Get-MailContact` for those removals) for the same identity, for about a minute: gone means the job is done, still there keeps the timeout as the failure. A 404 to the removal itself still fails the job.
 - **A request the target refuses no longer holds back other jobs.** A REST task whose request
   drew HTTP 400 from three instances in a row opened the worker circuit breaker for the whole
   REST job type, so Atlas held back every REST task on the server — the shop's fulfilment
