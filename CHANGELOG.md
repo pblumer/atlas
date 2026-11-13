@@ -445,6 +445,26 @@ _Changed_ / _Removed_ for each version.
   application constant `DEPARTMENT` when it is not empty (the installer sets the environment id),
   and from the OE otherwise, as before.
 
+### Security
+- **The x/net, x/text and x/crypto modules are on releases without known vulnerabilities, and a
+  build that lets Go pick its toolchain gets a patched one.** `govulncheck` found three
+  vulnerabilities reachable from Atlas's own code in the versions `go.mod` required: in
+  `golang.org/x/net/html`, a rendering fault that lets cleaned markup be read differently when it
+  is parsed again (GO-2026-6866, in the renderer the mail Worker's HTML cleaner uses) and quadratic
+  work on crafted markup (GO-2026-6860, reached with every page the web-scraping Worker fetches);
+  in `golang.org/x/text/secure/precis`, a panic on crafted input (GO-2026-6629, reachable by the
+  call graph through the SQL Worker's drivers). `golang.org/x/net` goes from v0.57.0 to v0.62.0,
+  `golang.org/x/text` from v0.40.0 to v0.44.0, `golang.org/x/crypto` from v0.54.0 to v0.59.0 and
+  `golang.org/x/sys` from v0.47.0 to v0.50.0.
+  `go.mod` also names `toolchain go1.26.11` now. Its `go 1.26` line let a build under
+  `GOTOOLCHAIN=auto` — which is how `deploy/opentofu/m365-devenv/scripts/atlas-setup.sh` builds
+  from source, and what a workstation with an older Go does — fetch go1.26.0, the oldest release
+  that satisfies it, whose standard library has 36 vulnerabilities reachable from Atlas, HTTP
+  server crashes and certificate-check faults among them. The released binaries and the container
+  image were not built that way: their workflows take the newest 1.26 patch release available
+  when they run. With both changes `govulncheck` reports nothing against the Go vulnerability
+  database of 2026-11-11.
+
 ## [0.25.0] — 2026-11-09
 
 **Every process, decision and form belongs to an application** (ADR-0544). Nothing new is
