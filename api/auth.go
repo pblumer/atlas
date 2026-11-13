@@ -325,9 +325,43 @@ func applyGroup(ids []string, groupID string, member bool) ([]string, bool) {
 // deployment is unaffected until an operator opts in (ADR-0044).
 func WithAuth() Option { return func(s *Server) { s.authEnabled = true } }
 
-// setSessionCookie writes the session cookie. It is HttpOnly and SameSite=Lax,
-// and Secure whenever the request arrived over TLS (so it still works on a plain
-// http:// dev server while never leaking over http on a real TLS deployment).
+// forwardedProto is the scheme the client-facing hop of a proxy chain reports in
+// X-Forwarded-Proto, or "" when no proxy named one. A chain sends a comma-separated
+// list; its first entry is the hop the browser spoke to.
+func forwardedProto(r *http.Request) string {
+	fwd := r.Header.Get("X-Forwarded-Proto")
+	if fwd == "" {
+		return ""
+	}
+	if first := strings.TrimSpace(strings.Split(fwd, ",")[0]); first == "http" || first == "https" {
+		return first
+	}
+	return ""
+}
+
+// arrivedOverHTTPS reports whether the browser's connection is HTTPS, wherever TLS
+// ends, and so whether a cookie written in answer to r carries Secure.
+//
+// r.TLS answers that for a server terminating TLS itself (ADR-0191). Behind a proxy
+// that ends TLS the request arrives as plain HTTP, and reading r.TLS alone left the
+// session cookie, the single sign-on state and the account-link state without Secure
+// in exactly the deployment that had a certificate: a browser then sends them over
+// http:// as well, where anybody on the path reads them. There the proxy's
+// X-Forwarded-Proto is what says how the browser arrived.
+//
+// The header is read from any peer, as externalBase reads it and unlike
+// X-Forwarded-For, which only a listed proxy may send (ADR-0448). It can add the
+// attribute and never remove it — a direct TLS connection is Secure whatever the
+// header says — and a caller who sends it on a plain connection withholds the cookie
+// from their own browser and from nobody else's.
+func arrivedOverHTTPS(r *http.Request) bool {
+	return r.TLS != nil || forwardedProto(r) == "https"
+}
+
+// setSessionCookie writes the session cookie. It is HttpOnly and SameSite=Lax, and
+// Secure whenever the browser arrived over HTTPS (arrivedOverHTTPS) — so it still
+// works on a plain http:// dev server and is never sent over http:// by a browser
+// that reached Atlas through TLS, whether Atlas or a proxy in front of it ended it.
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
@@ -335,7 +369,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl 
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   arrivedOverHTTPS(r),
 		MaxAge:   int(ttl.Seconds()),
 	})
 }
@@ -348,7 +382,7 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   arrivedOverHTTPS(r),
 		MaxAge:   -1,
 	})
 }

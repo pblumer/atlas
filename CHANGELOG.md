@@ -464,6 +464,18 @@ _Changed_ / _Removed_ for each version.
   image were not built that way: their workflows take the newest 1.26 patch release available
   when they run. With both changes `govulncheck` reports nothing against the Go vulnerability
   database of 2026-11-11.
+- **The session cookie is `Secure` behind a proxy that ends TLS.** Atlas decided the attribute
+  from its own listener: set when the connection was TLS, left off otherwise. Behind a
+  TLS-terminating proxy or an ingress — every deployment with a certificate until Atlas could
+  serve one itself — the request arrives as plain HTTP, so the session cookie, the single
+  sign-on state cookies and the Microsoft account-link cookie all went out without `Secure`,
+  and a browser would send them over `http://` as well, where anybody on the path reads them.
+  A proxy's `X-Forwarded-Proto: https` now counts as the browser having arrived over HTTPS,
+  as it already did for the URLs Atlas publishes about itself. The header can only add the
+  attribute: a connection that is TLS at Atlas stays `Secure` whatever it says, and a caller
+  who sends it on a plain connection withholds the cookie from their own browser only. A proxy
+  that does not send the header leaves the cookies as they were, so `docs/install.md` now says
+  the line is needed, and that `Strict-Transport-Security` is the proxy's to set.
 
 ## [0.25.0] — 2026-11-09
 

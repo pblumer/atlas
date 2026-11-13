@@ -340,7 +340,7 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		Path:     oidcCallbackPath,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   arrivedOverHTTPS(r),
 		MaxAge:   int(oidcLoginWindow.Seconds()),
 	})
 	http.SetCookie(w, &http.Cookie{
@@ -349,7 +349,7 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		Path:     oidcCallbackPath,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   arrivedOverHTTPS(r),
 		MaxAge:   int(oidcLoginWindow.Seconds()),
 	})
 	sep := "?"
@@ -721,7 +721,7 @@ func clearOIDCStateCookie(w http.ResponseWriter, r *http.Request) {
 			Path:     oidcCallbackPath,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
-			Secure:   r.TLS != nil,
+			Secure:   arrivedOverHTTPS(r),
 			MaxAge:   -1,
 		})
 	}
