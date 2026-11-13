@@ -1,12 +1,12 @@
 # ADR-0559: A collaboration is a view over processes that already exist
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted (2026-11-11)
+- **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** Atlas maintainers
 - **Open question:** whether aggregating the observed exchanges from the event log on request
-  is cheap enough on the run loop at a real installation's size, or whether the first slice
-  already needs a folded, per-edge table (§4). Nobody has measured how many `message.sent` rows
+  is cheap enough at a real installation's size, off the run loop as it is built, or whether
+  it already needs a folded, per-edge table (§4). Nobody has measured how many `message.sent` rows
   a 30-day window holds on the maintainer's server.
 - **Question checked:** 2026-11
 
@@ -538,6 +538,85 @@ served from more than one partition.** Measured against
 - **Verification deferred.** The tests that a merged cross-partition view equals the
   single-partition answer, and that it survives a failover, belong to the Milestone-5 slice of
   [ADR-0175](0175-replicated-partition-cells.md) that introduces several partitions.
+
+### As built
+
+**Slice LCV1 (2026-11): the derived graph, possible and observed, around one process.** The
+programme is [`docs/programs/lcv`](../programs/lcv/program.json), its plan
+[`docs/planning/local-collaboration-views-program.md`](../planning/local-collaboration-views-program.md).
+
+- **The route.** `GET /api/v1/process-interactions?processId=…&window=…` (`roleAny`, the rows
+  decide, as on the event log) and the MCP tool `atlas_process_interactions`. `window` is a Go
+  duration and defaults to the event-log retention, which the answer states as `retention`.
+- **The computation** is the pure package `api/interaction`. The handler copies the readable
+  definitions and the event-log reach on the loop, takes a `state.ReadView` there, and runs the
+  scan with the loop free. The reach is one function, `eventLogReach`, now shared with
+  `/api/v1/event-log`, so the two cannot apply different rules.
+- **Depth one.** The graph holds the process, everybody it exchanges a name with, and those
+  exchanges. Extending it (§3) is a second request for a neighbour; the client merges them.
+- **The possible layer** reads the newest, active definitions, and the inbound watches and
+  product actions of `message-sources` for a caller who may read that route (a modeller or an
+  administrator). A deactivated process makes nothing possible; its ports still list what it
+  would exchange.
+- **The observed layer** groups the rows of one command by their shared cause, which the log
+  writes next to each other, so a reception is attributed to the send of its own command.
+  - A reception is attributed to a sender only when the caller may read the send row.
+    Otherwise it comes from `outside-view`. This is the strict reading of ADR-0472 §5, which
+    names a reception's sender by instance key alone, and it is §8's rule applied to the
+    graph.
+  - What a readable send reached beyond the receptions the caller may read is counted on an
+    exchange to `outside-view`, from the send row's `reached` and `started`.
+  - A reception without a send in its command is a kept message taken later. Only a publish
+    with a time to live is kept, so it is attributed to `publish`.
+  - The event log does not tell a publish through the route from atlas's own order publishes,
+    nor which inbound watch sent; the observed layer therefore names them `publish` and
+    `inbound`. The possible layer names the watch.
+  - A definition no longer deployed, named in an older row, is `removed`. A directed delivery
+    (ADR-0428) is `directed`.
+  - Signals are not read (§3).
+- **The bound.** The scan reads at most 100 000 rows (`interactionScan`). A cut sets
+  `observed.partial` and dates `observed.readFrom` at the oldest row read.
+
+**Slice LCV2 (2026-11): the Operations view and the message-only replay.**
+
+- **The page** is `#/operations/interactions/{processId}` (`api/web/interactions.js`), reached
+  from an *Interactions* link on every process of the Operations list. It draws the LCV1 graph
+  as a BPMN collaboration (`api/web/interactions-bpmn.js` generates the document, the vendored
+  bpmn-js renders it through `collaborationCanvas` in `editor.js`): one horizontal pool per
+  participant, the pools that only send to the process above it, the process in the middle,
+  the pools it sends to below, and one BPMN message flow per exchange. Every pool opens
+  collapsed (`isExpanded="false"`). The period is a day, a week or the event-log retention.
+- **The layers by colour.** A message flow is dashed in BPMN, so possible and observed are told
+  apart by colour and caption: an observed flow is drawn dark with its count, a possible-only
+  one light, an observed one the newest definitions no longer allow in the attention colour.
+- **Expanding a white box** draws the newest deployed version's diagram in its pool: the model's
+  process and its diagram interchange are copied in with their ids prefixed, so two expanded
+  processes that use the same element id do not collide, and moved into the band. Its message
+  flows then dock on the element behind the message name, read from the process's ports
+  (a neighbour's from its own graph, asked with a window of one nanosecond so no row is
+  scanned); where the element is not drawn, the flow docks on the pool's edge. A model that
+  cannot be placed — no drawing of that process — stays a collapsed pool. `↗` opens a
+  neighbour as the center of its own graph, which is how the picture is extended (§3).
+- **What BPMN cannot draw** is listed under the collaboration instead: the sends that reached
+  nobody (a message flow joins two pools, and nobody is not one), and a process sending a name
+  to itself, which would be a message flow inside one pool.
+- **The replay route.** `GET /api/v1/process-interactions/replay` (and the MCP tool
+  `atlas_process_interaction_replay`) lists the graph's arrivals one by one, oldest first:
+  `received`, `started`, `unreceived`, and `outside` for what a send of the process reached
+  outside the reader's view. It is the graph's own attribution, now one function
+  (`attribute`), applied group by group, so the two cannot disagree. A page ends between two
+  commands; `before` and `after` are event-log positions, as on `/api/v1/event-log`.
+- **The page's replay** reads the history backwards until the route says it began, keeps at most
+  5 000 events, and states from when its history is complete and how far the event log reaches.
+  It plays one event per step as an envelope travelling along its message flow, with the
+  collaboration replay's own animation (ADR-0038), or, at five or
+  twenty-five events per step, bundles the step into counts that pulse on each message flow
+  and says which of the two it shows. A send that reached nobody leaves its pool and stops
+  just below it. *Live* follows with `after`, and redraws the graph first when
+  an event names an exchange it does not have. Correlation keys are listed with the events;
+  narrowing the replay to one key (§7) is not built.
+- **Not built yet:** narrowing to a correlation key (§7), the saved collaboration and its findings
+  (§5; LCV3), composing step by step in the Modeler (§6; LCV4).
 
 ### Consequences
 

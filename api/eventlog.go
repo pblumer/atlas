@@ -202,24 +202,13 @@ func (s *Server) handleEventLog(w http.ResponseWriter, r *http.Request) {
 		part = s.proc.Partition()
 		view = s.store.ReadView()
 		defs = make(map[uint64]eventLogDef, len(s.deployments))
-		all = !s.authEnabled || (pr != nil && (pr.HasRole(RoleOperator) || pr.HasRole(RoleAdmin)))
-		visible = map[uint64]bool{}
-		grants := map[string]bool{} // per project, asked once however many versions it holds
 		for key, d := range s.deployments {
 			if d == nil {
 				continue
 			}
 			defs[key] = eventLogDef{processID: d.ProcessID, name: d.Name, projectID: d.ProjectID, version: d.Version, cp: d.cp}
-			if all || pr == nil || d.ProjectID == "" || !definitionReadable(pr, d) {
-				continue
-			}
-			g, asked := grants[d.ProjectID]
-			if !asked {
-				g = s.instanceProjectGrantsView(pr, key)
-				grants[d.ProjectID] = g
-			}
-			visible[key] = g
 		}
+		all, visible = s.eventLogReach(pr)
 	})
 	if view == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "event log: the server is stopping")
@@ -272,6 +261,32 @@ func (s *Server) handleEventLog(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Latest = strconv.FormatUint(max(youngest, after), 10)
 	httpapi.JSON(w, http.StatusOK, resp)
+}
+
+// eventLogReach is who may read which rows of the event log (ADR-0472 §5): all is
+// true for an operator, an administrator or a server without authentication, who read
+// every row; otherwise visible names the definitions whose rows the caller may read,
+// those deployed from a project they may view. Every view built on the log reads it
+// through this one rule (ADR-0559 §4). Must be called on the run loop.
+func (s *Server) eventLogReach(pr *httpapi.Principal) (all bool, visible map[uint64]bool) {
+	all = !s.authEnabled || (pr != nil && (pr.HasRole(RoleOperator) || pr.HasRole(RoleAdmin)))
+	visible = map[uint64]bool{}
+	if all || pr == nil {
+		return all, visible
+	}
+	grants := map[string]bool{} // per project, asked once however many versions it holds
+	for key, d := range s.deployments {
+		if d == nil || d.ProjectID == "" || !definitionReadable(pr, d) {
+			continue
+		}
+		g, asked := grants[d.ProjectID]
+		if !asked {
+			g = s.instanceProjectGrantsView(pr, key)
+			grants[d.ProjectID] = g
+		}
+		visible[key] = g
+	}
+	return all, visible
 }
 
 // rowDefinition is the definition a row is about, for the rule of who may read it: the
