@@ -205,6 +205,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_signals":                            "GET /api/v1/signals",
 	"atlas_message_names":                      "GET /api/v1/message-names",
 	"atlas_event_log":                          "GET /api/v1/event-log",
+	"atlas_process_interactions":               "GET /api/v1/process-interactions",
+	"atlas_process_interaction_replay":         "GET /api/v1/process-interactions/replay",
 	"atlas_resolve_incident":                   "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":                   "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":                  "POST /api/v1/incidents/resolve",

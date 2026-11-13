@@ -3537,6 +3537,37 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .flow-log .empty { padding: 14px 16px; color: var(--muted); }
 .replay-link { margin-left: 8px; font-size: 12px; }
 
+/* Who a process talks to (ADR-0559): a generated BPMN collaboration on bpmn-js. A
+   message flow is always dashed in BPMN, so the layers are told apart by colour:
+   observed flows dark, possible-only ones light, an observed flow the newest
+   definitions no longer allow in the attention colour. The colours override what
+   bpmn-js writes inline, hence !important. */
+.ix-card { overflow-x: auto; }
+/* A view, not an editor: the modeler's palette, context pad and in-place editing stay
+   away, as in the live views. */
+.ix-canvas .djs-palette, .ix-canvas .djs-context-pad, .ix-canvas .djs-direct-editing-parent { display: none !important; }
+.ix-canvas { position: relative; height: 420px; background: var(--diagram-bg); border: 1px solid var(--border); border-radius: 10px; }
+.ix-legend { font-size: 12px; margin-bottom: 6px; }
+.ix-canvas .djs-connection.ix-observed .djs-visual > path { stroke: var(--diagram-shape-stroke) !important; stroke-width: 2px !important; }
+.ix-canvas .djs-connection.ix-possible .djs-visual > path { stroke: var(--border-strong) !important; }
+.ix-canvas .djs-shape.ix-possible-label .djs-visual text { fill: var(--muted) !important; }
+.ix-canvas .djs-shape.ix-not-possible-label .djs-visual text { fill: var(--mesh-attention) !important; }
+.ix-canvas .djs-connection.ix-not-possible .djs-visual > path { stroke: var(--mesh-attention) !important; stroke-width: 2px !important; }
+.ix-canvas .djs-connection.ix-active .djs-visual > path,
+.ix-canvas .djs-connection.ix-pulse .djs-visual > path { stroke: var(--accent) !important; stroke-width: 3px !important; }
+.ix-canvas .djs-shape.ix-center .djs-visual > rect { stroke: var(--accent) !important; stroke-width: 2.5px !important; }
+.ix-canvas .djs-shape.ix-outside .djs-visual > rect { fill: var(--diagram-bg) !important; stroke-dasharray: 6 4; }
+.ix-canvas .djs-shape.ix-outside .djs-visual text { fill: var(--muted) !important; font-style: italic; }
+.ix-canvas .djs-shape.ix-inactive .djs-visual { opacity: .6; }
+.ix-pool-ctl { display: flex; gap: 6px; align-items: center; white-space: nowrap; font-size: 12px; }
+.ix-pool-ctl button { border: 1px solid var(--border-strong); background: var(--surface); color: var(--accent-text); border-radius: 6px; width: 24px; height: 22px; padding: 0; font-weight: 700; cursor: pointer; line-height: 1; }
+.ix-pool-hint { color: var(--muted); }
+.ix-pulse-count { font-size: 12px; font-weight: 700; color: var(--accent-text); background: var(--surface); border-radius: 4px; padding: 0 3px; }
+.ix-unreceived { margin: 8px 0 0; }
+.ix-feed { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; }
+.ix-feed li { padding: 2px 0; border-bottom: 1px solid var(--border); }
+.ix-feed li.kind-unreceived { color: var(--danger); }
+
 /* ---------- Documentation prose (Markdown) ----------
    An element's documentation is written as Markdown and rendered by markdown.js
    (ADR-0250). One ruleset serves every surface that shows

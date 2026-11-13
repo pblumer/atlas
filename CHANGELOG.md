@@ -13,6 +13,29 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Operations shows who a process talks to, and replays only the messages.** Every process in
+  the Operations list has an *Interactions* link. It draws a BPMN collaboration: the pools that
+  send to the process above it, the process in the middle, the pools it sends to below, every pool
+  collapsed, and a message flow per exchange — dark with its count when it was observed, light
+  when it is only possible, in the attention colour when the newest definitions no longer allow
+  it. A process expands to its deployed diagram, and its message flows then dock on the elements
+  that send and receive; it also opens as the center of its own picture. The sends that reached
+  nobody are listed.
+  The replay plays what the event log recorded — deliveries, started instances, sends nobody
+  received — one message at a time or bundled per step, says from when its history is complete,
+  and follows new messages live. `GET /api/v1/process-interactions/replay` and the MCP tool
+  `atlas_process_interaction_replay` list the same events, oldest first, page by page
+  (ADR-0559 §7, §8).
+- **Atlas shows who a process talks to.** `GET /api/v1/process-interactions?processId=…` and the
+  MCP tool `atlas_process_interactions` answer the interaction graph around one process: every
+  participant it exchanges message names with — other deployed processes, also when they were
+  deployed from other files, and the inbound watches, product actions and API publishes that send
+  to it — and per exchange what the newest, active definitions make possible and what the event
+  log observed in a window: how often a message arrived, how many instances it started, and when
+  last. Its sends that reached nobody are counted, and its message names are listed with the
+  elements behind them. A reader sees only the rows the event log shows them; whatever they may
+  not read is a nameless participant "outside your view". The scan is bounded and says where it
+  stopped (ADR-0559).
 - **atlas hub shows what of an installed release is here.** An installation now lists its
   components — the application, its processes, forms, decisions and constants, its release, its
   catalogues and products — each as this server holds it at the moment it is read, never as the

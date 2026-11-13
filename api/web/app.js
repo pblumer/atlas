@@ -1535,6 +1535,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/operations/event-log")) return H("ereignisse", "The event log");
+  if (path.startsWith("#/operations/interactions/")) return H("ereignisse", "Who a process talks to");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -7313,9 +7314,12 @@ async function viewInstances() {
     const running = s.running
       ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
       : '<span class="muted">0</span>';
-    const collab = g.latest.collaborationKey
+    const collab = (g.latest.collaborationKey
       ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
-      : "";
+      : "") +
+      // Who the process talks to, whichever files its partners were deployed from
+      // (ADR-0559): offered for every process, since the answer is derived.
+      `<a class="replay-link ix-link" href="#/operations/interactions/${encodeURIComponent(g.processId)}" title="${esc(tr("ix.linkTitle"))}">⇆ ${esc(tr("ix.link"))}</a>`;
     // Row actions: one primary Open plus an overflow menu, so every row is the same
     // height and the destructive bulk-terminate doesn't shout from each row (it is
     // one click deeper, the same ⋯ pattern the Modeler's rows use).
@@ -12873,6 +12877,7 @@ function routeTitle(path) {
     [/^#\/operations\/decisions\//, "Decision · Operations"],
     [/^#\/operations\/decisions$/, "Decisions · Operations"],
     [/^#\/operations\/c\//, "Collaboration · Operations"],
+    [/^#\/operations\/interactions\//, "Interactions · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
     [/^#\/data\/instances$/, "Instances · Data"],
@@ -13151,6 +13156,14 @@ async function route() {
       const gen = navGen;
       const { viewEventLog } = await import("./eventlog.js");
       return await viewEventLog({ api, view, isSuperseded: () => superseded(gen) });
+    }
+    // Who a process talks to (ADR-0559): the interaction graph, collapsed, and the
+    // replay of only its messages.
+    const ixm = path.match(/^#\/operations\/interactions\/([^/]+)$/);
+    if (ixm) {
+      const gen = navGen;
+      const { viewInteractions } = await import("./interactions.js");
+      return await viewInteractions({ api, view, processId: decodeURIComponent(ixm[1]), isSuperseded: () => superseded(gen) });
     }
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
