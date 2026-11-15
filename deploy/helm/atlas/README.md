@@ -4,7 +4,7 @@ Deploys the single-binary [atlas](https://github.com/pblumer/atlas) BPMN workflo
 engine — the engine, HTTP API, web UI and MCP endpoint in one container.
 
 > ⚠️ Atlas is in early development (`0.x`) — APIs and on-disk formats are
-> unstable. By default this chart deploys the pinned `0.25.0` release image; set
+> unstable. By default this chart deploys the pinned `0.26.0` release image; set
 > `image.tag` to move to another release (or to the rolling `main` tag).
 
 ## Why a StatefulSet with one replica
@@ -21,14 +21,14 @@ not pods.
 
 ```bash
 # From the OCI registry (no checkout needed):
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.25.0
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.26.0
 
 # ...or from a checkout of the repo:
 helm install atlas ./deploy/helm/atlas
 
 # Pin an image tag and give it real storage:
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.25.0 \
-  --set image.tag=0.25.0 \
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.26.0 \
+  --set image.tag=0.26.0 \
   --set persistence.size=20Gi \
   --set persistence.storageClass=fast-ssd
 ```
@@ -219,8 +219,8 @@ helm upgrade --install atlas ./deploy/helm/atlas \
 `prometheusRule.selector` picks this installation's series and defaults to
 `job="<release fullname>"`, the job a ServiceMonitor on the chart's Service produces.
 The thresholds under `prometheusRule.thresholds` are assumptions from a small, healthy
-installation and are meant to be calibrated. The probe metrics come with the Atlas
-release after 0.25.0; against an older server only `AtlasRunLoopSaturated` can fire.
+installation and are meant to be calibrated. The probe metrics come with Atlas 0.26.0;
+against an older server only `AtlasRunLoopSaturated` can fire.
 
 If both slower alerts fire, the host is the likelier common cause, and an Alertmanager
 inhibit rule can keep the store alert quiet:
