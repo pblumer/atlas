@@ -701,6 +701,17 @@ Rahmen anzeigen und eigene Bedienelemente darüberlegen. Wo die Selbstregistrier
 eingeschaltet war, sind die registrierten Anwendungen nach der Aktualisierung auf
 Redirect-URIs mit anderem Schema durchzusehen und solche Anwendungen zu löschen.
 
+**Was die öffentliche Kontext-Route des Zustimmungsbildschirms sagt.**
+`GET /api/v1/oauth/authorize-context` ist ohne Anmeldung erreichbar, weil die Seite
+auch für eine noch nicht angemeldete Person aufgebaut werden muss. Ohne Anmeldung
+nennt sie, was die Anfrage selbst enthält oder der Client ohnehin zeigt: Name und
+Host des Clients, die Ressource und — bei einem verbundenen System (ADR-0512) —
+die verlangten Fähigkeiten. Die Angaben zu einer bereits bestehenden
+Systemfreigabe (wer sie genehmigt hat, wann, und welche Projekte sie erreicht)
+und die Liste der Projekte erhält ausschliesslich eine angemeldete
+Administratorin, also die Person, die diese Freigabe ersetzen kann
+(`api/oauthserver.go`, `handleAuthorizeContext`).
+
 Client ID Metadata Documents (CIMD), die andere Hälfte der Vollausbau-Variante,
 sind **nicht** gebaut und nicht geplant.
 

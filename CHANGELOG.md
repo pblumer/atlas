@@ -490,6 +490,14 @@ _Changed_ / _Removed_ for each version.
   (`myapp://127.0.0.1/…`) registers an `http` loopback URI instead. Where self-registration is
   on, look through the registered applications for redirect URIs under other schemes and delete
   those applications.
+- **The consent screen's context tells the standing system grant to an administrator only.**
+  `GET /api/v1/oauth/authorize-context` is public, because the consent page has to render before
+  anybody is signed in. For a system that was already connected, its answer also carried the
+  grant that stands — the user name of the administrator who approved it, when, and the project
+  ids each capability reaches — for anyone who sent that system's authorization request. That
+  part of the answer now goes to a signed-in administrator alone, the only person the page ever
+  showed it to. Everybody else is told what the system asks for and that an administrator has to
+  decide, as before.
 
 ## [0.25.0] — 2026-11-09
 
