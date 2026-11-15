@@ -269,8 +269,8 @@ readinessProbe:
 # The rules answer three questions: is the writer reachable (probe timeouts, store
 # read failures), do requests wait noticeably (the probe's wait time), and is it load
 # or a slowdown (the writer's utilisation against the probe's fixed reference work,
-# compared with its own 7-day median). The probe metrics exist from the Atlas release
-# after 0.25.0; against an older server only the utilisation alert can fire.
+# compared with its own 7-day median). The probe metrics exist from Atlas 0.26.0;
+# against an older server only the utilisation alert can fire.
 prometheusRule:
   enabled: false
   # -- Extra labels on the PrometheusRule object, e.g. `release: kube-prometheus-stack`

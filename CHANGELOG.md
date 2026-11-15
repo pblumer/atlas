@@ -12,6 +12,89 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-11-15
+
+**Atlas shows who a process talks to** (ADR-0559). Around a deployed process it answers every
+participant the process exchanges message names with — other processes, also those deployed
+from other files, and the watches, product actions and API publishes that send to it — with
+what the newest definitions make possible and what the event log observed. Operations draws it
+as a BPMN collaboration and replays only the messages, following new ones live.
+
+**A completed task stays readable, a form shows a chart, and a task prints.** The person who
+completed a task finds it again under *Completed*, read-only, in the form revision it was
+answered through (ADR-0554). A task form draws a report as a key figure, bars, a line over time
+or actual against target; the new *Atlas report* Worker Type reads Atlas's own figures as such
+a report, and the Tasks app prints a task as it stands (ADR-0555). `examples/monatsbericht`
+delivers two reports to a distribution list.
+
+**Processes find free slots in a calendar and book into it, never twice** (ADR-0552). The
+calendar Worker Type offers the slots no appointment touches, reserves one and gives it up
+when something else took its time, and confirms, reads or cancels the booking — in Microsoft
+365, Google Workspace, a CalDAV server, Exchange Server on premises, or a mock.
+`examples/terminbuchung` is a public booking wizard built on it.
+
+**A decision checks a whole file, and the corrections go back into it** (ADR-0548). A business
+rule task evaluates its decision once per record of a CSV document in one job; Active
+Directory and LDAP searches and SQL queries write their result as such a document, and the CSV
+Worker Type writes a corrected copy of the checked file. The hub bundle *Beispiele:
+Datenqualität* checks an uploaded file, a SQL Server table, an LDAP directory and an Active
+Directory this way.
+
+**The Modeler says more before a deploy.** The Variables panel narrows to the selected element
+and lists what arrives through a multi-instance, a mapping or a called process; a variable the
+model reads and nothing in it writes is a warning; a business rule task opens its decision
+over the diagram, in the version its binding resolves to (ADR-0556); a compile error names its
+element, and a deploy refuses the sequence-flow shapes BPMN forbids (ADR-0547).
+
+**An agent acts in the shop as the person it is connected as** (ADR-0550): it reads the
+catalogues, orders, amends, returns and decides approvals over MCP, with that person's rights
+and under their name. atlas hub records where an installed application came from and shows
+which of its components this server holds (ADR-0499, amendments g and h).
+
+**The single writer is measured whatever the traffic** (ADR-0557). A reference probe hands the
+run loop the same fixed, read-only work every five seconds, so a rising duration means the
+writer became slower rather than busier, and the Helm chart can install alerting rules built
+on it. The instance history nests the iterations of a multi-instance subprocess, and the line
+at which the replay switches to its bounded view can be lowered.
+
+**Worker Types say more about what they do.** The operations of the Entra and Teams Phone
+Worker Types declare technical capabilities, and the first capability contract is drafted with
+its conformance suite (ADR-0480, ADR-0483). A directory delta keeps only the objects it is
+about, so a test environment in a shared tenant holds back everybody else's names (ADR-0553).
+A REST request the target refuses no longer holds back other jobs, and a REST task's circuit
+breaker is kept per scheme and host (ADR-0340).
+
+**The shop's fulfilment no longer waits for ever.** An order line whose process an operator
+cancelled settles as failed (ADR-0558), the fulfilment orchestration waits for a line that is
+still running, and a position with a variant can be approved, refused and reported.
+
+0.26.0 opens a 0.25.0 data directory as it is, without a migration. The log gains one event,
+`TaskAnswered`, written when a person completes a task; the state gains the indexes folded
+from it and the retained elements of a multi-instance output collection (ADR-0549). Nothing
+recorded before is rewritten, and tasks completed before the upgrade are not listed under
+*Completed*. Going back to 0.25.0 on a data directory that 0.26.0 has written to has not been
+tested. Four changes alter what worked against 0.25.0:
+
+- **A deploy refuses three sequence-flow shapes.** A start event with an incoming flow, an end
+  event with an outgoing one and a gateway whose `default` names a flow that does not leave it
+  are errors at deploy. A definition already stored keeps loading and running; only the next
+  deploy of an affected model is refused.
+- **The shop is reachable over MCP, and that is on by default.** An agent connected as a
+  person can order, amend, return and decide approvals with that person's rights.
+  `--mcp-shop=false` (`ATLAS_MCP_SHOP=false`) keeps the earlier exclusion.
+- **Cancelling an instance that works an order line settles the line.** It becomes `failed`,
+  or `returnFailed` for a return, where it stayed `running` before. Fulfilment orchestrations
+  already running keep the earlier behaviour; an order one of them left open is started again
+  by `POST /api/v1/orders/fulfilment/repair`.
+- **A REST task's circuit breaker is named by its endpoint.** The Workers view,
+  `POST /api/v1/workers/breakers/close` and `atlas_close_breaker` name a REST breaker by the
+  scheme and host it calls, and a 4xx answer other than 408 and 429 no longer opens it.
+
+Five entries stood in the 0.25.0 notes although they were merged after its tag: the start
+grants in the Console, the multi-instance collection filling round by round, the manifest a
+new built-in Worker Type owes, and two fixes of the decision editor. They are part of this
+release and are listed here, at the end of their sections.
+
 ### Added
 - **Operations shows who a process talks to, and replays only the messages.** Every process in
   the Operations list has an *Interactions* link. It draws a BPMN collaboration: the pools that
@@ -295,6 +378,13 @@ _Changed_ / _Removed_ for each version.
   is not verified, authorizes nothing and does not make two providers interchangeable — the
   profile keeps it to the one provider. Tests pin the reviewed claims, hold every row to the
   manifest's rule and refuse one contract identity on two operations.
+- **Administrators manage start grants in the Console.** Console → Administration → Start
+  grants shows, per application, every process with who may start it themselves, whether it is
+  offered and if not why, and the last change; an administrator grants or revokes by name,
+  checks one person or group, and reads the history, without typing an id or a revision
+  (ADR-0516, MFE1A). A competing change is shown and nothing is sent twice. The grant reads
+  answer `blockers` for this, and an application's Deployments tab marks a granted process for
+  administrators, read-only.
 
 ### Changed
 - **Where the Operations replay switches to the bounded view is configurable.** The replay loads
@@ -344,6 +434,23 @@ _Changed_ / _Removed_ for each version.
   flow's condition was false. A definition already stored keeps loading and running exactly
   as before — the server logs it as `deployment.reloaded_with_problems` — so an upgrade
   refuses only the next deploy of an affected model (ADR-0547).
+- **A multi-instance body's collection fills round by round in the replay.** The replay showed
+  the output collection as it was seeded — `[null, …]` — in every round and filled only once
+  the loop had finished, because a round records only its element (ADR-0296) and that element
+  was not retained. It is now retained, the size of one result, in a column family of its own
+  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
+  linear in the round count. The instance timeline applies each element to the collection as
+  it stands, so a round shows the list the rounds before it left and its own answer at
+  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
+  this keep the old reading, and only there does the Environment still explain it
+  ([ADR-0549](docs/adr/0549-collection-by-round.md)).
+- **A new built-in Worker Type declares what a second delivery does.** Every new built-in
+  Worker Type ships a manifest stating each operation's idempotency and effect, as an
+  installed one must; `go test ./api` refuses one without it, and the 31 kinds released
+  before are listed and owe theirs. SharePoint Server has one: its operations are safe to
+  deliver twice, with one caveat now recorded — a second `create-site` after a first that
+  finished ends in `SHAREPOINT_SERVER_SITE_EXISTS`, not in success
+  (ADR-0546).
 
 ### Fixed
 - **A removal Exchange Online made after the worker stopped waiting counts as made.** `Remove-Mailbox` on a room, an equipment and a calendar mailbox ran past the two-minute bound in a real tenant and removed the mailbox all the same; every retry then answered 404 NotFound, the return parked as an incident, and the 404s kept the Exchange breaker open for every other job. After a timeout the worker now asks `Get-Mailbox` (`Get-DistributionGroup`, `Get-MailContact` for those removals) for the same identity, for about a minute: gone means the job is done, still there keeps the timeout as the failure. A 404 to the removal itself still fails the job.
@@ -444,6 +551,19 @@ _Changed_ / _Removed_ for each version.
   entry creates still reaches Atlas, `hr-eintritt.bpmn` sets `department` from the new
   application constant `DEPARTMENT` when it is not empty (the installer sets the environment id),
   and from the OE otherwise, as before.
+- **A decision model opens with its graph in view.** The decision editor left a model's graph
+  where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
+  to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
+  the canvas those two boxes leave free, centred and scaled down only as far as the window needs —
+  never enlarged past its own size.
+- **A decision's input data are drawn connected to it.** A DMN model whose requirements carry no
+  `id` (DMN allows that, and models written by hand, by an agent or by temis often omit it) was
+  drawn with its input data beside the decision and no arrow between them, because a diagram
+  edge points at its requirement by id. When Atlas draws such a model's diagram — on opening it
+  without one, or on Auto-layout — it now gives each unnamed requirement a stable id, so every
+  arrow is drawn. A model whose diagram already places every node is left as it is. The example
+  `pruefe-datensaetze.dmn` names its requirements, types its input data as `string` and gives
+  its verdict a structured type `tVerdict`.
 
 ## [0.25.0] — 2026-11-09
 
@@ -515,13 +635,6 @@ directory gains the document store. Four changes can break what worked against 0
   version 1.
 
 ### Added
-- **Administrators manage start grants in the Console.** Console → Administration → Start
-  grants shows, per application, every process with who may start it themselves, whether it is
-  offered and if not why, and the last change; an administrator grants or revokes by name,
-  checks one person or group, and reads the history, without typing an id or a revision
-  (ADR-0516, MFE1A). A competing change is shown and nothing is sent twice. The grant reads
-  answer `blockers` for this, and an application's Deployments tab marks a granted process for
-  administrators, read-only.
 - **What belongs to no application can be assigned to one, many at once.** `GET /api/v1/unassigned`
   lists the deployed processes, diagrams, forms, decisions, decision drafts and deployed decisions
   that belong to no application — no tag, or an application that no longer exists — and
@@ -673,23 +786,6 @@ directory gains the document store. Four changes can break what worked against 0
   `docs/contracts/worker-protocol/v1`.
 
 ### Changed
-- **A multi-instance body's collection fills round by round in the replay.** The replay showed
-  the output collection as it was seeded — `[null, …]` — in every round and filled only once
-  the loop had finished, because a round records only its element (ADR-0296) and that element
-  was not retained. It is now retained, the size of one result, in a column family of its own
-  keyed under the instance (`0x48`, purged with it); the log is unchanged and the history stays
-  linear in the round count. The instance timeline applies each element to the collection as
-  it stands, so a round shows the list the rounds before it left and its own answer at
-  completion, and marks such a body's values `elementsRecorded`. Instances recorded before
-  this keep the old reading, and only there does the Environment still explain it
-  ([ADR-0549](docs/adr/0549-collection-by-round.md)).
-- **A new built-in Worker Type declares what a second delivery does.** Every new built-in
-  Worker Type ships a manifest stating each operation's idempotency and effect, as an
-  installed one must; `go test ./api` refuses one without it, and the 31 kinds released
-  before are listed and owe theirs. SharePoint Server has one: its operations are safe to
-  deliver twice, with one caveat now recorded — a second `create-site` after a first that
-  finished ends in `SHAREPOINT_SERVER_SITE_EXISTS`, not in success
-  (ADR-0546).
 - **An installed Worker Type works only its own job types.** An artifact installed with
   `POST /api/v1/worker-types/installed` used to be launched with the server's internal
   worker credential, which reaches every job type. Its instance now gets a credential of
@@ -770,19 +866,6 @@ directory gains the document store. Four changes can break what worked against 0
   repository now pulls in only `workersdk` and the standard library; a test keeps it so.
 
 ### Fixed
-- **A decision model opens with its graph in view.** The decision editor left a model's graph
-  where dmn-js put it, at the canvas origin under the palette and the model's name box, so it had
-  to be dragged out first. Opening a model, and Auto-layout, now place the graph in the part of
-  the canvas those two boxes leave free, centred and scaled down only as far as the window needs —
-  never enlarged past its own size.
-- **A decision's input data are drawn connected to it.** A DMN model whose requirements carry no
-  `id` (DMN allows that, and models written by hand, by an agent or by temis often omit it) was
-  drawn with its input data beside the decision and no arrow between them, because a diagram
-  edge points at its requirement by id. When Atlas draws such a model's diagram — on opening it
-  without one, or on Auto-layout — it now gives each unnamed requirement a stable id, so every
-  arrow is drawn. A model whose diagram already places every node is left as it is. The example
-  `pruefe-datensaetze.dmn` names its requirements, types its input data as `string` and gives
-  its verdict a structured type `tVerdict`.
 - **A round of a multi-instance names what it produced.** The replay's Output of one round —
   and the diagram's in/out card — now lists what the round wrote into its own scope, such as a
   script's result variable or a person's answer on the form, where it said "wrote nothing" for
@@ -19073,7 +19156,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/pblumer/atlas/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/pblumer/atlas/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/pblumer/atlas/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/pblumer/atlas/compare/v0.23.0...v0.23.1
