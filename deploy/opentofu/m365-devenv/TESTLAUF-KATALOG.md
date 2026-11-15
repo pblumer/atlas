@@ -351,6 +351,11 @@ Der Agent schreibt das Protokoll nach `deploy/opentofu/m365-devenv/out/testlauf/
 
 Im Chat nennt der Agent am Ende nur die Zusammenfassung und den Pfad.
 
+Ist der Lauf abgeschlossen, kommt eine Kopie nach `testlaeufe/<RUN>.md` ins Repository, bevor
+`out/` beim Abbau gelöscht wird. Das Repository ist öffentlich: Die Kopie nennt den Tenant
+nicht, enthält keine Adressen, Passwörter oder Tokens und verweist auf die Datei mit den
+Initialpasswörtern höchstens mit ihrem Pfad.
+
 ## Vom Test zum Leitfaden
 
 Die Phasen sind die Entscheidungen, die ein echtes KMU beim Hochlauf trifft. Wer Atlas für
