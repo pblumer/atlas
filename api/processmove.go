@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
@@ -46,8 +45,8 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		ProjectID string `json:"projectId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, `invalid body: expected {"projectId": "..."}`)
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &payload); err != nil {
+		httpapi.BodyError(w, err, `invalid body: expected {"projectId": "..."}`)
 		return
 	}
 

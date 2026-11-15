@@ -2324,6 +2324,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	contentReg.OnChange(s.contentRunner.Reload)
 	s.catalogs.BindingChanged = s.contentRunner.Kick
 	s.orders.Limits = s.budgets()
+	s.userPrefs.Limits = s.budgets()
+	s.contentSources.Limits = s.budgets()
 	s.orders.CheckAnswers = s.checkOrderAnswers
 	// An outcome that comes without a right changing hands — a provision that
 	// failed or was refused, a return that failed — is written on its own
@@ -3878,7 +3880,9 @@ func (s *Server) Close() {
 // /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux, policy := s.mountRoutes()
-	return s.withAuth(policy, s.withStorageAdmission(mux))
+	// The body ceiling is outermost: it holds for every route and for whatever the
+	// layers between here and the route read on the way (bodycap.go).
+	return capBodies(s.withAuth(policy, s.withStorageAdmission(mux)), s.requestBodyCeiling())
 }
 
 // mountRoutes registers every route this server serves and, in the same pass,

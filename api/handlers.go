@@ -1814,8 +1814,8 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 	var body struct {
 		Active bool `json:"active"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &body); err != nil {
+		httpapi.BodyError(w, err, "invalid body: expected {\"active\": bool}")
 		return
 	}
 	var (
@@ -5789,9 +5789,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// Variables are parsed (and rejected on bad JSON) before the job is looked
 	// up, so a malformed body is a 400 regardless of whether the key exists —
 	// matching handleCompleteTask. An empty body completes with no variables.
-	body, err := io.ReadAll(r.Body)
+	body, err := httpapi.ReadBody(w, r, s.completionBudget())
 	if err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.BodyError(w, err, "read body: "+err.Error())
 		return
 	}
 	vars, err := parseStartVariables(body)
@@ -6168,9 +6168,9 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// written into the instance scope on completion exactly like a service-task
 	// worker's outputs (ADR-0028; the engine path landed with ADR-0039). An empty
 	// body completes with no variables.
-	body, err := io.ReadAll(r.Body)
+	body, err := httpapi.ReadBody(w, r, s.completionBudget())
 	if err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.BodyError(w, err, "read body: "+err.Error())
 		return
 	}
 	vars, err := parseStartVariables(body)
@@ -6285,8 +6285,8 @@ func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Assignee string `json:"assignee"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		httpapi.Error(w, http.StatusBadRequest, "invalid request body")
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &body); err != nil && err != io.EOF {
+		httpapi.BodyError(w, err, "invalid request body")
 		return
 	}
 	assignee := strings.TrimSpace(body.Assignee)
@@ -6957,8 +6957,8 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	// Every answer names the versions this server speaks, refusals included: that is
 	// how a newer client tells an older server from a broken one.
 	w.Header().Set(workerproto.Header, workerproto.HeaderValue)
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &body); err != nil && err != io.EOF {
+		httpapi.BodyError(w, err, "invalid JSON body: "+err.Error())
 		return
 	}
 	if err := workerproto.Check(body.Protocol); err != nil {
@@ -7814,8 +7814,8 @@ func (s *Server) handleActivateJob(w http.ResponseWriter, r *http.Request) {
 		LeaseMs int64  `json:"leaseMs"`
 	}
 	// An empty body is a valid activation: an anonymous worker taking the default lease.
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &body); err != nil && err != io.EOF {
+		httpapi.BodyError(w, err, "invalid JSON body: "+err.Error())
 		return
 	}
 	lease := defaultJobLease

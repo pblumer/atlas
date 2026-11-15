@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -212,8 +211,8 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 		TargetProcessID string `json:"targetProcessId"`
 		TargetVersion   int32  `json:"targetVersion"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "invalid override body")
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &body); err != nil {
+		httpapi.BodyError(w, err, "invalid override body")
 		return
 	}
 	rec := callOverride{

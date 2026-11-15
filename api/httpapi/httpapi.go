@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"slices"
@@ -43,6 +44,46 @@ func JSON(w http.ResponseWriter, status int, v any) {
 // clients can parse one thing.
 func Error(w http.ResponseWriter, status int, msg string) {
 	JSON(w, status, map[string]string{"error": msg})
+}
+
+// A request body is read through the three functions below, never straight from
+// r.Body: a body is input whose size the sender chose, and a handler that reads it
+// with no bound holds whatever it is sent. Each takes the ceiling as an argument, so
+// the number is a budget the caller resolved from limits.Limits and not one written
+// here. They cap with http.MaxBytesReader and not io.LimitReader on purpose: a
+// LimitReader truncates in silence, and a truncated JSON document is reported as
+// malformed — true of the bytes that were read, and no help to whoever sent a
+// well-formed body that was merely too large.
+
+// DecodeJSON decodes the request's JSON body into dst, reading at most limit bytes
+// of it. The error is json.Decoder's own — io.EOF for an empty body, which the
+// routes with an optional body test for — or one BodyTooLarge recognises.
+func DecodeJSON(w http.ResponseWriter, r *http.Request, limit int64, dst any) error {
+	return json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(dst)
+}
+
+// ReadBody reads the request's whole body, at most limit bytes of it. A longer body
+// is an error BodyTooLarge recognises, not a prefix.
+func ReadBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, error) {
+	return io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+}
+
+// BodyTooLarge reports whether err is a body read that stopped at its ceiling.
+func BodyTooLarge(err error) bool {
+	var tooLarge *http.MaxBytesError
+	return errors.As(err, &tooLarge)
+}
+
+// BodyError answers a failed DecodeJSON or ReadBody: 413 where the body was larger
+// than its budget, and otherwise 400 with invalid, the handler's own words for a body
+// it could not read. One function, so that "too large" is the same status and the
+// same sentence on every route.
+func BodyError(w http.ResponseWriter, err error, invalid string) {
+	if BodyTooLarge(err) {
+		Error(w, http.StatusRequestEntityTooLarge, "the request body is larger than this route accepts")
+		return
+	}
+	Error(w, http.StatusBadRequest, invalid)
 }
 
 // ClientIP is the address a request came from, without the source port. Rate

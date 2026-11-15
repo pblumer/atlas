@@ -1,12 +1,12 @@
 package userprefs
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
 
 // Service serves one person's display preferences: GET and PUT on
@@ -18,6 +18,19 @@ type Service struct {
 	// now is injected so a test can pin the stamp. Unix nanos, like every other
 	// timestamp Atlas writes.
 	now func() int64
+	// Limits are the resource budgets this service enforces: how large the body of
+	// a save may be. Set after construction, like every other per-area service's.
+	Limits limits.Limits
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service whose Limits
+// were never set to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 // New builds the service over the store, serializing every access on the loop:
@@ -102,8 +115,8 @@ func (s *Service) HandleSave(w http.ResponseWriter, r *http.Request) {
 		Language   string `json:"language"`
 		Appearance string `json:"appearance"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "malformed body: "+err.Error())
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &body); err != nil {
+		httpapi.BodyError(w, err, "malformed body: "+err.Error())
 		return
 	}
 	// The id comes from the principal and from nowhere else; a userId in the body

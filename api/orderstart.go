@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -54,8 +53,8 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 	id, ref := r.PathValue("id"), r.PathValue("item")
 	var req lineStartReq
 	if r.ContentLength != 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+		if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &req); err != nil {
+			httpapi.BodyError(w, err, "malformed JSON body: "+err.Error())
 			return
 		}
 	}

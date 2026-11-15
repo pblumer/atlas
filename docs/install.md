@@ -1069,6 +1069,16 @@ away.
 | `ATLAS_LIMIT_CLIENT_METADATA_HOST_BURST` | 10 | How many such documents atlas reads from one host at once — a document is cached, so a working system needs one read an hour |
 | `ATLAS_LIMIT_CLIENT_METADATA_HOST_RATE` | 1 | How many of those reads per second the host earns back |
 
+A request body is bounded twice. The route that reads it holds it to the budget that
+fits what it carries — a command to `REQUEST`, an order with its configuration answers
+to `SETTINGS`, a catalogue document to `DEFINITION`, the variables completing a job or a
+user task to `PAYLOAD` plus `REQUEST` — and answers `413 Request Entity Too Large` past
+it. Under every route there is one more ceiling, the largest of the byte budgets above
+(by default `ARCHIVE`, 1 GiB) or the size an installed Worker Type may have, whichever
+is larger: it is what a route reads at most if it has no budget of its own, and it is
+never what refuses a body a route is allowed to take. Lowering `ARCHIVE` lowers that
+ceiling too, down to the Worker Type bound of about 513 MiB.
+
 `TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
 hundred thousand iterations are a hundred thousand tokens taking one step each, which
 the step budget is deliberately built not to stop.

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 
@@ -94,9 +93,9 @@ type decideResponse struct {
 // handleDecideApprovals decides every named approval the caller holds, as one
 // decision on one order.
 func (s *Server) handleDecideApprovals(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	body, err := httpapi.ReadBody(w, r, s.budgets().Request)
 	if err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.BodyError(w, err, "read body: "+err.Error())
 		return
 	}
 	var req decideRequest

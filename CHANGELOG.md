@@ -498,6 +498,22 @@ _Changed_ / _Removed_ for each version.
   part of the answer now goes to a signed-in administrator alone, the only person the page ever
   showed it to. Everybody else is told what the system asks for and that an administrator has to
   decide, as before.
+- **Every request body is read up to a budget, and there is a ceiling under all routes.**
+  Nineteen handlers read their body with no bound: placing an order, reporting and deciding an
+  order line, starting a line and rebinding a product, a person's display preferences, the
+  collective approval decision, completing, claiming and activating a job or a task, a Worker
+  Instance asking for the jobs of its types, activating a definition, moving a process, a call-activity override,
+  creating and changing a catalogue, its theme, a product and its content bindings, and a
+  content source. Each now reads up to a named budget and answers `413 Request Entity Too
+  Large` past it, changing nothing: `ATLAS_LIMIT_REQUEST` (64 KiB) for a command,
+  `ATLAS_LIMIT_SETTINGS` (256 KiB) for a basket with its configuration answers,
+  `ATLAS_LIMIT_DEFINITION` (1 MiB) for a catalogue document, `ATLAS_LIMIT_THEME` (4 KiB) for a
+  catalogue's theme, and `ATLAS_LIMIT_PAYLOAD` plus `ATLAS_LIMIT_REQUEST` (8 MiB + 64 KiB) for
+  the variables a completion carries — a Worker whose answer is larger than that is refused
+  where it was accepted before, and raises `ATLAS_LIMIT_PAYLOAD`. Under every route there is
+  now one more bound, the largest budget of the installation (1 GiB by default, a restore's
+  archive), so a handler that reads without a budget of its own still reads a finite amount.
+  A test fails the build for a handler in `api/` that reads a body with no bound.
 
 ## [0.25.0] — 2026-11-09
 

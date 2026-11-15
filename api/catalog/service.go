@@ -3,8 +3,6 @@ package catalog
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -227,11 +225,16 @@ func newID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b), nil
 }
 
-func decodeBody(r *http.Request, into any) error {
-	if err := json.NewDecoder(r.Body).Decode(into); err != nil {
-		return fmt.Errorf("malformed JSON body: %w", err)
+// decodeBody reads a catalogue document — a catalogue, a patch to one, a product, a
+// content binding — into into, and answers the refusal itself: false means the
+// response is written. The budget is a modelled artefact's, because a catalogue's
+// patch carries its items and the edges between them whole.
+func (s *Service) decodeBody(w http.ResponseWriter, r *http.Request, into any) bool {
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Definition, into); err != nil {
+		httpapi.BodyError(w, err, "malformed JSON body: "+err.Error())
+		return false
 	}
-	return nil
+	return true
 }
 
 // HandleListCatalogs lists the catalogues the caller maintains, lowest rank
@@ -264,8 +267,7 @@ func (s *Service) HandleListCatalogs(w http.ResponseWriter, r *http.Request) {
 // HandleCreateCatalog creates one.
 func (s *Service) HandleCreateCatalog(w http.ResponseWriter, r *http.Request) {
 	var in Catalog
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 	// Refused here and never on the way out: an installation already carrying a
@@ -358,8 +360,7 @@ type catalogUpdate struct {
 func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var in catalogUpdate
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 
@@ -577,8 +578,7 @@ func (s *Service) HandleListItems(w http.ResponseWriter, r *http.Request) {
 // precondition is for the caller that is not a person.
 func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 	var in Item
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 	if in.ID == "" {

@@ -2,7 +2,6 @@ package contentsource
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"log/slog"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -45,6 +45,20 @@ type Service struct {
 	// supplies something is refused rather than leaving bindings nothing can
 	// recheck. Off the loop. Nil answers none.
 	InUse func(id string) ([]string, error)
+	// Limits are the resource budgets this service enforces: how large a source's
+	// configuration may arrive. Set after construction, like every other per-area
+	// service's.
+	Limits limits.Limits
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service whose Limits
+// were never set to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 // NewService builds the configuration API over a registry.
@@ -88,7 +102,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 // HandleCreate configures a new source. An id already taken is a conflict: a
 // create that silently replaced a source would rebind every product bound to it.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	in, ok := decodeSource(w, r)
+	in, ok := s.decodeSource(w, r)
 	if !ok {
 		return
 	}
@@ -118,7 +132,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 // HandleUpdate replaces a source's configuration. The id is the path's.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	in, ok := decodeSourceAs(w, r, id)
+	in, ok := s.decodeSourceAs(w, r, id)
 	if !ok {
 		return
 	}
@@ -212,10 +226,10 @@ func (s *Service) HandleCheck(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-func decodeSource(w http.ResponseWriter, r *http.Request) (Source, bool) {
+func (s *Service) decodeSource(w http.ResponseWriter, r *http.Request) (Source, bool) {
 	var in Source
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("malformed JSON body: %v", err))
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &in); err != nil {
+		httpapi.BodyError(w, err, fmt.Sprintf("malformed JSON body: %v", err))
 		return Source{}, false
 	}
 	in = in.Normalized()
@@ -226,10 +240,10 @@ func decodeSource(w http.ResponseWriter, r *http.Request) (Source, bool) {
 	return in, true
 }
 
-func decodeSourceAs(w http.ResponseWriter, r *http.Request, id string) (Source, bool) {
+func (s *Service) decodeSourceAs(w http.ResponseWriter, r *http.Request, id string) (Source, bool) {
 	var in Source
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("malformed JSON body: %v", err))
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &in); err != nil {
+		httpapi.BodyError(w, err, fmt.Sprintf("malformed JSON body: %v", err))
 		return Source{}, false
 	}
 	if in.ID != "" && in.ID != id {

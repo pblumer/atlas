@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -93,8 +92,8 @@ func (s *Service) HandleSetTheme(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
 
 	var in Theme
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Theme, &in); err != nil {
+		httpapi.BodyError(w, err, "malformed JSON body: "+err.Error())
 		return
 	}
 	in.Accent = strings.ToLower(strings.TrimSpace(in.Accent))

@@ -377,8 +377,7 @@ func (s *Service) HandleContentLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in contentRequest
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 	if len(in.Pages) == 0 {
@@ -421,8 +420,7 @@ func (s *Service) HandleContentRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	var in contentRequest
 	if r.ContentLength != 0 {
-		if err := decodeBody(r, &in); err != nil {
-			httpapi.Error(w, http.StatusBadRequest, err.Error())
+		if !s.decodeBody(w, r, &in) {
 			return
 		}
 	}
@@ -818,8 +816,7 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in contentRequest
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 	in.Reason = strings.TrimSpace(in.Reason)

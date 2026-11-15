@@ -3,7 +3,6 @@ package order
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -227,8 +226,10 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req placeReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+	// A basket carries the answers to its products' forms, so its budget is a form's
+	// payload and not an ordinary command's.
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Settings, &req); err != nil {
+		httpapi.BodyError(w, err, "malformed JSON body: "+err.Error())
 		return
 	}
 	id, err := newID("ord")
@@ -1001,8 +1002,8 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 	id, item := r.PathValue("id"), r.PathValue("item")
 
 	var req reportReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &req); err != nil {
+		httpapi.BodyError(w, err, "malformed JSON body: "+err.Error())
 		return
 	}
 
@@ -1168,8 +1169,8 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 	id, item := r.PathValue("id"), r.PathValue("item")
 
 	var req decideReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+	if err := httpapi.DecodeJSON(w, r, s.budgets().Request, &req); err != nil {
+		httpapi.BodyError(w, err, "malformed JSON body: "+err.Error())
 		return
 	}
 
