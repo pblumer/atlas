@@ -476,6 +476,20 @@ _Changed_ / _Removed_ for each version.
   who sends it on a plain connection withholds the cookie from their own browser only. A proxy
   that does not send the header leaves the cookies as they were, so `docs/install.md` now says
   the line is needed, and that `Strict-Transport-Security` is the proxy's to set.
+- **An OAuth redirect URI is `https`, or `http` on loopback, and nothing else.** A client's
+  redirect URI is the address the consent page sends a person's browser to. The rule for one was
+  always stated as "https, or http on loopback", but the check accepted any scheme when the host
+  was `localhost`, `127.0.0.1` or `[::1]` — for a client an administrator enters, for one that
+  registers itself where `--oauth-dynamic-registration` is on, and for one named by its metadata
+  document. Registration now refuses every scheme but those two. A redirect URI that was stored
+  under another scheme before this release is no longer used: a request naming it ends on
+  Atlas's own page, with no redirect and no code, while the client's other redirect URIs keep
+  working. The consent page navigates in one place and only to an `http` or `https` address, and
+  it is served with `frame-ancestors 'none'` and `X-Frame-Options: DENY`, so no other site can
+  show it in a frame. A client that had registered a custom scheme on a loopback host
+  (`myapp://127.0.0.1/…`) registers an `http` loopback URI instead. Where self-registration is
+  on, look through the registered applications for redirect URIs under other schemes and delete
+  those applications.
 
 ## [0.25.0] — 2026-11-09
 

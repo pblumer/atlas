@@ -104,8 +104,28 @@ function fatal(message, redirect) {
     application, go back to it and try again.</p>`;
   // Only ever a URI the server already matched against the client's registered
   // set — this page never builds a redirect of its own.
-  if (redirect) setTimeout(() => { location.href = redirect; }, 1500);
+  if (redirect) setTimeout(() => leaveTo(redirect), 1500);
 }
+
+// leaveTo sends the browser where the server said to go: the application's redirect
+// URI, carrying the code or the error. It is this page's only navigation, and it goes
+// to an http or https address or nowhere. The page runs in atlas's origin with the
+// person's session, and an address under a scheme a browser runs rather than opens
+// would run here. The server refuses such a redirect URI when it is registered and
+// again when it is used; this is that rule a third time, at the navigation itself, so
+// that it does not depend on every answer the page is ever given. Answers whether the
+// browser is leaving.
+function leaveTo(target) {
+  let u = null;
+  try { u = new URL(String(target)); } catch (_) { /* not an absolute URL: stay here */ }
+  if (!u || !(u.protocol === "https:" || u.protocol === "http:")) return false;
+  location.href = u.href;
+  return true;
+}
+
+// noWayBack is what the person reads when the server answered a decision with an
+// address this page does not open.
+const noWayBack = "the application's return address is not one this page opens";
 
 // signInFailure names what refused a sign-in — deliberately the same three answers
 // the login screen gives (app.js, loginFailureText). The 401 is the vague one on
@@ -284,7 +304,7 @@ async function decideSystem(approve, capabilities, preconsent) {
       preconsent: !!preconsent,
       approve,
     });
-    location.href = out.redirect;
+    if (!leaveTo(out.redirect)) fatal(noWayBack);
   } catch (e) {
     fatal(e.message || "the decision could not be recorded");
   }
@@ -335,7 +355,7 @@ function consent(ctx) {
         resource: q.get("resource"),
         approve,
       });
-      location.href = out.redirect;
+      if (!leaveTo(out.redirect)) fatal(noWayBack);
     } catch (e) {
       fatal(e.message || "the decision could not be recorded");
     }

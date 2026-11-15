@@ -112,10 +112,11 @@ func (s *Server) handleRegisterOAuthClient(w http.ResponseWriter, r *http.Reques
 
 // validRedirectURIs checks the set an application registers.
 //
-// Absolute, and https unless it is loopback. That carve-out is not politeness: the
-// authorization code travels back on this URI, and http over a network hands it to
-// anyone on the path — while a loopback redirect never leaves the machine and is
-// how a desktop client is meant to work. A URI with a fragment is refused because
+// Absolute, and https — or http, where the host is loopback. That carve-out is not
+// politeness: the authorization code travels back on this URI, and http over a
+// network hands it to anyone on the path — while a loopback redirect never leaves
+// the machine and is how a desktop client is meant to work. It is a carve-out for
+// http alone (redirectSchemeAllowed). A URI with a fragment is refused because
 // the response parameters are appended to the query and a fragment would swallow
 // them.
 func validRedirectURIs(in []string) ([]string, error) {
@@ -132,7 +133,7 @@ func validRedirectURIs(in []string) ([]string, error) {
 		if u.Fragment != "" || strings.Contains(uri, "#") {
 			return nil, errBadRedirect(uri, "must not carry a fragment")
 		}
-		if u.Scheme != "https" && !isLoopbackHost(u.Hostname()) {
+		if !redirectSchemeAllowed(u) {
 			return nil, errBadRedirect(uri, "must be https, or http on loopback")
 		}
 		out = append(out, uri)
@@ -141,6 +142,34 @@ func validRedirectURIs(in []string) ([]string, error) {
 		return nil, errBadRedirect("", "at least one redirect URI is required")
 	}
 	return out, nil
+}
+
+// redirectSchemeAllowed is the one statement of which schemes a redirect URI may
+// have: https, or http to a host that denotes this machine.
+//
+// The scheme is named, not merely "anything on loopback": a redirect URI is an
+// address this server's consent page sends a browser to from its own origin, and a
+// browser does not open every scheme — some it runs, in the page that navigated. The
+// host says where a request would go; it says nothing about that, so a loopback host
+// makes http acceptable and no other scheme. url.Parse has already lowercased the
+// scheme, so the comparison is on what a browser will see.
+func redirectSchemeAllowed(u *url.URL) bool {
+	return u.Scheme == "https" || (u.Scheme == "http" && isLoopbackHost(u.Hostname()))
+}
+
+// usableRedirect parses a redirect URI on its way to being used and reports whether
+// a browser may be sent to it.
+//
+// Registration asks validRedirectURIs; this asks the same rule of a URI that is
+// already stored, because a record written before the rule was complete is still on
+// disk and is not rewritten by tightening the door it came through. Every place that
+// matches a stored URI or builds a redirect from one goes through here.
+func usableRedirect(uri string) (*url.URL, bool) {
+	u, err := url.Parse(uri)
+	if err != nil || u.Host == "" || !redirectSchemeAllowed(u) {
+		return nil, false
+	}
+	return u, true
 }
 
 func errBadRedirect(uri, why string) error {

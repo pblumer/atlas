@@ -677,6 +677,30 @@ fest, getrennt vom Administratorakt — «eine Administratorin hat eine Anwendun
 hinzugefügt» und «ein Fremder hat eine hinzugefügt» sind derselbe Satz mit
 verschiedenen Folgen.
 
+**Wohin eine Zustimmung den Browser schickt, ist auf zwei Schemata begrenzt.** Die
+Redirect-URI eines Clients ist die Adresse, an die der Zustimmungsbildschirm den
+Browser der Person weiterleitet — mit dem Code nach einer Zustimmung, mit dem
+Fehler nach einer Ablehnung. Zulässig ist `https`, oder `http` auf einen Host, der
+die eigene Maschine bezeichnet (Loopback, für Desktop-Clients). Jedes andere Schema
+wird abgewiesen, auch auf einem Loopback-Host. Die Regel gilt an drei Stellen
+(`api/oauthclients.go`, `api/oauthclientstore.go`, `api/oauthserver.go`,
+`api/web/oauth-consent.html`):
+
+1. **Bei der Registrierung** — für den Client, den eine Administratorin einträgt,
+   für den selbstregistrierten und für den über sein Metadaten-Dokument benannten.
+2. **Bei jeder Verwendung einer gespeicherten URI.** Ein Eintrag, der vor dieser
+   Regel unter einem anderen Schema gespeichert wurde, wird nicht mehr benutzt: Die
+   Anfrage endet auf der Seite von atlas, ohne Weiterleitung und ohne Code. Die
+   übrigen Redirect-URIs desselben Clients bleiben gültig.
+3. **Im Zustimmungsbildschirm selbst.** Die Seite navigiert an genau einer Stelle
+   und nur zu einer `http`- oder `https`-Adresse.
+
+Der Zustimmungsbildschirm wird zudem mit `frame-ancestors 'none'` und
+`X-Frame-Options: DENY` ausgeliefert; eine fremde Seite kann ihn nicht in einem
+Rahmen anzeigen und eigene Bedienelemente darüberlegen. Wo die Selbstregistrierung
+eingeschaltet war, sind die registrierten Anwendungen nach der Aktualisierung auf
+Redirect-URIs mit anderem Schema durchzusehen und solche Anwendungen zu löschen.
+
 Client ID Metadata Documents (CIMD), die andere Hälfte der Vollausbau-Variante,
 sind **nicht** gebaut und nicht geplant.
 

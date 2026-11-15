@@ -391,6 +391,12 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   **Nicht nachgewiesen bzw. offen:** konkrete eIAM-Integration, SAML, vom Provider
   ausgelöste Abmeldung, lokale Passwortablauf- und Wiederverwendungssperre.
   Drosselung der Anmeldeversuche ist hingegen implementiert (ADR-0197).
+- **OAuth-Zustimmung:** Der Zustimmungsbildschirm des Autorisierungsservers
+  (ADR-0200) leitet den Browser nur an eine registrierte Redirect-URI mit Schema
+  `https` weiter, oder `http` auf einen Loopback-Host; jedes andere Schema wird bei
+  der Registrierung und bei der Verwendung abgewiesen. Die Seite lässt sich nicht
+  in einen Rahmen einer fremden Seite einbetten. Einzelheiten:
+  [Zugriffsschutz-Konzept](zugriffsschutz-konzept.md), M10.
 - **Login-Fehler** liefern eine einheitliche Meldung ohne Benutzer-Enumeration;
   deaktivierte Konten (`Disabled`) werden abgewiesen.
 - **Anmeldeversuche sind begrenzt** (ADR-0197): je

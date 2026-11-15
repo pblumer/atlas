@@ -92,9 +92,15 @@ type oauthClient struct {
 	Declined []string `json:"declined,omitempty"`
 }
 
-// allowsRedirect reports whether uri is one this client registered. Exact string
-// equality on purpose — see RedirectURIs.
+// allowsRedirect reports whether uri is one this client registered and a browser may
+// be sent to. Exact string equality on purpose — see RedirectURIs. The scheme is
+// asked again here (usableRedirect) because being in the record is not enough: a
+// record written before registration refused every scheme but https and loopback
+// http may hold one, and such a URI is not used.
 func (c oauthClient) allowsRedirect(uri string) bool {
+	if _, ok := usableRedirect(uri); !ok {
+		return false
+	}
 	for _, u := range c.RedirectURIs {
 		if u == uri {
 			return true

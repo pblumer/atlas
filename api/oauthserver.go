@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -222,6 +223,9 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// A consent decision must be made on a page this server served, freshly: a
 	// cached one could name a client the operator has since removed.
 	w.Header().Set("Cache-Control", "no-store")
+	// And on a page nobody else is showing: it asks a signed-in person to approve an
+	// application with one click, which is what a site that framed it would aim at.
+	setNoFraming(w.Header())
 	_, _ = w.Write(page)
 }
 
@@ -383,7 +387,15 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 // issueCode mints the authorization code a person's approval turns into, and returns
 // the redirect that carries it back to the client. The approval on the consent page and
 // the one pre-consent gives without it (ADR-0512 §3) are this same act.
+//
+// The redirect URI is checked before the code exists (usableRedirect): a code minted
+// for an address nobody is sent to would sit in the store until it expired, spendable
+// by whoever held it.
 func (s *Server) issueCode(req oauthRequest, p *httpapi.Principal, system *oauthSystem) (string, error) {
+	target, ok := usableRedirect(req.redirectURI)
+	if !ok {
+		return "", errors.New("the redirect URI is not one a browser is sent to")
+	}
 	secret, err := randomHex(32)
 	if err != nil {
 		return "", err
@@ -402,7 +414,6 @@ func (s *Server) issueCode(req oauthRequest, p *httpapi.Principal, system *oauth
 		system:      system,
 		expires:     time.Now().Add(oauthCodeLifetime),
 	})
-	target, _ := url.Parse(req.redirectURI)
 	rq := target.Query()
 	rq.Set("code", code)
 	if req.state != "" {
@@ -418,10 +429,13 @@ const oauthCodePrefix = "atlasoc_"
 
 // errorRedirect builds the redirect that carries an OAuth error back to a client.
 // The redirect URI is only ever one parseAuthorizeRequest already matched against
-// the client's registered set.
+// the client's registered set — and it is still asked whether a browser may be sent
+// to it (usableRedirect), so that what this function answers does not rest on every
+// caller having done so. For a URI that may not, it answers "": no redirect, and the
+// error stays on this server's page.
 func errorRedirect(redirectURI, code, state string) string {
-	u, err := url.Parse(redirectURI)
-	if err != nil {
+	u, ok := usableRedirect(redirectURI)
+	if !ok {
 		return ""
 	}
 	q := u.Query()
