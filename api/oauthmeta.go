@@ -75,12 +75,9 @@ func (s *Server) externalBase(r *http.Request) string {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	// A proxy chain sends a comma-separated list; the first entry is the client-facing
-	// hop, which is the one whose scheme a client would use.
-	if fwd := r.Header.Get("X-Forwarded-Proto"); fwd != "" {
-		if first := strings.TrimSpace(strings.Split(fwd, ",")[0]); first == "http" || first == "https" {
-			scheme = first
-		}
+	// The client-facing hop of a proxy chain is the one whose scheme a client would use.
+	if fwd := forwardedProto(r); fwd != "" {
+		scheme = fwd
 	}
 	return scheme + "://" + r.Host
 }

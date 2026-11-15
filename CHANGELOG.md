@@ -565,6 +565,38 @@ release and are listed here, at the end of their sections.
   `pruefe-datensaetze.dmn` names its requirements, types its input data as `string` and gives
   its verdict a structured type `tVerdict`.
 
+### Security
+- **The x/net, x/text and x/crypto modules are on releases without known vulnerabilities, and a
+  build that lets Go pick its toolchain gets a patched one.** `govulncheck` found three
+  vulnerabilities reachable from Atlas's own code in the versions `go.mod` required: in
+  `golang.org/x/net/html`, a rendering fault that lets cleaned markup be read differently when it
+  is parsed again (GO-2026-6866, in the renderer the mail Worker's HTML cleaner uses) and quadratic
+  work on crafted markup (GO-2026-6860, reached with every page the web-scraping Worker fetches);
+  in `golang.org/x/text/secure/precis`, a panic on crafted input (GO-2026-6629, reachable by the
+  call graph through the SQL Worker's drivers). `golang.org/x/net` goes from v0.57.0 to v0.62.0,
+  `golang.org/x/text` from v0.40.0 to v0.44.0, `golang.org/x/crypto` from v0.54.0 to v0.59.0 and
+  `golang.org/x/sys` from v0.47.0 to v0.50.0.
+  `go.mod` also names `toolchain go1.26.11` now. Its `go 1.26` line let a build under
+  `GOTOOLCHAIN=auto` — which is how `deploy/opentofu/m365-devenv/scripts/atlas-setup.sh` builds
+  from source, and what a workstation with an older Go does — fetch go1.26.0, the oldest release
+  that satisfies it, whose standard library has 36 vulnerabilities reachable from Atlas, HTTP
+  server crashes and certificate-check faults among them. The released binaries and the container
+  image were not built that way: their workflows take the newest 1.26 patch release available
+  when they run. With both changes `govulncheck` reports nothing against the Go vulnerability
+  database of 2026-11-11.
+- **The session cookie is `Secure` behind a proxy that ends TLS.** Atlas decided the attribute
+  from its own listener: set when the connection was TLS, left off otherwise. Behind a
+  TLS-terminating proxy or an ingress — every deployment with a certificate until Atlas could
+  serve one itself — the request arrives as plain HTTP, so the session cookie, the single
+  sign-on state cookies and the Microsoft account-link cookie all went out without `Secure`,
+  and a browser would send them over `http://` as well, where anybody on the path reads them.
+  A proxy's `X-Forwarded-Proto: https` now counts as the browser having arrived over HTTPS,
+  as it already did for the URLs Atlas publishes about itself. The header can only add the
+  attribute: a connection that is TLS at Atlas stays `Secure` whatever it says, and a caller
+  who sends it on a plain connection withholds the cookie from their own browser only. A proxy
+  that does not send the header leaves the cookies as they were, so `docs/install.md` now says
+  the line is needed, and that `Strict-Transport-Security` is the proxy's to set.
+
 ## [0.25.0] — 2026-11-09
 
 **Every process, decision and form belongs to an application** (ADR-0544). Nothing new is

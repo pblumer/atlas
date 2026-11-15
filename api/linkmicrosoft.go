@@ -223,7 +223,7 @@ func (s *Server) handleLinkMicrosoftStart(w http.ResponseWriter, r *http.Request
 		"prompt": {"select_account"},
 	}
 	http.SetCookie(w, &http.Cookie{Name: linkStateCookie, Value: state, Path: linkMicrosoftCallbackPath,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: int(linkWindow.Seconds())})
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: arrivedOverHTTPS(r), MaxAge: int(linkWindow.Seconds())})
 	sep := "?"
 	if strings.Contains(d.AuthorizeURL, "?") {
 		sep = "&"
@@ -236,7 +236,7 @@ func (s *Server) handleLinkMicrosoftStart(w http.ResponseWriter, r *http.Request
 func (s *Server) handleLinkMicrosoftCallback(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	http.SetCookie(w, &http.Cookie{Name: linkStateCookie, Value: "", Path: linkMicrosoftCallbackPath,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: -1})
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: arrivedOverHTTPS(r), MaxAge: -1})
 	l := s.msLink.Load()
 	if l == nil || s.identity == nil {
 		httpapi.Error(w, http.StatusNotFound, "linking a Microsoft account is not configured on this server")

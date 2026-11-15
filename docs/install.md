@@ -454,6 +454,12 @@ server {
 }
 ```
 
+Keep the `X-Forwarded-Proto` line whatever proxy you use. Behind a proxy atlas sees
+plain HTTP, and that header is the only thing telling it the browser came over HTTPS:
+with it the session cookie and the single sign-on cookies carry `Secure`, and a
+browser never sends them over `http://`; without it they do not carry the attribute.
+The proxy is also where `Strict-Transport-Security` is set — atlas does not send it.
+
 `/mcp` — the endpoint an AI agent drives the server through — is gated by
 `--auth` like the rest of the API
 ([ADR-0196](adr/0196-authenticated-mcp-transport.md)).

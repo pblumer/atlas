@@ -362,8 +362,10 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   (`bcrypt.DefaultCost`), Salt und Kostenfaktor im Digest. Mindestlänge 8 Zeichen
   — bewusst ein Minimum, **keine Passwort-Policy-Engine** (`api/auth.go`).
 - **Session:** nach erfolgreichem Login ein Cookie `atlas_session` mit 32 Byte
-  Zufall aus `crypto/rand`; `HttpOnly`, `SameSite=Lax`, `Secure` sobald die
-  Verbindung TLS ist; Lebensdauer 12 Stunden. Sessions liegen **nur im
+  Zufall aus `crypto/rand`; `HttpOnly`, `SameSite=Lax`, `Secure` sobald der
+  Browser über HTTPS kam — atlas terminiert TLS selbst, oder der vorgelagerte
+  Proxy meldet es mit `X-Forwarded-Proto: https`. Sendet der Proxy diesen Header
+  nicht, fehlt `Secure`; Lebensdauer 12 Stunden. Sessions liegen **nur im
   Arbeitsspeicher** — ein Serverneustart meldet alle Benutzer ab (ADR-0044).
 - **Bootstrap:** beim ersten Start mit `--auth` und leerem Benutzerspeicher wird
   genau ein Administrator angelegt (`ATLAS_ADMIN_USERNAME`/`_PASSWORD`); ohne
