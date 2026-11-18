@@ -334,7 +334,7 @@ type Server struct {
 	// --tls-ca named one, and tlsCAFile is that bundle's path. Beyond a peer Atlas
 	// they count for the wiki this installation works with: the content sources read
 	// it with the roots, and a supervised wikiwikibangbang worker is handed the path
-	// (ADR-draft-tls-ca-reaches-the-wiki).
+	// (ADR-0561).
 	operatorRoots *x509.CertPool
 	tlsCAFile     string
 	forms         *formStore // durable sidecar for form definitions (ADR-0028)
@@ -1074,7 +1074,7 @@ type Server struct {
 
 	// hsts is the Strict-Transport-Security value sent with answers to requests that
 	// arrived over HTTPS, where an operator asked for one (WithHSTS); empty sends
-	// none (ADR-draft-https-redirect-and-hsts).
+	// none (ADR-0560).
 	hsts string
 
 	// selfURL is how this process reaches its own HTTP server — the address its

@@ -200,7 +200,7 @@ func tlsClient(pool *x509.CertPool, http2 bool) *http.Client {
 // TestServeChoosesByNameRedirectsAndSendsThePolicy boots the real server with two
 // certificates, a redirect listener and a transport policy, the three things a
 // server that terminates TLS itself was missing beside the listener
-// (ADR-draft-tls-certificates-by-name, ADR-draft-https-redirect-and-hsts): each name
+// (ADR-0562, ADR-0560): each name
 // is presented its own certificate, plain HTTP is redirected to HTTPS on the port
 // --external-url names, and answers over HTTPS carry the policy while the redirect
 // does not.
@@ -286,7 +286,7 @@ func TestServeChoosesByNameRedirectsAndSendsThePolicy(t *testing.T) {
 }
 
 // TestServeRefusesARedirectWithoutTLSAndAPolicyThatIsNoNumber stops the server on
-// the two settings that cannot mean anything (ADR-draft-https-redirect-and-hsts).
+// the two settings that cannot mean anything (ADR-0560).
 func TestServeRefusesARedirectWithoutTLSAndAPolicyThatIsNoNumber(t *testing.T) {
 	dir := t.TempDir()
 	err := serveForTest(context.Background(), freeAddr(t), filepath.Join(dir, "a"), tlsConfig{redirectAddr: freeAddr(t)})

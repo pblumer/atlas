@@ -231,10 +231,10 @@ func runServe(args []string) error {
 	// authorization one: /healthz and /readyz stay unauthenticated by design
 	// (ADR-0142), because a kubelet has no credential to offer — /metrics moved
 	// behind the boundary in ADR-0198 and no longer does.
-	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. For a server reached under several names with certificates of their own, list them separated by commas, with the keys in the same order in --tls-key: the name a client asks for (SNI) chooses the certificate, and the first one answers every other name (ADR-0191, ADR-draft-tls-certificates-by-name). TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
+	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. For a server reached under several names with certificates of their own, list them separated by commas, with the keys in the same order in --tls-key: the name a client asks for (SNI) chooses the certificate, and the first one answers every other name (ADR-0191, ADR-0562). TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
 	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key; for several certificates, their keys separated by commas in the same order. Both or neither (or ATLAS_TLS_KEY)")
 	// Two things a reverse proxy usually does beside TLS, for a server that terminates
-	// it itself (ADR-draft-https-redirect-and-hsts). Both are off unless set, because
+	// it itself (ADR-0560). Both are off unless set, because
 	// both reach beyond this server: port 80 may be another program's, and the policy
 	// binds the whole host name in every browser that received it.
 	redirectAddr := fs.String("redirect-addr", os.Getenv("ATLAS_REDIRECT_ADDR"), "with --tls-cert: address to answer plain HTTP on, e.g. :80, by redirecting GET and HEAD to https:// on the host the request names; every other method is refused, and nothing of the server is served there. The redirect names port 443 unless --external-url is an https origin with another port. Empty (default) opens no such port (or ATLAS_REDIRECT_ADDR)")
@@ -243,7 +243,7 @@ func runServe(args []string) error {
 	// is taken (ADR-0448). Empty trusts nobody, which is what every
 	// deployment had before: the connection's own address is the client.
 	trustedProxies := fs.String("trusted-proxies", os.Getenv("ATLAS_TRUSTED_PROXIES"), "comma-separated addresses or CIDR prefixes of the load balancers in front of this server, e.g. 10.179.2.139 or 10.179.2.0/28. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2, for a balancer that forwards TCP and leaves TLS to this server) or from X-Forwarded-For (for one that speaks HTTP), so the login throttle and the audit log see the person rather than the balancer; from any other address neither is read. Empty (default) trusts nobody (or ATLAS_TRUSTED_PROXIES)")
-	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. The catalogue's content sources and a supervised wikiwikibangbang worker verify this installation's wiki against it too (ADR-draft-tls-ca-reaches-the-wiki). It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
+	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. The catalogue's content sources and a supervised wikiwikibangbang worker verify this installation's wiki against it too (ADR-0561). It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
@@ -580,7 +580,7 @@ type tlsConfig struct {
 	// plaintext, which is what every deployment behind a proxy keeps. Each may be a
 	// list separated by commas, the key at the same place as its certificate: the
 	// name a client asks for then chooses the pair
-	// (ADR-draft-tls-certificates-by-name).
+	// (ADR-0562).
 	certFile, keyFile string
 
 	// caFile is an operator's CA bundle, trusted *in addition to* the host's roots
@@ -591,7 +591,7 @@ type tlsConfig struct {
 	// redirectAddr is where plain HTTP is answered by a redirect to HTTPS, and
 	// hstsMaxAge the seconds of the transport policy sent over HTTPS, as the flag
 	// gives them; both empty is what every deployment had
-	// (ADR-draft-https-redirect-and-hsts).
+	// (ADR-0560).
 	redirectAddr, hstsMaxAge string
 }
 
@@ -690,7 +690,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// A redirect to HTTPS that nothing answers sends every reader to an error, so it
 	// needs this server's own TLS; and a policy that is no number stops the server
 	// rather than sending something nobody wrote
-	// (ADR-draft-https-redirect-and-hsts).
+	// (ADR-0560).
 	redirectAddr := strings.TrimSpace(tlsCfg.redirectAddr)
 	if redirectAddr != "" && !tlsOn {
 		return errors.New("--redirect-addr is set without --tls-cert and --tls-key: nothing would answer the HTTPS it sends readers to")

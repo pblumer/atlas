@@ -55,7 +55,7 @@ const wikiCAEnv = "ATLAS_TLS_CA"
 // wikiClientOptions are the client options every wiki of this worker shares. Where the
 // operator named certificate authorities of their own (--tls-ca), the wikis are
 // verified against the host's roots and those besides
-// (ADR-draft-tls-ca-reaches-the-wiki): a wiki is the operator's own server, as a peer
+// (ADR-0561): a wiki is the operator's own server, as a peer
 // Atlas is, and inside an organisation its certificate usually comes from the
 // organisation's authority, which no host knows. The client keeps the bound every
 // Worker's outbound call has (nettimeout); without a bundle it is that shared client,

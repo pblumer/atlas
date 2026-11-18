@@ -12,7 +12,7 @@ import (
 // every answer to a request that arrived over HTTPS — this server's own TLS, or a
 // proxy that ended it and says so — and never over plain HTTP, where RFC 6797 has a
 // browser ignore it. Without the option nothing is sent, which is what every
-// deployment had (ADR-draft-https-redirect-and-hsts).
+// deployment had (ADR-0560).
 func TestHSTSIsSentOverHTTPSOnly(t *testing.T) {
 	header := func(srv *httptest.Server, proto string) string {
 		t.Helper()

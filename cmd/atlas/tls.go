@@ -29,7 +29,7 @@ func tlsConfigured(certFile, keyFile string) (bool, error) {
 type certPair struct{ certFile, keyFile string }
 
 // tlsPairs reads --tls-cert and --tls-key as lists separated by commas, the key at
-// the same place as its certificate (ADR-draft-tls-certificates-by-name). One of
+// the same place as its certificate (ADR-0562). One of
 // each is what every deployment had. Several are for a server reached under names
 // that are certified apart; position is the only pairing there is, so lists of
 // different lengths stop the server rather than serve a pair nobody meant.
@@ -85,7 +85,7 @@ func counted(n int, what string) string {
 //
 // certFiles and keyFiles are the two flags as given: one pair, or several separated
 // by commas, of which the name a client asks for chooses one
-// (ADR-draft-tls-certificates-by-name).
+// (ADR-0562).
 func newServerTLSConfig(certFiles, keyFiles string) (*tls.Config, error) {
 	pairs, err := tlsPairs(certFiles, keyFiles)
 	if err != nil {
@@ -120,7 +120,7 @@ func newServerTLSConfig(certFiles, keyFiles string) (*tls.Config, error) {
 // by address, get the first pair's certificate, which is what a single pair
 // answered everybody with. Whether to trust it is the client's decision, and
 // refusing the handshake instead would turn a certificate warning into a
-// connection error that names nothing (ADR-draft-tls-certificates-by-name).
+// connection error that names nothing (ADR-0562).
 type certChooser []*certReloader
 
 func (c certChooser) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {

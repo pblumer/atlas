@@ -197,10 +197,10 @@ func reachableOrigin(externalURL, addr string, tlsOn bool) string {
 }
 
 // redirectToHTTPS answers plain HTTP for a server that terminates TLS itself
-// (--redirect-addr, ADR-draft-https-redirect-and-hsts): a GET or HEAD is sent to the
+// (--redirect-addr, ADR-0560): a GET or HEAD is sent to the
 // same host and path over HTTPS, on httpsPort where that is not 443 (empty means
 // 443). The host is the one the request names, so every name this server has a
-// certificate for keeps its own (ADR-draft-tls-certificates-by-name).
+// certificate for keeps its own (ADR-0562).
 //
 // The redirect is temporary. A browser keeps a permanent one without an end, which
 // would outlast a server that stops terminating TLS, with nothing to withdraw it;

@@ -254,7 +254,7 @@ func TestOnlyThePublicServerHearsProxies(t *testing.T) {
 // one the request names, so every name this server answers keeps its own; a write is
 // refused rather than redirected, because its body has crossed the network in the
 // clear already and a client that is redirected would send it so again every time
-// (ADR-draft-https-redirect-and-hsts).
+// (ADR-0560).
 func TestRedirectToHTTPS(t *testing.T) {
 	for _, tc := range []struct {
 		name, port, method, host, target string

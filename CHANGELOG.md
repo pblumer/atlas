@@ -20,7 +20,7 @@ _Changed_ / _Removed_ for each version.
   origin with a wildcard of its own, an internal and a public name certified by different
   authorities — and the first pair answers every other name and clients that ask by address. Each
   pair is reloaded on its own when its files change. One pair behaves as before
-  (ADR-draft-tls-certificates-by-name).
+  (ADR-0562).
 - **atlas redirects plain HTTP to HTTPS and can tell browsers to stay there.** With
   `--redirect-addr :80` (or `ATLAS_REDIRECT_ADDR`), a server that terminates TLS itself answers
   plain HTTP on a second address: GET and HEAD are redirected to `https://` on the host the
@@ -30,14 +30,14 @@ _Changed_ / _Removed_ for each version.
   `Strict-Transport-Security: max-age=…`, so a browser that visited once asks over HTTPS by itself
   for that long; `0` withdraws it. Both are off unless set: the policy binds the whole host name
   on every port in each browser — a plain-HTTP service under the same name stops working there —
-  and never includes subdomains or preload (ADR-draft-https-redirect-and-hsts).
+  and never includes subdomains or preload (ADR-0560).
 - **The operator's CA bundle also counts for the wiki.** `--tls-ca` (or `ATLAS_TLS_CA`), which
   adds an organisation's own certificate authorities to the host's roots for calls to another
   atlas, now also counts for the wiki an installation works with: a worker serving
   wikiwikibangbang Workers verifies each wiki against it, a supervised one is handed the bundle
   by the server that starts it, and the catalogue's content sources read with it. Every other
   Worker Type keeps the host's roots, and nothing skips verification
-  (ADR-draft-tls-ca-reaches-the-wiki).
+  (ADR-0561).
 
 ## [0.26.0] — 2026-11-15
 

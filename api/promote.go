@@ -363,7 +363,7 @@ func (s *Server) bundleForRelease(appName string, rel applicationRelease, outErr
 //
 // The wiki this installation works with is the operator's own server too, and the
 // catalogue's content sources read it with the same roots (contentRoundTripper,
-// ADR-draft-tls-ca-reaches-the-wiki).
+// ADR-0561).
 func WithTargetTLSRoots(pool *x509.CertPool) Option {
 	return func(s *Server) {
 		s.operatorRoots = pool
@@ -376,7 +376,7 @@ func WithTargetTLSRoots(pool *x509.CertPool) Option {
 // WithTLSCAFile names the file --tls-ca was given, so that a supervised worker
 // serving this installation's wikis can be handed it: the worker verifies a wiki
 // against the host's roots and that bundle, as this server's content sources do
-// (ADR-draft-tls-ca-reaches-the-wiki). The roots themselves come with
+// (ADR-0561). The roots themselves come with
 // WithTargetTLSRoots; a child process needs the path.
 func WithTLSCAFile(path string) Option {
 	return func(s *Server) { s.tlsCAFile = strings.TrimSpace(path) }

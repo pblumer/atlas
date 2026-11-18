@@ -9,7 +9,7 @@ import (
 // RFC 6797) of maxAgeSeconds with every answer to a request that arrived over HTTPS:
 // a browser that received it asks this host over HTTPS by itself for that long, so a
 // later http:// request never leaves it in the clear (--hsts-max-age,
-// ADR-draft-https-redirect-and-hsts).
+// ADR-0560).
 //
 // It is an option and not the default because the policy reaches beyond this server.
 // It binds the whole host name in each browser, on every port — another service

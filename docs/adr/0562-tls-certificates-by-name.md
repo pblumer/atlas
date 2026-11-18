@@ -1,4 +1,4 @@
-# ADR-DRAFT: Several certificates, chosen by the name a client asks for
+# ADR-0562: Several certificates, chosen by the name a client asks for
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -127,4 +127,4 @@ state, routing or the log.
   several pairs added; its reload, its TLS 1.3 and its both-or-neither rule unchanged
 - relates to [ADR-0204](0204-hosted-apps-on-an-isolated-origin.md) — the second name an
   installation most often has
-- relates to ADR-draft-https-redirect-and-hsts — the redirect keeps the name asked for
+- relates to ADR-0560 — the redirect keeps the name asked for

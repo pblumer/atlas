@@ -357,7 +357,7 @@ func TestTrustPoolAddsToTheHostRoots(t *testing.T) {
 // several are for a server reached under names certified apart, and the key at the
 // same place as its certificate is the only pairing there is, so a list that does
 // not line up stops the server rather than serving a pair nobody meant
-// (ADR-draft-tls-certificates-by-name).
+// (ADR-0562).
 func TestTLSPairs(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -478,7 +478,7 @@ func handshakes(t *testing.T, cfg *tls.Config) string {
 // the certificate made for the name it asked for. A name no certificate is made
 // for, and a client that names none — one that asks by address — get the first
 // pair's, as a single pair answered everybody before
-// (ADR-draft-tls-certificates-by-name).
+// (ADR-0562).
 func TestTheNameAskedForChoosesTheCertificate(t *testing.T) {
 	dir := t.TempDir()
 	atlasCert, atlasKey, atlasLeaf := writeNamedCertPair(t, dir, "atlas", 31, "atlas.example.org")

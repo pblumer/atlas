@@ -647,6 +647,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0557](0557-runloop-reference-probe.md) | A reference probe measures the single writer independent of traffic | Accepted | Landed |
 | [0558](0558-a-cancelled-line-instance-settles-its-line.md) | An order line whose instance an operator ended settles as a failed report | Accepted | Landed |
 | [0559](0559-local-collaboration-views.md) | A collaboration is a view over processes that already exist | Accepted | Partial |
+| [0560](0560-https-redirect-and-hsts.md) | A redirect from plain HTTP and a transport policy, on request | Accepted | Landed |
+| [0561](0561-tls-ca-reaches-the-wiki.md) | The operator's CA bundle also counts for the wiki | Accepted | Landed |
+| [0562](0562-tls-certificates-by-name.md) | Several certificates, chosen by the name a client asks for | Accepted | Landed |
 
 ## The two states of a record
 

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A redirect from plain HTTP and a transport policy, on request
+# ADR-0560: A redirect from plain HTTP and a transport policy, on request
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -42,7 +42,7 @@ and ports it was not given?
   opens no new port.
 - **Nothing beyond the server by default** (ADR-0191's reason, kept).
 - **Every setting has a way back.**
-- **Several names keep their own** (ADR-draft-tls-certificates-by-name).
+- **Several names keep their own** (ADR-0562).
 - **A request in the clear is not made worse:** a redirect must not teach a client to
   keep sending a credential over plain HTTP.
 - **Encryption is not authorization** (ADR-0191): the port open to plain HTTP reaches
@@ -150,4 +150,4 @@ partition state, routing or the log.
   keeping its reason as the reason both are opt-in
 - relates to [ADR-0448](0448-trusted-proxies.md) — the redirect listener reads the PROXY
   protocol from the same listed peers
-- relates to ADR-draft-tls-certificates-by-name — a redirect keeps the name asked for
+- relates to ADR-0562 — a redirect keeps the name asked for

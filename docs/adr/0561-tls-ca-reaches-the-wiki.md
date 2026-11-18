@@ -1,4 +1,4 @@
-# ADR-DRAFT: The operator's CA bundle also counts for the wiki
+# ADR-0561: The operator's CA bundle also counts for the wiki
 
 - **Status:** Accepted
 - **Implementation:** Landed

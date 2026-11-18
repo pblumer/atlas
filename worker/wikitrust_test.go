@@ -79,7 +79,7 @@ func wikiBehindAnInternalCA(t *testing.T) (url, caFile string) {
 // wikiwikibangbang Worker Type: a wiki of the same operator, with a certificate their
 // own authority signed, is reached once the worker is given that authority's bundle,
 // and refused on the host's roots alone. The bundle is added to those roots and is no
-// way around verification (ADR-draft-tls-ca-reaches-the-wiki).
+// way around verification (ADR-0561).
 func TestTheWikiWorkerTrustsTheOperatorsCA(t *testing.T) {
 	wikiURL, caFile := wikiBehindAnInternalCA(t)
 	env := func(ca string) func(string) string {

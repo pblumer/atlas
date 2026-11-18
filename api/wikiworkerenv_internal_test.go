@@ -60,7 +60,7 @@ func TestSupervisedWikiEnvUsesTheWorkersOwnNames(t *testing.T) {
 // A wiki of the same operator often has a certificate their own authority signed, and
 // a supervised worker cannot be told --tls-ca by anyone but the engine that starts it:
 // the bundle's path is handed over under the name the worker's flag defaults to, and
-// only where the operator named one (ADR-draft-tls-ca-reaches-the-wiki).
+// only where the operator named one (ADR-0561).
 func TestSupervisedWikiEnvHandsOnTheOperatorsCA(t *testing.T) {
 	t.Setenv("ATLAS_CONNECTOR_WIKI_BOT_TOKEN", wikiBundle)
 
@@ -86,7 +86,7 @@ func TestSupervisedWikiEnvHandsOnTheOperatorsCA(t *testing.T) {
 // The catalogue's content sources read the same wiki, from this process: with the
 // operator's roots they use the process-wide transport trusting those besides the
 // host's; a transport a caller set wins; and without either nothing changes
-// (ADR-draft-tls-ca-reaches-the-wiki).
+// (ADR-0561).
 func TestContentSourcesTrustTheOperatorsCA(t *testing.T) {
 	pool := x509.NewCertPool()
 
