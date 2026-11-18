@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"slices"
@@ -53,6 +54,60 @@ func TestSupervisedWikiEnvUsesTheWorkersOwnNames(t *testing.T) {
 	}
 	if got := env["ATLAS_WIKIWIKIBANGBANG_WIKI_CREDENTIALS"]; got != wikiBundle {
 		t.Errorf("the handed bundle = %q, want it whole", got)
+	}
+}
+
+// A wiki of the same operator often has a certificate their own authority signed, and
+// a supervised worker cannot be told --tls-ca by anyone but the engine that starts it:
+// the bundle's path is handed over under the name the worker's flag defaults to, and
+// only where the operator named one (ADR-draft-tls-ca-reaches-the-wiki).
+func TestSupervisedWikiEnvHandsOnTheOperatorsCA(t *testing.T) {
+	t.Setenv("ATLAS_CONNECTOR_WIKI_BOT_TOKEN", wikiBundle)
+
+	with, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil), WithTLSCAFile(" /etc/atlas/ca.pem "))
+	saveWikiWorker(t, with, "1", "wiki", "https://wiki.example.ch", "wiki-bot")
+	if got := envOf(t, with.wikiWorkerEnv())["ATLAS_TLS_CA"]; got != "/etc/atlas/ca.pem" {
+		t.Errorf("with --tls-ca the worker is handed ATLAS_TLS_CA=%q, want the bundle's path", got)
+	}
+
+	without, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	saveWikiWorker(t, without, "1", "wiki", "https://wiki.example.ch", "wiki-bot")
+	if _, ok := envOf(t, without.wikiWorkerEnv())["ATLAS_TLS_CA"]; ok {
+		t.Error("without --tls-ca the worker was handed a bundle")
+	}
+
+	// No wiki in the store, nothing to hand over: the bundle alone starts no worker.
+	none, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil), WithTLSCAFile("/etc/atlas/ca.pem"))
+	if env := none.wikiWorkerEnv(); env != nil {
+		t.Errorf("a server without wikis rendered %v", env)
+	}
+}
+
+// The catalogue's content sources read the same wiki, from this process: with the
+// operator's roots they use the process-wide transport trusting those besides the
+// host's; a transport a caller set wins; and without either nothing changes
+// (ADR-draft-tls-ca-reaches-the-wiki).
+func TestContentSourcesTrustTheOperatorsCA(t *testing.T) {
+	pool := x509.NewCertPool()
+
+	trusting, _ := newValidateServer(t, WithTargetTLSRoots(pool))
+	rt, ok := trusting.contentRoundTripper().(*http.Transport)
+	if !ok || rt.TLSClientConfig == nil || rt.TLSClientConfig.RootCAs != pool {
+		t.Errorf("with --tls-ca the content sources use %#v, want a transport trusting the operator's roots", trusting.contentRoundTripper())
+	}
+	if ok && rt == http.DefaultTransport {
+		t.Error("the process-wide transport itself was changed; every other outbound call would trust the bundle too")
+	}
+
+	explicit := &http.Transport{}
+	chosen, _ := newValidateServer(t, WithTargetTLSRoots(pool), WithContentTransport(explicit))
+	if chosen.contentRoundTripper() != http.RoundTripper(explicit) {
+		t.Error("a transport a caller set was replaced")
+	}
+
+	plain, _ := newValidateServer(t)
+	if plain.contentRoundTripper() != nil {
+		t.Error("without --tls-ca the content sources got a transport of their own")
 	}
 }
 

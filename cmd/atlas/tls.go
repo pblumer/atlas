@@ -20,16 +20,57 @@ import (
 // that falls back to plaintext: it is a server listening in the clear on the port
 // somebody believed they had just secured, so it does not start (ADR-0191).
 func tlsConfigured(certFile, keyFile string) (bool, error) {
-	cert, key := strings.TrimSpace(certFile), strings.TrimSpace(keyFile)
+	pairs, err := tlsPairs(certFile, keyFile)
+	return len(pairs) > 0, err
+}
+
+// certPair names the files of one certificate: its chain and the key that belongs
+// to it.
+type certPair struct{ certFile, keyFile string }
+
+// tlsPairs reads --tls-cert and --tls-key as lists separated by commas, the key at
+// the same place as its certificate (ADR-draft-tls-certificates-by-name). One of
+// each is what every deployment had. Several are for a server reached under names
+// that are certified apart; position is the only pairing there is, so lists of
+// different lengths stop the server rather than serve a pair nobody meant.
+func tlsPairs(certFiles, keyFiles string) ([]certPair, error) {
+	certs, keys := splitFileList(certFiles), splitFileList(keyFiles)
 	switch {
-	case cert == "" && key == "":
-		return false, nil
-	case key == "":
-		return false, errors.New("--tls-cert is set without --tls-key: name both or neither")
-	case cert == "":
-		return false, errors.New("--tls-key is set without --tls-cert: name both or neither")
+	case len(certs) == 0 && len(keys) == 0:
+		return nil, nil
+	case len(keys) == 0:
+		return nil, errors.New("--tls-cert is set without --tls-key: name both or neither")
+	case len(certs) == 0:
+		return nil, errors.New("--tls-key is set without --tls-cert: name both or neither")
+	case len(certs) != len(keys):
+		return nil, fmt.Errorf("--tls-cert names %s and --tls-key names %s: name a key for every certificate, in the same order",
+			counted(len(certs), "certificate"), counted(len(keys), "key"))
 	}
-	return true, nil
+	pairs := make([]certPair, len(certs))
+	for i := range certs {
+		pairs[i] = certPair{certFile: certs[i], keyFile: keys[i]}
+	}
+	return pairs, nil
+}
+
+// splitFileList splits a comma-separated list of paths, dropping what is empty: an
+// environment variable set to nothing is unset, not a path.
+func splitFileList(s string) []string {
+	var out []string
+	for _, f := range strings.Split(s, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// counted is "1 certificate" or "2 certificates".
+func counted(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }
 
 // newServerTLSConfig is the whole of Atlas's TLS configuration surface.
@@ -41,12 +82,61 @@ func tlsConfigured(certFile, keyFile string) (bool, error) {
 // is refused rather than quietly downgraded, and there is deliberately no
 // --tls-min-version: if a real deployment needs one it is an amendment, added as a
 // documented opt-in downgrade rather than by relaxing the default (ADR-0191).
-func newServerTLSConfig(certFile, keyFile string) (*tls.Config, error) {
-	r, err := newCertReloader(certFile, keyFile)
+//
+// certFiles and keyFiles are the two flags as given: one pair, or several separated
+// by commas, of which the name a client asks for chooses one
+// (ADR-draft-tls-certificates-by-name).
+func newServerTLSConfig(certFiles, keyFiles string) (*tls.Config, error) {
+	pairs, err := tlsPairs(certFiles, keyFiles)
 	if err != nil {
 		return nil, err
 	}
-	return &tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: r.GetCertificate}, nil
+	if len(pairs) == 0 {
+		return nil, errors.New("no TLS certificate named")
+	}
+	// Every pair is loaded now, so that a wrong path or a key that belongs to another
+	// certificate stops the server at startup, whichever pair it is.
+	chooser := make(certChooser, len(pairs))
+	for i, p := range pairs {
+		if chooser[i], err = newCertReloader(p.certFile, p.keyFile); err != nil {
+			return nil, err
+		}
+	}
+	return &tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: chooser.GetCertificate}, nil
+}
+
+// certChooser hands each handshake the certificate made for the name the client
+// asks for (SNI), out of the pairs the operator named, each reloaded as its files
+// change.
+//
+// One certificate that lists every name was the only way to serve several, and it
+// stops working where names are certified apart: the Console under the
+// organisation's name and the hosted apps under an origin of their own (ADR-0204),
+// by different authorities or on different renewal dates. The choice is the one
+// crypto/tls makes for a list of certificates — the first one the client asked for
+// by name and can verify — kept while the files may change underneath it.
+//
+// A name no certificate is made for, and a client that names none because it asks
+// by address, get the first pair's certificate, which is what a single pair
+// answered everybody with. Whether to trust it is the client's decision, and
+// refusing the handshake instead would turn a certificate warning into a
+// connection error that names nothing (ADR-draft-tls-certificates-by-name).
+type certChooser []*certReloader
+
+func (c certChooser) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	current := make([]*tls.Certificate, len(c))
+	for i, r := range c {
+		// A reloader does not fail: it serves the pair it has when a reload does.
+		current[i], _ = r.GetCertificate(hello)
+	}
+	if len(current) > 1 {
+		for _, cert := range current {
+			if hello.SupportsCertificate(cert) == nil {
+				return cert, nil
+			}
+		}
+	}
+	return current[0], nil
 }
 
 // certReloader hands the operator's certificate to each handshake, reloading the

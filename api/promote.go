@@ -360,12 +360,41 @@ func (s *Server) bundleForRelease(appName string, rel applicationRelease, outErr
 // deliberately reaches no further than a peer Atlas: a worker calling a third
 // party keeps the host's roots, because its endpoint is somebody else's
 // (ADR-0129, ADR-0191).
+//
+// The wiki this installation works with is the operator's own server too, and the
+// catalogue's content sources read it with the same roots (contentRoundTripper,
+// ADR-draft-tls-ca-reaches-the-wiki).
 func WithTargetTLSRoots(pool *x509.CertPool) Option {
 	return func(s *Server) {
+		s.operatorRoots = pool
 		s.targetClient = &http.Client{Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 		}}
 	}
+}
+
+// WithTLSCAFile names the file --tls-ca was given, so that a supervised worker
+// serving this installation's wikis can be handed it: the worker verifies a wiki
+// against the host's roots and that bundle, as this server's content sources do
+// (ADR-draft-tls-ca-reaches-the-wiki). The roots themselves come with
+// WithTargetTLSRoots; a child process needs the path.
+func WithTLSCAFile(path string) Option {
+	return func(s *Server) { s.tlsCAFile = strings.TrimSpace(path) }
+}
+
+// contentRoundTripper is the transport the catalogue's content sources reach a wiki
+// with: the one a caller set (WithContentTransport), else, where the operator named
+// certificate authorities of their own, the process-wide transport trusting those
+// besides the host's, else nil, which is the process-wide transport as it is.
+func (s *Server) contentRoundTripper() http.RoundTripper {
+	if s.contentTransport != nil || s.operatorRoots == nil {
+		return s.contentTransport
+	}
+	// A clone, so the outbound proxy this installation uses (ADR-0464) stays, and
+	// nothing changes but whom the transport trusts.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: s.operatorRoots, MinVersion: tls.VersionTLS12}
+	return transport
 }
 
 // targetHTTP is the client the two calls to a peer use: the operator's, where they

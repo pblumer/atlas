@@ -3,10 +3,14 @@ package worker
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/wikiwikibangbang"
+	"github.com/pblumer/atlas/internal/trustroots"
 )
 
 // wikiEnvPrefix is where a wikiwikibangbang worker's wikis live.
@@ -28,16 +32,49 @@ func wikiRegistryFromEnv(env func(string) string) (*wikiwikibangbang.Registry, [
 		// that does not build, below, is still an error.
 		return nil, nil, nil
 	}
+	opts, err := wikiClientOptions(env)
+	if err != nil {
+		return nil, nil, err
+	}
 	reg := wikiwikibangbang.NewRegistry()
 	for _, name := range names {
 		key := wikiEnvPrefix + envFold(name) + "_"
-		c, err := wikiwikibangbang.NewClient(env(key+"URL"), env(key+"CREDENTIALS"), wikiwikibangbang.Options{})
+		c, err := wikiwikibangbang.NewClient(env(key+"URL"), env(key+"CREDENTIALS"), opts)
 		if err != nil {
 			return nil, nil, fmt.Errorf("worker: wikiwikibangbang worker %q is not usable: %w (set %sURL to the wiki's base URL and %sCREDENTIALS to the credential bundle)", name, err, key, key)
 		}
 		reg.Register(name, c)
 	}
 	return reg, names, nil
+}
+
+// wikiCAEnv names the operator's CA bundle: the variable --tls-ca defaults to, which
+// the worker's command line hands on where the flag was given instead.
+const wikiCAEnv = "ATLAS_TLS_CA"
+
+// wikiClientOptions are the client options every wiki of this worker shares. Where the
+// operator named certificate authorities of their own (--tls-ca), the wikis are
+// verified against the host's roots and those besides
+// (ADR-draft-tls-ca-reaches-the-wiki): a wiki is the operator's own server, as a peer
+// Atlas is, and inside an organisation its certificate usually comes from the
+// organisation's authority, which no host knows. The client keeps the bound every
+// Worker's outbound call has (nettimeout); without a bundle it is that shared client,
+// exactly as before.
+func wikiClientOptions(env func(string) string) (wikiwikibangbang.Options, error) {
+	roots, err := trustroots.Load(env(wikiCAEnv))
+	if err != nil {
+		return wikiwikibangbang.Options{}, fmt.Errorf("worker: the wikis cannot be verified against the operator's certificate authorities: %w", err)
+	}
+	if roots == nil {
+		return wikiwikibangbang.Options{}, nil
+	}
+	// The process-wide transport, which carries the outbound proxy this installation
+	// uses (ADR-0464), with nothing changed but whom it trusts.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+	client := nettimeout.HTTPClient()
+	client.Transport = transport
+	return wikiwikibangbang.Options{HTTPClient: client}, nil
 }
 
 // RunWikiJob performs a resolved wikiwikibangbang task through a registry the caller

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -245,5 +246,88 @@ func TestOnlyThePublicServerHearsProxies(t *testing.T) {
 	}
 	if srv := newHTTPServer("", http.NewServeMux(), nil); srv.ConnContext != nil {
 		t.Error("the loopback server reads connections as if a balancer were in front of it")
+	}
+}
+
+// TestRedirectToHTTPS covers --redirect-addr: plain HTTP is answered by sending a
+// reader to the same host and path over HTTPS, and by nothing else. The host is the
+// one the request names, so every name this server answers keeps its own; a write is
+// refused rather than redirected, because its body has crossed the network in the
+// clear already and a client that is redirected would send it so again every time
+// (ADR-draft-https-redirect-and-hsts).
+func TestRedirectToHTTPS(t *testing.T) {
+	for _, tc := range []struct {
+		name, port, method, host, target string
+		status                           int
+		location                         string
+	}{
+		{"a page", "", "GET", "atlas.example.org", "/tasks?x=1&y=2", http.StatusFound, "https://atlas.example.org/tasks?x=1&y=2"},
+		{"the host's own port is dropped", "", "GET", "atlas.example.org:8081", "/", http.StatusFound, "https://atlas.example.org/"},
+		{"another HTTPS port", "8443", "GET", "atlas.example.org:80", "/a", http.StatusFound, "https://atlas.example.org:8443/a"},
+		{"the standard port is not written", "443", "GET", "atlas.example.org", "/a", http.StatusFound, "https://atlas.example.org/a"},
+		{"an address", "", "GET", "192.0.2.7:80", "/", http.StatusFound, "https://192.0.2.7/"},
+		{"an IPv6 address", "8443", "GET", "[2001:db8::7]:80", "/", http.StatusFound, "https://[2001:db8::7]:8443/"},
+		{"an escaped path", "", "GET", "atlas.example.org", "/a%2Fb/c%20d", http.StatusFound, "https://atlas.example.org/a%2Fb/c%20d"},
+		{"a path that looks like a host", "", "GET", "atlas.example.org", "//evil.example/x", http.StatusFound, "https://atlas.example.org//evil.example/x"},
+		{"HEAD", "", "HEAD", "atlas.example.org", "/a", http.StatusFound, "https://atlas.example.org/a"},
+		{"a write is not repeated", "", "POST", "atlas.example.org", "/api/v1/login", http.StatusBadRequest, ""},
+		{"no host", "", "GET", "", "/a", http.StatusBadRequest, ""},
+		{"a host that carries a user", "", "GET", "atlas.example.org@evil.example", "/a", http.StatusBadRequest, ""},
+		{"a host that carries a path", "", "GET", "evil.example/atlas.example.org", "/a", http.StatusBadRequest, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.target, nil)
+			req.Host = tc.host
+			rec := httptest.NewRecorder()
+			redirectToHTTPS(tc.port).ServeHTTP(rec, req)
+			if rec.Code != tc.status || rec.Header().Get("Location") != tc.location {
+				t.Errorf("status %d, Location %q; want %d, %q", rec.Code, rec.Header().Get("Location"), tc.status, tc.location)
+			}
+		})
+	}
+}
+
+// TestHTTPSPort is the port a redirect names: the one --external-url states when it
+// is an https origin with a port, and otherwise none, which is 443. The port of
+// --addr does not tell, because a container or a load balancer publishes it under
+// another.
+func TestHTTPSPort(t *testing.T) {
+	for external, want := range map[string]string{
+		"":                               "",
+		"https://atlas.example.org":      "",
+		"https://atlas.example.org:8443": "8443",
+		"https://atlas.example.org:443/": "443",
+		"http://atlas.example.org:8080":  "",
+		"://bad":                         "",
+	} {
+		if got := httpsPort(external); got != want {
+			t.Errorf("httpsPort(%q) = %q, want %q", external, got, want)
+		}
+	}
+}
+
+// TestHSTSMaxAge reads --hsts-max-age: a number of seconds, zero included, and unset
+// when empty. Anything else stops the server rather than sending a policy nobody
+// wrote.
+func TestHSTSMaxAge(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want uint64
+		set  bool
+		ok   bool
+	}{
+		{"", 0, false, true},
+		{"  ", 0, false, true},
+		{" 31536000 ", 31536000, true, true},
+		{"0", 0, true, true},
+		{"-1", 0, false, false},
+		{"on", 0, false, false},
+		{"1.5", 0, false, false},
+		{"31536000; includeSubDomains", 0, false, false},
+	} {
+		got, set, err := hstsMaxAge(tc.in)
+		if got != tc.want || set != tc.set || (err == nil) != tc.ok {
+			t.Errorf("hstsMaxAge(%q) = %d, %v, %v; want %d, %v, ok %v", tc.in, got, set, err, tc.want, tc.set, tc.ok)
+		}
 	}
 }
