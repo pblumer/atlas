@@ -197,6 +197,117 @@ func tlsClient(pool *x509.CertPool, http2 bool) *http.Client {
 	}
 }
 
+// TestServeChoosesByNameRedirectsAndSendsThePolicy boots the real server with two
+// certificates, a redirect listener and a transport policy, the three things a
+// server that terminates TLS itself was missing beside the listener
+// (ADR-draft-tls-certificates-by-name, ADR-draft-https-redirect-and-hsts): each name
+// is presented its own certificate, plain HTTP is redirected to HTTPS on the port
+// --external-url names, and answers over HTTPS carry the policy while the redirect
+// does not.
+func TestServeChoosesByNameRedirectsAndSendsThePolicy(t *testing.T) {
+	dir := t.TempDir()
+	atlasCert, atlasKey, atlasLeaf := writeNamedCertPair(t, dir, "atlas", 51, "atlas.example.org")
+	appsCert, appsKey, appsLeaf := writeNamedCertPair(t, dir, "apps", 52, "apps.example.com")
+	addr, plain := freeAddr(t), freeAddr(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- serveWithForTest(ctx, addr, filepath.Join(dir, "data"), tlsConfig{
+			certFile: atlasCert + "," + appsCert, keyFile: atlasKey + "," + appsKey,
+			redirectAddr: plain, hstsMaxAge: "300",
+		}, oauthConfig{externalURL: "https://atlas.example.org:8443"})
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("serve returned %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Error("serve did not return after its context was cancelled")
+		}
+	})
+
+	clientFor := func(name string, leaf *x509.Certificate) *http.Client {
+		pool := x509.NewCertPool()
+		pool.AddCert(leaf)
+		return &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: name}},
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+	}
+	atlas := clientFor("atlas.example.org", atlasLeaf)
+	waitHealthy(t, atlas, "https://"+addr+"/healthz")
+
+	// Each client trusts only the certificate of the name it asks for, so a request
+	// that succeeds was presented that certificate.
+	for name, client := range map[string]*http.Client{"atlas.example.org": atlas, "apps.example.com": clientFor("apps.example.com", appsLeaf)} {
+		resp, err := client.Get("https://" + addr + "/healthz")
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		resp.Body.Close()
+		if got := resp.Header.Get("Strict-Transport-Security"); got != "max-age=300" {
+			t.Errorf("%s: Strict-Transport-Security %q over HTTPS, want max-age=300", name, got)
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "http://"+plain+"/tasks?x=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "apps.example.com"
+	resp, err := atlas.Do(req)
+	if err != nil {
+		t.Fatalf("plain HTTP: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "https://apps.example.com:8443/tasks?x=1" {
+		t.Errorf("plain HTTP: status %s, Location %q; want 302 to https://apps.example.com:8443/tasks?x=1", resp.Status, resp.Header.Get("Location"))
+	}
+	if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
+		t.Errorf("plain HTTP: Strict-Transport-Security %q, want none", got)
+	}
+	// The port open to plain HTTP reaches nothing of the server.
+	resp, err = atlas.Post("http://"+plain+"/api/v1/login", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("a write over plain HTTP: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a write over plain HTTP: status %s, want 400", resp.Status)
+	}
+}
+
+// TestServeRefusesARedirectWithoutTLSAndAPolicyThatIsNoNumber stops the server on
+// the two settings that cannot mean anything (ADR-draft-https-redirect-and-hsts).
+func TestServeRefusesARedirectWithoutTLSAndAPolicyThatIsNoNumber(t *testing.T) {
+	dir := t.TempDir()
+	err := serveForTest(context.Background(), freeAddr(t), filepath.Join(dir, "a"), tlsConfig{redirectAddr: freeAddr(t)})
+	if err == nil || !strings.Contains(err.Error(), "--redirect-addr") || !strings.Contains(err.Error(), "--tls-cert") {
+		t.Errorf("a redirect without TLS: %v; want an error naming --redirect-addr and --tls-cert", err)
+	}
+	err = serveForTest(context.Background(), freeAddr(t), filepath.Join(dir, "b"), tlsConfig{hstsMaxAge: "on"})
+	if err == nil || !strings.Contains(err.Error(), "--hsts-max-age") {
+		t.Errorf("a policy that is no number: %v; want an error naming --hsts-max-age", err)
+	}
+
+	// An address that cannot be listened on ends the server, as --addr does.
+	certFile, keyFile, _ := writeCertPair(t, dir, 61)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	err = serveForTest(ctx, freeAddr(t), filepath.Join(dir, "c"), tlsConfig{certFile: certFile, keyFile: keyFile, redirectAddr: "256.0.0.1:1"})
+	if err == nil || !strings.Contains(err.Error(), "--redirect-addr") {
+		t.Errorf("an unusable redirect address: %v; want an error naming --redirect-addr", err)
+	}
+}
+
 // TestServeRefusesHalfATLSPair keeps a misconfiguration from starting a server that
 // listens in the clear on the port somebody believed they had just secured.
 func TestServeRefusesHalfATLSPair(t *testing.T) {
@@ -221,10 +332,19 @@ func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) e
 
 // serveBehindForTest is serveForTest with the proxies --trusted-proxies would name.
 func serveBehindForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig, proxies trustedproxy.Set) error {
+	return serveAllForTest(ctx, addr, dataDir, tlsCfg, oauthConfig{}, proxies)
+}
+
+// serveWithForTest is serveForTest with the origin --external-url would state.
+func serveWithForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig, oauth oauthConfig) error {
+	return serveAllForTest(ctx, addr, dataDir, tlsCfg, oauth, trustedproxy.Set{})
+}
+
+func serveAllForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig, oauth oauthConfig, proxies trustedproxy.Set) error {
 	return serve(ctx, addr, dataDir, 5*time.Second,
 		false, // docs
 		false, // auth
-		oauthConfig{}, tlsCfg, proxies,
+		oauth, tlsCfg, proxies,
 		false, // vault
 		false, // userProvisioning
 		nil, time.Second, script.SandboxOff, opensearch.Config{}, promquery.Config{}, retentionConfig{}, storeConfig{},

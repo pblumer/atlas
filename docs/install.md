@@ -413,12 +413,38 @@ atlas serve --data-dir /var/lib/atlas/data \
   disk, so `certbot renew` (or your cert-manager) is enough on its own. A renewal
   caught half-written keeps the previous certificate in service and logs
   `server.tls_reload_failed`; that is a warning to act on, not an outage.
+- **Several names, several certificates.** Where the server is reached under names
+  that are certified apart — the Console's name and the hosted apps' origin, an
+  internal name and a public one — list the certificates separated by commas, and
+  their keys in the same order:
+  `--tls-cert atlas.crt,apps.crt --tls-key atlas.key,apps.key`. atlas presents each
+  client the certificate made for the name it asks for (SNI); the first pair answers
+  every other name and clients that ask by address. Lists of different lengths stop
+  the server
+  ([the record](adr/draft-tls-certificates-by-name.md)).
 - **`--external-url` is usually unnecessary here.** Atlas derives its public origin
   from the request, and a client that reached it over TLS is told `https://`. Set it
   where clients arrive by an address the certificate does not name.
 - The certificate and key are read as the user `atlas serve` runs as. Keep them
   `0600` and owned by that user; a key readable by everyone is the one file here
   worth being strict about.
+
+Two more settings do what a proxy would otherwise do beside TLS, and both are off
+unless you set them ([the record](adr/draft-https-redirect-and-hsts.md)):
+
+- **`--redirect-addr :80`** answers plain HTTP on a second address by redirecting GET
+  and HEAD to `https://` on the host the request names; every other method is
+  refused, and nothing of the server is served there. The redirect names port 443
+  unless `--external-url` is an `https` origin with another port. It needs
+  `--tls-cert`.
+- **`--hsts-max-age SECONDS`** sends `Strict-Transport-Security: max-age=…` with every
+  answer to a request that arrived over HTTPS, so a browser that visited once asks
+  over HTTPS by itself for that long. Read this before setting it: the policy binds
+  the **whole host name on every port** in each browser. Another service under the
+  same name that answers plain HTTP stops working there, and taking TLS away later
+  locks people out until the time has passed. Start with `300`, raise it once
+  everything works (`31536000` is a year), and set `0` before taking TLS away, which
+  tells browsers to forget it. It is never sent with `includeSubDomains` or `preload`.
 
 Where TLS is on, the server also opens a second listener on `127.0.0.1` with an
 ephemeral port, in plaintext, for its own child processes — the MCP adapter's
@@ -458,7 +484,7 @@ Keep the `X-Forwarded-Proto` line whatever proxy you use. Behind a proxy atlas s
 plain HTTP, and that header is the only thing telling it the browser came over HTTPS:
 with it the session cookie and the single sign-on cookies carry `Secure`, and a
 browser never sends them over `http://`; without it they do not carry the attribute.
-The proxy is also where `Strict-Transport-Security` is set — atlas does not send it.
+`Strict-Transport-Security` is the proxy's to set here; atlas sends it only where you ask it to, with `--hsts-max-age`, and then also for a request a proxy marks as HTTPS — so set it in one of the two places, not both.
 
 `/mcp` — the endpoint an AI agent drives the server through — is gated by
 `--auth` like the rest of the API
@@ -940,10 +966,12 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
 | `--client-metadata-allow-private` | `false` | Let atlas read a connected system's client ID metadata document from a private, loopback or link-local address ([ADR-0512](adr/0512-connected-systems.md)). Off by default: anyone can send an authorization request naming a URL, so with this on anyone could make atlas send a GET to a host inside its network. For a connected system that runs beside atlas in one network. Also `ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on` |
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
-| `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
-| `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
+| `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Several certificates, separated by commas, are chosen by the name a client asks for; the first answers every other name ([the record](adr/draft-tls-certificates-by-name.md)). Also `ATLAS_TLS_CERT` |
+| `--tls-key` | *(none)* | PEM private key for `--tls-cert`; for several certificates, their keys separated by commas in the same order. Also `ATLAS_TLS_KEY` |
+| `--redirect-addr` | *(none)* | With `--tls-cert`: address to answer plain HTTP on, e.g. `:80`, by redirecting GET and HEAD to `https://` on the host the request names. Every other method is refused and nothing of the server is served there. Names port 443 unless `--external-url` is an `https` origin with another port ([the record](adr/draft-https-redirect-and-hsts.md)). Also `ATLAS_REDIRECT_ADDR` |
+| `--hsts-max-age` | *(none)* | Seconds of the `Strict-Transport-Security` policy sent with every answer to a request that arrived over HTTPS, this server's own or a proxy's. It binds the whole host name on every port in each browser until the time runs out; `0` withdraws it. Never with `includeSubDomains` or `preload` ([the record](adr/draft-https-redirect-and-hsts.md)). Also `ATLAS_HSTS_MAX_AGE` |
 | `--trusted-proxies` | *(none)* | Addresses or CIDR prefixes of the load balancers in front of this server, comma-separated, e.g. `10.179.2.139` or `10.179.2.0/28`. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2) or from `X-Forwarded-For`; from anywhere else neither is read. A prefix covering every address is refused. See [The client's address behind a proxy](#the-clients-address-behind-a-proxy) ([ADR-0448](adr/0448-trusted-proxies.md)). Also `ATLAS_TRUSTED_PROXIES` |
-| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server. Also `ATLAS_TLS_CA` |
+| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. It also counts for the wiki this installation works with: the catalogue's content sources read with it, and a supervised wikiwikibangbang worker is handed it ([the record](adr/draft-tls-ca-reaches-the-wiki.md)). Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server, and `atlas worker` for the wikis it writes to. Also `ATLAS_TLS_CA` |
 | `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
 | `--oidc-client-id` | *(none)* | Client id this server was registered under at that provider. Also `ATLAS_OIDC_CLIENT_ID` |
 | `--oidc-client-secret` | *(none)* | Client secret, if the provider issued one; omit it for a public client (the flow uses PKCE either way). Prefer `ATLAS_OIDC_CLIENT_SECRET`, so it stays out of `ps` |
@@ -1004,7 +1032,7 @@ history.
 | `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
 | `--allow-unsigned-worker-types` (flag) | Admit Worker Type artifacts installed through `POST /api/v1/worker-types/installed` although their signature is not verified — signatures are not verified yet, so without it nothing can be installed. Each artifact is still checked against its manifest's sha256 at install and before every start, and runs with an allowlisted environment. Development only ([ADR-0535](adr/0535-worker-types-as-distributed-artifacts.md)) |
 | `ATLAS_WORKERS_BINARY` | Which executable the server's supervised workers run. Unset, the server uses `atlas-workers` (`atlas-workers.exe` on Windows) when it sits beside the `atlas` binary — the release archives and the container image ship it there — and otherwise its own `atlas worker` mode. `self` keeps the server's own binary; a path names another worker-only executable. `atlas-workers` takes the same flags and variables as `atlas worker` ([ADR-0535](adr/0535-worker-types-as-distributed-artifacts.md)) |
-| `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another atlas over `https`. For an internally issued certificate; it never replaces the system roots and never skips verification |
+| `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another atlas over `https`, and `atlas serve` and `atlas worker` when they call this installation's wiki. For an internally issued certificate; it never replaces the system roots and never skips verification |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |

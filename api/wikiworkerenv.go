@@ -17,6 +17,8 @@ import (
 const (
 	wikiEnvPrefix     = "ATLAS_WIKIWIKIBANGBANG_"
 	wikiConnectorsEnv = wikiEnvPrefix + "CONNECTORS"
+	// wikiCAEnv is the variable `atlas worker --tls-ca` defaults to.
+	wikiCAEnv = "ATLAS_TLS_CA"
 )
 
 // wikiWorkerEnv renders the wikis a supervised wikiwikibangbang worker needs out of the
@@ -87,6 +89,13 @@ func (s *Server) wikiWorkerEnv() []string {
 	})
 	if !fromStore {
 		return nil
+	}
+	if s.tlsCAFile != "" {
+		// The operator's CA bundle, by the name the worker's own --tls-ca defaults to:
+		// a wiki with a certificate of the organisation's authority is verified
+		// against it (ADR-draft-tls-ca-reaches-the-wiki). The child reaches this
+		// server over the plaintext loopback hop, so the bundle serves the wikis alone.
+		env = append(env, wikiCAEnv+"="+s.tlsCAFile)
 	}
 	return append(env, wikiConnectorsEnv+"="+strings.Join(names, ","))
 }

@@ -352,3 +352,179 @@ func TestTrustPoolAddsToTheHostRoots(t *testing.T) {
 		t.Error("the peer verified against the host roots alone; the test proves nothing")
 	}
 }
+
+// TestTLSPairs reads the two flags as lists. One pair is what every deployment had;
+// several are for a server reached under names certified apart, and the key at the
+// same place as its certificate is the only pairing there is, so a list that does
+// not line up stops the server rather than serving a pair nobody meant
+// (ADR-draft-tls-certificates-by-name).
+func TestTLSPairs(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		certs      string
+		keys       string
+		want       []certPair
+		errWants   string
+		errWantsTo string
+	}{
+		{name: "neither"},
+		{name: "blank", certs: " , ", keys: ""},
+		{name: "one", certs: "/etc/atlas/tls.crt", keys: "/etc/atlas/tls.key",
+			want: []certPair{{"/etc/atlas/tls.crt", "/etc/atlas/tls.key"}}},
+		{name: "two", certs: "a.crt, b.crt", keys: "a.key,b.key",
+			want: []certPair{{"a.crt", "a.key"}, {"b.crt", "b.key"}}},
+		{name: "cert only", certs: "a.crt", errWants: "--tls-key"},
+		{name: "key only", keys: "a.key", errWants: "--tls-cert"},
+		{name: "a certificate without its key", certs: "a.crt,b.crt", keys: "a.key", errWants: "2 certificates", errWantsTo: "1 key"},
+		{name: "a key without its certificate", certs: "a.crt", keys: "a.key,b.key", errWants: "1 certificate", errWantsTo: "2 keys"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tlsPairs(tc.certs, tc.keys)
+			if tc.errWants != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.errWants) || !strings.Contains(err.Error(), tc.errWantsTo) {
+					t.Fatalf("tlsPairs(%q, %q) = %v, %v; want an error naming %q and %q", tc.certs, tc.keys, got, err, tc.errWants, tc.errWantsTo)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("tlsPairs(%q, %q): %v", tc.certs, tc.keys, err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("tlsPairs(%q, %q) = %v, want %v", tc.certs, tc.keys, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("pair %d = %v, want %v", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// writeNamedCertPair is writeCertPair for a certificate made for names — DNS names,
+// wildcards among them — written as <base>.crt and <base>.key, so one directory can
+// hold the pairs of several names.
+func writeNamedCertPair(t *testing.T, dir, base string, serial int64, names ...string) (certFile, keyFile string, leaf *x509.Certificate) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(serial),
+		Subject:      pkix.Name{CommonName: names[0]},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		DNSNames:     names,
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA:         true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	if leaf, err = x509.ParseCertificate(der); err != nil {
+		t.Fatalf("parse certificate: %v", err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	certFile = filepath.Join(dir, base+".crt")
+	keyFile = filepath.Join(dir, base+".key")
+	writeStamped(t, certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	writeStamped(t, keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+	return certFile, keyFile, leaf
+}
+
+// presentedTo dials addr asking for name and returns the serial of the certificate
+// the server presented. It verifies nothing: the tests compare it with the files.
+func presentedTo(t *testing.T, addr, name string) *big.Int {
+	t.Helper()
+	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: name, InsecureSkipVerify: true})
+	if err != nil {
+		t.Fatalf("dial asking for %q: %v", name, err)
+	}
+	defer conn.Close()
+	return conn.ConnectionState().PeerCertificates[0].SerialNumber
+}
+
+// handshakes answers TLS handshakes with cfg on a loopback port.
+func handshakes(t *testing.T, cfg *tls.Config) string {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", cfg)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				_ = conn.(*tls.Conn).Handshake()
+			}()
+		}
+	}()
+	return ln.Addr().String()
+}
+
+// TestTheNameAskedForChoosesTheCertificate is what several pairs are for: a server
+// reached as atlas.example.org and under the apps' own origin presents each client
+// the certificate made for the name it asked for. A name no certificate is made
+// for, and a client that names none — one that asks by address — get the first
+// pair's, as a single pair answered everybody before
+// (ADR-draft-tls-certificates-by-name).
+func TestTheNameAskedForChoosesTheCertificate(t *testing.T) {
+	dir := t.TempDir()
+	atlasCert, atlasKey, atlasLeaf := writeNamedCertPair(t, dir, "atlas", 31, "atlas.example.org")
+	appsCert, appsKey, appsLeaf := writeNamedCertPair(t, dir, "apps", 32, "apps.example.com", "*.apps.example.com")
+
+	cfg, err := newServerTLSConfig(atlasCert+","+appsCert, atlasKey+","+appsKey)
+	if err != nil {
+		t.Fatalf("newServerTLSConfig: %v", err)
+	}
+	addr := handshakes(t, cfg)
+	for _, tc := range []struct {
+		name string
+		want *x509.Certificate
+	}{
+		{"atlas.example.org", atlasLeaf},
+		{"apps.example.com", appsLeaf},
+		{"orders.apps.example.com", appsLeaf},
+		{"unknown.example.net", atlasLeaf},
+		{"", atlasLeaf},
+	} {
+		if got := presentedTo(t, addr, tc.name); got.Cmp(tc.want.SerialNumber) != 0 {
+			t.Errorf("asked for %q: presented serial %v, want %v", tc.name, got, tc.want.SerialNumber)
+		}
+	}
+
+	// A renewal of one pair is served under its name and leaves the other alone.
+	_, _, renewed := writeNamedCertPair(t, dir, "apps", 33, "apps.example.com", "*.apps.example.com")
+	if got := presentedTo(t, addr, "apps.example.com"); got.Cmp(renewed.SerialNumber) != 0 {
+		t.Errorf("after the renewal of one pair: presented serial %v, want %v", got, renewed.SerialNumber)
+	}
+	if got := presentedTo(t, addr, "atlas.example.org"); got.Cmp(atlasLeaf.SerialNumber) != 0 {
+		t.Errorf("the pair that was not renewed: presented serial %v, want %v", got, atlasLeaf.SerialNumber)
+	}
+}
+
+// TestNewServerTLSConfigRejectsAnyUnusablePair stops the server at startup when one
+// of several pairs cannot be served, whichever one it is.
+func TestNewServerTLSConfigRejectsAnyUnusablePair(t *testing.T) {
+	dir := t.TempDir()
+	atlasCert, atlasKey, _ := writeNamedCertPair(t, dir, "atlas", 41, "atlas.example.org")
+	appsCert, _, _ := writeNamedCertPair(t, dir, "apps", 42, "apps.example.com")
+
+	if _, err := newServerTLSConfig(atlasCert+","+appsCert, atlasKey+","+atlasKey); err == nil {
+		t.Error("a second certificate with the first one's key started the server")
+	}
+	if _, err := newServerTLSConfig(atlasCert+","+appsCert, atlasKey); err == nil {
+		t.Error("a second certificate without a key started the server")
+	}
+}

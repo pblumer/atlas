@@ -1335,7 +1335,11 @@ What it takes to run this for real.
   `.github/workflows/docker.yml`) and a Helm chart (`deploy/helm/atlas`, released by
   `.github/workflows/chart-release.yml`); an optional **TLS 1.3 listener** with
   operator-supplied certificates, off by default
-  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)).
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)), which presents each name the
+  certificate made for it (ADR-draft-tls-certificates-by-name), can redirect plain HTTP
+  to HTTPS and send a transport policy on request (ADR-draft-https-redirect-and-hsts),
+  and whose CA bundle also counts for the wiki an installation works with
+  (ADR-draft-tls-ca-reaches-the-wiki).
 - ✅ **Deactivating a version** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   an inactive definition is no longer started by its timer, message or signal start
   events; an explicit create and the running instances are untouched.

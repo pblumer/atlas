@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -191,4 +194,90 @@ func reachableOrigin(externalURL, addr string, tlsOn bool) string {
 		origin = "https://" + strings.TrimPrefix(origin, "http://")
 	}
 	return origin
+}
+
+// redirectToHTTPS answers plain HTTP for a server that terminates TLS itself
+// (--redirect-addr, ADR-draft-https-redirect-and-hsts): a GET or HEAD is sent to the
+// same host and path over HTTPS, on httpsPort where that is not 443 (empty means
+// 443). The host is the one the request names, so every name this server has a
+// certificate for keeps its own (ADR-draft-tls-certificates-by-name).
+//
+// The redirect is temporary. A browser keeps a permanent one without an end, which
+// would outlast a server that stops terminating TLS, with nothing to withdraw it;
+// what makes HTTPS stick is the transport policy of --hsts-max-age, which has an end
+// and a way back. Any other method is refused rather than redirected: its body and
+// credentials have crossed the network in the clear already, and a client that is
+// redirected would send them so again every time, unnoticed.
+//
+// Nothing else is answered here — no API, no Console, no health endpoint — so the
+// port that is open to plain HTTP reaches none of the server.
+func redirectToHTTPS(httpsPort string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+			if strings.Contains(h, ":") {
+				host = "[" + h + "]"
+			}
+		}
+		if !plainHost(host) || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+			http.Error(w, "this server answers over HTTPS only", http.StatusBadRequest)
+			return
+		}
+		if httpsPort != "" && httpsPort != "443" {
+			host = net.JoinHostPort(strings.Trim(host, "[]"), httpsPort)
+		}
+		to := url.URL{Scheme: "https", Host: host, Path: r.URL.Path, RawPath: r.URL.RawPath, RawQuery: r.URL.RawQuery}
+		http.Redirect(w, r, to.String(), http.StatusFound)
+	})
+}
+
+// plainHost reports whether host is a name or an address and nothing else, so that
+// what a request calls its host cannot carry a user, a path or another host into the
+// address the redirect names.
+func plainHost(host string) bool {
+	for i := 0; i < len(host); i++ {
+		c := host[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '.', c == '_', c == ':', c == '[', c == ']':
+		default:
+			return false
+		}
+	}
+	return host != ""
+}
+
+// httpsPort is the port readers reach HTTPS at when it is not the standard one: the
+// port --external-url names, if it is an https origin that names one. The port of
+// --addr does not tell: a container or a load balancer publishes it under another.
+func httpsPort(externalURL string) string {
+	u, err := url.Parse(strings.TrimSpace(externalURL))
+	if err != nil || u.Scheme != "https" {
+		return ""
+	}
+	return u.Port()
+}
+
+// hstsMaxAge reads --hsts-max-age: a number of seconds, and whether one was given at
+// all, since zero is a setting of its own — it tells browsers to forget the policy.
+func hstsMaxAge(setting string) (seconds uint64, set bool, err error) {
+	setting = strings.TrimSpace(setting)
+	if setting == "" {
+		return 0, false, nil
+	}
+	seconds, err = strconv.ParseUint(setting, 10, 63)
+	if err != nil {
+		return 0, false, fmt.Errorf("--hsts-max-age %q is not a number of seconds", setting)
+	}
+	return seconds, true, nil
+}
+
+// hstsHeader is the policy as the startup line states it: the header's value, or
+// empty where none is sent.
+func hstsHeader(seconds uint64, set bool) string {
+	if !set {
+		return ""
+	}
+	return "max-age=" + strconv.FormatUint(seconds, 10)
 }

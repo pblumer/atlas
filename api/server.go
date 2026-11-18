@@ -29,6 +29,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
 	"embed"
 	"encoding/hex"
 	"fmt"
@@ -329,7 +330,14 @@ type Server struct {
 	// --tls-ca; nil means the default client, verifying against the host's roots
 	// (ADR-0191).
 	targetClient *http.Client
-	forms        *formStore // durable sidecar for form definitions (ADR-0028)
+	// operatorRoots are the host's roots with the operator's CA bundle added, where
+	// --tls-ca named one, and tlsCAFile is that bundle's path. Beyond a peer Atlas
+	// they count for the wiki this installation works with: the content sources read
+	// it with the roots, and a supervised wikiwikibangbang worker is handed the path
+	// (ADR-draft-tls-ca-reaches-the-wiki).
+	operatorRoots *x509.CertPool
+	tlsCAFile     string
+	forms         *formStore // durable sidecar for form definitions (ADR-0028)
 	// playgroundScenarios holds saved Playground runs: the requests that make one,
 	// what it must show, and the last report it produced
 	// (ADR-0215).
@@ -1063,6 +1071,11 @@ type Server struct {
 	// documents and the WWW-Authenticate challenge build their absolute URLs from;
 	// empty means derive them from the request (ADR-0200).
 	externalURL string
+
+	// hsts is the Strict-Transport-Security value sent with answers to requests that
+	// arrived over HTTPS, where an operator asked for one (WithHSTS); empty sends
+	// none (ADR-draft-https-redirect-and-hsts).
+	hsts string
 
 	// selfURL is how this process reaches its own HTTP server — the address its
 	// supervised workers are told to work for (cmd/atlas: internalURL), which is a
@@ -2316,7 +2329,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The content sources: the credential is resolved on the loop like every
 	// Worker's, the fetches and the recheck run off it (I3).
 	contentReg := contentsource.NewRegistry(s.runLoop, contentSourceStore, s.resolveConnectorSecret)
-	contentReg.Transport = s.contentTransport
+	contentReg.Transport = s.contentRoundTripper()
 	s.catalogs.Content = contentReg
 	s.contentSources = contentsource.NewService(contentReg, func() int64 { return s.now() })
 	s.contentSources.InUse = s.catalogs.BoundTo
@@ -3878,7 +3891,7 @@ func (s *Server) Close() {
 // /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux, policy := s.mountRoutes()
-	return s.withAuth(policy, s.withStorageAdmission(mux))
+	return s.withHSTS(s.withAuth(policy, s.withStorageAdmission(mux)))
 }
 
 // mountRoutes registers every route this server serves and, in the same pass,

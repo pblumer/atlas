@@ -28,6 +28,10 @@ import (
 	"github.com/pblumer/atlas/workersdk"
 )
 
+// tlsCAEnv is the variable --tls-ca defaults to, under which the built-in Worker
+// Types that verify the operator's own servers read the bundle.
+const tlsCAEnv = "ATLAS_TLS_CA"
+
 // handleFlag collects repeated --handle type=command pairs: what this worker
 // serves, and what to run for each. A repeated flag is the shape that keeps the
 // pairing unambiguous — two parallel lists would let a typo silently line the wrong
@@ -82,7 +86,7 @@ func Run(args []string) error {
 	server := fs.String("server", "http://localhost:8080", "base URL of the atlas server to work for")
 	id := fs.String("id", DefaultWorkerID(), "worker id, shown in the Workers view; give each deployment its own")
 	token := fs.String("token", os.Getenv("ATLAS_TOKEN"), "bearer token, when the server requires authentication (or ATLAS_TOKEN)")
-	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Without it the host trust store is the only answer. It is never a way to skip verification: there is none (or ATLAS_TLS_CA)")
+	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191), and when a wikiwikibangbang worker's wiki has one (ADR-draft-tls-ca-reaches-the-wiki). Without it the host trust store is the only answer. It is never a way to skip verification: there is none, and it does not touch the other Worker Types, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
 	lease := fs.Duration("lease", worker.DefaultLease, "how long the engine holds a job for this worker; must comfortably exceed how long the work takes")
 	wait := fs.Duration("wait", worker.DefaultWait, "how long a poll waits for work before asking again; the server caps it")
 	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs of one type this worker runs at once; a poll leases only as many as there are free places for, so a leased job starts the moment it arrives. Keep it to what the handler and its target can take in parallel")
@@ -120,6 +124,12 @@ func Run(args []string) error {
 	env := func(name string) string {
 		if name == worker.WorkerIDEnv {
 			return *id
+		}
+		if name == tlsCAEnv {
+			// --tls-ca, wherever it was given: beyond the server this worker works for,
+			// the bundle counts for the wikis a wikiwikibangbang worker writes to
+			// (ADR-draft-tls-ca-reaches-the-wiki).
+			return *tlsCA
 		}
 		if name == script.LanguagesEnv && strings.TrimSpace(*scriptLanguages) != "" {
 			return *scriptLanguages

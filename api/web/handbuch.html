@@ -11974,10 +11974,22 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
           the intermediates; atlas serves the chain as it stands in the file and does not check it. The key is
           unencrypted (PKCS#1, PKCS#8 or SEC1) – atlas has no way to ask for a passphrase. atlas reads neither PFX
           files nor the Windows certificate store.</li>
-        <li data-l="de"><b>Ein Zertifikat für alle Namen.</b> atlas wählt nicht nach dem angefragten Namen (SNI)
-          aus. Jeder Name, unter dem der Server erreicht wird, gehört als SAN in dasselbe Zertifikat.</li>
-        <li data-l="en"><b>One certificate for every name.</b> atlas does not choose by the requested name (SNI).
-          Every name the server is reached by belongs in the same certificate as a SAN.</li>
+        <li data-l="de"><b>Mehrere Namen, mehrere Zertifikate.</b> Ist der Server unter Namen erreichbar, die
+          getrennt zertifiziert sind – die Console unter dem Namen der Organisation und die gehosteten Apps unter
+          einer eigenen Adresse, ein interner und ein öffentlicher Name –, nennst du die Zertifikate durch Kommas
+          getrennt und die Schlüssel in derselben Reihenfolge:
+          <code>--tls-cert atlas.crt,apps.crt --tls-key atlas.key,apps.key</code>. atlas legt jedem Client das
+          Zertifikat vor, das für den angefragten Namen (SNI) ausgestellt ist. Das erste Paar gilt für jeden
+          anderen Namen und für Clients, die den Server über seine Adresse ansprechen. Sind die beiden Listen
+          ungleich lang, startet atlas nicht. Ein einzelnes Zertifikat, das alle Namen als SAN enthält, genügt
+          weiterhin.</li>
+        <li data-l="en"><b>Several names, several certificates.</b> Where the server is reached under names that
+          are certified apart – the Console under the organisation's name and the hosted apps under an origin of
+          their own, an internal name and a public one – list the certificates separated by commas and the keys
+          in the same order: <code>--tls-cert atlas.crt,apps.crt --tls-key atlas.key,apps.key</code>. atlas
+          presents each client the certificate made for the name it asks for (SNI). The first pair answers every
+          other name, and clients that reach the server by its address. Lists of different lengths keep atlas from
+          starting. A single certificate that carries every name as a SAN still works.</li>
         <li data-l="de"><b>Rechte.</b> Das Konto, unter dem atlas läuft, liest beide Dateien. Der Schlüssel gehört
           diesem Konto allein – unter Linux <code>0600</code>, unter Windows eine ACL wie
           <a href="#tls-windows">unten</a>.</li>
@@ -12024,6 +12036,68 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
           cert-manager's metrics.</p>
       </div>
 
+      <h3 data-l="de">HTTP umleiten und Browser bei HTTPS halten</h3><h3 data-l="en">Redirecting HTTP and keeping browsers on HTTPS</h3>
+      <p data-l="de">Wer nur den Namen des Servers eintippt, landet auf Port 80, und dort antwortet ohne Reverse
+        Proxy niemand. Zwei Einstellungen übernehmen, was sonst der Proxy tut. Beide sind ausgeschaltet, solange du
+        sie nicht setzt.</p>
+      <p data-l="en">Somebody who types only the server's name arrives at port 80, and without a reverse proxy
+        nothing answers there. Two settings do what the proxy otherwise does. Both are off until you set them.</p>
+      <pre><code>atlas serve --data-dir /var/lib/atlas/data \
+  --tls-cert /etc/atlas/tls.crt --tls-key /etc/atlas/tls.key \
+  --redirect-addr :80 --hsts-max-age 300</code></pre>
+      <ul>
+        <li data-l="de"><b><code>--redirect-addr</code></b> (oder <code>ATLAS_REDIRECT_ADDR</code>) öffnet eine
+          zweite Adresse für HTTP. GET und HEAD leitet atlas dort auf <code>https://</code> um, und zwar auf den
+          Namen, den die Anfrage nennt – jeder Name behält also seinen eigenen. Jede andere Methode weist atlas
+          mit <code>400</code> ab, weil ihr Inhalt das Netz bereits unverschlüsselt durchquert hat. Sonst ist
+          über diese Adresse nichts erreichbar, weder die API noch die Console. Die Einstellung verlangt
+          <code>--tls-cert</code>.</li>
+        <li data-l="en"><b><code>--redirect-addr</code></b> (or <code>ATLAS_REDIRECT_ADDR</code>) opens a second
+          address for HTTP. There atlas redirects GET and HEAD to <code>https://</code>, on the name the request
+          states – so every name keeps its own. Every other method is refused with <code>400</code>, because its
+          content has already crossed the network unencrypted. Nothing else is reachable through that address,
+          neither the API nor the Console. The setting needs <code>--tls-cert</code>.</li>
+        <li data-l="de"><b>Der Port im Ziel.</b> Die Umleitung nennt Port 443. Erreichen die Clients HTTPS unter
+          einem anderen Port, setzt du <code>--external-url</code> auf diese Adresse, etwa
+          <code>https://atlas.example.com:8443</code>; atlas übernimmt den Port von dort.</li>
+        <li data-l="en"><b>The port in the target.</b> The redirect names port 443. Where clients reach HTTPS on
+          another port, set <code>--external-url</code> to that origin, for instance
+          <code>https://atlas.example.com:8443</code>; atlas takes the port from there.</li>
+        <li data-l="de"><b><code>--hsts-max-age</code></b> (oder <code>ATLAS_HSTS_MAX_AGE</code>) ist eine Dauer in
+          Sekunden. atlas sendet dann mit jeder Antwort über HTTPS den Header
+          <code>Strict-Transport-Security: max-age=…</code>. Ein Browser, der ihn einmal erhalten hat, fragt den
+          Server für diese Dauer von sich aus nur noch über HTTPS an. Über HTTP sendet atlas den Header nie, und
+          <code>includeSubDomains</code> oder <code>preload</code> enthält er nie.</li>
+        <li data-l="en"><b><code>--hsts-max-age</code></b> (or <code>ATLAS_HSTS_MAX_AGE</code>) is a duration in
+          seconds. atlas then sends the header <code>Strict-Transport-Security: max-age=…</code> with every answer
+          over HTTPS. A browser that has received it once asks the server over HTTPS only, by itself, for that
+          long. atlas never sends the header over HTTP, and it never contains <code>includeSubDomains</code> or
+          <code>preload</code>.</li>
+      </ul>
+      <div class="note warn">
+        <div class="lbl" data-l="de">Die Regel gilt für den ganzen Hostnamen</div><div class="lbl" data-l="en">The policy covers the whole host name</div>
+        <p data-l="de">Der Browser wendet die Regel auf den Hostnamen an, auf jedem Port. Läuft unter demselben
+          Namen ein anderer Dienst, der nur HTTP spricht, ist er in diesem Browser nicht mehr erreichbar, bis die
+          Dauer abgelaufen ist. Dasselbe gilt für atlas selbst, wenn du TLS später wieder abschaltest. Beginne
+          deshalb mit einem kleinen Wert wie <code>300</code> und erhöhe ihn, wenn alles funktioniert
+          (<code>31536000</code> ist ein Jahr). Bevor du TLS abschaltest, setzt du <code>--hsts-max-age 0</code>:
+          Damit vergisst jeder Browser die Regel bei seinem nächsten Besuch über HTTPS.</p>
+        <p data-l="en">The browser applies the policy to the host name, on every port. Another service under the
+          same name that speaks only HTTP can no longer be reached from that browser until the time has passed.
+          The same holds for atlas itself if you turn TLS off again later. So start with a small value such as
+          <code>300</code> and raise it once everything works (<code>31536000</code> is a year). Before you turn
+          TLS off, set <code>--hsts-max-age 0</code>: every browser then forgets the policy at its next visit over
+          HTTPS.</p>
+      </div>
+      <p data-l="de">Terminiert ein Reverse Proxy TLS und setzt den Header selbst, lässt du
+        <code>--hsts-max-age</code> weg: atlas sendet ihn sonst auch für Anfragen, die der Proxy mit
+        <code>X-Forwarded-Proto: https</code> weiterreicht. Die Startzeile <code>server.listening</code> nennt
+        beide Einstellungen als <code>redirect_addr</code> und <code>hsts</code>.</p>
+      <p data-l="en">Where a reverse proxy terminates TLS and sets the header itself, leave
+        <code>--hsts-max-age</code> out: atlas otherwise sends it for requests the proxy passes on with
+        <code>X-Forwarded-Proto: https</code> as well. The <code>server.listening</code> start line states both
+        settings as <code>redirect_addr</code> and <code>hsts</code>.</p>
+
       <h3 data-l="de">Der interne Listener auf 127.0.0.1</h3><h3 data-l="en">The internal listener on 127.0.0.1</h3>
       <p data-l="de">Mit TLS öffnet atlas zusätzlich einen Listener ohne TLS auf <code>127.0.0.1</code> mit einem
         zufälligen Port. Ihn benutzen nur die eigenen Kindprozesse: der MCP-Adapter und die Worker, die atlas
@@ -12039,10 +12113,12 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
       <h3 data-l="de">atlas prüft ein Zertifikat</h3><h3 data-l="en">atlas verifies a certificate</h3>
       <p data-l="de">Wo atlas selbst Client ist, prüft es das Zertifikat der Gegenseite gegen den
         Zertifikatsspeicher des Hosts. Stammt es von einer internen CA, die der Host nicht kennt, übergibst du deren
-        PEM-Bündel mit <code>--tls-ca</code>. Das gilt für drei Verbindungen:</p>
+        PEM-Bündel mit <code>--tls-ca</code>. Das gilt für die Verbindungen zu deinen eigenen Servern – zu einem
+        anderen atlas und zum Wiki:</p>
       <p data-l="en">Where atlas is the client, it verifies the other side's certificate against the host's trust
         store. When that certificate comes from an internal CA the host does not know, hand atlas the CA's PEM
-        bundle with <code>--tls-ca</code>. That applies to three connections:</p>
+        bundle with <code>--tls-ca</code>. That applies to the connections to your own servers – another atlas and
+        the wiki:</p>
       <ul>
         <li data-l="de"><code>atlas serve</code>, wenn es eine Applikation an ein
           <a href="#ausliefern">Deployment-Ziel</a> publiziert und dessen Status liest (ADR-0129). Ein Ziel muss
@@ -12056,16 +12132,24 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
           bedient.</li>
         <li data-l="en"><code>atlas mcp --server https://…</code>, the adapter an AI assistant drives atlas
           through.</li>
+        <li data-l="de">Das Wiki, mit dem diese Installation arbeitet: Ein Worker, der wikiwikibangbang-Worker
+          bedient, prüft jedes Wiki gegen das Bündel, und <code>atlas serve</code> liest damit die Inhaltsquellen
+          des Katalogs. Einem Worker, den atlas selbst startet, gibt <code>atlas serve</code> das Bündel mit.</li>
+        <li data-l="en">The wiki this installation works with: a worker serving wikiwikibangbang Workers verifies
+          each wiki against the bundle, and <code>atlas serve</code> reads the catalogue's content sources with
+          it. A worker atlas starts itself is handed the bundle by <code>atlas serve</code>.</li>
       </ul>
       <pre><code>atlas worker --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem …</code></pre>
       <p data-l="de">Das Bündel <b>ergänzt</b> den Zertifikatsspeicher des Hosts, es ersetzt ihn nie. Eine Option,
         die Prüfung abzuschalten, gibt es nirgends in atlas. In die Worker Types, die Dritte aufrufen – REST, Mail,
-        Graph und die übrigen –, reicht <code>--tls-ca</code> nicht: Deren Gegenstelle gehört jemand anderem. Sie
+        Graph und die übrigen ausser dem Wiki –, reicht <code>--tls-ca</code> nicht: Deren Gegenstelle gehört
+        jemand anderem. Sie
         vertrauen dem Zertifikatsspeicher des Hosts oder, wo ein Worker Type das anbietet, einer eigenen CA in
         seiner Konfiguration, etwa bei LDAP.</p>
       <p data-l="en">The bundle is <b>added to</b> the host's trust store, never a replacement for it. There is no
         option anywhere in atlas to switch verification off. <code>--tls-ca</code> does not reach the Worker Types
-        that call third parties – REST, mail, Graph and the rest: their endpoint belongs to somebody else. They
+        that call third parties – REST, mail, Graph and the rest apart from the wiki: their endpoint belongs to
+        somebody else. They
         trust the host's store or, where a Worker Type offers it, a CA of its own in its configuration, LDAP for
         one.</p>
       <table id="tls-flags">
@@ -12077,14 +12161,19 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
         </tr></thead>
         <tbody>
           <tr><td><code>--tls-cert</code></td><td><code>ATLAS_TLS_CERT</code></td><td><code>serve</code></td>
-            <td data-l="de">PEM-Zertifikatskette, mit der atlas <code>--addr</code> bedient</td>
-            <td data-l="en">PEM certificate chain atlas serves <code>--addr</code> with</td></tr>
+            <td data-l="de">PEM-Zertifikatskette, mit der atlas <code>--addr</code> bedient; mehrere durch Kommas
+              getrennt</td>
+            <td data-l="en">PEM certificate chain atlas serves <code>--addr</code> with; several separated by
+              commas</td></tr>
           <tr><td><code>--tls-key</code></td><td><code>ATLAS_TLS_KEY</code></td><td><code>serve</code></td>
-            <td data-l="de">der private Schlüssel dazu, PEM, unverschlüsselt</td>
-            <td data-l="en">its private key, PEM, unencrypted</td></tr>
+            <td data-l="de">der private Schlüssel dazu, PEM, unverschlüsselt; mehrere in derselben
+              Reihenfolge</td>
+            <td data-l="en">its private key, PEM, unencrypted; several in the same order</td></tr>
           <tr><td><code>--tls-ca</code></td><td><code>ATLAS_TLS_CA</code></td><td><code>serve</code>, <code>worker</code>, <code>mcp</code></td>
-            <td data-l="de">CA-Bündel, dem atlas zusätzlich zum Host vertraut, wenn es ein anderes atlas aufruft</td>
-            <td data-l="en">CA bundle atlas trusts in addition to the host's when it calls another atlas</td></tr>
+            <td data-l="de">CA-Bündel, dem atlas zusätzlich zum Host vertraut, wenn es ein anderes atlas oder das
+              Wiki aufruft</td>
+            <td data-l="en">CA bundle atlas trusts in addition to the host's when it calls another atlas or the
+              wiki</td></tr>
         </tbody>
       </table>
 
