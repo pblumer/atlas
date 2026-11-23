@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Erzeugt spop-zusatz.bpmn (Prozess proc_spop_zusatz): python3 tools/gen_bpmn_zusatz.py spop-zusatz.bpmn (aus examples/spop).
 
-Ein Strang je Position für die drei Zusatzprodukte Speicherplatzerweiterung, Erweitertes Reporting und SubSite Quota. Der
+Ein Strang je Position für die zwei Zusatzprodukte Erweitertes Reporting und SubSite Quota. Der
 Strang bezieht sich auf eine Site, die eine andere Position hält; die bestellende Person nennt sie mit ihrer URL, und der
 Strang prüft über die Instanzsuche, dass diese Site ihr gehört.
 """
@@ -28,9 +28,9 @@ EIGEN = (
     'siteUrl: siteUrl }'
 )
 node("z_start", "startEvent", "Zusatzleistung bestellt", 118, M, '<messageEventDefinition messageRef="m_bestellen"/>',
-     doc="Start der Operation provision. Drei Produkte binden diesen Prozess: spop-speicher (Speicherplatzerweiterung, GB), "
+     doc="Start der Operation provision. Zwei Produkte binden diesen Prozess: "
          "spop-reporting (Erweitertes Reporting, Pakete) und spop-subsite-quota (SubSite Quota, Subsites). Formulare "
-         "spop-speicher-bestellung, spop-reporting-bestellung, spop-subsite-bestellung: siteUrl, menge, begruendung.")
+         "spop-reporting-bestellung, spop-subsite-bestellung: siteUrl, menge, begruendung.")
 node("z_procs", "serviceTask", "Site-Prozessversionen lesen", 250, M,
      ext(f'<atlas:restConnector method="GET" url={quoteattr("=" + BASE + ' + "/api/v1/processes"')} authType="bearer" authSecret="atlas" resultVariable="prozesse"/>'),
      doc="Liest die deployten Definitionen (GET /api/v1/processes). Site-Stränge laufen auf der Version, mit der sie bereitgestellt "
@@ -87,7 +87,7 @@ node("g_warten", "eventBasedGateway", "Aktiv: auf Auftrag warten", GX, M, label=
 node("c_rueck", "intermediateCatchEvent", "Rückgabe angefordert", CX, M, '<messageEventDefinition messageRef="m_rueckgabe"/>',
      doc="Operation deprovision (Formular spop-zusatz-rueckgabe: grund).", lw=90)
 node("c_aendern", "intermediateCatchEvent", "Mengenänderung angefragt", CX, QY, '<messageEventDefinition messageRef="m_aendern"/>',
-     doc="Aktion menge-aendern (Formulare spop-speicher-aendern, spop-reporting-aendern, spop-subsite-aendern: menge, begruendung). "
+     doc="Aktion menge-aendern (Formulare spop-reporting-aendern, spop-subsite-aendern: menge, begruendung). "
          "Eine neue Menge kann das Verrechnungsband und damit die Materialnummer wechseln.", lw=90)
 
 W = 1750
@@ -171,8 +171,7 @@ flow("r_f9", "r_bill", "r_info")
 flow("r_f10", "r_info", "r_end")
 
 PROCESS_DOC = """SPoP: Lebenszyklus einer Zusatzleistung zu einer SharePoint-OnPrem-Site, ein Strang je Position (Katalogform per-position).
-Drei Produkte binden diesen Prozess:
-- spop-speicher        Speicherplatzerweiterung (540007510), Menge in GB
+Zwei Produkte binden diesen Prozess (die Speicherplatzerweiterung, 540007510, ist die Aktion quota-erhoehen der Site):
 - spop-reporting       Erweitertes Reporting, 1–20 Pakete: 1–5 = 540007511, 6–10 = 540007703, 11–15 = 540007702, 16–20 = 540007704
 - spop-subsite-quota   SubSite Quota, 11–500 Subsites: 11–20 = 540007513, 21–50 = 540007705, 51–100 = 540007706,
                        101–200 = 540007707, 201–500 = 540007708

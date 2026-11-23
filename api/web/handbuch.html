@@ -6750,15 +6750,15 @@ carla@example.org,admins,GOLD</code></pre></li>
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Ein Angebot an SharePoint-OnPrem-Sites als Katalog: sechs Site-Typen (Hermes, Communication,
-              Publishing, Team Site Classic und Modern, Wiki) und drei Zusatzleistungen (Speicherplatzerweiterung, Erweitertes
-              Reporting, SubSite Quota), deren Stufen Verrechnungsbänder einer Menge sind. Eine Site bestellen, ihre Quota
+              Publishing, Team Site Classic und Modern, Wiki) und zwei Zusatzleistungen (Erweitertes Reporting, SubSite Quota), deren
+              Stufen Verrechnungsbänder einer Menge sind; Zusatzspeicher wird an der Site selbst bestellt. Eine Site bestellen, ihre Quota
               erhöhen und einen externen Benutzer einladen, dazu die Rückgabe. Ämterspezifische Richtlinien
               (Namensregel, Quota-Grenzen, erlaubte Mail-Domains) prüft je eine Entscheidungstabelle; was über der
               Schwelle liegt, gibt eine zweite Person frei. Eine Einladung bekommt ihre Berechtigung erst, wenn sie
               angenommen ist, und wird nach Ablauf der Gültigkeit widerrufen.</p>
             <p data-l="en">An offering of SharePoint OnPrem sites as a catalogue: six site types (Hermes, Communication,
-              Publishing, Team Site Classic and Modern, Wiki) and three add-ons (storage extension, extended reporting, subsite
-              quota) whose tiers are billing bands of a quantity. Order a site, raise its quota and invite an external user,
+              Publishing, Team Site Classic and Modern, Wiki) and two add-ons (extended reporting, subsite quota) whose tiers are
+              billing bands of a quantity; extra storage is ordered on the site itself. Order a site, raise its quota and invite an external user,
               plus the return. Agency-specific rules (naming, quota limits,
               allowed mail domains) are each checked by a decision table; anything above the threshold is approved by a
               second person. An invitation gets its permission only once it is accepted, and is revoked when it
@@ -6767,7 +6767,7 @@ carla@example.org,admins,GOLD</code></pre></li>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Zwei Lebenszyklus-Prozesse in der Katalogform <code>per-position</code>, einer für die sechs
-              Site-Produkte und einer für die drei Zusatzprodukte; eine Entscheidungstabelle leitet aus dem Produkt den Site-Typ
+              Site-Produkte und einer für die zwei Zusatzprodukte; eine Entscheidungstabelle leitet aus dem Produkt den Site-Typ
               bzw. aus der Menge das Verrechnungsband und die Materialnummer ab. Ein einziger Strang je Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b> auf die nächste
               Aktion; Quota-Erhöhung und Einladung sind <b>Subprozesse</b>, nach denen er zum Warten zurückkehrt, und
               die Rückgabe ist ein Catch-Event, ein unterbrechendes Boundary-Event an beiden Subprozessen und ein
@@ -6777,7 +6777,7 @@ carla@example.org,admins,GOLD</code></pre></li>
               (<code>atlas:shopTask</code>), Bereitstellung und Rückgabe die Positionsroute. Die Ausführung gegen das
               Zielsystem ist mit <code>atlas:mockupConnector</code> simuliert.</p>
             <p data-l="en">Two lifecycle processes in the catalogue form <code>per-position</code>, one for the six site
-              products and one for the three add-ons; a decision table derives the site type from the product, or the billing
+              products and one for the two add-ons; a decision table derives the site type from the product, or the billing
               band and material number from the quantity. One strand per position.
               After provisioning it waits at an <b>event-based gateway</b> for the next action; quota increase and
               invitation are <b>subprocesses</b> after which it returns to waiting, and the return is a catch event, an

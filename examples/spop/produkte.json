@@ -1,5 +1,5 @@
 {
-  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Das frühere Produkt spop-teamsite ist zurückgezogen (state withdrawn).",
+  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Zurückgezogen (state withdrawn) sind spop-teamsite und spop-speicher; die Speicherplatzerweiterung ist die Aktion quota-erhoehen («Speicherplatz erweitern») der Site-Produkte.",
   "products": [
     {
       "id": "spop-site-hermes",
@@ -10,7 +10,7 @@
         "de": "SharePoint OnP Project Site Hermes"
       },
       "descriptions": {
-        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Quota erhöhen (PvN-GF-002), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -46,7 +46,7 @@
             "operator"
           ],
           "labels": {
-            "de": "Quota erhöhen"
+            "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
         },
@@ -85,7 +85,7 @@
         "de": "SharePoint OnP Communication Site"
       },
       "descriptions": {
-        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Quota erhöhen (PvN-GF-002), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -121,7 +121,7 @@
             "operator"
           ],
           "labels": {
-            "de": "Quota erhöhen"
+            "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
         },
@@ -160,7 +160,7 @@
         "de": "SharePoint OnP Publishing Site"
       },
       "descriptions": {
-        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Quota erhöhen (PvN-GF-002), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -196,7 +196,7 @@
             "operator"
           ],
           "labels": {
-            "de": "Quota erhöhen"
+            "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
         },
@@ -235,7 +235,7 @@
         "de": "SharePoint OnP Team Site Classic"
       },
       "descriptions": {
-        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Quota erhöhen (PvN-GF-002), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -271,7 +271,7 @@
             "operator"
           ],
           "labels": {
-            "de": "Quota erhöhen"
+            "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
         },
@@ -310,7 +310,7 @@
         "de": "SharePoint OnP Team Site Modern"
       },
       "descriptions": {
-        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Quota erhöhen (PvN-GF-002), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -346,7 +346,7 @@
             "operator"
           ],
           "labels": {
-            "de": "Quota erhöhen"
+            "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
         },
@@ -385,7 +385,7 @@
         "de": "SharePoint OnP Wiki Site"
       },
       "descriptions": {
-        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Quota erhöhen (PvN-GF-002), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -421,7 +421,7 @@
             "operator"
           ],
           "labels": {
-            "de": "Quota erhöhen"
+            "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
         },
@@ -449,68 +449,6 @@
       "category": "sharepoint-sites",
       "categoryTexts": {
         "de": "SharePoint OnP: Sites"
-      }
-    },
-    {
-      "id": "spop-speicher",
-      "homeCatalog": "",
-      "state": "active",
-      "icon": "database",
-      "texts": {
-        "de": "SharePoint OnP Speicherplatzerweiterung"
-      },
-      "descriptions": {
-        "de": "Zusätzlicher Speicher für eine bestehende Site über das Maximum ihres Site-Typs hinaus, verrechnet pro GB und Monat. Material 540007510. PoC: Ausführung und Verrechnung simuliert."
-      },
-      "approval": {
-        "kind": "none"
-      },
-      "lifecycleProcess": "proc_spop_zusatz",
-      "lifecycleForm": "per-position",
-      "configForm": "spop-speicher-bestellung",
-      "actions": [
-        {
-          "key": "provision",
-          "message": "spop.zusatz.bestellen",
-          "effect": "provision"
-        },
-        {
-          "key": "deprovision",
-          "message": "spop.zusatz.rueckgabe",
-          "effect": "deprovision",
-          "triggers": [
-            "customer",
-            "operator"
-          ],
-          "labels": {
-            "de": "Zusatzleistung zurückgeben"
-          },
-          "form": "spop-zusatz-rueckgabe"
-        },
-        {
-          "key": "menge-aendern",
-          "message": "spop.zusatz.aendern",
-          "effect": "change",
-          "triggers": [
-            "customer",
-            "operator"
-          ],
-          "labels": {
-            "de": "Menge ändern"
-          },
-          "form": "spop-speicher-aendern"
-        }
-      ],
-      "multipleAllowed": true,
-      "keywords": [
-        "SharePoint",
-        "OnPrem",
-        "Zusatzleistung",
-        "540007510"
-      ],
-      "category": "sharepoint-zusatz",
-      "categoryTexts": {
-        "de": "SharePoint OnP: Zusatzleistungen"
       }
     },
     {

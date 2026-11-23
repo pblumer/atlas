@@ -89,23 +89,6 @@ decisions = [
                  ("template", "string"), ("features", "string"), ("material", "string"), ("grund", "string")],
         rules=teamsite_rules),
     dict(
-        id="SpopQuotaRichtlinie", name="Quota-Richtlinie (GF-002)",
-        doc="Ersetzt quota_limits.rego und approval.rego. Annahmen: Maximum je Site-Typ wie in der Site-Richtlinie (51200 MB für "
-            "Hermes, Communication, Publishing; 10240 MB sonst); darüber hinaus gilt das Zusatzprodukt Speicherplatzerweiterung; "
-            "Vier-Augen-Prinzip, wenn die Erhöhung mehr als 5120 MB beträgt.",
-        inputs=[("siteGefunden", "boolean"), ("siteTyp", "string"), ("neueQuotaMb", "number"), ("erhoehungMb", "number"),
-                ("begruendungVorhanden", "boolean")],
-        outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("grund", "string")],
-        rules=[
-            (["false", "-", "-", "-", "-"], ["false", "false", S("Die Site wurde nicht gefunden.")]),
-            (["-", "-", "-", "-", "false"], ["false", "false", S("Die Begründung fehlt (mindestens 10 Zeichen).")]),
-            (["-", "-", "-", "<= 0", "-"], ["false", "false", S("Die neue Quota muss grösser als die aktuelle sein.")]),
-            (["-", BIG, "> 51200", "-", "-"], ["false", "false", S("Über dem Maximum des Site-Typs (51200 MB); mehr Speicher über die Speicherplatzerweiterung.")]),
-            (["-", SMALL, "> 10240", "-", "-"], ["false", "false", S("Über dem Maximum des Site-Typs (10240 MB); mehr Speicher über die Speicherplatzerweiterung.")]),
-            (["-", "-", "-", "> 5120", "-"], ["true", "true", S("Erhöhung um mehr als 5120 MB: Vier-Augen-Prinzip.")]),
-            (["-", "-", "-", "-", "-"], ["true", "false", S("Erhöhung bis 5120 MB: ohne Freigabe.")]),
-        ]),
-    dict(
         id="SpopExternRichtlinie", name="Externe-Benutzer-Richtlinie (GF-003)",
         doc="Ersetzt external_user.rego, mfa_required.rego und approval.rego. Annahmen: Liste privater Mail-Domains; "
             "Gültigkeit 1 bis 90 Tage; MFA ist für alle externen Benutzer Pflicht; Vier-Augen-Prinzip ab Contribute.",
@@ -124,7 +107,8 @@ decisions = [
         ]),
     dict(
         id="SpopZusatzRichtlinie", name="Zusatzleistung-Richtlinie",
-        doc="Zulässige Menge, Verrechnungsband und Materialnummer der Zusatzprodukte: Speicherplatzerweiterung 540007510 (GB), "
+        doc="Zulässige Menge, Verrechnungsband und Materialnummer der Zusatzleistungen: Speicherplatzerweiterung 540007510 (GB, "
+            "Aktion quota-erhoehen der Site, Produkt spop-speicher), "
             "Erweitertes Reporting 540007511/540007703/540007702/540007704 (1–5/6–10/11–15/16–20 Pakete), SubSite Quota "
             "540007513/540007705/540007706/540007707/540007708 (11–20/21–50/51–100/101–200/201–500). Annahmen: Speicher 1 bis "
             "500 GB, Freigabe über 100 GB; SubSite Quota bis 10 in der Basis enthalten, Freigabe ab 101. Abgelehnt wird auch, "

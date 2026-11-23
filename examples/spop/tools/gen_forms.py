@@ -37,20 +37,21 @@ forms = {
          "properties": NP},
         {"key": "quotaMb", "type": "number", "label": "Quota (MB)",
          "description": "Minimum 1024 MB; Maximum 10240 MB (Team Sites, Wiki) bzw. 51200 MB (Hermes, Communication, Publishing). "
-                        "Mehr Speicher über das Produkt Speicherplatzerweiterung.",
+                        "Mehr Speicher später über die Aktion «Speicherplatz erweitern».",
          "conditional": {"hide": "=quotaWahl != \"Custom\""}, "validate": {"min": 1024, "max": 51200}, "properties": NP},
         {"key": "quotaBegruendung", "type": "textarea", "label": "Begründung für die individuelle Quota",
          "description": "Pflicht bei individueller Quota, mindestens 10 Zeichen.",
          "conditional": {"hide": "=quotaWahl != \"Custom\""}, "validate": {"minLength": 10}, "properties": NP},
         {"key": "bemerkung", "type": "textarea", "label": "Bemerkung", "properties": NP},
     ]),
-    "spop-quota-erhoehung": ("SPoP: Quota-Erhöhung (GF-002)", [
-        text("**SharePoint OnPrem: Quota-Erhöhung (PvN-GF-002)**\n\nGilt für die TeamSite dieser Position. Die neue Quota muss "
-             "grösser als die aktuelle sein. Eine Erhöhung um mehr als 5120 MB geht in die Vier-Augen-Freigabe."),
-        {"key": "neueQuotaMb", "type": "number", "label": "Neue Quota (MB)",
-         "validate": {"required": True, "min": 1024, "max": 102400}, "properties": NP},
-        {"key": "begruendung", "type": "textarea", "label": "Begründung", "description": "Mindestens 10 Zeichen.",
-         "validate": {"required": True, "minLength": 10}, "properties": NP},
+    "spop-quota-erhoehung": ("SPoP: Speicherplatz erweitern (GF-002)", [
+        text("**SharePoint OnP Speicherplatzerweiterung (PvN-GF-002, Material 540007510)**\n\nZusatzspeicher für die Site dieser "
+             "Position, über ihre inbegriffene Quota hinaus. Anzugeben ist die neue **Gesamtmenge** an Zusatzspeicher in GB, nicht "
+             "die Differenz; 0 ist nicht möglich, für weniger Speicher ist eine kleinere Menge anzugeben. Verrechnung pro GB und "
+             "Monat. Über 100 GB geht die Erweiterung in die Vier-Augen-Freigabe."),
+        {"key": "menge", "type": "number", "label": "Zusatzspeicher gesamt (GB)", "description": "1 bis 500 GB.",
+         "validate": {"required": True, "min": 1, "max": 500}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
     ]),
     "spop-extern-einladen": ("SPoP: Externen Benutzer einladen (GF-003)", [
         text("**SharePoint OnPrem: Externen Benutzer einladen (PvN-GF-003)**\n\nGilt für die TeamSite dieser Position. Private Mail-Domains sind nicht zugelassen; "
@@ -79,16 +80,6 @@ forms = {
         {"key": "freigabeKommentar", "type": "textarea", "label": "Kommentar",
          "description": "Bei einer Ablehnung wird der Kommentar der antragstellenden Person mitgeteilt.", "properties": NP},
     ]),
-    "spop-speicher-bestellung": ("SPoP: Speicherplatzerweiterung bestellen", [
-        text("**SharePoint OnP Speicherplatzerweiterung (540007510)**\n\nZusätzlicher Speicher für eine bestehende Site, über das "
-             "Maximum ihres Site-Typs hinaus. Verrechnung pro GB und Monat. Über 100 GB geht die Bestellung in die Vier-Augen-Freigabe."),
-        {"key": "siteUrl", "type": "textfield", "label": "Site-URL",
-         "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
-         "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
-        {"key": "menge", "type": "number", "label": "Zusatzspeicher (GB)", "description": "1 bis 500 GB.",
-         "validate": {"required": True, "min": 1, "max": 500}, "properties": NP},
-        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
-    ]),
     "spop-reporting-bestellung": ("SPoP: Erweitertes Reporting bestellen", [
         text("**SharePoint OnP Erweitertes Reporting**\n\nReport-Pakete für eine bestehende Site (z. B. Nutzung, Speicher, "
              "Berechtigungen, Performance). CHF 25.– pro Paket. Die Anzahl bestimmt das Verrechnungsband: 1–5, 6–10, 11–15 oder 16–20 Pakete."),
@@ -108,12 +99,6 @@ forms = {
          "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
         {"key": "menge", "type": "number", "label": "Anzahl Subsites", "description": "11 bis 500 Subsites.",
          "validate": {"required": True, "min": 11, "max": 500}, "properties": NP},
-        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
-    ]),
-    "spop-speicher-aendern": ("SPoP: Speicherplatzerweiterung ändern", [
-        text("**Speicherplatzerweiterung ändern**\n\nNeue Gesamtmenge des Zusatzspeichers dieser Position."),
-        {"key": "menge", "type": "number", "label": "Neuer Zusatzspeicher (GB)", "description": "1 bis 500 GB.",
-         "validate": {"required": True, "min": 1, "max": 500}, "properties": NP},
         {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
     ]),
     "spop-reporting-aendern": ("SPoP: Erweitertes Reporting ändern", [

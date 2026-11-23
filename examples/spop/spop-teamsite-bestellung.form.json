@@ -116,7 +116,7 @@
       "key": "quotaMb",
       "type": "number",
       "label": "Quota (MB)",
-      "description": "Minimum 1024 MB; Maximum 10240 MB (Team Sites, Wiki) bzw. 51200 MB (Hermes, Communication, Publishing). Mehr Speicher über das Produkt Speicherplatzerweiterung.",
+      "description": "Minimum 1024 MB; Maximum 10240 MB (Team Sites, Wiki) bzw. 51200 MB (Hermes, Communication, Publishing). Mehr Speicher später über die Aktion «Speicherplatz erweitern».",
       "conditional": {
         "hide": "=quotaWahl != \"Custom\""
       },

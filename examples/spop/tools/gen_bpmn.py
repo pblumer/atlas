@@ -61,9 +61,10 @@ node("a_rechte", "serviceTask", "Berechtigungen zuweisen (S5)", 1780, M + U,
      ext(mock('={ owners: "Full Control", members: "Contribute", visitors: "Read" }', "berechtigungen")),
      doc="Simuliert apsbw_sharepoint_roleassignment create.")
 node("a_quota", "serviceTask", "Quota setzen (S7)", 1630, M,
-     ext(mock('={ siteUrl: site.url, storageMb: regel.quotaEffektivMb }', "quota")),
-     doc="Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota). Schreibt quota, den Stand, "
-         "den die Quota-Erhöhung später liest und fortschreibt.")
+     ext(mock('={ siteUrl: site.url, basisMb: regel.quotaEffektivMb, zusatzGb: 0, storageMb: regel.quotaEffektivMb }', "quota")),
+     doc="Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota). Schreibt quota: die inbegriffene "
+         "Quota des Site-Typs (basisMb), den Zusatzspeicher (zusatzGb, anfangs 0) und die gesetzte Quota (storageMb). Die "
+         "Speicherplatzerweiterung liest und schreibt quota fort.")
 node("a_feat", "serviceTask", "Features aktivieren (S8)", 1630, M + L1,
      ext(mock('={ siteUrl: site.url, features: regel.features }', "features")),
      doc="Simuliert apsbw_sharepoint_feature activate mit den Features des Site-Typs aus der Richtlinie (Annahme).")
@@ -92,38 +93,43 @@ node("c_rueck", "intermediateCatchEvent", "Rückgabe angefordert", CX, M, '<mess
      doc="Operation deprovision (Formular spop-teamsite-rueckgabe: grund).", lw=90)
 node("c_extern", "intermediateCatchEvent", "Einladung angefragt", CX, 330, '<messageEventDefinition messageRef="m_extern"/>',
      doc="GF-003: Aktion extern-einladen (Formular spop-extern-einladen: email, rolle, ablaufTage, nachricht).", lw=90)
-node("c_quota", "intermediateCatchEvent", "Quota-Erhöhung angefragt", CX, 960, '<messageEventDefinition messageRef="m_quota"/>',
-     doc="GF-002: Aktion quota-erhoehen (Formular spop-quota-erhoehung: neueQuotaMb, begruendung).", lw=90)
+node("c_quota", "intermediateCatchEvent", "Speichererweiterung angefragt", CX, 960, '<messageEventDefinition messageRef="m_quota"/>',
+     doc="GF-002: Aktion quota-erhoehen, im Shop «Speicherplatz erweitern» (Formular spop-quota-erhoehung: menge = "
+         "Zusatzspeicher in GB, begruendung).", lw=90)
 
-# ----------------------------------------------------------------------- Subprozess Quota (GF-002), unterhalb
+# ----------------------------------------------------------------------- Subprozess Speicher (GF-002), unterhalb
 QY = 960
+GB = 'if menge = null then 0 else number(string(menge))'
 X = change_sub(
-    SPX, "q", "sp_quota", "quota-erhoehen", "Quota erhöhen (GF-002)", QY, 1600,
-    "GF-002 SP OnPrem Quota-Erhöhung als Subprozess des Strangs, innerhalb des Maximums des Site-Typs; Speicher darüber hinaus "
-    "ist das Zusatzprodukt Speicherplatzerweiterung (Annahme). Liest Site und aktuelle Quota aus dem Strang (site, quota), "
-    "prüft die Richtlinie, holt bei Bedarf die Vier-Augen-Freigabe und schreibt quota fort. Output-Mapping quota: Ergebnisse "
-    "innerer Aufgaben bleiben im Subprozess (ADR-0074); endet er mit einer Ablehnung, löst =quota den unveränderten Wert auf.",
+    SPX, "q", "sp_quota", "quota-erhoehen", "Speicherplatz erweitern (GF-002)", QY, 1600,
+    "GF-002 SP OnPrem Quota-Erhöhung als Speicherplatzerweiterung (Material 540007510, Verrechnung pro GB und Monat): Die "
+    "Aktion nennt die neue Gesamtmenge Zusatzspeicher in GB. Die Site behält ihre inbegriffene Quota (quota.basisMb); die "
+    "gesetzte Quota ist basisMb + zusatzGb × 1024. Die Richtlinie ist SpopZusatzRichtlinie mit dem Produkt spop-speicher: "
+    "1 bis 500 GB, Vier-Augen-Prinzip über 100 GB. Output-Mapping quota: Ergebnisse innerer Aufgaben bleiben im Subprozess "
+    "(ADR-0074); endet er mit einer Ablehnung, löst =quota den unveränderten Wert auf.",
     [("=quota", "quota")],
-    "Site und Quota lesen (S1)",
-    '={ gefunden: site != null, siteUrl: site.url, siteTyp: site.typ, quotaMb: quota.storageMb }',
-    "Simuliert apsbw_sharepoint_site read und apsbw_sharepoint_quota read. Im PoC aus dem Stand des Strangs (site, quota). Schreibt aktuell.",
-    "Quota-Richtlinie prüfen (S3)", "SpopQuotaRichtlinie",
-    [("=aktuell.gefunden", "siteGefunden"), ("=aktuell.siteTyp", "siteTyp"),
-     ("=if neueQuotaMb = null then 0 else number(string(neueQuotaMb))", "neueQuotaMb"),
-     ("=(if neueQuotaMb = null then 0 else number(string(neueQuotaMb))) - aktuell.quotaMb", "erhoehungMb"),
-     ("=begruendung != null and string length(begruendung) >= 10", "begruendungVorhanden")],
-    "DMN SpopQuotaRichtlinie anstelle von quota_limits.rego und approval.rego: Begründung Pflicht, neue Quota grösser als die aktuelle, "
-    "Maximum je Site-Typ, Vier-Augen-Prinzip ab einer Erhöhung um mehr als 5120 MB (Annahme).",
-    '="Quota-Erhöhung (GF-002)\\nSite: " + site.url + " (" + site.typ + ")\\nAktuell: " + string(aktuell.quotaMb) + " MB\\nNeu: " + '
-    'string(neueQuotaMb) + " MB\\nBegründung: " + begruendung + "\\nRegel: " + regel.grund',
-    "Quota-Erhöhung freigeben")
-node("q_apply", "serviceTask", "Quota setzen (S2)", X(1260), QY,
-     ext(mock('={ siteUrl: site.url, storageMb: number(string(neueQuotaMb)), alteQuotaMb: aktuell.quotaMb }', "quota")),
-     doc="Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota) und schreibt quota fort; "
-         "alteQuotaMb bleibt für einen Rollback erhalten.", parent="sp_quota")
+    "Site und Speicher lesen (S1)",
+    '={ gefunden: site != null, siteUrl: site.url, basisMb: if quota.basisMb = null then quota.storageMb else quota.basisMb, '
+    'gb: if quota.zusatzGb = null then 0 else quota.zusatzGb }',
+    "Simuliert apsbw_sharepoint_site read und apsbw_sharepoint_quota read aus dem Stand des Strangs (site, quota). Schreibt aktuell.",
+    "Speicher-Richtlinie prüfen (S3)", "SpopZusatzRichtlinie",
+    [("=aktuell.gefunden", "siteGefunden"), ("=true", "siteGehoert"), ('="spop-speicher"', "produkt"),
+     (f"={GB}", "menge"), (f"=({GB}) = aktuell.gb", "unveraendert")],
+    "DMN SpopZusatzRichtlinie mit dem Produkt spop-speicher: zulässige Menge, Material 540007510, Vier-Augen-Prinzip über "
+    "100 GB. Die Site gehört dem Strang selbst, darum siteGehoert = true.",
+    '="Speicherplatzerweiterung (GF-002, Material " + regel.material + ")\nSite: " + site.url + " (" + site.typ + ")\n'
+    'Zusatzspeicher bisher: " + string(aktuell.gb) + " GB\nNeu: " + string(menge) + " GB" + '
+    '(if begruendung = null then "" else "\nBegründung: " + begruendung) + "\nRegel: " + regel.grund',
+    "Speichererweiterung freigeben")
+node("q_apply", "serviceTask", "Speicher setzen (S2)", X(1260), QY,
+     ext(mock('={ siteUrl: site.url, basisMb: aktuell.basisMb, zusatzGb: number(string(menge)), zusatzGbVorher: aktuell.gb, '
+              'storageMb: aktuell.basisMb + number(string(menge)) * 1024, material: regel.material }', "quota")),
+     doc="Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota) mit basisMb + zusatzGb × 1024 und "
+         "die Umstellung der Verrechnung auf zusatzGb × Material 540007510; zusatzGbVorher bleibt für einen Rollback erhalten.",
+     parent="sp_quota")
 node("q_info", "sendTask", "Aktion als erledigt melden", X(1410), QY, shop("quota-erhoehen", "completed"),
      doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion quota-erhoehen mit completed.", parent="sp_quota")
-node("q_end", "endEvent", "Quota erhöht", X(1540), QY, parent="sp_quota")
+node("q_end", "endEvent", "Speicher erweitert", X(1540), QY, parent="sp_quota")
 flow("q_f10", "q_join", "q_apply", parent="sp_quota")
 flow("q_f11", "q_apply", "q_info", parent="sp_quota")
 flow("q_f12", "q_info", "q_end", parent="sp_quota")
@@ -258,13 +264,13 @@ Sechs Katalogprodukte binden diesen Prozess, je Site-Typ eines: Project Site Her
 Publishing Site (540007515), Team Site Classic (540007516), Team Site Modern (540007560), Wiki Site (540008180). Den Typ, seine
 Vorlage, Features, Quota-Grenzen, Freigabepflicht und Materialnummer bestimmt die Richtlinie SpopTeamsiteRichtlinie aus itemId.
 Bereitstellung (GF-001) läuft flach; danach wartet der Strang am ereignisbasierten Gateway «Aktiv: auf Auftrag warten» auf:
-- spop.teamsite.quota     → Subprozess «Quota erhöhen (GF-002)»                 (Katalog: change, Formular spop-quota-erhoehung)
+- spop.teamsite.quota     → Subprozess «Speicherplatz erweitern (GF-002)»       (Katalog: change, Formular spop-quota-erhoehung)
 - spop.teamsite.extern    → Subprozess «Externen Benutzer einladen (GF-003)»    (Katalog: change, Formular spop-extern-einladen)
 - spop.teamsite.rueckgabe → Rückgabe, auch als Boundary an beiden Subprozessen  (Katalog: deprovision, Formular spop-teamsite-rueckgabe)
 Nach jedem Subprozess kehrt der Strang zum Warten zurück. Alle späteren Aktionen sind an orderId + "/" + positionId korreliert
-(Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, externe). Zusatzleistungen (Speicherplatzerweiterung,
-Erweitertes Reporting, SubSite Quota) sind eigene Produkte mit eigenem Prozess proc_spop_zusatz. Regeln: DMN SpopTeamsiteRichtlinie,
-SpopQuotaRichtlinie, SpopExternRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular spop-freigabe. Ausführung gegen APS-BW
+(Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, externe). Die Speicherplatzerweiterung (540007510, in GB)
+ist die Aktion quota-erhoehen der Site. Erweitertes Reporting und SubSite Quota sind eigene Produkte mit eigenem Prozess
+proc_spop_zusatz. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie (Speicher), SpopExternRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular spop-freigabe. Ausführung gegen APS-BW
 und Verrechnung im PoC simuliert (atlas:mockupConnector). Rückmeldungen an den Katalog sind echt: Decision-Route, Positionsroute
 (Secret "atlas", Konstante ATLAS_API_BASE) und Shop-Aufgaben."""
 
