@@ -41,6 +41,27 @@ aus Produkt und Menge ab; eine Mengenänderung kann das Band wechseln.
 Position hält. Die bestellende Person nennt sie mit ihrer URL. Eine «requires»-Kante im
 Katalog drückt das nicht aus: Sie verlangt jedes Zielprodukt, nicht eines von sechs.
 
+**Eigentumsprüfung:** Der Zusatzprozess nimmt nur eine Site an, die der bestellenden Person
+gehört. «Gehört» heisst: Die Person ist Besteller (`orderer`) oder Empfänger (`recipient`)
+der Site-Position.
+
+| Schritt | Wo | Was |
+|---|---|---|
+| 1 | Site-Strang, «Zugriff registrieren» | setzt `siteZugriff = <URL>\|<Besteller>\|<Empfänger>`, als `atlas:searchable` deklariert |
+| 2 | Zusatz-Strang, «Site-Prozessversionen lesen» | `GET /api/v1/processes`, Versionen von `proc_spop_teamsite` |
+| 3 | Zusatz-Strang, «Site im Bestand suchen» | je Version `GET /api/v1/instances/search?process=<Version>&q=siteZugriff=<URL>\|*` (parallele Mehrfach-Instanz) |
+| 4 | Zusatz-Strang, «Eigentum prüfen» | nur aktive Stränge zählen; `gefunden`, `gehoert` |
+| 5 | `SpopZusatzRichtlinie` | lehnt ab, wenn die Site nicht gefunden wird oder nicht der Person gehört |
+
+Gründe für diesen Weg:
+
+- Der Atlas-Bestand führt keine Site-URL.
+- Fremde Bestände darf nur die Admin-Rolle lesen, die ein API-Token nie hat.
+- Eine Instanzsuche ohne `?process=` durchsucht alle Instanzen des Servers und lief auf einer
+  Installation mit rund 50'000 aktiven Instanzen in ein Timeout.
+- Eine Inhaltssuche liefert je Treffer nur die passende Variable; darum stehen URL, Besteller
+  und Empfänger in einer Variablen.
+
 ## Geschäftsfälle im Site-Prozess
 
 | Geschäftsfall | Inhalt | Im Prozess `proc_spop_teamsite` |
@@ -162,3 +183,14 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
   Aktion an.
 - **Personendaten:** `ownerUpn`, `memberUpns` und `email` sind nicht als Personendaten
   deklariert (`atlas:personal`).
+- **Owner aus dem Formular (offen):** `ownerUpn` zählt bei der Eigentumsprüfung noch nicht.
+  Eine Bestellung übergibt ihren Prozessen nur die Atlas-Kennung der Personen (`orderer`,
+  `recipient`), nicht ihre E-Mail oder UPN, und Benutzerkonten darf nur die Admin-Rolle
+  lesen. Ein Abgleich braucht eine Erweiterung von Atlas, etwa `ordererEmail` als
+  Startvariable einer Position.
+- **Sites ohne `siteZugriff`:** Sites, die vor der Eigentumsprüfung bereitgestellt wurden,
+  tragen die Variable nicht und gelten für Zusatzprodukte als nicht gefunden.
+- **Grösse der Prozessliste:** «Site-Prozessversionen lesen» legt die ganze Antwort von
+  `GET /api/v1/processes` im Strang ab (auf der Testinstallation rund 160 KB). Ein
+  Folgeschritt, der nur die Schlüssel behält, oder eine Abfrage nach Prozess-ID wäre
+  sparsamer.
