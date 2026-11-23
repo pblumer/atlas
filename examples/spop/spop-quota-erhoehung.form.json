@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "spop-quota-erhoehung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: Quota-Erhöhung (PvN-GF-002)**\n\nGilt für die TeamSite dieser Position. Die neue Quota muss grösser als die aktuelle sein. Eine Erhöhung um mehr als 5120 MB geht in die Vier-Augen-Freigabe."
+    },
+    {
+      "key": "neueQuotaMb",
+      "type": "number",
+      "label": "Neue Quota (MB)",
+      "validate": {
+        "required": true,
+        "min": 1024,
+        "max": 102400
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "description": "Mindestens 10 Zeichen.",
+      "validate": {
+        "required": true,
+        "minLength": 10
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

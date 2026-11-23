@@ -1,0 +1,168 @@
+{
+  "type": "default",
+  "id": "spop-teamsite-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: TeamSite bestellen (PvN-GF-001)**\n\nClean Order: Das Formular enthält alle Angaben, die die Bereitstellung braucht. Standard-Sites mit Standardquota laufen ohne Freigabe; alle anderen Bestellungen gehen in die Vier-Augen-Freigabe."
+    },
+    {
+      "key": "titel",
+      "type": "textfield",
+      "label": "Titel der TeamSite",
+      "validate": {
+        "required": true,
+        "maxLength": 80
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "amtKuerzel",
+      "type": "textfield",
+      "label": "Amtskürzel",
+      "description": "2 bis 6 Grossbuchstaben, z. B. BIT. Bildet zusammen mit dem Site-Typ die URL.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Z]{2,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "siteTyp",
+      "type": "select",
+      "label": "Site-Typ",
+      "defaultValue": "Standard",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        {
+          "label": "Standard",
+          "value": "Standard"
+        },
+        {
+          "label": "Projekt (Project)",
+          "value": "Project"
+        },
+        {
+          "label": "Abteilung (Department)",
+          "value": "Department"
+        }
+      ],
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sprache",
+      "type": "select",
+      "label": "Sprache",
+      "defaultValue": "1031",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        {
+          "label": "Deutsch",
+          "value": "1031"
+        },
+        {
+          "label": "Französisch",
+          "value": "1036"
+        },
+        {
+          "label": "Italienisch",
+          "value": "1040"
+        },
+        {
+          "label": "Englisch",
+          "value": "1033"
+        }
+      ],
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ownerUpn",
+      "type": "textfield",
+      "label": "Owner (UPN)",
+      "description": "Verantwortliche Person, z. B. vorname.name@admin.ch. Wird in die Owner-Gruppe aufgenommen.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "memberUpns",
+      "type": "textarea",
+      "label": "Members (UPN, eine pro Zeile)",
+      "description": "Optional. Werden in die Member-Gruppe aufgenommen."
+    },
+    {
+      "key": "quotaWahl",
+      "type": "radio",
+      "label": "Speicherquota",
+      "defaultValue": "Standard",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        {
+          "label": "Standard des Site-Typs",
+          "value": "Standard"
+        },
+        {
+          "label": "Individuell (Custom)",
+          "value": "Custom"
+        }
+      ],
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "quotaMb",
+      "type": "number",
+      "label": "Quota (MB)",
+      "description": "Minimum 1024 MB; Maximum Standard 10240, Project 51200, Department 102400 MB.",
+      "conditional": {
+        "hide": "=quotaWahl != \"Custom\""
+      },
+      "validate": {
+        "min": 1024,
+        "max": 102400
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "quotaBegruendung",
+      "type": "textarea",
+      "label": "Begründung für die individuelle Quota",
+      "description": "Pflicht bei individueller Quota, mindestens 10 Zeichen.",
+      "conditional": {
+        "hide": "=quotaWahl != \"Custom\""
+      },
+      "validate": {
+        "minLength": 10
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}
