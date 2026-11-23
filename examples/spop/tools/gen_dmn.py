@@ -48,7 +48,7 @@ SMALL = ",".join(S(t[0]) for t in TYPES if t[6] == 10240)
 
 
 def band(item, rng, mat, unit, ve, text):
-    return (["-", S(item), rng, "-"], ["true", "true" if ve else "false", S(mat), S(unit), S(text)])
+    return (["-", "-", S(item), rng, "-"], ["true", "true" if ve else "false", S(mat), S(unit), S(text)])
 
 
 def zreject(inputs, text):
@@ -56,23 +56,24 @@ def zreject(inputs, text):
 
 
 zusatz_rules = [
-    zreject(["false", "-", "-", "-"], "Die Site wurde nicht gefunden (URL /sites/…)."),
-    zreject(["-", "-", "-", "true"], "Die Menge ist unverändert."),
+    zreject(["false", "-", "-", "-", "-"], "Die Site wurde nicht gefunden: kein aktiver Site-Strang mit dieser URL (/sites/<amt>-<kurzname>)."),
+    zreject(["-", "false", "-", "-", "-"], "Die Site gehört nicht der bestellenden Person: sie ist weder Besteller noch Empfänger der Site-Position."),
+    zreject(["-", "-", "-", "-", "true"], "Die Menge ist unverändert."),
     band("spop-speicher", "[1..100]", "540007510", "GB", False, "Speicherplatzerweiterung bis 100 GB: ohne Freigabe."),
     band("spop-speicher", "(100..500]", "540007510", "GB", True, "Speicherplatzerweiterung über 100 GB: Vier-Augen-Prinzip."),
-    zreject(["-", S("spop-speicher"), "-", "-"], "Speicherplatzerweiterung: 1 bis 500 GB."),
+    zreject(["-", "-", S("spop-speicher"), "-", "-"], "Speicherplatzerweiterung: 1 bis 500 GB."),
     band("spop-reporting", "[1..5]", "540007511", "Pakete", False, "Erweitertes Reporting 1–5 Pakete."),
     band("spop-reporting", "[6..10]", "540007703", "Pakete", False, "Erweitertes Reporting 6–10 Pakete."),
     band("spop-reporting", "[11..15]", "540007702", "Pakete", False, "Erweitertes Reporting 11–15 Pakete."),
     band("spop-reporting", "[16..20]", "540007704", "Pakete", False, "Erweitertes Reporting 16–20 Pakete."),
-    zreject(["-", S("spop-reporting"), "-", "-"], "Erweitertes Reporting: 1 bis 20 Pakete."),
+    zreject(["-", "-", S("spop-reporting"), "-", "-"], "Erweitertes Reporting: 1 bis 20 Pakete."),
     band("spop-subsite-quota", "[11..20]", "540007513", "Subsites", False, "SubSite Quota 11–20."),
     band("spop-subsite-quota", "[21..50]", "540007705", "Subsites", False, "SubSite Quota 21–50."),
     band("spop-subsite-quota", "[51..100]", "540007706", "Subsites", False, "SubSite Quota 51–100."),
     band("spop-subsite-quota", "[101..200]", "540007707", "Subsites", True, "SubSite Quota 101–200: Vier-Augen-Prinzip."),
     band("spop-subsite-quota", "[201..500]", "540007708", "Subsites", True, "SubSite Quota 201–500: Vier-Augen-Prinzip."),
-    zreject(["-", S("spop-subsite-quota"), "-", "-"], "SubSite Quota: 11 bis 500 Subsites; bis 10 sind in der Basis enthalten."),
-    zreject(["-", "-", "-", "-"], "Unbekanntes Produkt: keine SPoP-Zusatzleistung."),
+    zreject(["-", "-", S("spop-subsite-quota"), "-", "-"], "SubSite Quota: 11 bis 500 Subsites; bis 10 sind in der Basis enthalten."),
+    zreject(["-", "-", "-", "-", "-"], "Unbekanntes Produkt: keine SPoP-Zusatzleistung."),
 ]
 
 decisions = [
@@ -126,8 +127,9 @@ decisions = [
         doc="Zulässige Menge, Verrechnungsband und Materialnummer der Zusatzprodukte: Speicherplatzerweiterung 540007510 (GB), "
             "Erweitertes Reporting 540007511/540007703/540007702/540007704 (1–5/6–10/11–15/16–20 Pakete), SubSite Quota "
             "540007513/540007705/540007706/540007707/540007708 (11–20/21–50/51–100/101–200/201–500). Annahmen: Speicher 1 bis "
-            "500 GB, Freigabe über 100 GB; SubSite Quota bis 10 in der Basis enthalten, Freigabe ab 101.",
-        inputs=[("siteGefunden", "boolean"), ("produkt", "string"), ("menge", "number"), ("unveraendert", "boolean")],
+            "500 GB, Freigabe über 100 GB; SubSite Quota bis 10 in der Basis enthalten, Freigabe ab 101. Abgelehnt wird auch, "
+            "wenn die Site nicht aktiv ist oder nicht der bestellenden Person gehört (siteGefunden, siteGehoert).",
+        inputs=[("siteGefunden", "boolean"), ("siteGehoert", "boolean"), ("produkt", "string"), ("menge", "number"), ("unveraendert", "boolean")],
         outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("material", "string"), ("einheit", "string"), ("grund", "string")],
         rules=zusatz_rules),
 ]

@@ -12,13 +12,17 @@ Drei Produkte binden diesen Prozess:
                        101–200 = 540007707, 201–500 = 540007708
 Die Stufen sind Verrechnungsbänder einer Menge, keine eigenen Produkte: die Richtlinie SpopZusatzRichtlinie leitet Band und
 Materialnummer aus Produkt und Menge ab. Die Site nennt die bestellende Person mit ihrer URL (siteUrl), weil sie einer anderen
-Position gehört. Nach der Bereitstellung wartet der Strang auf spop.zusatz.aendern (Subprozess «Menge ändern») oder
+Position gehört. Der Strang sucht diese Position über die Instanzsuche (Secret "atlas") und lehnt ab, wenn die Site nicht
+aktiv ist oder nicht der bestellenden Person gehört (sie muss Besteller oder Empfänger der Site-Position sein). Nach der
+Bereitstellung wartet der Strang auf spop.zusatz.aendern (Subprozess «Menge ändern») oder
 spop.zusatz.rueckgabe (auch als Boundary am Subprozess). Ausführung und Verrechnung im PoC simuliert; Rückmeldungen an den
 Katalog echt (Decision-Route, Positionsroute mit Secret "atlas", Shop-Aufgaben).</documentation>
 <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" value="http://127.0.0.1:8080" source="application"/></atlas:constants></extensionElements>
 <startEvent id="z_start" name="Zusatzleistung bestellt"><documentation>Start der Operation provision. Drei Produkte binden diesen Prozess: spop-speicher (Speicherplatzerweiterung, GB), spop-reporting (Erweitertes Reporting, Pakete) und spop-subsite-quota (SubSite Quota, Subsites). Formulare spop-speicher-bestellung, spop-reporting-bestellung, spop-subsite-bestellung: siteUrl, menge, begruendung.</documentation><outgoing>z_f0</outgoing><messageEventDefinition messageRef="m_bestellen"/></startEvent>
-<serviceTask id="z_read" name="Site prüfen"><documentation>Simuliert apsbw_sharepoint_site read für die genannte Site. Im Zielbild prüft dieser Schritt auch, dass die Site derselben Organisationseinheit gehört wie die bestellende Person. Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ gefunden: siteUrl != null and matches(siteUrl, "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"), siteUrl: siteUrl }' resultVariable="aktuell"/></extensionElements><incoming>z_f0</incoming><outgoing>z_f1</outgoing></serviceTask>
-<businessRuleTask id="z_regel" name="Zusatz-Richtlinie prüfen"><documentation>DMN SpopZusatzRichtlinie: zulässige Menge je Produkt, Verrechnungsband und Materialnummer (z. B. Reporting 6–10 Pakete = 540007703), Vier-Augen-Pflicht. Liefert regel = {zulaessig, vierAugen, material, einheit, grund}.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopZusatzRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source="=itemId" target="produkt"/><zeebe:input source="=if menge = null then 0 else number(string(menge))" target="menge"/><zeebe:input source="=false" target="unveraendert"/></zeebe:ioMapping></extensionElements><incoming>z_f1</incoming><outgoing>z_f2</outgoing></businessRuleTask>
+<serviceTask id="z_procs" name="Site-Prozessversionen lesen"><documentation>Liest die deployten Definitionen (GET /api/v1/processes). Site-Stränge laufen auf der Version, mit der sie bereitgestellt wurden; gesucht wird deshalb in jeder Version von proc_spop_teamsite. Braucht das Secret "atlas". Schreibt prozesse.</documentation><extensionElements><atlas:restConnector method="GET" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/processes"' authType="bearer" authSecret="atlas" resultVariable="prozesse"/></extensionElements><incoming>z_f0</incoming><outgoing>z_f0b</outgoing></serviceTask>
+<serviceTask id="z_read" name="Site im Bestand suchen"><documentation>Parallele Mehrfach-Instanz, eine je Version von proc_spop_teamsite: GET /api/v1/instances/search?process=&lt;Version&gt;&amp;q=siteZugriff=&lt;Site-URL&gt;|*. Die Einschränkung auf eine Version liest deren Index statt aller Instanzen des Servers; siteZugriff ist im Site-Prozess als atlas:searchable deklariert. Die Instanzsuche verlangt die Rolle operator (Secret "atlas"). Schreibt treffer, die Liste der Antworten.</documentation><extensionElements><atlas:restConnector method="GET" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/instances/search?process=" + string(siteDefKey) + "&amp;q=siteZugriff%3D" + siteUrl + "%7C*&amp;values=preview"' authType="bearer" authSecret="atlas" resultVariable="trefferVersion"/></extensionElements><incoming>z_f0b</incoming><outgoing>z_f1</outgoing><multiInstanceLoopCharacteristics><extensionElements><zeebe:loopCharacteristics inputCollection="=prozesse[processId = &quot;proc_spop_teamsite&quot;].key" inputElement="siteDefKey" outputCollection="treffer" outputElement="=trefferVersion"/></extensionElements></multiInstanceLoopCharacteristics></serviceTask>
+<scriptTask id="z_eigen" name="Eigentum prüfen"><documentation>Prüft, ob die genannte Site der bestellenden Person gehört: Unter den Treffern zählen nur aktive Site-Stränge, deren siteZugriff mit der Site-URL beginnt. Die Site gehört der Person, wenn ihr orderer (sie bestellt die Zusatzleistung) Besteller oder Empfänger der Site-Position ist. Schreibt aktuell = {gefunden, gehoert, siteUrl}. Eine zurückgegebene Site hat keinen aktiven Strang mehr und gilt als nicht gefunden.</documentation><extensionElements><zeebe:script expression='={ zugriffe: flatten(for p in (if treffer = null then [] else treffer) return (if p = null or p.items = null then [] else for t in p.items[state = "active"] return t.variables[name = "siteZugriff"][1].value)), passend: zugriffe[item != null and starts with(item, siteUrl + "|")], gefunden: count(passend) &gt; 0, gehoert: some z in passend satisfies contains(z + "|", "|" + orderer + "|"), siteUrl: siteUrl }' resultVariable="aktuell"/></extensionElements><incoming>z_f1</incoming><outgoing>z_f1b</outgoing></scriptTask>
+<businessRuleTask id="z_regel" name="Zusatz-Richtlinie prüfen"><documentation>DMN SpopZusatzRichtlinie: zulässige Menge je Produkt, Verrechnungsband und Materialnummer (z. B. Reporting 6–10 Pakete = 540007703), Vier-Augen-Pflicht. Liefert regel = {zulaessig, vierAugen, material, einheit, grund}.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopZusatzRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source="=aktuell.gehoert" target="siteGehoert"/><zeebe:input source="=itemId" target="produkt"/><zeebe:input source="=if menge = null then 0 else number(string(menge))" target="menge"/><zeebe:input source="=false" target="unveraendert"/></zeebe:ioMapping></extensionElements><incoming>z_f1b</incoming><outgoing>z_f2</outgoing></businessRuleTask>
 <exclusiveGateway id="z_gw_ok" name="Zulässig?" default="z_f_ok_nein"><documentation>Fail-closed: Der Default-Fluss ist die Ablehnung.</documentation><incoming>z_f2</incoming><outgoing>z_f_ok_ja</outgoing><outgoing>z_f_ok_nein</outgoing></exclusiveGateway>
 <exclusiveGateway id="z_gw_4e" name="Vier-Augen nötig?" default="z_f_4e_nein"><incoming>z_f_ok_ja</incoming><outgoing>z_f_4e_ja</outgoing><outgoing>z_f_4e_nein</outgoing></exclusiveGateway>
 <serviceTask id="z_rej1" name="Ablehnung melden"><documentation>Meldet die Ablehnung über die Decision-Route der Position mit dem Grund der Richtlinie. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + itemId + "/decision"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="Richtlinie SpopZusatzRichtlinie"' target="by"/><zeebe:input source="=regel.grund" target="reason"/></zeebe:ioMapping></extensionElements><incoming>z_f_ok_nein</incoming><outgoing>z_f_rej1</outgoing></serviceTask>
@@ -38,7 +42,7 @@ Katalog echt (Decision-Route, Positionsroute mit Secret "atlas", Shop-Aufgaben).
 <intermediateCatchEvent id="c_aendern" name="Mengenänderung angefragt"><documentation>Aktion menge-aendern (Formulare spop-speicher-aendern, spop-reporting-aendern, spop-subsite-aendern: menge, begruendung). Eine neue Menge kann das Verrechnungsband und damit die Materialnummer wechseln.</documentation><incoming>w_f4</incoming><outgoing>w_f6</outgoing><messageEventDefinition messageRef="m_aendern"/></intermediateCatchEvent>
 <subProcess id="sp_aendern" name="Menge ändern"><documentation>Ändert die Menge der Zusatzleistung: Richtlinie mit der neuen Menge, bei Bedarf Vier-Augen-Freigabe, Anpassung und Verrechnung im neuen Band. Output-Mapping bestand: Ergebnisse innerer Aufgaben bleiben im Subprozess (ADR-0074).</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=bestand" target="bestand"/></zeebe:ioMapping></extensionElements><incoming>w_f6</incoming><outgoing>w_f8</outgoing><startEvent id="m_s"><outgoing>m_f0</outgoing></startEvent>
 <serviceTask id="m_read" name="Bestand lesen"><documentation>Liest den Stand des Strangs (bestand). Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ gefunden: bestand != null, siteUrl: bestand.siteUrl, menge: bestand.menge }" resultVariable="aktuell"/></extensionElements><incoming>m_f0</incoming><outgoing>m_f1</outgoing></serviceTask>
-<businessRuleTask id="m_regel" name="Zusatz-Richtlinie prüfen"><documentation>DMN SpopZusatzRichtlinie mit der neuen Menge; eine unveränderte Menge wird abgelehnt.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopZusatzRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source="=itemId" target="produkt"/><zeebe:input source="=if menge = null then 0 else number(string(menge))" target="menge"/><zeebe:input source="=(if menge = null then 0 else number(string(menge))) = aktuell.menge" target="unveraendert"/></zeebe:ioMapping></extensionElements><incoming>m_f1</incoming><outgoing>m_f2</outgoing></businessRuleTask>
+<businessRuleTask id="m_regel" name="Zusatz-Richtlinie prüfen"><documentation>DMN SpopZusatzRichtlinie mit der neuen Menge; eine unveränderte Menge wird abgelehnt.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopZusatzRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source="=true" target="siteGehoert"/><zeebe:input source="=itemId" target="produkt"/><zeebe:input source="=if menge = null then 0 else number(string(menge))" target="menge"/><zeebe:input source="=(if menge = null then 0 else number(string(menge))) = aktuell.menge" target="unveraendert"/></zeebe:ioMapping></extensionElements><incoming>m_f1</incoming><outgoing>m_f2</outgoing></businessRuleTask>
 <exclusiveGateway id="m_gw_ok" name="Zulässig?" default="m_f_ok_nein"><incoming>m_f2</incoming><outgoing>m_f_ok_ja</outgoing><outgoing>m_f_ok_nein</outgoing></exclusiveGateway>
 <exclusiveGateway id="m_gw_4e" name="Vier-Augen nötig?" default="m_f_4e_nein"><incoming>m_f_ok_ja</incoming><outgoing>m_f_4e_ja</outgoing><outgoing>m_f_4e_nein</outgoing></exclusiveGateway>
 <sendTask id="m_rej1" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion menge-aendern mit rejected, weil die Richtlinie sie nicht zulässt.</documentation><extensionElements><atlas:shopTask mode="outcome" action="menge-aendern" outcome="rejected"/></extensionElements><incoming>m_f_ok_nein</incoming><outgoing>m_f_rej1</outgoing></sendTask>
@@ -91,8 +95,10 @@ Katalog echt (Decision-Route, Positionsroute mit Secret "atlas", Shop-Aufgaben).
 <sequenceFlow id="z_f_fr_ja" name="Ja" sourceRef="z_gw_fr" targetRef="z_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
 <sequenceFlow id="z_f_fr_nein" name="Nein" sourceRef="z_gw_fr" targetRef="z_rej2"/>
 <sequenceFlow id="z_f_rej2" sourceRef="z_rej2" targetRef="z_end_rej2"/>
-<sequenceFlow id="z_f0" sourceRef="z_start" targetRef="z_read"/>
-<sequenceFlow id="z_f1" sourceRef="z_read" targetRef="z_regel"/>
+<sequenceFlow id="z_f0" sourceRef="z_start" targetRef="z_procs"/>
+<sequenceFlow id="z_f0b" sourceRef="z_procs" targetRef="z_read"/>
+<sequenceFlow id="z_f1" sourceRef="z_read" targetRef="z_eigen"/>
+<sequenceFlow id="z_f1b" sourceRef="z_eigen" targetRef="z_regel"/>
 <sequenceFlow id="z_f3" sourceRef="z_join" targetRef="z_apply"/>
 <sequenceFlow id="z_f4" sourceRef="z_apply" targetRef="z_bill"/>
 <sequenceFlow id="z_f5" sourceRef="z_bill" targetRef="z_done"/>
@@ -114,99 +120,103 @@ Katalog echt (Decision-Route, Positionsroute mit Secret "atlas", Shop-Aufgaben).
 </process>
 <bpmndi:BPMNDiagram id="dia_proc_spop_zusatz"><bpmndi:BPMNPlane id="plane_proc_spop_zusatz" bpmnElement="proc_spop_zusatz">
 <bpmndi:BPMNShape id="d1" bpmnElement="z_start"><dc:Bounds x="100" y="282" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="63" y="322" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d2" bpmnElement="z_read"><dc:Bounds x="200" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d3" bpmnElement="z_regel"><dc:Bounds x="350" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d4" bpmnElement="z_gw_ok"><dc:Bounds x="525" y="275" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="518.5" y="329" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d5" bpmnElement="z_gw_4e"><dc:Bounds x="655" y="275" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="625" y="242" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d6" bpmnElement="z_rej1"><dc:Bounds x="630" y="110" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d7" bpmnElement="z_end_rej1"><dc:Bounds x="792" y="132" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="755" y="172" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d8" bpmnElement="z_prep"><dc:Bounds x="760" y="410" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d9" bpmnElement="z_ut"><dc:Bounds x="910" y="410" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d10" bpmnElement="z_gw_fr"><dc:Bounds x="1085" y="425" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1068" y="405" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d11" bpmnElement="z_rej2"><dc:Bounds x="1190" y="540" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d12" bpmnElement="z_end_rej2"><dc:Bounds x="1352" y="562" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1315" y="602" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d13" bpmnElement="z_join"><dc:Bounds x="1215" y="275" width="50" height="50"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d14" bpmnElement="z_apply"><dc:Bounds x="1320" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d15" bpmnElement="z_bill"><dc:Bounds x="1470" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d16" bpmnElement="z_done"><dc:Bounds x="1620" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d17" bpmnElement="j_aktiv"><dc:Bounds x="1775" y="275" width="50" height="50"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d18" bpmnElement="g_warten"><dc:Bounds x="1935" y="275" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1825" y="238" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d19" bpmnElement="c_rueck"><dc:Bounds x="2052" y="282" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2025" y="322" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d20" bpmnElement="c_aendern"><dc:Bounds x="2052" y="542" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2025" y="582" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d21" bpmnElement="sp_aendern" isExpanded="true"><dc:Bounds x="2120" y="380" width="1750" height="480"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d22" bpmnElement="m_s"><dc:Bounds x="2142" y="542" width="36" height="36"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d23" bpmnElement="m_read"><dc:Bounds x="2210" y="520" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d24" bpmnElement="m_regel"><dc:Bounds x="2360" y="520" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d25" bpmnElement="m_gw_ok"><dc:Bounds x="2535" y="535" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="2528.5" y="589" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d26" bpmnElement="m_gw_4e"><dc:Bounds x="2665" y="535" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="2635" y="502" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d27" bpmnElement="m_rej1"><dc:Bounds x="2640" y="400" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d28" bpmnElement="m_end_rej1"><dc:Bounds x="2802" y="422" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2765" y="462" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d29" bpmnElement="m_prep"><dc:Bounds x="2770" y="640" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d30" bpmnElement="m_ut"><dc:Bounds x="2920" y="640" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d31" bpmnElement="m_gw_fr"><dc:Bounds x="3095" y="655" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3078" y="635" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d32" bpmnElement="m_rej2"><dc:Bounds x="3200" y="740" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d33" bpmnElement="m_end_rej2"><dc:Bounds x="3362" y="762" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3325" y="802" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d34" bpmnElement="m_join"><dc:Bounds x="3225" y="535" width="50" height="50"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d35" bpmnElement="m_apply"><dc:Bounds x="3330" y="520" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d36" bpmnElement="m_bill"><dc:Bounds x="3480" y="520" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d37" bpmnElement="m_info"><dc:Bounds x="3630" y="520" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d38" bpmnElement="m_end"><dc:Bounds x="3792" y="542" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3761" y="582" width="98" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d39" bpmnElement="b_rueck"><dc:Bounds x="3792" y="362" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3832" y="346" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d40" bpmnElement="j_rueck1"><dc:Bounds x="3785" y="275" width="50" height="50"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d41" bpmnElement="j_rueck2"><dc:Bounds x="4175" y="275" width="50" height="50"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d42" bpmnElement="r_start"><dc:Bounds x="3922" y="542" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3890" y="582" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d43" bpmnElement="r_bestand"><dc:Bounds x="4020" y="520" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d44" bpmnElement="r_remove"><dc:Bounds x="4280" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d45" bpmnElement="r_bill"><dc:Bounds x="4430" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d46" bpmnElement="r_info"><dc:Bounds x="4580" y="260" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d47" bpmnElement="r_end"><dc:Bounds x="4742" y="282" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4705" y="322" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNEdge id="d48" bpmnElement="z_f2"><di:waypoint x="450" y="300"/><di:waypoint x="525" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d49" bpmnElement="z_f_ok_ja"><di:waypoint x="575" y="300"/><di:waypoint x="655" y="300"/><bpmndi:BPMNLabel><dc:Bounds x="584" y="278" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d50" bpmnElement="z_f_ok_nein"><di:waypoint x="550" y="275"/><di:waypoint x="550" y="150"/><di:waypoint x="630" y="150"/><bpmndi:BPMNLabel><dc:Bounds x="558" y="200" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d51" bpmnElement="z_f_rej1"><di:waypoint x="730" y="150"/><di:waypoint x="792" y="150"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d52" bpmnElement="z_f_4e_ja"><di:waypoint x="680" y="325"/><di:waypoint x="680" y="450"/><di:waypoint x="760" y="450"/><bpmndi:BPMNLabel><dc:Bounds x="688" y="400" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d53" bpmnElement="z_f_4e_nein"><di:waypoint x="705" y="300"/><di:waypoint x="1215" y="300"/><bpmndi:BPMNLabel><dc:Bounds x="715" y="278" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d54" bpmnElement="z_f_prep"><di:waypoint x="860" y="450"/><di:waypoint x="910" y="450"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d55" bpmnElement="z_f_ut"><di:waypoint x="1010" y="450"/><di:waypoint x="1085" y="450"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d56" bpmnElement="z_f_fr_ja"><di:waypoint x="1135" y="450"/><di:waypoint x="1240" y="450"/><di:waypoint x="1240" y="325"/><bpmndi:BPMNLabel><dc:Bounds x="1145" y="428" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d57" bpmnElement="z_f_fr_nein"><di:waypoint x="1110" y="475"/><di:waypoint x="1110" y="580"/><di:waypoint x="1190" y="580"/><bpmndi:BPMNLabel><dc:Bounds x="1118" y="520" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d58" bpmnElement="z_f_rej2"><di:waypoint x="1290" y="580"/><di:waypoint x="1352" y="580"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d59" bpmnElement="m_f0"><di:waypoint x="2178" y="560"/><di:waypoint x="2210" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d60" bpmnElement="m_f1"><di:waypoint x="2310" y="560"/><di:waypoint x="2360" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d61" bpmnElement="m_f2"><di:waypoint x="2460" y="560"/><di:waypoint x="2535" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d62" bpmnElement="m_f_ok_ja"><di:waypoint x="2585" y="560"/><di:waypoint x="2665" y="560"/><bpmndi:BPMNLabel><dc:Bounds x="2594" y="538" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d63" bpmnElement="m_f_ok_nein"><di:waypoint x="2560" y="535"/><di:waypoint x="2560" y="440"/><di:waypoint x="2640" y="440"/><bpmndi:BPMNLabel><dc:Bounds x="2568" y="480" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d64" bpmnElement="m_f_rej1"><di:waypoint x="2740" y="440"/><di:waypoint x="2802" y="440"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d65" bpmnElement="m_f_4e_ja"><di:waypoint x="2690" y="585"/><di:waypoint x="2690" y="680"/><di:waypoint x="2770" y="680"/><bpmndi:BPMNLabel><dc:Bounds x="2698" y="630" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d66" bpmnElement="m_f_4e_nein"><di:waypoint x="2715" y="560"/><di:waypoint x="3225" y="560"/><bpmndi:BPMNLabel><dc:Bounds x="2725" y="538" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d67" bpmnElement="m_f_prep"><di:waypoint x="2870" y="680"/><di:waypoint x="2920" y="680"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d68" bpmnElement="m_f_ut"><di:waypoint x="3020" y="680"/><di:waypoint x="3095" y="680"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d69" bpmnElement="m_f_fr_ja"><di:waypoint x="3145" y="680"/><di:waypoint x="3250" y="680"/><di:waypoint x="3250" y="585"/><bpmndi:BPMNLabel><dc:Bounds x="3155" y="658" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d70" bpmnElement="m_f_fr_nein"><di:waypoint x="3120" y="705"/><di:waypoint x="3120" y="780"/><di:waypoint x="3200" y="780"/><bpmndi:BPMNLabel><dc:Bounds x="3128" y="730" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d71" bpmnElement="m_f_rej2"><di:waypoint x="3300" y="780"/><di:waypoint x="3362" y="780"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d72" bpmnElement="m_f10"><di:waypoint x="3275" y="560"/><di:waypoint x="3330" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d73" bpmnElement="m_f11"><di:waypoint x="3430" y="560"/><di:waypoint x="3480" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d74" bpmnElement="m_f12"><di:waypoint x="3580" y="560"/><di:waypoint x="3630" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d75" bpmnElement="m_f13"><di:waypoint x="3730" y="560"/><di:waypoint x="3792" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d76" bpmnElement="z_f0"><di:waypoint x="136" y="300"/><di:waypoint x="200" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d77" bpmnElement="z_f1"><di:waypoint x="300" y="300"/><di:waypoint x="350" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d78" bpmnElement="z_f3"><di:waypoint x="1265" y="300"/><di:waypoint x="1320" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d79" bpmnElement="z_f4"><di:waypoint x="1420" y="300"/><di:waypoint x="1470" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d80" bpmnElement="z_f5"><di:waypoint x="1570" y="300"/><di:waypoint x="1620" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d81" bpmnElement="z_f6"><di:waypoint x="1720" y="300"/><di:waypoint x="1775" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d82" bpmnElement="w_f1"><di:waypoint x="1825" y="300"/><di:waypoint x="1935" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d83" bpmnElement="w_f2"><di:waypoint x="1985" y="300"/><di:waypoint x="2052" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d84" bpmnElement="w_f4"><di:waypoint x="1960" y="325"/><di:waypoint x="1960" y="560"/><di:waypoint x="2052" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d85" bpmnElement="w_f6"><di:waypoint x="2088" y="560"/><di:waypoint x="2120" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d86" bpmnElement="w_f8"><di:waypoint x="2150" y="860"/><di:waypoint x="2150" y="890"/><di:waypoint x="1800" y="890"/><di:waypoint x="1800" y="325"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d87" bpmnElement="r_f1"><di:waypoint x="2088" y="300"/><di:waypoint x="3785" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d88" bpmnElement="r_f2"><di:waypoint x="3810" y="362"/><di:waypoint x="3810" y="325"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d89" bpmnElement="r_f3"><di:waypoint x="3835" y="300"/><di:waypoint x="4175" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d90" bpmnElement="r_f5"><di:waypoint x="3958" y="560"/><di:waypoint x="4020" y="560"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d91" bpmnElement="r_f6"><di:waypoint x="4120" y="560"/><di:waypoint x="4200" y="560"/><di:waypoint x="4200" y="325"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d92" bpmnElement="r_f7"><di:waypoint x="4225" y="300"/><di:waypoint x="4280" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d93" bpmnElement="r_f8"><di:waypoint x="4380" y="300"/><di:waypoint x="4430" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d94" bpmnElement="r_f9"><di:waypoint x="4530" y="300"/><di:waypoint x="4580" y="300"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d95" bpmnElement="r_f10"><di:waypoint x="4680" y="300"/><di:waypoint x="4742" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNShape id="d2" bpmnElement="z_procs"><dc:Bounds x="200" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d3" bpmnElement="z_read"><dc:Bounds x="350" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d4" bpmnElement="z_eigen"><dc:Bounds x="500" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d5" bpmnElement="z_regel"><dc:Bounds x="650" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d6" bpmnElement="z_gw_ok"><dc:Bounds x="825" y="275" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="818.5" y="329" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d7" bpmnElement="z_gw_4e"><dc:Bounds x="955" y="275" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="925" y="242" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d8" bpmnElement="z_rej1"><dc:Bounds x="930" y="110" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d9" bpmnElement="z_end_rej1"><dc:Bounds x="1092" y="132" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1055" y="172" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d10" bpmnElement="z_prep"><dc:Bounds x="1060" y="410" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d11" bpmnElement="z_ut"><dc:Bounds x="1210" y="410" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d12" bpmnElement="z_gw_fr"><dc:Bounds x="1385" y="425" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1368" y="405" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d13" bpmnElement="z_rej2"><dc:Bounds x="1490" y="540" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d14" bpmnElement="z_end_rej2"><dc:Bounds x="1652" y="562" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1615" y="602" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d15" bpmnElement="z_join"><dc:Bounds x="1515" y="275" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d16" bpmnElement="z_apply"><dc:Bounds x="1620" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d17" bpmnElement="z_bill"><dc:Bounds x="1770" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d18" bpmnElement="z_done"><dc:Bounds x="1920" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d19" bpmnElement="j_aktiv"><dc:Bounds x="2075" y="275" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d20" bpmnElement="g_warten"><dc:Bounds x="2235" y="275" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="2125" y="238" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d21" bpmnElement="c_rueck"><dc:Bounds x="2352" y="282" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2325" y="322" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d22" bpmnElement="c_aendern"><dc:Bounds x="2352" y="542" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2325" y="582" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d23" bpmnElement="sp_aendern" isExpanded="true"><dc:Bounds x="2420" y="380" width="1750" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d24" bpmnElement="m_s"><dc:Bounds x="2442" y="542" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d25" bpmnElement="m_read"><dc:Bounds x="2510" y="520" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d26" bpmnElement="m_regel"><dc:Bounds x="2660" y="520" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d27" bpmnElement="m_gw_ok"><dc:Bounds x="2835" y="535" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="2828.5" y="589" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d28" bpmnElement="m_gw_4e"><dc:Bounds x="2965" y="535" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="2935" y="502" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d29" bpmnElement="m_rej1"><dc:Bounds x="2940" y="400" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d30" bpmnElement="m_end_rej1"><dc:Bounds x="3102" y="422" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3065" y="462" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d31" bpmnElement="m_prep"><dc:Bounds x="3070" y="640" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d32" bpmnElement="m_ut"><dc:Bounds x="3220" y="640" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d33" bpmnElement="m_gw_fr"><dc:Bounds x="3395" y="655" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3378" y="635" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d34" bpmnElement="m_rej2"><dc:Bounds x="3500" y="740" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d35" bpmnElement="m_end_rej2"><dc:Bounds x="3662" y="762" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3625" y="802" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d36" bpmnElement="m_join"><dc:Bounds x="3525" y="535" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d37" bpmnElement="m_apply"><dc:Bounds x="3630" y="520" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d38" bpmnElement="m_bill"><dc:Bounds x="3780" y="520" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d39" bpmnElement="m_info"><dc:Bounds x="3930" y="520" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d40" bpmnElement="m_end"><dc:Bounds x="4092" y="542" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4061" y="582" width="98" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d41" bpmnElement="b_rueck"><dc:Bounds x="4092" y="362" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4132" y="346" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d42" bpmnElement="j_rueck1"><dc:Bounds x="4085" y="275" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d43" bpmnElement="j_rueck2"><dc:Bounds x="4475" y="275" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d44" bpmnElement="r_start"><dc:Bounds x="4222" y="542" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4190" y="582" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d45" bpmnElement="r_bestand"><dc:Bounds x="4320" y="520" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d46" bpmnElement="r_remove"><dc:Bounds x="4580" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d47" bpmnElement="r_bill"><dc:Bounds x="4730" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d48" bpmnElement="r_info"><dc:Bounds x="4880" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d49" bpmnElement="r_end"><dc:Bounds x="5042" y="282" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="5005" y="322" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="d50" bpmnElement="z_f2"><di:waypoint x="750" y="300"/><di:waypoint x="825" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d51" bpmnElement="z_f_ok_ja"><di:waypoint x="875" y="300"/><di:waypoint x="955" y="300"/><bpmndi:BPMNLabel><dc:Bounds x="884" y="278" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d52" bpmnElement="z_f_ok_nein"><di:waypoint x="850" y="275"/><di:waypoint x="850" y="150"/><di:waypoint x="930" y="150"/><bpmndi:BPMNLabel><dc:Bounds x="858" y="200" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d53" bpmnElement="z_f_rej1"><di:waypoint x="1030" y="150"/><di:waypoint x="1092" y="150"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d54" bpmnElement="z_f_4e_ja"><di:waypoint x="980" y="325"/><di:waypoint x="980" y="450"/><di:waypoint x="1060" y="450"/><bpmndi:BPMNLabel><dc:Bounds x="988" y="400" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d55" bpmnElement="z_f_4e_nein"><di:waypoint x="1005" y="300"/><di:waypoint x="1515" y="300"/><bpmndi:BPMNLabel><dc:Bounds x="1015" y="278" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d56" bpmnElement="z_f_prep"><di:waypoint x="1160" y="450"/><di:waypoint x="1210" y="450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d57" bpmnElement="z_f_ut"><di:waypoint x="1310" y="450"/><di:waypoint x="1385" y="450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d58" bpmnElement="z_f_fr_ja"><di:waypoint x="1435" y="450"/><di:waypoint x="1540" y="450"/><di:waypoint x="1540" y="325"/><bpmndi:BPMNLabel><dc:Bounds x="1445" y="428" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d59" bpmnElement="z_f_fr_nein"><di:waypoint x="1410" y="475"/><di:waypoint x="1410" y="580"/><di:waypoint x="1490" y="580"/><bpmndi:BPMNLabel><dc:Bounds x="1418" y="520" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d60" bpmnElement="z_f_rej2"><di:waypoint x="1590" y="580"/><di:waypoint x="1652" y="580"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d61" bpmnElement="m_f0"><di:waypoint x="2478" y="560"/><di:waypoint x="2510" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d62" bpmnElement="m_f1"><di:waypoint x="2610" y="560"/><di:waypoint x="2660" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d63" bpmnElement="m_f2"><di:waypoint x="2760" y="560"/><di:waypoint x="2835" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d64" bpmnElement="m_f_ok_ja"><di:waypoint x="2885" y="560"/><di:waypoint x="2965" y="560"/><bpmndi:BPMNLabel><dc:Bounds x="2894" y="538" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d65" bpmnElement="m_f_ok_nein"><di:waypoint x="2860" y="535"/><di:waypoint x="2860" y="440"/><di:waypoint x="2940" y="440"/><bpmndi:BPMNLabel><dc:Bounds x="2868" y="480" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d66" bpmnElement="m_f_rej1"><di:waypoint x="3040" y="440"/><di:waypoint x="3102" y="440"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d67" bpmnElement="m_f_4e_ja"><di:waypoint x="2990" y="585"/><di:waypoint x="2990" y="680"/><di:waypoint x="3070" y="680"/><bpmndi:BPMNLabel><dc:Bounds x="2998" y="630" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d68" bpmnElement="m_f_4e_nein"><di:waypoint x="3015" y="560"/><di:waypoint x="3525" y="560"/><bpmndi:BPMNLabel><dc:Bounds x="3025" y="538" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d69" bpmnElement="m_f_prep"><di:waypoint x="3170" y="680"/><di:waypoint x="3220" y="680"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d70" bpmnElement="m_f_ut"><di:waypoint x="3320" y="680"/><di:waypoint x="3395" y="680"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d71" bpmnElement="m_f_fr_ja"><di:waypoint x="3445" y="680"/><di:waypoint x="3550" y="680"/><di:waypoint x="3550" y="585"/><bpmndi:BPMNLabel><dc:Bounds x="3455" y="658" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d72" bpmnElement="m_f_fr_nein"><di:waypoint x="3420" y="705"/><di:waypoint x="3420" y="780"/><di:waypoint x="3500" y="780"/><bpmndi:BPMNLabel><dc:Bounds x="3428" y="730" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d73" bpmnElement="m_f_rej2"><di:waypoint x="3600" y="780"/><di:waypoint x="3662" y="780"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d74" bpmnElement="m_f10"><di:waypoint x="3575" y="560"/><di:waypoint x="3630" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d75" bpmnElement="m_f11"><di:waypoint x="3730" y="560"/><di:waypoint x="3780" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d76" bpmnElement="m_f12"><di:waypoint x="3880" y="560"/><di:waypoint x="3930" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d77" bpmnElement="m_f13"><di:waypoint x="4030" y="560"/><di:waypoint x="4092" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d78" bpmnElement="z_f0"><di:waypoint x="136" y="300"/><di:waypoint x="200" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d79" bpmnElement="z_f0b"><di:waypoint x="300" y="300"/><di:waypoint x="350" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d80" bpmnElement="z_f1"><di:waypoint x="450" y="300"/><di:waypoint x="500" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d81" bpmnElement="z_f1b"><di:waypoint x="600" y="300"/><di:waypoint x="650" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d82" bpmnElement="z_f3"><di:waypoint x="1565" y="300"/><di:waypoint x="1620" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d83" bpmnElement="z_f4"><di:waypoint x="1720" y="300"/><di:waypoint x="1770" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d84" bpmnElement="z_f5"><di:waypoint x="1870" y="300"/><di:waypoint x="1920" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d85" bpmnElement="z_f6"><di:waypoint x="2020" y="300"/><di:waypoint x="2075" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d86" bpmnElement="w_f1"><di:waypoint x="2125" y="300"/><di:waypoint x="2235" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d87" bpmnElement="w_f2"><di:waypoint x="2285" y="300"/><di:waypoint x="2352" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d88" bpmnElement="w_f4"><di:waypoint x="2260" y="325"/><di:waypoint x="2260" y="560"/><di:waypoint x="2352" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d89" bpmnElement="w_f6"><di:waypoint x="2388" y="560"/><di:waypoint x="2420" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d90" bpmnElement="w_f8"><di:waypoint x="2450" y="860"/><di:waypoint x="2450" y="890"/><di:waypoint x="2100" y="890"/><di:waypoint x="2100" y="325"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d91" bpmnElement="r_f1"><di:waypoint x="2388" y="300"/><di:waypoint x="4085" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d92" bpmnElement="r_f2"><di:waypoint x="4110" y="362"/><di:waypoint x="4110" y="325"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d93" bpmnElement="r_f3"><di:waypoint x="4135" y="300"/><di:waypoint x="4475" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d94" bpmnElement="r_f5"><di:waypoint x="4258" y="560"/><di:waypoint x="4320" y="560"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d95" bpmnElement="r_f6"><di:waypoint x="4420" y="560"/><di:waypoint x="4500" y="560"/><di:waypoint x="4500" y="325"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d96" bpmnElement="r_f7"><di:waypoint x="4525" y="300"/><di:waypoint x="4580" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d97" bpmnElement="r_f8"><di:waypoint x="4680" y="300"/><di:waypoint x="4730" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d98" bpmnElement="r_f9"><di:waypoint x="4830" y="300"/><di:waypoint x="4880" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d99" bpmnElement="r_f10"><di:waypoint x="4980" y="300"/><di:waypoint x="5042" y="300"/></bpmndi:BPMNEdge>
 </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </definitions>

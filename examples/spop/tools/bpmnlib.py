@@ -12,13 +12,14 @@ KIND = {"startEvent": "ev", "endEvent": "ev", "intermediateCatchEvent": "ev", "b
 nodes, flows, pos, spbox = [], [], {}, {}
 
 
-def node(nid, tag, name, cx, cy, inner="", attrs="", doc=None, label="below", parent=None, lw=None, lpos=None):
-    nodes.append(dict(id=nid, tag=tag, name=name, inner=inner, attrs=attrs, doc=doc, label=label, parent=parent, lw=lw, lpos=lpos))
+def node(nid, tag, name, cx, cy, inner="", attrs="", doc=None, label="below", parent=None, lw=None, lpos=None, tail=""):
+    """tail: Inhalt nach incoming/outgoing, z. B. multiInstanceLoopCharacteristics."""
+    nodes.append(dict(id=nid, tag=tag, name=name, inner=inner, attrs=attrs, doc=doc, label=label, parent=parent, lw=lw, lpos=lpos, tail=tail))
     pos[nid] = (cx, cy, KIND[tag])
 
 
 def subprocess(nid, name, x, y, w, h, doc, parent=None, inner=""):
-    nodes.append(dict(id=nid, tag="subProcess", name=name, inner=inner, attrs="", doc=doc, label=None, parent=parent, lw=None, lpos=None))
+    nodes.append(dict(id=nid, tag="subProcess", name=name, inner=inner, attrs="", doc=doc, label=None, parent=parent, lw=None, lpos=None, tail=""))
     pos[nid] = (x + w / 2, y + h / 2, "sp")
     spbox[nid] = (x, y, w, h)
 
@@ -178,7 +179,7 @@ def _fmt(v):
     return str(int(v)) if v.is_integer() else str(v)
 
 
-def write(out, defs_id, process_id, process_name, doc, messages):
+def write(out, defs_id, process_id, process_name, doc, messages, process_attrs=""):
     """Schreibt das Modell. messages: [(id, name, correlationKey-Ausdruck oder None)]."""
     incoming, outgoing = {}, {}
     for f in flows:
@@ -201,6 +202,7 @@ def write(out, defs_id, process_id, process_name, doc, messages):
             inner = ""
         body += "".join(f"<incoming>{i}</incoming>" for i in incoming.get(n["id"], []))
         body += "".join(f"<outgoing>{i}</outgoing>" for i in outgoing.get(n["id"], []))
+        body += n["tail"]
         if n["tag"] == "subProcess":
             for c in nodes:
                 if c["parent"] == n["id"]:
@@ -221,7 +223,7 @@ def write(out, defs_id, process_id, process_name, doc, messages):
             o.append(f'<message id="{mid}" name="{mname}"><extensionElements><zeebe:subscription correlationKey={quoteattr(key)}/></extensionElements></message>')
         else:
             o.append(f'<message id="{mid}" name="{mname}"/>')
-    o.append(f'<process id="{process_id}" name={quoteattr(process_name)} isExecutable="true">')
+    o.append(f'<process id="{process_id}" name={quoteattr(process_name)} isExecutable="true"{process_attrs}>')
     o.append(f'<documentation>{escape(doc)}</documentation>')
     o.append('<extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" value="http://127.0.0.1:8080" source="application"/></atlas:constants></extensionElements>')
     for n in nodes:

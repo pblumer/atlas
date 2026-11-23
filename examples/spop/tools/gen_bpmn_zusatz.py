@@ -2,34 +2,63 @@
 """Erzeugt spop-zusatz.bpmn (Prozess proc_spop_zusatz): python3 tools/gen_bpmn_zusatz.py spop-zusatz.bpmn (aus examples/spop).
 
 Ein Strang je Position für die drei Zusatzprodukte Speicherplatzerweiterung, Erweitertes Reporting und SubSite Quota. Der
-Strang bezieht sich auf eine Site, die eine andere Position hält; die bestellende Person nennt sie mit ihrer URL.
+Strang bezieht sich auf eine Site, die eine andere Position hält; die bestellende Person nennt sie mit ihrer URL, und der
+Strang prüft über die Instanzsuche, dass diese Site ihr gehört.
 """
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from xml.sax.saxutils import quoteattr  # noqa: E402
 from bpmnlib import (KEY, REASON_FREIGABE, REST_DOC, brt, change_sub, check_block, ext, flow, mock, node,  # noqa: E402
                      rest_decision, rest_status, script, shop, spbox, write)
 
 OUT = sys.argv[1]
 M = 300
 
+BASE = '(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase)'
+# Eigentumsprüfung: treffer ist die Liste der Suchantworten, eine je Version des Site-Prozesses. Jeder Treffer trägt nur die
+# passende Variable siteZugriff = <Site-URL>|<Besteller>|<Empfänger>.
+EIGEN = (
+    '={ zugriffe: flatten(for p in (if treffer = null then [] else treffer) return '
+    '(if p = null or p.items = null then [] else for t in p.items[state = "active"] return t.variables[name = "siteZugriff"][1].value)), '
+    'passend: zugriffe[item != null and starts with(item, siteUrl + "|")], '
+    'gefunden: count(passend) > 0, '
+    'gehoert: some z in passend satisfies contains(z + "|", "|" + orderer + "|"), '
+    'siteUrl: siteUrl }'
+)
 node("z_start", "startEvent", "Zusatzleistung bestellt", 118, M, '<messageEventDefinition messageRef="m_bestellen"/>',
      doc="Start der Operation provision. Drei Produkte binden diesen Prozess: spop-speicher (Speicherplatzerweiterung, GB), "
          "spop-reporting (Erweitertes Reporting, Pakete) und spop-subsite-quota (SubSite Quota, Subsites). Formulare "
          "spop-speicher-bestellung, spop-reporting-bestellung, spop-subsite-bestellung: siteUrl, menge, begruendung.")
-node("z_read", "serviceTask", "Site prüfen", 250, M,
-     ext(mock('={ gefunden: siteUrl != null and matches(siteUrl, "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"), siteUrl: siteUrl }', "aktuell")),
-     doc="Simuliert apsbw_sharepoint_site read für die genannte Site. Im Zielbild prüft dieser Schritt auch, dass die Site "
-         "derselben Organisationseinheit gehört wie die bestellende Person. Schreibt aktuell.")
-node("z_regel", "businessRuleTask", "Zusatz-Richtlinie prüfen", 400, M,
+node("z_procs", "serviceTask", "Site-Prozessversionen lesen", 250, M,
+     ext(f'<atlas:restConnector method="GET" url={quoteattr("=" + BASE + ' + "/api/v1/processes"')} authType="bearer" authSecret="atlas" resultVariable="prozesse"/>'),
+     doc="Liest die deployten Definitionen (GET /api/v1/processes). Site-Stränge laufen auf der Version, mit der sie bereitgestellt "
+         "wurden; gesucht wird deshalb in jeder Version von proc_spop_teamsite. Braucht das Secret \"atlas\". Schreibt prozesse.")
+node("z_read", "serviceTask", "Site im Bestand suchen", 400, M,
+     ext(f'<atlas:restConnector method="GET" url={quoteattr("=" + BASE + ' + "/api/v1/instances/search?process=" + string(siteDefKey) + "&q=siteZugriff%3D" + siteUrl + "%7C*&values=preview"')} '
+         'authType="bearer" authSecret="atlas" resultVariable="trefferVersion"/>'),
+     tail='<multiInstanceLoopCharacteristics><extensionElements><zeebe:loopCharacteristics '
+          'inputCollection="=prozesse[processId = &quot;proc_spop_teamsite&quot;].key" inputElement="siteDefKey" '
+          'outputCollection="treffer" outputElement="=trefferVersion"/></extensionElements></multiInstanceLoopCharacteristics>',
+     doc="Parallele Mehrfach-Instanz, eine je Version von proc_spop_teamsite: GET /api/v1/instances/search?process=<Version>&"
+         "q=siteZugriff=<Site-URL>|*. Die Einschränkung auf eine Version liest deren Index statt aller Instanzen des Servers; "
+         "siteZugriff ist im Site-Prozess als atlas:searchable deklariert. Die Instanzsuche verlangt die Rolle operator (Secret "
+         "\"atlas\"). Schreibt treffer, die Liste der Antworten.")
+node("z_eigen", "scriptTask", "Eigentum prüfen", 550, M,
+     script(EIGEN, "aktuell"),
+     doc="Prüft, ob die genannte Site der bestellenden Person gehört: Unter den Treffern zählen nur aktive Site-Stränge, deren "
+         "siteZugriff mit der Site-URL beginnt. Die Site gehört der Person, wenn ihr orderer (sie bestellt die Zusatzleistung) "
+         "Besteller oder Empfänger der Site-Position ist. Schreibt aktuell = {gefunden, gehoert, siteUrl}. Eine zurückgegebene "
+         "Site hat keinen aktiven Strang mehr und gilt als nicht gefunden.")
+node("z_regel", "businessRuleTask", "Zusatz-Richtlinie prüfen", 700, M,
      brt("SpopZusatzRichtlinie", "regel",
-         ("=aktuell.gefunden", "siteGefunden"), ("=itemId", "produkt"),
+         ("=aktuell.gefunden", "siteGefunden"), ("=aktuell.gehoert", "siteGehoert"), ("=itemId", "produkt"),
          ("=if menge = null then 0 else number(string(menge))", "menge"), ("=false", "unveraendert")),
      doc="DMN SpopZusatzRichtlinie: zulässige Menge je Produkt, Verrechnungsband und Materialnummer (z. B. Reporting 6–10 Pakete "
          "= 540007703), Vier-Augen-Pflicht. Liefert regel = {zulaessig, vierAugen, material, einheit, grund}.")
 join, jx = check_block(
-    "z", 550, M, "z_regel",
+    "z", 850, M, "z_regel",
     "Ablehnung melden", rest_decision("Richtlinie SpopZusatzRichtlinie", "=regel.grund"),
     "Meldet die Ablehnung über die Decision-Route der Position mit dem Grund der Richtlinie." + REST_DOC,
     '="Zusatzleistung: " + itemId + "\\nSite: " + siteUrl + "\\nMenge: " + string(menge) + " " + regel.einheit + '
@@ -38,18 +67,18 @@ join, jx = check_block(
     "Zusatzleistung freigeben", "Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe, Formular spop-freigabe.",
     rest_decision("Vier-Augen-Freigabe", REASON_FREIGABE),
     "Meldet die verweigerte Vier-Augen-Freigabe über die Decision-Route der Position." + REST_DOC)
-node("z_apply", "serviceTask", "Zusatzleistung einrichten", 1370, M,
+node("z_apply", "serviceTask", "Zusatzleistung einrichten", 1670, M,
      ext(mock('={ produkt: itemId, siteUrl: siteUrl, menge: number(string(menge)), einheit: regel.einheit, material: regel.material }', "bestand")),
      doc="Simuliert die Einrichtung über APS-BW: Speicher (apsbw_sharepoint_quota apply um menge GB), Reporting-Pakete oder "
          "Subsite-Quota. Schreibt bestand, den Stand des Strangs bis zur Rückgabe.")
-node("z_bill", "serviceTask", "Verrechnung erfassen", 1520, M,
+node("z_bill", "serviceTask", "Verrechnung erfassen", 1820, M,
      ext(mock('={ material: bestand.material, menge: bestand.menge, einheit: bestand.einheit, position: orderId + "/" + (if positionId = null then itemId else positionId) }', "verrechnung")),
      doc="Simuliert die Erfassung der wiederkehrenden Verrechnung mit der Materialnummer des Verrechnungsbands. Die Antworten "
          "eines Bestellformulars kommen als Text an; menge wird deshalb vor Regel und Bestand in eine Zahl umgewandelt.")
-node("z_done", "serviceTask", "Position als erledigt melden", 1670, M, rest_status("done"),
+node("z_done", "serviceTask", "Position als erledigt melden", 1970, M, rest_status("done"),
      doc="Meldet die Position als erledigt (status done); damit steht die Zusatzleistung im Bestand." + REST_DOC)
 
-JX, GX, CX, SPX = 1800, 1960, 2070, 2120
+JX, GX, CX, SPX = 2100, 2260, 2370, 2420
 QY = M + 260
 node("j_aktiv", "exclusiveGateway", "", JX, M)
 node("g_warten", "eventBasedGateway", "Aktiv: auf Auftrag warten", GX, M, label="custom", lpos=(JX + 25, M - 62, 100, 27),
@@ -71,7 +100,7 @@ X = change_sub(
     '={ gefunden: bestand != null, siteUrl: bestand.siteUrl, menge: bestand.menge }',
     "Liest den Stand des Strangs (bestand). Schreibt aktuell.",
     "Zusatz-Richtlinie prüfen", "SpopZusatzRichtlinie",
-    [("=aktuell.gefunden", "siteGefunden"), ("=itemId", "produkt"),
+    [("=aktuell.gefunden", "siteGefunden"), ("=true", "siteGehoert"), ("=itemId", "produkt"),
      ("=if menge = null then 0 else number(string(menge))", "menge"), ("=(if menge = null then 0 else number(string(menge))) = aktuell.menge", "unveraendert")],
     "DMN SpopZusatzRichtlinie mit der neuen Menge; eine unveränderte Menge wird abgelehnt.",
     '="Mengenänderung: " + itemId + "\\nSite: " + bestand.siteUrl + "\\nBisher: " + string(aktuell.menge) + "\\nNeu: " + '
@@ -118,8 +147,10 @@ node("r_info", "serviceTask", "Rückgabe melden", J2 + 430, M, rest_status("retu
 node("r_end", "endEvent", "Zusatzleistung zurückgegeben", J2 + 560, M, '<terminateEventDefinition/>',
      doc="Terminierendes Ende: beendet den Strang der Position vollständig.")
 
-flow("z_f0", "z_start", "z_read")
-flow("z_f1", "z_read", "z_regel")
+flow("z_f0", "z_start", "z_procs")
+flow("z_f0b", "z_procs", "z_read")
+flow("z_f1", "z_read", "z_eigen")
+flow("z_f1b", "z_eigen", "z_regel")
 flow("z_f3", join, "z_apply")
 flow("z_f4", "z_apply", "z_bill")
 flow("z_f5", "z_bill", "z_done")
@@ -147,7 +178,9 @@ Drei Produkte binden diesen Prozess:
                        101–200 = 540007707, 201–500 = 540007708
 Die Stufen sind Verrechnungsbänder einer Menge, keine eigenen Produkte: die Richtlinie SpopZusatzRichtlinie leitet Band und
 Materialnummer aus Produkt und Menge ab. Die Site nennt die bestellende Person mit ihrer URL (siteUrl), weil sie einer anderen
-Position gehört. Nach der Bereitstellung wartet der Strang auf spop.zusatz.aendern (Subprozess «Menge ändern») oder
+Position gehört. Der Strang sucht diese Position über die Instanzsuche (Secret "atlas") und lehnt ab, wenn die Site nicht
+aktiv ist oder nicht der bestellenden Person gehört (sie muss Besteller oder Empfänger der Site-Position sein). Nach der
+Bereitstellung wartet der Strang auf spop.zusatz.aendern (Subprozess «Menge ändern») oder
 spop.zusatz.rueckgabe (auch als Boundary am Subprozess). Ausführung und Verrechnung im PoC simuliert; Rückmeldungen an den
 Katalog echt (Decision-Route, Positionsroute mit Secret "atlas", Shop-Aufgaben)."""
 

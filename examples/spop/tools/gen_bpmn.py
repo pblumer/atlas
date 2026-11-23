@@ -68,16 +68,21 @@ node("a_feat", "serviceTask", "Features aktivieren (S8)", 1630, M + L1,
      ext(mock('={ siteUrl: site.url, features: regel.features }', "features")),
      doc="Simuliert apsbw_sharepoint_feature activate mit den Features des Site-Typs aus der Richtlinie (Annahme).")
 node("a_parj", "parallelGateway", "", 1910, M)
-node("a_bill", "serviceTask", "Verrechnung erfassen", 2040, M,
+node("a_reg", "scriptTask", "Zugriff registrieren", 2040, M,
+     script('=site.url + "|" + (if orderer = null then "" else orderer) + "|" + (if recipient = null then "" else recipient)', "siteZugriff"),
+     doc="Setzt siteZugriff = <Site-URL>|<Besteller>|<Empfänger> als durchsuchbare Variable (atlas:searchable). Daran erkennt der "
+         "Zusatzprozess proc_spop_zusatz über die Instanzsuche, ob eine Site der Person gehört, die eine Zusatzleistung bestellt. "
+         "Eine Inhaltssuche liefert je Treffer nur die passende Variable; darum stehen alle drei Angaben in einer.")
+node("a_bill", "serviceTask", "Verrechnung erfassen", 2170, M,
      ext(mock('={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, position: orderId + "/" + (if positionId = null then itemId else positionId) }', "verrechnung")),
      doc="Simuliert die Erfassung der wiederkehrenden Verrechnung (Marktleistungsstruktur ML Redesign SharePoint) mit der "
          "Materialnummer des Site-Typs.")
-node("a_info", "serviceTask", "Position als erledigt melden", 2170, M, rest_status("done"),
+node("a_info", "serviceTask", "Position als erledigt melden", 2300, M, rest_status("done"),
      doc="Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status done); erst damit "
          "steht die Site im Bestand und die Aktionen werden möglich." + REST_DOC)
 
 # ======================================================================= Warten auf Aufträge
-JX, GX, CX, SPX = 2300, 2460, 2570, 2620
+JX, GX, CX, SPX = 2430, 2590, 2700, 2750
 node("j_aktiv", "exclusiveGateway", "", JX, M)
 node("g_warten", "eventBasedGateway", "Aktiv: auf Auftrag warten", GX, M, label="custom", lpos=(JX + 25, M - 62, 100, 27),
      doc="Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Quota-Erhöhung, externe Einladung "
@@ -222,7 +227,8 @@ flow("a_f9", "a_par", "a_quota")
 flow("a_f10", "a_quota", "a_parj")
 flow("a_f11", "a_par", "a_feat", "b", "l")
 flow("a_f12", "a_feat", "a_parj", "r", "b")
-flow("a_f13", "a_parj", "a_bill")
+flow("a_f13", "a_parj", "a_reg")
+flow("a_f13a", "a_reg", "a_bill")
 flow("a_f13b", "a_bill", "a_info")
 flow("a_f14", "a_info", "j_aktiv")
 flow("w_f1", "j_aktiv", "g_warten")
@@ -267,4 +273,5 @@ write(OUT, "defs_spop_teamsite", "proc_spop_teamsite", "SPoP: Site-Lebenszyklus"
        ("m_quota", "spop.teamsite.quota", KEY),
        ("m_extern", "spop.teamsite.extern", KEY),
        ("m_rueckgabe", "spop.teamsite.rueckgabe", KEY),
-       ("m_angenommen", "spop.extern.angenommen", "=einladung.einladungId")])
+       ("m_angenommen", "spop.extern.angenommen", "=einladung.einladungId")],
+      process_attrs=' atlas:searchable="siteZugriff"')
