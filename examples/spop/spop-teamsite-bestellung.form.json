@@ -4,12 +4,12 @@
   "components": [
     {
       "type": "text",
-      "text": "**SharePoint OnPrem: TeamSite bestellen (PvN-GF-001)**\n\nClean Order: Das Formular enthält alle Angaben, die die Bereitstellung braucht. Standard-Sites mit Standardquota laufen ohne Freigabe; alle anderen Bestellungen gehen in die Vier-Augen-Freigabe."
+      "text": "**SharePoint OnPrem: Site bestellen (PvN-GF-001)**\n\nClean Order: Das Formular enthält alle Angaben, die die Bereitstellung braucht. Der Site-Typ ist das gewählte Produkt. Team Site Classic, Team Site Modern und Wiki Site mit Standardquota laufen ohne Freigabe; Hermes, Communication und Publishing sowie jede individuelle Quota gehen in die Vier-Augen-Freigabe."
     },
     {
       "key": "titel",
       "type": "textfield",
-      "label": "Titel der TeamSite",
+      "label": "Titel der Site",
       "validate": {
         "required": true,
         "maxLength": 80
@@ -22,7 +22,7 @@
       "key": "amtKuerzel",
       "type": "textfield",
       "label": "Amtskürzel",
-      "description": "2 bis 6 Grossbuchstaben, z. B. BIT. Bildet zusammen mit dem Site-Typ die URL.",
+      "description": "2 bis 6 Grossbuchstaben, z. B. BIT. Erster Teil der URL.",
       "validate": {
         "required": true,
         "pattern": "^[A-Z]{2,6}$"
@@ -32,27 +32,14 @@
       }
     },
     {
-      "key": "siteTyp",
-      "type": "select",
-      "label": "Site-Typ",
-      "defaultValue": "Standard",
+      "key": "kurzname",
+      "type": "textfield",
+      "label": "Kurzname (URL-Teil)",
+      "description": "3 bis 30 Zeichen, Kleinbuchstaben, Ziffern und Bindestriche. Die Site erhält die URL /sites/<amt>-<kurzname>.",
       "validate": {
-        "required": true
+        "required": true,
+        "pattern": "^[a-z0-9][a-z0-9-]{2,29}$"
       },
-      "values": [
-        {
-          "label": "Standard",
-          "value": "Standard"
-        },
-        {
-          "label": "Projekt (Project)",
-          "value": "Project"
-        },
-        {
-          "label": "Abteilung (Department)",
-          "value": "Department"
-        }
-      ],
       "properties": {
         "personal": "false"
       }
@@ -129,13 +116,13 @@
       "key": "quotaMb",
       "type": "number",
       "label": "Quota (MB)",
-      "description": "Minimum 1024 MB; Maximum Standard 10240, Project 51200, Department 102400 MB.",
+      "description": "Minimum 1024 MB; Maximum 10240 MB (Team Sites, Wiki) bzw. 51200 MB (Hermes, Communication, Publishing). Mehr Speicher über das Produkt Speicherplatzerweiterung.",
       "conditional": {
         "hide": "=quotaWahl != \"Custom\""
       },
       "validate": {
         "min": 1024,
-        "max": 102400
+        "max": 51200
       },
       "properties": {
         "personal": "false"

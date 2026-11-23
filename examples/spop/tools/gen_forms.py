@@ -12,16 +12,18 @@ def text(t):
 
 
 forms = {
-    "spop-teamsite-bestellung": ("SPoP: TeamSite bestellen (GF-001)", [
-        text("**SharePoint OnPrem: TeamSite bestellen (PvN-GF-001)**\n\nClean Order: Das Formular enthält alle Angaben, die die Bereitstellung braucht. "
-             "Standard-Sites mit Standardquota laufen ohne Freigabe; alle anderen Bestellungen gehen in die Vier-Augen-Freigabe."),
-        {"key": "titel", "type": "textfield", "label": "Titel der TeamSite", "validate": {"required": True, "maxLength": 80}, "properties": NP},
+    "spop-teamsite-bestellung": ("SPoP: SharePoint OnP Site bestellen (GF-001)", [
+        text("**SharePoint OnPrem: Site bestellen (PvN-GF-001)**\n\nClean Order: Das Formular enthält alle Angaben, die die "
+             "Bereitstellung braucht. Der Site-Typ ist das gewählte Produkt. Team Site Classic, Team Site Modern und Wiki Site mit "
+             "Standardquota laufen ohne Freigabe; Hermes, Communication und Publishing sowie jede individuelle Quota gehen in die "
+             "Vier-Augen-Freigabe."),
+        {"key": "titel", "type": "textfield", "label": "Titel der Site", "validate": {"required": True, "maxLength": 80}, "properties": NP},
         {"key": "amtKuerzel", "type": "textfield", "label": "Amtskürzel",
-         "description": "2 bis 6 Grossbuchstaben, z. B. BIT. Bildet zusammen mit dem Site-Typ die URL.",
+         "description": "2 bis 6 Grossbuchstaben, z. B. BIT. Erster Teil der URL.",
          "validate": {"required": True, "pattern": "^[A-Z]{2,6}$"}, "properties": NP},
-        {"key": "siteTyp", "type": "select", "label": "Site-Typ", "defaultValue": "Standard", "validate": {"required": True},
-         "values": [{"label": "Standard", "value": "Standard"}, {"label": "Projekt (Project)", "value": "Project"},
-                    {"label": "Abteilung (Department)", "value": "Department"}], "properties": NP},
+        {"key": "kurzname", "type": "textfield", "label": "Kurzname (URL-Teil)",
+         "description": "3 bis 30 Zeichen, Kleinbuchstaben, Ziffern und Bindestriche. Die Site erhält die URL /sites/<amt>-<kurzname>.",
+         "validate": {"required": True, "pattern": "^[a-z0-9][a-z0-9-]{2,29}$"}, "properties": NP},
         {"key": "sprache", "type": "select", "label": "Sprache", "defaultValue": "1031", "validate": {"required": True},
          "values": [{"label": "Deutsch", "value": "1031"}, {"label": "Französisch", "value": "1036"},
                     {"label": "Italienisch", "value": "1040"}, {"label": "Englisch", "value": "1033"}], "properties": NP},
@@ -34,8 +36,9 @@ forms = {
          "values": [{"label": "Standard des Site-Typs", "value": "Standard"}, {"label": "Individuell (Custom)", "value": "Custom"}],
          "properties": NP},
         {"key": "quotaMb", "type": "number", "label": "Quota (MB)",
-         "description": "Minimum 1024 MB; Maximum Standard 10240, Project 51200, Department 102400 MB.",
-         "conditional": {"hide": "=quotaWahl != \"Custom\""}, "validate": {"min": 1024, "max": 102400}, "properties": NP},
+         "description": "Minimum 1024 MB; Maximum 10240 MB (Team Sites, Wiki) bzw. 51200 MB (Hermes, Communication, Publishing). "
+                        "Mehr Speicher über das Produkt Speicherplatzerweiterung.",
+         "conditional": {"hide": "=quotaWahl != \"Custom\""}, "validate": {"min": 1024, "max": 51200}, "properties": NP},
         {"key": "quotaBegruendung", "type": "textarea", "label": "Begründung für die individuelle Quota",
          "description": "Pflicht bei individueller Quota, mindestens 10 Zeichen.",
          "conditional": {"hide": "=quotaWahl != \"Custom\""}, "validate": {"minLength": 10}, "properties": NP},
@@ -75,6 +78,59 @@ forms = {
          "values": [{"label": "Freigeben", "value": "freigegeben"}, {"label": "Ablehnen", "value": "abgelehnt"}], "properties": NP},
         {"key": "freigabeKommentar", "type": "textarea", "label": "Kommentar",
          "description": "Bei einer Ablehnung wird der Kommentar der antragstellenden Person mitgeteilt.", "properties": NP},
+    ]),
+    "spop-speicher-bestellung": ("SPoP: Speicherplatzerweiterung bestellen", [
+        text("**SharePoint OnP Speicherplatzerweiterung (540007510)**\n\nZusätzlicher Speicher für eine bestehende Site, über das "
+             "Maximum ihres Site-Typs hinaus. Verrechnung pro GB und Monat. Über 100 GB geht die Bestellung in die Vier-Augen-Freigabe."),
+        {"key": "siteUrl", "type": "textfield", "label": "Site-URL",
+         "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
+         "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
+        {"key": "menge", "type": "number", "label": "Zusatzspeicher (GB)", "description": "1 bis 500 GB.",
+         "validate": {"required": True, "min": 1, "max": 500}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-reporting-bestellung": ("SPoP: Erweitertes Reporting bestellen", [
+        text("**SharePoint OnP Erweitertes Reporting**\n\nReport-Pakete für eine bestehende Site (z. B. Nutzung, Speicher, "
+             "Berechtigungen, Performance). CHF 25.– pro Paket. Die Anzahl bestimmt das Verrechnungsband: 1–5, 6–10, 11–15 oder 16–20 Pakete."),
+        {"key": "siteUrl", "type": "textfield", "label": "Site-URL",
+         "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
+         "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
+        {"key": "menge", "type": "number", "label": "Anzahl Report-Pakete", "description": "1 bis 20 Pakete.",
+         "validate": {"required": True, "min": 1, "max": 20}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-subsite-bestellung": ("SPoP: SubSite Quota bestellen", [
+        text("**SharePoint OnP SubSite Quota**\n\nErhöht die Zahl der erlaubten Subsites einer bestehenden Site. Bis 10 Subsites "
+             "sind in der Basis enthalten. Die Anzahl bestimmt das Verrechnungsband: 11–20, 21–50, 51–100, 101–200 oder 201–500; "
+             "ab 101 geht die Bestellung in die Vier-Augen-Freigabe."),
+        {"key": "siteUrl", "type": "textfield", "label": "Site-URL",
+         "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
+         "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
+        {"key": "menge", "type": "number", "label": "Anzahl Subsites", "description": "11 bis 500 Subsites.",
+         "validate": {"required": True, "min": 11, "max": 500}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-speicher-aendern": ("SPoP: Speicherplatzerweiterung ändern", [
+        text("**Speicherplatzerweiterung ändern**\n\nNeue Gesamtmenge des Zusatzspeichers dieser Position."),
+        {"key": "menge", "type": "number", "label": "Neuer Zusatzspeicher (GB)", "description": "1 bis 500 GB.",
+         "validate": {"required": True, "min": 1, "max": 500}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-reporting-aendern": ("SPoP: Erweitertes Reporting ändern", [
+        text("**Erweitertes Reporting ändern**\n\nNeue Anzahl Report-Pakete dieser Position; ein Wechsel des Bands wechselt die Materialnummer."),
+        {"key": "menge", "type": "number", "label": "Neue Anzahl Report-Pakete", "description": "1 bis 20 Pakete.",
+         "validate": {"required": True, "min": 1, "max": 20}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-subsite-aendern": ("SPoP: SubSite Quota ändern", [
+        text("**SubSite Quota ändern**\n\nNeue Anzahl Subsites dieser Position; ein Wechsel des Bands wechselt die Materialnummer."),
+        {"key": "menge", "type": "number", "label": "Neue Anzahl Subsites", "description": "11 bis 500 Subsites.",
+         "validate": {"required": True, "min": 11, "max": 500}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-zusatz-rueckgabe": ("SPoP: Zusatzleistung zurückgeben", [
+        text("**Zusatzleistung zurückgeben**\n\nEntfernt die Zusatzleistung dieser Position von der Site und beendet ihre Verrechnung."),
+        {"key": "grund", "type": "textarea", "label": "Grund der Rückgabe", "validate": {"required": True}, "properties": NP},
     ]),
 }
 

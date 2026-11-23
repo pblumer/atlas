@@ -6735,7 +6735,7 @@ carla@example.org,admins,GOLD</code></pre></li>
       </div>
       <div class="bsp" id="bsp-spop">
         <h4><span class="rz-emoji" aria-hidden="true">🗄️</span>
-          <span data-l="de">SPoP: Lebenszyklus einer SharePoint-OnPrem-TeamSite</span><span data-l="en">SPoP: the lifecycle of a SharePoint OnPrem team site</span></h4>
+          <span data-l="de">SPoP: SharePoint-OnPrem-Sites und Zusatzleistungen im Lebenszyklus</span><span data-l="en">SPoP: SharePoint OnPrem sites and add-ons through their lifecycle</span></h4>
         <p class="bsp-tags">
           <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
           <span class="tag">per-position</span>
@@ -6749,21 +6749,26 @@ carla@example.org,admins,GOLD</code></pre></li>
         <div class="bsp-cols">
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
-            <p data-l="de">Drei Geschäftsfälle einer SharePoint-OnPrem-Umgebung in einem Prozess: eine TeamSite bestellen,
-              ihre Quota erhöhen und einen externen Benutzer einladen, dazu die Rückgabe. Ämterspezifische Richtlinien
+            <p data-l="de">Ein Angebot an SharePoint-OnPrem-Sites als Katalog: sechs Site-Typen (Hermes, Communication,
+              Publishing, Team Site Classic und Modern, Wiki) und drei Zusatzleistungen (Speicherplatzerweiterung, Erweitertes
+              Reporting, SubSite Quota), deren Stufen Verrechnungsbänder einer Menge sind. Eine Site bestellen, ihre Quota
+              erhöhen und einen externen Benutzer einladen, dazu die Rückgabe. Ämterspezifische Richtlinien
               (Namensregel, Quota-Grenzen, erlaubte Mail-Domains) prüft je eine Entscheidungstabelle; was über der
               Schwelle liegt, gibt eine zweite Person frei. Eine Einladung bekommt ihre Berechtigung erst, wenn sie
               angenommen ist, und wird nach Ablauf der Gültigkeit widerrufen.</p>
-            <p data-l="en">Three business cases of a SharePoint OnPrem environment in one process: order a team site,
-              raise its quota and invite an external user, plus the return. Agency-specific rules (naming, quota limits,
+            <p data-l="en">An offering of SharePoint OnPrem sites as a catalogue: six site types (Hermes, Communication,
+              Publishing, Team Site Classic and Modern, Wiki) and three add-ons (storage extension, extended reporting, subsite
+              quota) whose tiers are billing bands of a quantity. Order a site, raise its quota and invite an external user,
+              plus the return. Agency-specific rules (naming, quota limits,
               allowed mail domains) are each checked by a decision table; anything above the threshold is approved by a
               second person. An invitation gets its permission only once it is accepted, and is revoked when it
               expires.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Ein Lebenszyklus-Prozess in der Katalogform <code>per-position</code>: ein einziger Strang je
-              Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b> auf die nächste
+            <p data-l="de">Zwei Lebenszyklus-Prozesse in der Katalogform <code>per-position</code>, einer für die sechs
+              Site-Produkte und einer für die drei Zusatzprodukte; eine Entscheidungstabelle leitet aus dem Produkt den Site-Typ
+              bzw. aus der Menge das Verrechnungsband und die Materialnummer ab. Ein einziger Strang je Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b> auf die nächste
               Aktion; Quota-Erhöhung und Einladung sind <b>Subprozesse</b>, nach denen er zum Warten zurückkehrt, und
               die Rückgabe ist ein Catch-Event, ein unterbrechendes Boundary-Event an beiden Subprozessen und ein
               Nachrichtenstart als Rückfallebene. Der Strang trägt den Stand der Site (<code>site</code>,
@@ -6771,7 +6776,9 @@ carla@example.org,admins,GOLD</code></pre></li>
               <b>Output-Mappings</b> am Subprozess sie heraus. Änderungen beantwortet je eine Shop-Aufgabe
               (<code>atlas:shopTask</code>), Bereitstellung und Rückgabe die Positionsroute. Die Ausführung gegen das
               Zielsystem ist mit <code>atlas:mockupConnector</code> simuliert.</p>
-            <p data-l="en">A lifecycle process in the catalogue form <code>per-position</code>: one strand per position.
+            <p data-l="en">Two lifecycle processes in the catalogue form <code>per-position</code>, one for the six site
+              products and one for the three add-ons; a decision table derives the site type from the product, or the billing
+              band and material number from the quantity. One strand per position.
               After provisioning it waits at an <b>event-based gateway</b> for the next action; quota increase and
               invitation are <b>subprocesses</b> after which it returns to waiting, and the return is a catch event, an
               interrupting boundary event on both subprocesses and a message start as the fallback. The strand carries

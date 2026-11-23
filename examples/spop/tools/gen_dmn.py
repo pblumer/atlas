@@ -6,36 +6,92 @@ from xml.sax.saxutils import escape
 OUT = sys.argv[1]
 S = '"{}"'.format
 
+# Site-Typen: Schlüssel, Produkt, Material, Vorlage, Features, Standardquota MB, Maximum MB, Vier-Augen bei Standardquota.
+# Vorlagen, Features, Grenzwerte und Freigabepflicht sind Annahmen (die Katalogtexte stützen sich auf kein Factsheet).
+TYPES = [
+    ("hermes", "spop-site-hermes", "540007512", "STS#3 + HERMES-Struktur", "TeamCollab, HERMES-Projektstruktur", 10240, 51200, True),
+    ("communication", "spop-site-communication", "540007514", "SITEPAGEPUBLISHING#0", "Publishing, AudienceTargeting", 10240, 51200, True),
+    ("publishing", "spop-site-publishing", "540007515", "BLANKINTERNET#0", "PublishingSite, PublishingWeb, Variations", 10240, 51200, True),
+    ("teamsite-classic", "spop-site-teamsite-classic", "540007516", "STS#0", "TeamCollab", 5120, 10240, False),
+    ("teamsite-modern", "spop-site-teamsite-modern", "540007560", "STS#3", "TeamCollab, ModernPages", 5120, 10240, False),
+    ("wiki", "spop-site-wiki", "540008180", "ENTERWIKI#0", "EnterpriseWiki, PublishingSite", 5120, 10240, False),
+]
+ITEMS = ",".join(S(t[1]) for t in TYPES)
+NO = ["false", "false", "0", S(""), S(""), S(""), S("")]
+
+
+def reject(reason):
+    return NO + [S(reason)]
+
+
+teamsite_rules = [
+    (["false", "-", "-", "-", "-", "-"], reject("Das Amtskürzel entspricht nicht der Namensregel (2 bis 6 Grossbuchstaben).")),
+    (["-", "false", "-", "-", "-", "-"], reject("Der Kurzname (URL-Teil) muss 3 bis 30 Zeichen haben: Kleinbuchstaben, Ziffern und Bindestriche.")),
+    (["-", "-", f"not({ITEMS})", "-", "-", "-"], reject("Unbekanntes Produkt: kein SharePoint-OnP-Site-Typ.")),
+    (["-", "-", "-", 'not("Standard","Custom")', "-", "-"], reject("Unbekannte Quota-Wahl.")),
+    (["-", "-", "-", S("Custom"), "-", "false"], reject("Eine individuelle Quota braucht eine Begründung (mindestens 10 Zeichen).")),
+    (["-", "-", "-", S("Custom"), "< 1024", "-"], reject("Die Quota muss mindestens 1024 MB betragen.")),
+]
+for key, item, mat, tpl, feat, std, mx, ve in TYPES:
+    teamsite_rules.append((["-", "-", S(item), S("Custom"), f"> {mx}", "-"], reject(f"Über dem Maximum für {key} ({mx} MB).")))
+for key, item, mat, tpl, feat, std, mx, ve in TYPES:
+    out = [S(key), S(tpl), S(feat), S(mat)]
+    teamsite_rules.append((["-", "-", S(item), S("Standard"), "-", "-"],
+                           ["true", "true" if ve else "false", str(std)] + out +
+                           [S(f"{key}: Vier-Augen-Prinzip (Owner-Zuweisung ausserhalb Self-Service).") if ve else S(f"{key} im Self-Service: ohne Freigabe.")]))
+    teamsite_rules.append((["-", "-", S(item), S("Custom"), "-", "-"],
+                           ["true", "true", "quotaMb"] + out + [S(f"{key} mit individueller Quota: Vier-Augen-Prinzip.")]))
+teamsite_rules.append((["-", "-", "-", "-", "-", "-"], reject("Die Bestellung ist unvollständig.")))
+
+BIG = ",".join(S(t[0]) for t in TYPES if t[6] == 51200)
+SMALL = ",".join(S(t[0]) for t in TYPES if t[6] == 10240)
+
+
+def band(item, rng, mat, unit, ve, text):
+    return (["-", S(item), rng, "-"], ["true", "true" if ve else "false", S(mat), S(unit), S(text)])
+
+
+def zreject(inputs, text):
+    return (inputs, ["false", "false", S(""), S(""), S(text)])
+
+
+zusatz_rules = [
+    zreject(["false", "-", "-", "-"], "Die Site wurde nicht gefunden (URL /sites/…)."),
+    zreject(["-", "-", "-", "true"], "Die Menge ist unverändert."),
+    band("spop-speicher", "[1..100]", "540007510", "GB", False, "Speicherplatzerweiterung bis 100 GB: ohne Freigabe."),
+    band("spop-speicher", "(100..500]", "540007510", "GB", True, "Speicherplatzerweiterung über 100 GB: Vier-Augen-Prinzip."),
+    zreject(["-", S("spop-speicher"), "-", "-"], "Speicherplatzerweiterung: 1 bis 500 GB."),
+    band("spop-reporting", "[1..5]", "540007511", "Pakete", False, "Erweitertes Reporting 1–5 Pakete."),
+    band("spop-reporting", "[6..10]", "540007703", "Pakete", False, "Erweitertes Reporting 6–10 Pakete."),
+    band("spop-reporting", "[11..15]", "540007702", "Pakete", False, "Erweitertes Reporting 11–15 Pakete."),
+    band("spop-reporting", "[16..20]", "540007704", "Pakete", False, "Erweitertes Reporting 16–20 Pakete."),
+    zreject(["-", S("spop-reporting"), "-", "-"], "Erweitertes Reporting: 1 bis 20 Pakete."),
+    band("spop-subsite-quota", "[11..20]", "540007513", "Subsites", False, "SubSite Quota 11–20."),
+    band("spop-subsite-quota", "[21..50]", "540007705", "Subsites", False, "SubSite Quota 21–50."),
+    band("spop-subsite-quota", "[51..100]", "540007706", "Subsites", False, "SubSite Quota 51–100."),
+    band("spop-subsite-quota", "[101..200]", "540007707", "Subsites", True, "SubSite Quota 101–200: Vier-Augen-Prinzip."),
+    band("spop-subsite-quota", "[201..500]", "540007708", "Subsites", True, "SubSite Quota 201–500: Vier-Augen-Prinzip."),
+    zreject(["-", S("spop-subsite-quota"), "-", "-"], "SubSite Quota: 11 bis 500 Subsites; bis 10 sind in der Basis enthalten."),
+    zreject(["-", "-", "-", "-"], "Unbekanntes Produkt: keine SPoP-Zusatzleistung."),
+]
+
 decisions = [
     dict(
-        id="SpopTeamsiteRichtlinie", name="TeamSite-Richtlinie (GF-001)",
-        doc="Ersetzt amt_naming.rego, quota_limits.rego und approval.rego. Annahmen: Amtskürzel 2 bis 6 Grossbuchstaben; "
-            "Standardquota Standard 5120 MB, Project 10240 MB, Department 20480 MB; Maximum 10240, 51200 und 102400 MB; "
-            "Minimum 1024 MB; Vier-Augen-Prinzip ausser beim Self-Service Standard (Standard-Site mit Standardquota).",
-        inputs=[("amtGueltig", "boolean"), ("siteTyp", "string"), ("quotaWahl", "string"), ("quotaMb", "number"),
-                ("begruendungVorhanden", "boolean")],
-        outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("quotaEffektivMb", "number"), ("grund", "string")],
-        rules=[
-            (["false", "-", "-", "-", "-"], ["false", "false", "0", S("Das Amtskürzel entspricht nicht der Namensregel (2 bis 6 Grossbuchstaben).")]),
-            (["-", 'not("Standard","Project","Department")', "-", "-", "-"], ["false", "false", "0", S("Unbekannter Site-Typ.")]),
-            (["-", "-", 'not("Standard","Custom")', "-", "-"], ["false", "false", "0", S("Unbekannte Quota-Wahl.")]),
-            (["-", "-", S("Custom"), "-", "false"], ["false", "false", "0", S("Eine individuelle Quota braucht eine Begründung (mindestens 10 Zeichen).")]),
-            (["-", "-", S("Custom"), "< 1024", "-"], ["false", "false", "0", S("Die Quota muss mindestens 1024 MB betragen.")]),
-            (["-", S("Standard"), S("Custom"), "> 10240", "-"], ["false", "false", "0", S("Über dem Maximum für Standard (10240 MB).")]),
-            (["-", S("Project"), S("Custom"), "> 51200", "-"], ["false", "false", "0", S("Über dem Maximum für Project (51200 MB).")]),
-            (["-", S("Department"), S("Custom"), "> 102400", "-"], ["false", "false", "0", S("Über dem Maximum für Department (102400 MB).")]),
-            (["-", S("Standard"), S("Standard"), "-", "-"], ["true", "false", "5120", S("Self-Service Standard: ohne Freigabe.")]),
-            (["-", S("Standard"), S("Custom"), "-", "-"], ["true", "true", "quotaMb", S("Individuelle Quota: Vier-Augen-Prinzip.")]),
-            (["-", S("Project"), S("Standard"), "-", "-"], ["true", "true", "10240", S("Owner-Zuweisung ausserhalb Self-Service Standard: Vier-Augen-Prinzip.")]),
-            (["-", S("Project"), S("Custom"), "-", "-"], ["true", "true", "quotaMb", S("Owner-Zuweisung ausserhalb Self-Service Standard: Vier-Augen-Prinzip.")]),
-            (["-", S("Department"), S("Standard"), "-", "-"], ["true", "true", "20480", S("Owner-Zuweisung ausserhalb Self-Service Standard: Vier-Augen-Prinzip.")]),
-            (["-", S("Department"), S("Custom"), "-", "-"], ["true", "true", "quotaMb", S("Owner-Zuweisung ausserhalb Self-Service Standard: Vier-Augen-Prinzip.")]),
-            (["-", "-", "-", "-", "-"], ["false", "false", "0", S("Die Bestellung ist unvollständig.")]),
-        ]),
+        id="SpopTeamsiteRichtlinie", name="Site-Richtlinie (GF-001)",
+        doc="Ersetzt amt_naming.rego, quota_limits.rego und approval.rego und bildet das Katalogprodukt auf den Site-Typ ab: "
+            "Vorlage, Features, Standard- und Maximalquota, Freigabepflicht und Materialnummer. Annahmen: Amtskürzel 2 bis 6 "
+            "Grossbuchstaben; Kurzname 3 bis 30 Zeichen; Vorlagen, Features, Grenzwerte und Freigabepflicht je Typ wie in der "
+            "Tabelle; Hermes, Communication und Publishing immer mit Vier-Augen-Prinzip; individuelle Quota immer mit Freigabe.",
+        inputs=[("amtGueltig", "boolean"), ("kurznameGueltig", "boolean"), ("produkt", "string"), ("quotaWahl", "string"),
+                ("quotaMb", "number"), ("begruendungVorhanden", "boolean")],
+        outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("quotaEffektivMb", "number"), ("siteTyp", "string"),
+                 ("template", "string"), ("features", "string"), ("material", "string"), ("grund", "string")],
+        rules=teamsite_rules),
     dict(
         id="SpopQuotaRichtlinie", name="Quota-Richtlinie (GF-002)",
-        doc="Ersetzt quota_limits.rego und approval.rego. Annahmen: Maximum je Site-Typ wie GF-001; Vier-Augen-Prinzip, "
-            "wenn die Erhöhung mehr als 5120 MB beträgt.",
+        doc="Ersetzt quota_limits.rego und approval.rego. Annahmen: Maximum je Site-Typ wie in der Site-Richtlinie (51200 MB für "
+            "Hermes, Communication, Publishing; 10240 MB sonst); darüber hinaus gilt das Zusatzprodukt Speicherplatzerweiterung; "
+            "Vier-Augen-Prinzip, wenn die Erhöhung mehr als 5120 MB beträgt.",
         inputs=[("siteGefunden", "boolean"), ("siteTyp", "string"), ("neueQuotaMb", "number"), ("erhoehungMb", "number"),
                 ("begruendungVorhanden", "boolean")],
         outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("grund", "string")],
@@ -43,9 +99,8 @@ decisions = [
             (["false", "-", "-", "-", "-"], ["false", "false", S("Die Site wurde nicht gefunden.")]),
             (["-", "-", "-", "-", "false"], ["false", "false", S("Die Begründung fehlt (mindestens 10 Zeichen).")]),
             (["-", "-", "-", "<= 0", "-"], ["false", "false", S("Die neue Quota muss grösser als die aktuelle sein.")]),
-            (["-", S("Standard"), "> 10240", "-", "-"], ["false", "false", S("Über dem Maximum für Standard (10240 MB).")]),
-            (["-", S("Project"), "> 51200", "-", "-"], ["false", "false", S("Über dem Maximum für Project (51200 MB).")]),
-            (["-", S("Department"), "> 102400", "-", "-"], ["false", "false", S("Über dem Maximum für Department (102400 MB).")]),
+            (["-", BIG, "> 51200", "-", "-"], ["false", "false", S("Über dem Maximum des Site-Typs (51200 MB); mehr Speicher über die Speicherplatzerweiterung.")]),
+            (["-", SMALL, "> 10240", "-", "-"], ["false", "false", S("Über dem Maximum des Site-Typs (10240 MB); mehr Speicher über die Speicherplatzerweiterung.")]),
             (["-", "-", "-", "> 5120", "-"], ["true", "true", S("Erhöhung um mehr als 5120 MB: Vier-Augen-Prinzip.")]),
             (["-", "-", "-", "-", "-"], ["true", "false", S("Erhöhung bis 5120 MB: ohne Freigabe.")]),
         ]),
@@ -66,6 +121,15 @@ decisions = [
             (["-", "-", '"Contribute","Full Control"', "-"], ["true", "true", "true", S("Contribute oder Full Control: Vier-Augen-Prinzip, MFA-Pflicht.")]),
             (["-", "-", "-", "-"], ["false", "false", "true", S("Unbekannte Rolle.")]),
         ]),
+    dict(
+        id="SpopZusatzRichtlinie", name="Zusatzleistung-Richtlinie",
+        doc="Zulässige Menge, Verrechnungsband und Materialnummer der Zusatzprodukte: Speicherplatzerweiterung 540007510 (GB), "
+            "Erweitertes Reporting 540007511/540007703/540007702/540007704 (1–5/6–10/11–15/16–20 Pakete), SubSite Quota "
+            "540007513/540007705/540007706/540007707/540007708 (11–20/21–50/51–100/101–200/201–500). Annahmen: Speicher 1 bis "
+            "500 GB, Freigabe über 100 GB; SubSite Quota bis 10 in der Basis enthalten, Freigabe ab 101.",
+        inputs=[("siteGefunden", "boolean"), ("produkt", "string"), ("menge", "number"), ("unveraendert", "boolean")],
+        outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("material", "string"), ("einheit", "string"), ("grund", "string")],
+        rules=zusatz_rules),
 ]
 
 import os
