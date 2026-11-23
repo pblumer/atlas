@@ -27,11 +27,12 @@ node("a_regel", "businessRuleTask", "Richtlinien prüfen (S6)", 250, M,
          ('=kurzname != null and matches(kurzname, "^[a-z0-9][a-z0-9-]{2,29}$")', "kurznameGueltig"),
          ("=itemId", "produkt"),
          ('=if quotaWahl = null then "Standard" else quotaWahl', "quotaWahl"),
-         ("=if quotaMb = null then 0 else quotaMb", "quotaMb"),
+         ("=if quotaMb = null then 0 else number(string(quotaMb))", "quotaMb"),
          ("=quotaBegruendung != null and string length(quotaBegruendung) >= 10", "begruendungVorhanden")),
      doc="DMN SpopTeamsiteRichtlinie anstelle von amt_naming.rego, quota_limits.rego und approval.rego. Bildet das Produkt auf "
          "den Site-Typ ab und liefert regel = {zulaessig, vierAugen, quotaEffektivMb, siteTyp, template, features, material, grund}. "
-         "Vorlagen, Grenzwerte und Freigabepflicht je Typ sind Annahmen und im DMN gepflegt.")
+         "Vorlagen, Grenzwerte und Freigabepflicht je Typ sind Annahmen und im DMN gepflegt. Die Antworten eines Bestellformulars "
+         "kommen als Text an; quotaMb wird deshalb vor der Regel in eine Zahl umgewandelt.")
 join, jx = check_block(
     "a", 400, M, "a_regel",
     "Ablehnung melden", rest_decision("Richtlinie SpopTeamsiteRichtlinie", "=regel.grund"),
@@ -103,8 +104,8 @@ X = change_sub(
     "Simuliert apsbw_sharepoint_site read und apsbw_sharepoint_quota read. Im PoC aus dem Stand des Strangs (site, quota). Schreibt aktuell.",
     "Quota-Richtlinie prüfen (S3)", "SpopQuotaRichtlinie",
     [("=aktuell.gefunden", "siteGefunden"), ("=aktuell.siteTyp", "siteTyp"),
-     ("=if neueQuotaMb = null then 0 else neueQuotaMb", "neueQuotaMb"),
-     ("=(if neueQuotaMb = null then 0 else neueQuotaMb) - aktuell.quotaMb", "erhoehungMb"),
+     ("=if neueQuotaMb = null then 0 else number(string(neueQuotaMb))", "neueQuotaMb"),
+     ("=(if neueQuotaMb = null then 0 else number(string(neueQuotaMb))) - aktuell.quotaMb", "erhoehungMb"),
      ("=begruendung != null and string length(begruendung) >= 10", "begruendungVorhanden")],
     "DMN SpopQuotaRichtlinie anstelle von quota_limits.rego und approval.rego: Begründung Pflicht, neue Quota grösser als die aktuelle, "
     "Maximum je Site-Typ, Vier-Augen-Prinzip ab einer Erhöhung um mehr als 5120 MB (Annahme).",
@@ -112,7 +113,7 @@ X = change_sub(
     'string(neueQuotaMb) + " MB\\nBegründung: " + begruendung + "\\nRegel: " + regel.grund',
     "Quota-Erhöhung freigeben")
 node("q_apply", "serviceTask", "Quota setzen (S2)", X(1260), QY,
-     ext(mock('={ siteUrl: site.url, storageMb: neueQuotaMb, alteQuotaMb: aktuell.quotaMb }', "quota")),
+     ext(mock('={ siteUrl: site.url, storageMb: number(string(neueQuotaMb)), alteQuotaMb: aktuell.quotaMb }', "quota")),
      doc="Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota) und schreibt quota fort; "
          "alteQuotaMb bleibt für einen Rollback erhalten.", parent="sp_quota")
 node("q_info", "sendTask", "Aktion als erledigt melden", X(1410), QY, shop("quota-erhoehen", "completed"),
@@ -137,7 +138,7 @@ X = change_sub(
     "Externe-Benutzer-Richtlinie prüfen (S4)", "SpopExternRichtlinie",
     [("=aktuell.gefunden", "siteGefunden"),
      ('=if email = null then "" else lower case(substring after(email, "@"))', "emailDomain"),
-     ("=rolle", "rolle"), ("=if ablaufTage = null then 30 else ablaufTage", "ablaufTage")],
+     ("=rolle", "rolle"), ("=if ablaufTage = null then 30 else number(string(ablaufTage))", "ablaufTage")],
     "DMN SpopExternRichtlinie anstelle von external_user.rego, mfa_required.rego und approval.rego.",
     '="Externe Einladung (GF-003)\\nSite: " + site.url + "\\nE-Mail: " + email + "\\nRolle: " + rolle + '
     '"\\nGültigkeit: " + string(ablaufTage) + " Tage\\nRegel: " + regel.grund',

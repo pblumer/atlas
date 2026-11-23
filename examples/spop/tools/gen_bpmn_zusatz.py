@@ -25,7 +25,7 @@ node("z_read", "serviceTask", "Site prüfen", 250, M,
 node("z_regel", "businessRuleTask", "Zusatz-Richtlinie prüfen", 400, M,
      brt("SpopZusatzRichtlinie", "regel",
          ("=aktuell.gefunden", "siteGefunden"), ("=itemId", "produkt"),
-         ("=if menge = null then 0 else menge", "menge"), ("=false", "unveraendert")),
+         ("=if menge = null then 0 else number(string(menge))", "menge"), ("=false", "unveraendert")),
      doc="DMN SpopZusatzRichtlinie: zulässige Menge je Produkt, Verrechnungsband und Materialnummer (z. B. Reporting 6–10 Pakete "
          "= 540007703), Vier-Augen-Pflicht. Liefert regel = {zulaessig, vierAugen, material, einheit, grund}.")
 join, jx = check_block(
@@ -39,12 +39,13 @@ join, jx = check_block(
     rest_decision("Vier-Augen-Freigabe", REASON_FREIGABE),
     "Meldet die verweigerte Vier-Augen-Freigabe über die Decision-Route der Position." + REST_DOC)
 node("z_apply", "serviceTask", "Zusatzleistung einrichten", 1370, M,
-     ext(mock('={ produkt: itemId, siteUrl: siteUrl, menge: menge, einheit: regel.einheit, material: regel.material }', "bestand")),
+     ext(mock('={ produkt: itemId, siteUrl: siteUrl, menge: number(string(menge)), einheit: regel.einheit, material: regel.material }', "bestand")),
      doc="Simuliert die Einrichtung über APS-BW: Speicher (apsbw_sharepoint_quota apply um menge GB), Reporting-Pakete oder "
          "Subsite-Quota. Schreibt bestand, den Stand des Strangs bis zur Rückgabe.")
 node("z_bill", "serviceTask", "Verrechnung erfassen", 1520, M,
      ext(mock('={ material: bestand.material, menge: bestand.menge, einheit: bestand.einheit, position: orderId + "/" + (if positionId = null then itemId else positionId) }', "verrechnung")),
-     doc="Simuliert die Erfassung der wiederkehrenden Verrechnung mit der Materialnummer des Verrechnungsbands.")
+     doc="Simuliert die Erfassung der wiederkehrenden Verrechnung mit der Materialnummer des Verrechnungsbands. Die Antworten "
+         "eines Bestellformulars kommen als Text an; menge wird deshalb vor Regel und Bestand in eine Zahl umgewandelt.")
 node("z_done", "serviceTask", "Position als erledigt melden", 1670, M, rest_status("done"),
      doc="Meldet die Position als erledigt (status done); damit steht die Zusatzleistung im Bestand." + REST_DOC)
 
@@ -71,14 +72,14 @@ X = change_sub(
     "Liest den Stand des Strangs (bestand). Schreibt aktuell.",
     "Zusatz-Richtlinie prüfen", "SpopZusatzRichtlinie",
     [("=aktuell.gefunden", "siteGefunden"), ("=itemId", "produkt"),
-     ("=if menge = null then 0 else menge", "menge"), ("=menge = aktuell.menge", "unveraendert")],
+     ("=if menge = null then 0 else number(string(menge))", "menge"), ("=(if menge = null then 0 else number(string(menge))) = aktuell.menge", "unveraendert")],
     "DMN SpopZusatzRichtlinie mit der neuen Menge; eine unveränderte Menge wird abgelehnt.",
     '="Mengenänderung: " + itemId + "\\nSite: " + bestand.siteUrl + "\\nBisher: " + string(aktuell.menge) + "\\nNeu: " + '
     'string(menge) + " " + regel.einheit + " (Material " + regel.material + ")\\nRegel: " + regel.grund',
     "Mengenänderung freigeben")
 SM = dict(parent="sp_aendern")
 node("m_apply", "serviceTask", "Menge anpassen", X(1260), QY,
-     ext(mock('={ produkt: itemId, siteUrl: bestand.siteUrl, menge: menge, einheit: regel.einheit, material: regel.material, '
+     ext(mock('={ produkt: itemId, siteUrl: bestand.siteUrl, menge: number(string(menge)), einheit: regel.einheit, material: regel.material, '
               'mengeVorher: aktuell.menge, materialVorher: bestand.material }', "bestand")),
      doc="Simuliert die Anpassung über APS-BW und schreibt bestand fort; mengeVorher und materialVorher bleiben für einen Rollback.", **SM)
 node("m_bill", "serviceTask", "Verrechnung anpassen", X(1410), QY,
