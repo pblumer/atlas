@@ -61,9 +61,9 @@ way: `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.28.0/atlas_0.28.0_linux_amd64.tar.gz
-tar -xzf atlas_0.28.0_linux_amd64.tar.gz
-./atlas_0.28.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.28.1/atlas_0.28.1_linux_amd64.tar.gz
+tar -xzf atlas_0.28.1_linux_amd64.tar.gz
+./atlas_0.28.1_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.28.0
+VERSION=0.28.1
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.28.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.28.1_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -446,6 +446,24 @@ unless you set them ([the record](adr/0560-https-redirect-and-hsts.md)):
   everything works (`31536000` is a year), and set `0` before taking TLS away, which
   tells browsers to forget it. It is never sent with `includeSubDomains` or `preload`.
 
+Three headers need no setting, because they bind nothing but atlas's own answers. Every
+answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and
+`Content-Security-Policy: frame-ancestors 'self'` with `X-Frame-Options: SAMEORIGIN`, so
+a page of another site cannot show the Console in a frame. The one thing meant to be
+framed elsewhere stays frameable: a public start form under `/public/forms/`
+([embedding](adr/0186-embed-public-forms-cross-origin.md)). A proxy in front may set
+stricter values of its own; it should not remove these.
+
+One rule goes with them ([the record](adr/0563-cross-origin-protection.md)): a
+browser's request that changes something is accepted only from atlas's own origin. A
+browser says where a request comes from (`Sec-Fetch-Site`, `Origin`), and anything but
+`GET`, `HEAD` and `OPTIONS` from another origin is answered `403` and logged as
+`auth.cross_origin_refused`. Clients that are not browsers send neither header and are
+not affected; the public forms and the OAuth client endpoints are exempt. The one way
+to meet this by accident is a proxy that does not pass `Host` on, in front of a Console
+used over plain HTTP or from an old browser: pass `Host` on, as the example below does,
+or set `--external-url`, whose origin is always accepted as atlas's own.
+
 Where TLS is on, the server also opens a second listener on `127.0.0.1` with an
 ephemeral port, in plaintext, for its own child processes — the MCP adapter's
 loopback calls and any worker this server supervises. It is not reachable from
@@ -767,7 +785,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.28.0'
+$Version = '0.28.1'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -783,7 +801,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.28.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.28.1_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -799,7 +817,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.28.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.28.1_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -878,7 +896,7 @@ The archive holds a folder `atlas_<version>_windows_amd64`, so the binary is one
 down:
 
 ```powershell
-$Version = '0.28.0'
+$Version = '0.28.1'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 $Dir  = "D:\atlas\releases\$Version"
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
@@ -1232,6 +1250,7 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.login_throttled` | WARN | An attempt refused before any password check, because the address or the account had spent its budget |
 | `auth.logout` | INFO | A session was ended by its owner |
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
+| `auth.cross_origin_refused` | WARN | A browser sent a state-changing request from another origin, and it was refused before it was authenticated, with the `path`, the `origin` the browser named and the `host` the request arrived for. Either a page elsewhere tried to act as a signed-in person, or a proxy in front rewrites `Host` — see below |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
 | `content.source_changed` | INFO | An administrator created, changed or removed a content source, by `source`, naming its `base_url` and `credentials_ref` — never the token |

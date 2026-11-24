@@ -142,6 +142,11 @@ func TestAProcessCommandsAnActionInTheNameOfItsApplication(t *testing.T) {
 	if audit == nil || audit["outcome"] != "completed" || uint64(audit["instanceKey"].(float64)) != strand {
 		t.Fatalf("the commanded audit ended %v (%s), want completed by the strand", audit, body)
 	}
+	// Listed, the same command raises nothing: what the process is told is what it
+	// was told before the tool was listed, and no more.
+	if got := commandIncidents(t, admin, ts, "leaver-audit"); len(got) != before {
+		t.Fatalf("the listed command raised an incident of its own: %q, want the %d from before the tool was listed", got, before)
+	}
 
 	start("leaver-reset")
 	refusedWith("leaver-reset", "a process commands only what an operator or a system may ask for")

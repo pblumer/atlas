@@ -59,6 +59,9 @@ func TestPanoramaModelLibraryHTTP(t *testing.T) {
 	// ownership means deleting the application is refused while a model would be
 	// orphaned.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/applications", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list applications: status=%d body=%s", code, body)
+	}
 	var applications []struct {
 		ID        string `json:"id"`
 		Artifacts int    `json:"artifacts"`

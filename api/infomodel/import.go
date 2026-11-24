@@ -223,10 +223,6 @@ func sanitizeImport(doc Model, notes *noteList) Model {
 	seenName := map[string]bool{}
 	for _, c := range doc.Classes {
 		name := strings.TrimSpace(c.Name)
-		label := name
-		if label == "" {
-			label = c.ID
-		}
 		if name == "" {
 			notes.add(NoteDropped, c.ID, "A class with no name was dropped: a name is what a data object's itemSubjectRef refers to.")
 			continue

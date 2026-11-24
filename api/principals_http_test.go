@@ -56,8 +56,6 @@ func TestPrincipalsDirectory(t *testing.T) {
 	if e, ok := byID[aliceID]; !ok || e.Type != "user" || e.Name != "Alice Ng" {
 		t.Fatalf("alice entry = %+v (ok=%v), want type=user name=Alice Ng", e, ok)
 	}
-	if _, ok := byID["admin-missing"]; ok { /* placeholder */
-	}
 	if _, ok := byID[bobID]; ok {
 		t.Fatalf("disabled bob must not appear: %s", body)
 	}

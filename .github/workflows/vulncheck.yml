@@ -1,0 +1,150 @@
+name: Known vulnerabilities
+
+# A dependency does not become vulnerable when somebody changes it. It becomes
+# vulnerable on the day a report about it is published, while this repository sits
+# perfectly still — so no pull request can be the moment to find out, and a check
+# that runs on pull requests would only ever blame whoever happened to open the
+# next one. This asks on a schedule instead, and it is deliberately not a gate.
+#
+# govulncheck reads the call graph: it reports a vulnerability when Atlas's own
+# code can reach the affected function, not whenever an affected module is somewhere
+# in go.sum. That is what makes a finding here worth an issue.
+#
+# It scans with the toolchain go.mod names, not with the newest one the runner
+# offers. The `toolchain` line is the floor everybody building from source gets, and
+# a newer patch release of Go is how fixes to the standard library arrive. Scanned
+# with the newest toolchain, a floor that has fallen behind would read as clean
+# forever; scanned at the floor, it reads as what it is, and the fix is to raise the
+# line.
+#
+# What this does not cover: images already published. They carry the standard
+# library and the modules of the day they were built, and only a rebuild changes that.
+
+on:
+  schedule:
+    # Every morning, before the working day. A report published overnight is waiting
+    # as an issue rather than as a red run nobody opens.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: vulncheck
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: no known vulnerability is reachable
+    runs-on: ubuntu-latest
+    # The scan takes well under a minute once the modules are there. The cap is for
+    # the download that hangs.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      # Built with the runner's toolchain, before the floor is pinned below: the
+      # tool's own go.mod may ask for a newer Go than the floor Atlas declares, and a
+      # pinned toolchain refuses that rather than fetching one.
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Scan with the toolchain go.mod declares
+        id: scan
+        run: |
+          floor="$(go mod edit -json | jq -r '.Toolchain // empty')"
+          if [ -n "$floor" ]; then
+            export GOTOOLCHAIN="$floor"
+          fi
+          echo "scanning with $(go version)"
+          # govulncheck exits 3 for "found something" and with anything else for "could
+          # not look". Only the first is a finding; the second fails the run as itself,
+          # so an unreachable database is never reported as a vulnerable dependency.
+          set +e
+          "$(go env GOPATH)/bin/govulncheck" ./... > vuln.log 2>&1
+          code=$?
+          set -e
+          cat vuln.log
+          case "$code" in
+            0) echo "found=false" >> "$GITHUB_OUTPUT" ;;
+            3) echo "found=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "govulncheck could not complete (exit $code); that is not a finding."
+               exit "$code" ;;
+          esac
+
+      - name: Open an issue for the findings
+        if: steps.scan.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Each finding as one line: the report's id, its title, and where the fix is.
+          # The traces stay in the run's log, which the issue links to.
+          awk '
+            /^Vulnerability #/ { id = $3; getline; sub(/^ +/, ""); title = $0; next }
+            /^ +Found in:/     { found = $3 }
+            /^ +Fixed in:/     { printf "- [%s](https://pkg.go.dev/vuln/%s): %s (found in `%s`, fixed in `%s`)\n", id, id, title, found, $3 }
+          ' vuln.log > findings.md
+          # One open issue at a time, as nuggets-check.yml does it and for its reason:
+          # a daily issue is how a label gets muted.
+          existing="$(gh issue list --label known-vulnerability --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "issue #$existing is already open for this; commenting instead"
+            {
+              echo "Still reachable as of $(date -u +%Y-%m-%d). [Run]($RUN_URL)"
+              echo
+              cat findings.md
+            } > comment.md
+            gh issue comment "$existing" --body-file comment.md
+            exit 0
+          fi
+          gh label create known-vulnerability --color B60205 \
+            --description "govulncheck reports a published vulnerability Atlas's code can reach" 2>/dev/null || true
+          {
+            echo "The scheduled scan found published vulnerabilities in code Atlas can"
+            echo "reach. These are reports from the Go vulnerability database about the"
+            echo "standard library or a dependency, not defects found in Atlas itself."
+            echo
+            cat findings.md
+            echo
+            echo "To fix: a finding in a module wants \`go get <module>@<fixed version>\`"
+            echo "and \`go mod tidy\`; a finding in the standard library wants the"
+            echo "\`toolchain\` line in \`go.mod\` raised to the fixed release. Then"
+            echo "\`govulncheck ./...\` locally, and the full check sequence."
+            echo
+            echo "The call traces are in the [workflow run]($RUN_URL)."
+          } > body.md
+          gh issue create --title "govulncheck reports reachable vulnerabilities" \
+            --label known-vulnerability --body-file body.md
+
+      # The other half of "one issue at a time": when the scan is clean again, the
+      # issue it opened has nothing left to say.
+      - name: Close the issue once the scan is clean
+        if: steps.scan.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          existing="$(gh issue list --label known-vulnerability --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" \
+              --comment "The scan of $(date -u +%Y-%m-%d) found nothing reachable. [Run]($RUN_URL)"
+          fi
+
+      # Last, so the issue exists before the run turns red: a scheduled run that found
+      # something should not read as a success in the list either.
+      - name: Fail the run when something was found
+        if: steps.scan.outputs.found == 'true'
+        run: |
+          echo "govulncheck found reachable vulnerabilities; see the issue labelled known-vulnerability."
+          exit 1

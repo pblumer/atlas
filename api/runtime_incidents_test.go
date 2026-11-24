@@ -84,6 +84,9 @@ func TestProcessRuntimeShowsWhyATokenIsParked(t *testing.T) {
 
 	// Exhaust the job's retries the way a failing worker does.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: status=%d body=%s", code, body)
+	}
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
