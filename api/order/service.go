@@ -227,7 +227,10 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req placeReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().ModelUpload)).Decode(&req); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
 		return
 	}
@@ -1001,7 +1004,10 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 	id, item := r.PathValue("id"), r.PathValue("item")
 
 	var req reportReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().ModelUpload)).Decode(&req); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
 		return
 	}
@@ -1168,7 +1174,10 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 	id, item := r.PathValue("id"), r.PathValue("item")
 
 	var req decideReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().Request)).Decode(&req); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
 		return
 	}

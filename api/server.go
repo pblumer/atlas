@@ -2313,6 +2313,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
 	s.catalogs.Limits = s.budgets()
+	s.userPrefs.Limits = s.budgets()
 	// The catalogue can now say which approval rules reach nobody. It asks; the
 	// accounts and the groups are the server's, and this is where the two meet.
 	s.catalogs.Approvers = approverLookup{s: s}
@@ -2332,6 +2333,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	contentReg.Transport = s.contentRoundTripper()
 	s.catalogs.Content = contentReg
 	s.contentSources = contentsource.NewService(contentReg, func() int64 { return s.now() })
+	s.contentSources.Limits = s.budgets()
 	s.contentSources.InUse = s.catalogs.BoundTo
 	s.contentRunner = contentsource.NewRunner(contentReg, s.catalogs.Rechecks(), func() int64 { return s.now() })
 	contentReg.OnChange(s.contentRunner.Reload)

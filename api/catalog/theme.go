@@ -93,7 +93,10 @@ func (s *Service) HandleSetTheme(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
 
 	var in Theme
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().Settings)).Decode(&in); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
 		return
 	}

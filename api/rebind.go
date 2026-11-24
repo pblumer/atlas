@@ -32,7 +32,10 @@ func (s *Server) handleRebindProduct(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req rebindReq
 	if r.ContentLength != 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().Request)).Decode(&req); err != nil {
+			if httpapi.BodyTooLarge(w, err) {
+				return
+			}
 			httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
 			return
 		}

@@ -35,6 +35,16 @@ _Changed_ / _Removed_ for each version.
   read it. It is now part of the answer only for an administrator, the one account that can
   approve a system; everybody else is still told what the system asks for and that they may not
   approve it.
+- **Every request body is read against a budget.** Nineteen handlers read theirs with no
+  ceiling: placing an order, reporting and deciding one, completing a task or a job, claiming a
+  task, activating jobs, deciding approvals, saving one's preferences, a catalogue's content and
+  theme, a content source, a call override, and moving, rebinding or deactivating a process.
+  The body was read into memory whole before a field of it was looked at, so a single request
+  from any signed-in account could spend the memory of the one process that serves everybody.
+  Each now reads against the budget of what it carries — the one an ordinary JSON request has,
+  or the one a body with variables has, as starting an instance already did — and a body past
+  it is answered `413` and not parsed. A test now refuses a handler anywhere under `api/` that
+  reads a request body directly, so the next one cannot be written the old way.
 
 ## [0.28.0] — 2026-11-24
 

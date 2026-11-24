@@ -94,8 +94,11 @@ type decideResponse struct {
 // handleDecideApprovals decides every named approval the caller holds, as one
 // decision on one order.
 func (s *Server) handleDecideApprovals(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(httpapi.LimitBody(w, r, s.budgets().ModelUpload))
 	if err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
