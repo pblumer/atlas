@@ -12,6 +12,51 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.28.1] — 2026-11-24
+
+**A browser acts on Atlas only from Atlas's own pages.** A request that changes something is
+accepted from the server's own origin and answered `403` from any other, before it is
+authenticated (ADR-0563), and every answer carries the baseline browser headers. A page of
+another site can therefore neither act as the person signed in nor show the Console in a frame.
+
+**An approval is decided by somebody other than the person who ordered, and carries the
+decision alone.** A `fixed` or a `role` approval no longer lets the person a product names
+approve an order of their own, the three approval models Atlas ships pass on what their form
+asks for and nothing else, and releasing a task addressed to one person no longer opens it to
+every account.
+
+**Single sign-on and the OAuth server check what they took on trust.** An ID token's `nbf` and
+`azp` are read, an e-mail address the provider does not vouch for is not taken, a redirect URI
+is `https` or `http` to this machine and nothing else, and the grant a connected system holds
+and the reason a metadata document could not be fetched are told to an administrator alone.
+Nineteen handlers that read a request body without a ceiling now read it against a budget.
+
+Nothing in the log or the state changed; 0.28.1 replaces 0.28.0 in place. On its first start
+the server deploys one new version of each of the three approval models; an approval that is
+already waiting stays on the version it was started on (ADR-0162) and is still held to the
+rules the server itself asks. The release carries fixes only, and most of them refuse
+something that was accepted, so six changes can alter what worked against 0.28.0:
+
+- **A browser's state-changing request from another origin is answered `403`, and the Console
+  is not shown in a frame of another site.** Clients that are not browsers are not affected,
+  and a public start form stays frameable. Behind a proxy that does not pass `Host` on, with
+  the Console used over plain HTTP or from an old browser, the Console's own requests are
+  refused: pass `Host` on, or start the server with `--external-url`.
+- **Releasing a task addressed to one person and to no group answers `409`.**
+  `POST /api/v1/tasks/{key}/unclaim` says to hand the task to somebody instead.
+- **The person a `fixed` or `role` approval names cannot approve an order they placed.**
+  `POST /api/v1/tasks/{key}/complete` answers `403` and `POST /api/v1/approvals/decide` skips
+  the line; somebody else with the operator role decides.
+- **Variables sent beside an approval's answer no longer reach the instance.** The shipped
+  approval tasks map out `genehmigt` and `begruendung` only. An approval model of your own
+  that builds a call from instance variables after a user task needs the same output mappings.
+- **Single sign-on and OAuth refuse what they let through.** An ID token whose `nbf` lies more
+  than a minute ahead, or whose `azp` names another client, fails the login. A redirect URI
+  of another scheme than `http` or `https` is refused at registration and for a client that
+  already holds one.
+- **A request body past its budget is answered `413`** on the nineteen routes that read theirs
+  without a ceiling.
+
 ### Security
 - **A browser's request that changes something is accepted only from Atlas's own origin.** What kept a page elsewhere from acting as the signed-in person was `SameSite=Lax` on the session cookie, and a site is wider than an origin: a service under a sibling host name or on another port of the same host is the same site, and its pages' requests arrived signed in. The server now reads what a browser says about a request's source (`Sec-Fetch-Site`, and `Origin` where that is missing) and answers anything but `GET`, `HEAD` and `OPTIONS` from another origin with `403`, before it is authenticated; the refusal is logged as `auth.cross_origin_refused`. Clients that are not browsers send neither header and are unaffected. The public start forms and their wizard (`/public/forms/`, `/public/wizard/`) and the OAuth token, revocation and registration endpoints are exempt, because they are called from other origins on purpose and act on no session. **If the Console sits behind a proxy that does not pass the `Host` header on** and is used over plain HTTP or from an old browser, its own requests are refused until the proxy passes `Host` on or the server is started with `--external-url`, whose origin is always accepted (ADR-0563).
 - **Every answer says how a browser may treat it.** `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `Content-Security-Policy: frame-ancestors 'self'` with `X-Frame-Options: SAMEORIGIN` used to be set by the handlers that had thought of them. They are now the default of every answer, written before the handler runs, so a new route has them without its author knowing and a handler that says more — the pages a link opens keep out of every frame, a stored document is sandboxed — is still the one that is heard. A page of another site can therefore no longer show the Console in a frame. A public start form under `/public/forms/` stays frameable, because embedding it that way is supported (ADR-0186). `Strict-Transport-Security` remains the operator's to switch on (`--hsts-max-age`). Because a browser told not to sniff loads a script or a stylesheet only when it is declared as one, the server now states the type of its own embedded scripts and stylesheets instead of asking the host: on Windows that answer came from the registry and differed from machine to machine.
@@ -19403,7 +19448,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/pblumer/atlas/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/pblumer/atlas/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.1
 [0.27.0]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.0
