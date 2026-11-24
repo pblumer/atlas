@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-11-24
+
+**A per-position product can take an action in a message event subprocess, and SPoP shows a
+catalogue built that way.** Publishing such a product now counts the start of a
+message-triggered event subprocess (ADR-0082) as a place its strand waits for an action, and the
+shop offers the action while that start is armed. `examples/spop` models a SharePoint OnPrem
+offering as eight catalogue products on two lifecycle processes; renaming a site, changing its
+URL and changing its owner and members run there as event subprocesses beside the strand.
+
+**A decision's last version stays while a task still names it.** Deleting a decision deployment
+is now also refused when a deployed process evaluates the decision as latest under its FEEL
+identifier rather than its label.
+
+Nothing in the log or the state changed; 0.28.0 replaces 0.27.1 in place. One change can alter
+what worked against 0.27.1:
+
+- **Deleting a decision deployment can now be refused where it went through.** A delete that
+  would have left a latest-bound business rule task without a model is refused as it already
+  was for a task naming the decision's label. Deploy another version of the decision first, or
+  undeploy the process definitions the refusal names.
+
 ### Added
 
 - **Example: SharePoint OnPrem team site lifecycle (SPoP).** `examples/spop` models a
@@ -19283,7 +19304,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.27.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/pblumer/atlas/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.1
 [0.27.0]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/pblumer/atlas/compare/v0.25.0...v0.26.0
