@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Security
+- **Answering an approval writes the decision and nothing else.** The three approval models
+  Atlas ships call Atlas's own API after their task, with an operator's token: at the address
+  in `atlasApiBase`, for the order and position the instance names, reporting `approvalRef` as
+  the person who approved. Completing a task writes whatever variables the request carries, and
+  for a task without output mappings they land on the instance. So whoever held an approval
+  could send, beside their answer, another order, another approver, or another address for the
+  call that carries the token. The approval tasks now map out exactly what their form asks
+  for — `genehmigt` and `begruendung` — and a task with output mappings keeps everything else
+  in its own scope (ADR-0068). `POST /api/v1/orders/{id}/lines/{line}/start` also no longer
+  records an approval under a name other than the one a `fixed` or `role` product names. An
+  approval model of your own that builds a call from instance variables after a user task
+  needs the same output mappings; a task without them still writes to the instance, as before.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other
