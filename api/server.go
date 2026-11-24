@@ -39,6 +39,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -4241,7 +4242,31 @@ func revalidated(root fs.FS, next http.Handler) http.Handler {
 		if tag, ok := tags[p]; ok {
 			w.Header().Set("ETag", tag)
 			w.Header().Set("Cache-Control", "no-cache")
+			if ct := ownStaticType(p); ct != "" {
+				w.Header().Set("Content-Type", ct)
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ownStaticType is the content type of an embedded script or stylesheet, said by this
+// server rather than looked up.
+//
+// The file server would ask package mime, and mime asks the host: on Windows the
+// registry, where any installed program may have written what ".js" is. Machines
+// answer "application/javascript" and machines answer "text/plain". Every answer
+// carries nosniff (withSecurityHeaders), so a browser loads a script or a stylesheet
+// only when it is declared as one — which made the host's opinion decide whether the
+// Console starts. These files are compiled into the binary; what they are is not a
+// question for the machine it runs on. The file server keeps a type that is already
+// set. Other extensions are left to it: nothing a browser refuses hangs on them.
+func ownStaticType(p string) string {
+	switch path.Ext(p) {
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	}
+	return ""
 }
