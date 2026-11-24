@@ -35,7 +35,16 @@ Katalog stehen können. Alle sechs Produkte binden denselben Prozess. Die Richtl
 **Speicherplatzerweiterung (540007510):** keine eigene Bestellung, sondern die Aktion
 «Speicherplatz erweitern» an jeder Site (GF-002). Sie nennt die Gesamtmenge an Zusatzspeicher in
 GB (1–500, Freigabe über 100 GB); die gesetzte Quota ist die inbegriffene Quota des Site-Typs plus
-Zusatzspeicher × 1024 MB. Geprüft wird mit `SpopZusatzRichtlinie` (Produkt `spop-speicher`).
+Zusatzspeicher × 1024 MB. Geprüft wird mit `SpopZusatzRichtlinie`; `spop-speicher` ist dort nur
+der Schlüssel der Regelzeilen, kein Katalogprodukt.
+
+| Anfrage (Gesamtmenge) | Ergebnis bei Team Site Modern (5120 MB inbegriffen) |
+|---|---|
+| 50 GB | ohne Freigabe; Quota 56 320 MB; Shop meldet «completed» |
+| 150 GB | Vier-Augen-Freigabe; danach Quota 158 720 MB; Shop meldet «completed» |
+| erneut 150 GB | abgelehnt, weil unverändert; Shop meldet «rejected» |
+
+Eine kleinere Menge verringert den Zusatzspeicher; 0 lässt das Formular nicht zu.
 
 **Stufenpakete:** Die Stufen von Reporting und SubSite Quota sind Verrechnungsbänder einer
 Menge, keine eigenen Produkte. `SpopZusatzRichtlinie` leitet das Band und die Materialnummer
@@ -155,6 +164,16 @@ Katalogprodukten sind. Die Schritte:
    - die Applikationskonstante `ATLAS_API_BASE`, falls der Server nicht unter
      `http://127.0.0.1:8080` lauscht.
 
+Die Applikation trägt genau diese drei Regeln. Eine Installation aus einem früheren Stand
+bereinigt man so:
+
+- Regel und Modell `SpopQuotaRichtlinie` (`spop-quota-richtlinie`) in der Console löschen; das
+  MCP-Werkzeug kann Regeln nur registrieren, nicht löschen. Danach neu deployen.
+- Das frühere Produkt `spop-speicher` zurückziehen (`state: withdrawn`) und aus dem Katalog
+  nehmen; seine Leistung ist die Aktion «Speicherplatz erweitern».
+- Alte Prozessversionen erst löschen, wenn ihre Sites nicht mehr gebraucht werden (siehe
+  «Alte Versionen löschen» unten).
+
 Auf einen anderen Server überträgt `atlas export --application … --catalog …` zusammen mit
 `atlas import` das Ganze als Paket (ADR-0467).
 
@@ -170,6 +189,10 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
   - Freigabepflicht: Hermes, Communication und Publishing immer
 - **Grenzen der Zusatzleistungen (Annahmen):**
   - Speicherplatzerweiterung 1 bis 500 GB, Freigabe über 100 GB
+  - Die Freigabegrenze gilt für die Gesamtmenge, nicht für die einzelne Erhöhung: 90 → 110 GB
+    braucht eine Freigabe, zwei Schritte zu je 50 GB bis 100 GB nicht.
+  - Verrechnet wird die Gesamtmenge pro GB und Monat; ob APS-BW Gesamtmenge oder Differenz
+    erwartet, ist nicht geklärt.
   - SubSite Quota bis 10 in der Basis enthalten, Freigabe ab 101
 - **Preise:** nur für Reporting bekannt (CHF 25.– pro Paket).
 - **Widerspruch in der Quelle:** Der Katalogtext zu «SubSite Quota (11-20)» nennt «21 bis 50
@@ -190,6 +213,14 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
   Startvariable einer Position.
 - **Sites ohne `siteZugriff`:** Sites, die vor der Eigentumsprüfung bereitgestellt wurden,
   tragen die Variable nicht und gelten für Zusatzprodukte als nicht gefunden.
+- **Alte Versionen löschen:** Die Eigentumsprüfung sucht in den Instanzen aller deployten
+  Versionen von `proc_spop_teamsite`. Wird eine Version gelöscht, fehlen ihre Sites danach im
+  Bestand, und Zusatzprodukte für sie werden abgelehnt. Eine Version mit aktiven Sites
+  vorher migrieren oder behalten.
+- **Gelöschte Entscheidungsversionen:** Atlas hat auf der Testinstallation Entscheidungs-
+  versionen gelöscht, die eine noch deployte, ältere Prozessversion verwendet hatte. Das
+  Entscheidungsprotokoll ihrer Instanzen blieb lesbar; ein Neustart dieser Version fände die
+  Tabellen nicht mehr. Ob das so beabsichtigt ist, ist nicht geklärt.
 - **Grösse der Prozessliste:** «Site-Prozessversionen lesen» legt die ganze Antwort von
   `GET /api/v1/processes` im Strang ab (auf der Testinstallation rund 160 KB). Ein
   Folgeschritt, der nur die Schlüssel behält, oder eine Abfrage nach Prozess-ID wäre
