@@ -1,4 +1,4 @@
-# ADR-DRAFT: A browser's request that changes something comes from Atlas's own origin
+# ADR-0563: A browser's request that changes something comes from Atlas's own origin
 
 - **Status:** Accepted
 - **Implementation:** Landed

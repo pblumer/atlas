@@ -454,7 +454,7 @@ framed elsewhere stays frameable: a public start form under `/public/forms/`
 ([embedding](adr/0186-embed-public-forms-cross-origin.md)). A proxy in front may set
 stricter values of its own; it should not remove these.
 
-One rule goes with them ([the record](adr/draft-cross-origin-protection.md)): a
+One rule goes with them ([the record](adr/0563-cross-origin-protection.md)): a
 browser's request that changes something is accepted only from atlas's own origin. A
 browser says where a request comes from (`Sec-Fetch-Site`, `Origin`), and anything but
 `GET`, `HEAD` and `OPTIONS` from another origin is answered `403` and logged as

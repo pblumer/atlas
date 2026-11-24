@@ -1,4 +1,4 @@
-# ADR-DRAFT: What a script task may reach when nobody said
+# ADR-0564: What a script task may reach when nobody said
 
 - **Status:** Proposed
 - **Implementation:** Not started
