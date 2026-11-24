@@ -107,8 +107,8 @@ forms = {
     ]),
     "spop-teamsite-rueckgabe": ("SPoP: Site zurückgeben", [
         text("**SharePoint OnPrem: Site zurückgeben**\n\nGilt für die Site dieser Position. Entfernt alle externen Zugriffe, "
-             "verschiebt die Site in den Papierkorb, beendet ihre Zusatzleistungen und bricht eine laufende Änderung ab, auch "
-             "eine, die auf eine Freigabe wartet."),
+             "verschiebt die Site in den Papierkorb und beendet ihre Zusatzleistungen. Während eine Änderung der Site läuft, "
+             "etwa eine Freigabe aussteht, ist die Rückgabe erst nach deren Abschluss möglich."),
         {"key": "grund", "type": "textarea", "label": "Grund der Rückgabe", "validate": {"required": True}, "properties": NP},
     ]),
     "spop-freigabe": ("SPoP: Vier-Augen-Freigabe", [

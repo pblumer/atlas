@@ -24,8 +24,9 @@ ist ein Zwischenereignis an diesem Gateway mit ihrem Subprozess (Katalog: change
 - spop.teamsite.titel          → «Site umbenennen»                      (Formular spop-site-umbenennen)
 - spop.teamsite.url            → «Site-URL ändern»                      (Formular spop-site-url-aendern)
 - spop.teamsite.berechtigungen → «Berechtigungen ändern»                (Formular spop-berechtigungen-aendern)
-Nach jedem Subprozess kehrt der Strang zum Warten zurück. Die Rückgabe (spop.teamsite.rueckgabe, Katalog: deprovision) ist ein
-unterbrechender Ereignis-Subprozess und als Nachrichtenstart die Rückfallebene ohne laufenden Strang. Alle späteren Aktionen sind an
+Nach jedem Subprozess kehrt der Strang zum Warten zurück. Die Rückgabe (spop.teamsite.rueckgabe, Katalog: deprovision) ist ebenfalls
+ein Zwischenereignis am Gateway und als Nachrichtenstart die Rückfallebene ohne laufenden Strang; während eine Änderung läuft, nimmt
+der Strang sie nicht an. Alle späteren Aktionen sind an
 orderId + "/" + positionId korreliert (Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, zusatz, gruppen,
 externe, verrechnung); jede Änderung setzt nur ihre eigenen Felder mit context merge ein. «Angaben ändern» im Shop korrigiert nur den
 Datensatz der Bestellung; die Sprache ist nach der Erstellung fest. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie
@@ -56,7 +57,7 @@ echt: Decision-Route, Positionsroute (Secret "atlas", Konstante ATLAS_API_BASE) 
 <serviceTask id="a_bill" name="Verrechnung erfassen"><documentation>Simuliert die Erfassung der wiederkehrenden Verrechnung (Marktleistungsstruktur ML Redesign SharePoint) mit der Materialnummer des Site-Typs.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, position: orderId + "/" + (if positionId = null then itemId else positionId) }' resultVariable="verrechnung"/></extensionElements><incoming>a_f13</incoming><outgoing>a_f13b</outgoing></serviceTask>
 <serviceTask id="a_info" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status done); erst damit steht die Site im Bestand und die Aktionen werden möglich. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + replace((if positionId = null then itemId else positionId), "#", "%23")' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>a_f13b</incoming><outgoing>a_f14</outgoing></serviceTask>
 <exclusiveGateway id="j_aktiv"><incoming>w_back</incoming><incoming>a_f14</incoming><incoming>w_f7</incoming><outgoing>w_f1</outgoing></exclusiveGateway>
-<eventBasedGateway id="g_warten" name="Aktiv: auf Auftrag warten"><documentation>Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Einladung, Speicher, Erweitertes Reporting, SubSite Quota, Umbenennung, URL-Änderung oder Berechtigungen. Jede Aktion ist an orderId/positionId korreliert. Während eine Aktion läuft, wartet der Strang nicht; eine zweite Aktion derselben Position wird erst nach Abschluss der ersten angenommen. Die Rückgabe unterbricht jederzeit (Ereignis-Subprozess «Rückgabe»).</documentation><incoming>w_f1</incoming><outgoing>w_c0</outgoing><outgoing>w_c1</outgoing><outgoing>w_c2</outgoing><outgoing>w_c3</outgoing><outgoing>w_c4</outgoing><outgoing>w_c5</outgoing><outgoing>w_f3</outgoing></eventBasedGateway>
+<eventBasedGateway id="g_warten" name="Aktiv: auf Auftrag warten"><documentation>Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Einladung, Speicher, Erweitertes Reporting, SubSite Quota, Umbenennung, URL-Änderung oder Berechtigungen. Jede Aktion ist an orderId/positionId korreliert. Während eine Aktion läuft, wartet der Strang nicht; eine zweite Aktion derselben Position wird erst nach Abschluss der ersten angenommen; das gilt auch für die Rückgabe.</documentation><incoming>w_f1</incoming><outgoing>w_c0</outgoing><outgoing>w_c1</outgoing><outgoing>w_c2</outgoing><outgoing>w_c3</outgoing><outgoing>w_c4</outgoing><outgoing>w_c5</outgoing><outgoing>r_f0</outgoing><outgoing>w_f3</outgoing></eventBasedGateway>
 <intermediateCatchEvent id="c_extern" name="Einladung angefragt"><documentation>GF-003: Aktion extern-einladen (Formular spop-extern-einladen: email, rolle, ablaufTage, nachricht).</documentation><incoming>w_f3</incoming><outgoing>w_f5</outgoing><messageEventDefinition messageRef="m_extern"/></intermediateCatchEvent>
 <subProcess id="sp_extern" name="Externen Benutzer einladen (GF-003)"><documentation>GF-003 SP OnPrem Invite External User als Subprozess des Strangs. Prüft Site und Richtlinie, holt bei Contribute oder Full Control die Vier-Augen-Freigabe, lädt ein und setzt die Berechtigung erst nach der Annahme. Läuft die Gültigkeit ab, wird die Einladung widerrufen. Bis dahin nimmt der Strang keine weitere Aktion an. Output-Mapping externe: hängt eine angenommene Einladung an die Liste der externen Benutzer des Strangs an; die Rückgabe entfernt diese Zugriffe.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=if berechtigung = null then externe else append(if externe = null then [] else externe, { email: email, rolle: rolle })" target="externe"/></zeebe:ioMapping></extensionElements><incoming>w_f5</incoming><outgoing>w_f7</outgoing><startEvent id="x_s"><outgoing>x_f0</outgoing></startEvent>
 <serviceTask id="x_read" name="Site prüfen (S1)"><documentation>Simuliert apsbw_sharepoint_site read aus dem Stand des Strangs (site). Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ gefunden: site != null, siteUrl: site.url }" resultVariable="aktuell"/></extensionElements><incoming>x_f0</incoming><outgoing>x_f1</outgoing></serviceTask>
@@ -312,24 +313,15 @@ echt: Decision-Route, Positionsroute (Secret "atlas", Konstante ATLAS_API_BASE) 
 <sequenceFlow id="b_f12" sourceRef="b_info" targetRef="b_end"/>
 </subProcess>
 <exclusiveGateway id="j_zurueck"><documentation>Gemeinsamer Rückweg: Jeder Änderungs-Subprozess unterhalb mündet hier; von hier geht der Strang zurück zum Warten.</documentation><incoming>w_z0</incoming><incoming>w_z1</incoming><incoming>w_z2</incoming><incoming>w_z3</incoming><incoming>w_z4</incoming><incoming>w_z5</incoming><outgoing>w_back</outgoing></exclusiveGateway>
-<subProcess id="sp_rueckgabe" name="Rückgabe" triggeredByEvent="true"><documentation>Unterbrechender Ereignis-Subprozess (ADR-0082) auf der Nachricht spop.teamsite.rueckgabe (Operation deprovision, Formular spop-teamsite-rueckgabe: grund). Er unterbricht den Strang, wo immer er steht: beim Warten, in einer Änderung oder in einer wartenden Freigabe. Entfernt die externen Zugriffe, löscht die Site und beendet die Verrechnung der Site und ihrer Zusatzleistungen.</documentation><startEvent id="rv_s" name="Rückgabe angefordert"><outgoing>rv_f1</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></startEvent>
-<serviceTask id="rv_extern" name="Externe Zugriffe entfernen"><documentation>Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, entfernt: if externe = null then [] else externe }" resultVariable="externEntfernt"/></extensionElements><incoming>rv_f1</incoming><outgoing>rv_f2</outgoing></serviceTask>
-<serviceTask id="rv_delete" name="Site löschen"><documentation>Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ siteUrl: site.url, status: "im Papierkorb" }' resultVariable="rueckbau"/></extensionElements><incoming>rv_f2</incoming><outgoing>rv_f3</outgoing></serviceTask>
-<serviceTask id="rv_bill" name="Verrechnung beenden"><documentation>Simuliert das Beenden der wiederkehrenden Verrechnung: Site-Material, Speicherplatzerweiterung und Zusatzleistungen.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ material: site.material, siteUrl: site.url, zusatz: zusatz, quota: quota, status: "beendet" }' resultVariable="verrechnung"/></extensionElements><incoming>rv_f3</incoming><outgoing>rv_f4</outgoing></serviceTask>
-<serviceTask id="rv_info" name="Rückgabe melden"><documentation>Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + replace((if positionId = null then itemId else positionId), "#", "%23")' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>rv_f4</incoming><outgoing>rv_f5</outgoing></serviceTask>
-<endEvent id="rv_end" name="Site zurückgegeben"><incoming>rv_f5</incoming></endEvent>
-<sequenceFlow id="rv_f1" sourceRef="rv_s" targetRef="rv_extern"/>
-<sequenceFlow id="rv_f2" sourceRef="rv_extern" targetRef="rv_delete"/>
-<sequenceFlow id="rv_f3" sourceRef="rv_delete" targetRef="rv_bill"/>
-<sequenceFlow id="rv_f4" sourceRef="rv_bill" targetRef="rv_info"/>
-<sequenceFlow id="rv_f5" sourceRef="rv_info" targetRef="rv_end"/>
-</subProcess>
-<startEvent id="r_start" name="Rückgabe ohne laufenden Strang"><documentation>Rückfallebene wie im Referenzmodell: Eine Rückgabe für eine Position ohne laufenden Strang startet hier. Der Katalog verlangt für per-position diesen Nachrichtenstart.</documentation><outgoing>r_f1</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></startEvent>
-<scriptTask id="r_site" name="Site ermitteln"><documentation>Bildet die Site-URL aus der Konfiguration der Position nach demselben Schema wie die Bereitstellung (Annahme: der Katalog liefert amtKuerzel und kurzname der Position mit). Eine spätere URL-Änderung kennt diese Ebene nicht.</documentation><extensionElements><zeebe:script expression='={ url: "/sites/" + lower case(amtKuerzel) + "-" + kurzname }' resultVariable="site"/></extensionElements><incoming>r_f1</incoming><outgoing>r_f2</outgoing></scriptTask>
-<serviceTask id="r_delete" name="Site löschen"><documentation>Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ siteUrl: site.url, status: "im Papierkorb" }' resultVariable="rueckbau"/></extensionElements><incoming>r_f2</incoming><outgoing>r_f3</outgoing></serviceTask>
-<serviceTask id="r_bill" name="Verrechnung beenden"><documentation>Simuliert das Beenden der wiederkehrenden Verrechnung der Site und ihrer Zusatzleistungen.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ siteUrl: site.url, status: "beendet" }' resultVariable="verrechnung"/></extensionElements><incoming>r_f3</incoming><outgoing>r_f4</outgoing></serviceTask>
-<serviceTask id="r_info" name="Rückgabe melden"><documentation>Meldet die Rückgabe über die Positionsroute (status returned). Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + replace((if positionId = null then itemId else positionId), "#", "%23")' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>r_f4</incoming><outgoing>r_f5</outgoing></serviceTask>
-<endEvent id="r_end" name="Site zurückgegeben"><incoming>r_f5</incoming></endEvent>
+<intermediateCatchEvent id="c_rueck" name="Rückgabe angefordert"><documentation>Operation deprovision (Formular spop-teamsite-rueckgabe: grund). Nur, wenn der Strang wartet.</documentation><incoming>r_f0</incoming><outgoing>r_f1</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></intermediateCatchEvent>
+<exclusiveGateway id="j_rueck"><documentation>Rückgabe aus dem wartenden Strang und Rückgabe ohne laufenden Strang führen in denselben Abbau.</documentation><incoming>r_f1</incoming><incoming>r_f3</incoming><outgoing>r_f4</outgoing></exclusiveGateway>
+<serviceTask id="r_extern" name="Externe Zugriffe entfernen"><documentation>Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, entfernt: if externe = null then [] else externe }" resultVariable="externEntfernt"/></extensionElements><incoming>r_f4</incoming><outgoing>r_f5</outgoing></serviceTask>
+<serviceTask id="r_delete" name="Site löschen"><documentation>Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ siteUrl: site.url, status: "im Papierkorb" }' resultVariable="rueckbau"/></extensionElements><incoming>r_f5</incoming><outgoing>r_f6</outgoing></serviceTask>
+<serviceTask id="r_bill" name="Verrechnung beenden"><documentation>Simuliert das Beenden der wiederkehrenden Verrechnung: Site-Material, Speicherplatzerweiterung und Zusatzleistungen.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ material: site.material, siteUrl: site.url, zusatz: zusatz, quota: quota, status: "beendet" }' resultVariable="verrechnung"/></extensionElements><incoming>r_f6</incoming><outgoing>r_f7</outgoing></serviceTask>
+<serviceTask id="r_info" name="Rückgabe melden"><documentation>Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + replace((if positionId = null then itemId else positionId), "#", "%23")' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>r_f7</incoming><outgoing>r_f8</outgoing></serviceTask>
+<endEvent id="r_end" name="Site zurückgegeben"><documentation>Terminierendes Ende: beendet den Strang der Position vollständig.</documentation><incoming>r_f8</incoming><terminateEventDefinition/></endEvent>
+<startEvent id="r_start" name="Rückgabe ohne laufenden Strang"><documentation>Rückfallebene wie im Referenzmodell: Eine Rückgabe für eine Position ohne laufenden Strang startet hier. Der Katalog verlangt für per-position diesen Nachrichtenstart.</documentation><outgoing>r_f2</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></startEvent>
+<scriptTask id="r_site" name="Site ermitteln"><documentation>Bildet die Site-URL aus der Konfiguration der Position nach demselben Schema wie die Bereitstellung (Annahme: der Katalog liefert amtKuerzel und kurzname der Position mit). Eine spätere URL-Änderung kennt diese Ebene nicht.</documentation><extensionElements><zeebe:script expression='={ url: "/sites/" + lower case(amtKuerzel) + "-" + kurzname }' resultVariable="site"/></extensionElements><incoming>r_f2</incoming><outgoing>r_f3</outgoing></scriptTask>
 <sequenceFlow id="a_f2" sourceRef="a_regel" targetRef="a_gw_ok"/>
 <sequenceFlow id="a_f_ok_ja" name="Ja" sourceRef="a_gw_ok" targetRef="a_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
 <sequenceFlow id="a_f_ok_nein" name="Nein" sourceRef="a_gw_ok" targetRef="a_rej1"/>
@@ -360,11 +352,15 @@ echt: Decision-Route, Positionsroute (Secret "atlas", Konstante ATLAS_API_BASE) 
 <sequenceFlow id="w_s5" sourceRef="c_rechte" targetRef="sp_rechte"/>
 <sequenceFlow id="w_z5" sourceRef="sp_rechte" targetRef="j_zurueck"/>
 <sequenceFlow id="w_back" sourceRef="j_zurueck" targetRef="j_aktiv"/>
-<sequenceFlow id="r_f1" sourceRef="r_start" targetRef="r_site"/>
-<sequenceFlow id="r_f2" sourceRef="r_site" targetRef="r_delete"/>
-<sequenceFlow id="r_f3" sourceRef="r_delete" targetRef="r_bill"/>
-<sequenceFlow id="r_f4" sourceRef="r_bill" targetRef="r_info"/>
-<sequenceFlow id="r_f5" sourceRef="r_info" targetRef="r_end"/>
+<sequenceFlow id="r_f0" sourceRef="g_warten" targetRef="c_rueck"/>
+<sequenceFlow id="r_f1" sourceRef="c_rueck" targetRef="j_rueck"/>
+<sequenceFlow id="r_f2" sourceRef="r_start" targetRef="r_site"/>
+<sequenceFlow id="r_f3" sourceRef="r_site" targetRef="j_rueck"/>
+<sequenceFlow id="r_f4" sourceRef="j_rueck" targetRef="r_extern"/>
+<sequenceFlow id="r_f5" sourceRef="r_extern" targetRef="r_delete"/>
+<sequenceFlow id="r_f6" sourceRef="r_delete" targetRef="r_bill"/>
+<sequenceFlow id="r_f7" sourceRef="r_bill" targetRef="r_info"/>
+<sequenceFlow id="r_f8" sourceRef="r_info" targetRef="r_end"/>
 <sequenceFlow id="a_f1" sourceRef="s_neu" targetRef="a_regel"/>
 <sequenceFlow id="a_f3" sourceRef="a_join" targetRef="a_owner"/>
 <sequenceFlow id="a_f4" sourceRef="a_owner" targetRef="a_site"/>
@@ -544,196 +540,191 @@ echt: Decision-Route, Positionsroute (Secret "atlas", Konstante ATLAS_API_BASE) 
 <bpmndi:BPMNShape id="d157" bpmnElement="b_info"><dc:Bounds x="4110" y="4070" width="100" height="80"/></bpmndi:BPMNShape>
 <bpmndi:BPMNShape id="d158" bpmnElement="b_end"><dc:Bounds x="4272" y="4092" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4235" y="4132" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
 <bpmndi:BPMNShape id="d159" bpmnElement="j_zurueck"><dc:Bounds x="4535" y="4455" width="50" height="50"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d160" bpmnElement="sp_rueckgabe" isExpanded="true"><dc:Bounds x="4800" y="590" width="860" height="220"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d161" bpmnElement="rv_s"><dc:Bounds x="4822" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4795" y="722" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d162" bpmnElement="rv_extern"><dc:Bounds x="4910" y="660" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d163" bpmnElement="rv_delete"><dc:Bounds x="5060" y="660" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d164" bpmnElement="rv_bill"><dc:Bounds x="5210" y="660" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d165" bpmnElement="rv_info"><dc:Bounds x="5360" y="660" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d166" bpmnElement="rv_end"><dc:Bounds x="5542" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="5505" y="722" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d167" bpmnElement="r_start"><dc:Bounds x="4822" y="1012" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4790" y="1052" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d168" bpmnElement="r_site"><dc:Bounds x="4910" y="990" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d169" bpmnElement="r_delete"><dc:Bounds x="5060" y="990" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d170" bpmnElement="r_bill"><dc:Bounds x="5210" y="990" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d171" bpmnElement="r_info"><dc:Bounds x="5360" y="990" width="100" height="80"/></bpmndi:BPMNShape>
-<bpmndi:BPMNShape id="d172" bpmnElement="r_end"><dc:Bounds x="5542" y="1012" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="5505" y="1052" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-<bpmndi:BPMNEdge id="d173" bpmnElement="a_f2"><di:waypoint x="300" y="700"/><di:waypoint x="375" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d174" bpmnElement="a_f_ok_ja"><di:waypoint x="425" y="700"/><di:waypoint x="505" y="700"/><bpmndi:BPMNLabel><dc:Bounds x="434" y="678" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d175" bpmnElement="a_f_ok_nein"><di:waypoint x="400" y="675"/><di:waypoint x="400" y="550"/><di:waypoint x="480" y="550"/><bpmndi:BPMNLabel><dc:Bounds x="408" y="600" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d176" bpmnElement="a_f_rej1"><di:waypoint x="580" y="550"/><di:waypoint x="642" y="550"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d177" bpmnElement="a_f_4e_ja"><di:waypoint x="530" y="725"/><di:waypoint x="530" y="850"/><di:waypoint x="610" y="850"/><bpmndi:BPMNLabel><dc:Bounds x="538" y="800" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d178" bpmnElement="a_f_4e_nein"><di:waypoint x="555" y="700"/><di:waypoint x="1065" y="700"/><bpmndi:BPMNLabel><dc:Bounds x="565" y="678" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d179" bpmnElement="a_f_prep"><di:waypoint x="710" y="850"/><di:waypoint x="760" y="850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d180" bpmnElement="a_f_ut"><di:waypoint x="860" y="850"/><di:waypoint x="935" y="850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d181" bpmnElement="a_f_fr_ja"><di:waypoint x="985" y="850"/><di:waypoint x="1090" y="850"/><di:waypoint x="1090" y="725"/><bpmndi:BPMNLabel><dc:Bounds x="995" y="828" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d182" bpmnElement="a_f_fr_nein"><di:waypoint x="960" y="875"/><di:waypoint x="960" y="980"/><di:waypoint x="1040" y="980"/><bpmndi:BPMNLabel><dc:Bounds x="968" y="920" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d183" bpmnElement="a_f_rej2"><di:waypoint x="1140" y="980"/><di:waypoint x="1202" y="980"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d184" bpmnElement="x_f0"><di:waypoint x="2808" y="330"/><di:waypoint x="2840" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d185" bpmnElement="x_f1"><di:waypoint x="2940" y="330"/><di:waypoint x="2990" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d186" bpmnElement="x_f2"><di:waypoint x="3090" y="330"/><di:waypoint x="3165" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d187" bpmnElement="x_f_ok_ja"><di:waypoint x="3215" y="330"/><di:waypoint x="3295" y="330"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="308" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d188" bpmnElement="x_f_ok_nein"><di:waypoint x="3190" y="305"/><di:waypoint x="3190" y="210"/><di:waypoint x="3270" y="210"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="250" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d189" bpmnElement="x_f_rej1"><di:waypoint x="3370" y="210"/><di:waypoint x="3432" y="210"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d190" bpmnElement="x_f_4e_ja"><di:waypoint x="3320" y="355"/><di:waypoint x="3320" y="450"/><di:waypoint x="3400" y="450"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="400" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d191" bpmnElement="x_f_4e_nein"><di:waypoint x="3345" y="330"/><di:waypoint x="3855" y="330"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="308" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d192" bpmnElement="x_f_prep"><di:waypoint x="3500" y="450"/><di:waypoint x="3550" y="450"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d193" bpmnElement="x_f_ut"><di:waypoint x="3650" y="450"/><di:waypoint x="3725" y="450"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d194" bpmnElement="x_f_fr_ja"><di:waypoint x="3775" y="450"/><di:waypoint x="3880" y="450"/><di:waypoint x="3880" y="355"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="428" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d195" bpmnElement="x_f_fr_nein"><di:waypoint x="3750" y="475"/><di:waypoint x="3750" y="550"/><di:waypoint x="3830" y="550"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="500" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d196" bpmnElement="x_f_rej2"><di:waypoint x="3930" y="550"/><di:waypoint x="3992" y="550"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d197" bpmnElement="x_f10"><di:waypoint x="3905" y="330"/><di:waypoint x="3960" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d198" bpmnElement="x_f11"><di:waypoint x="4060" y="330"/><di:waypoint x="4115" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d199" bpmnElement="x_f12"><di:waypoint x="4165" y="330"/><di:waypoint x="4232" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d200" bpmnElement="x_f13"><di:waypoint x="4268" y="330"/><di:waypoint x="4330" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d201" bpmnElement="x_f14"><di:waypoint x="4430" y="330"/><di:waypoint x="4480" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d202" bpmnElement="x_f15"><di:waypoint x="4580" y="330"/><di:waypoint x="4642" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d203" bpmnElement="x_f16"><di:waypoint x="4140" y="305"/><di:waypoint x="4140" y="210"/><di:waypoint x="4232" y="210"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d204" bpmnElement="x_f17"><di:waypoint x="4268" y="210"/><di:waypoint x="4330" y="210"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d205" bpmnElement="x_f18"><di:waypoint x="4430" y="210"/><di:waypoint x="4480" y="210"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d206" bpmnElement="x_f19"><di:waypoint x="4580" y="210"/><di:waypoint x="4642" y="210"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d207" bpmnElement="q_f0"><di:waypoint x="2808" y="960"/><di:waypoint x="2840" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d208" bpmnElement="q_f1"><di:waypoint x="2940" y="960"/><di:waypoint x="2990" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d209" bpmnElement="q_f2"><di:waypoint x="3090" y="960"/><di:waypoint x="3165" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d210" bpmnElement="q_f_ok_ja"><di:waypoint x="3215" y="960"/><di:waypoint x="3295" y="960"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="938" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d211" bpmnElement="q_f_ok_nein"><di:waypoint x="3190" y="935"/><di:waypoint x="3190" y="840"/><di:waypoint x="3270" y="840"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="880" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d212" bpmnElement="q_f_rej1"><di:waypoint x="3370" y="840"/><di:waypoint x="3432" y="840"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d213" bpmnElement="q_f_4e_ja"><di:waypoint x="3320" y="985"/><di:waypoint x="3320" y="1080"/><di:waypoint x="3400" y="1080"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="1030" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d214" bpmnElement="q_f_4e_nein"><di:waypoint x="3345" y="960"/><di:waypoint x="3855" y="960"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="938" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d215" bpmnElement="q_f_prep"><di:waypoint x="3500" y="1080"/><di:waypoint x="3550" y="1080"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d216" bpmnElement="q_f_ut"><di:waypoint x="3650" y="1080"/><di:waypoint x="3725" y="1080"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d217" bpmnElement="q_f_fr_ja"><di:waypoint x="3775" y="1080"/><di:waypoint x="3880" y="1080"/><di:waypoint x="3880" y="985"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="1058" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d218" bpmnElement="q_f_fr_nein"><di:waypoint x="3750" y="1105"/><di:waypoint x="3750" y="1180"/><di:waypoint x="3830" y="1180"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="1130" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d219" bpmnElement="q_f_rej2"><di:waypoint x="3930" y="1180"/><di:waypoint x="3992" y="1180"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d220" bpmnElement="q_f10"><di:waypoint x="3905" y="960"/><di:waypoint x="3960" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d221" bpmnElement="q_f11"><di:waypoint x="4060" y="960"/><di:waypoint x="4110" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d222" bpmnElement="q_f12"><di:waypoint x="4210" y="960"/><di:waypoint x="4272" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d223" bpmnElement="rp_f0"><di:waypoint x="2808" y="1590"/><di:waypoint x="2840" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d224" bpmnElement="rp_f1"><di:waypoint x="2940" y="1590"/><di:waypoint x="2990" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d225" bpmnElement="rp_f2"><di:waypoint x="3090" y="1590"/><di:waypoint x="3165" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d226" bpmnElement="rp_f_ok_ja"><di:waypoint x="3215" y="1590"/><di:waypoint x="3295" y="1590"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="1568" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d227" bpmnElement="rp_f_ok_nein"><di:waypoint x="3190" y="1565"/><di:waypoint x="3190" y="1470"/><di:waypoint x="3270" y="1470"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="1510" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d228" bpmnElement="rp_f_rej1"><di:waypoint x="3370" y="1470"/><di:waypoint x="3432" y="1470"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d229" bpmnElement="rp_f_4e_ja"><di:waypoint x="3320" y="1615"/><di:waypoint x="3320" y="1710"/><di:waypoint x="3400" y="1710"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="1660" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d230" bpmnElement="rp_f_4e_nein"><di:waypoint x="3345" y="1590"/><di:waypoint x="3855" y="1590"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="1568" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d231" bpmnElement="rp_f_prep"><di:waypoint x="3500" y="1710"/><di:waypoint x="3550" y="1710"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d232" bpmnElement="rp_f_ut"><di:waypoint x="3650" y="1710"/><di:waypoint x="3725" y="1710"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d233" bpmnElement="rp_f_fr_ja"><di:waypoint x="3775" y="1710"/><di:waypoint x="3880" y="1710"/><di:waypoint x="3880" y="1615"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="1688" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d234" bpmnElement="rp_f_fr_nein"><di:waypoint x="3750" y="1735"/><di:waypoint x="3750" y="1810"/><di:waypoint x="3830" y="1810"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="1760" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d235" bpmnElement="rp_f_rej2"><di:waypoint x="3930" y="1810"/><di:waypoint x="3992" y="1810"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d236" bpmnElement="rp_f10"><di:waypoint x="3905" y="1590"/><di:waypoint x="3960" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d237" bpmnElement="rp_f11"><di:waypoint x="4060" y="1590"/><di:waypoint x="4110" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d238" bpmnElement="rp_f12"><di:waypoint x="4210" y="1590"/><di:waypoint x="4272" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d239" bpmnElement="ss_f0"><di:waypoint x="2808" y="2220"/><di:waypoint x="2840" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d240" bpmnElement="ss_f1"><di:waypoint x="2940" y="2220"/><di:waypoint x="2990" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d241" bpmnElement="ss_f2"><di:waypoint x="3090" y="2220"/><di:waypoint x="3165" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d242" bpmnElement="ss_f_ok_ja"><di:waypoint x="3215" y="2220"/><di:waypoint x="3295" y="2220"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="2198" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d243" bpmnElement="ss_f_ok_nein"><di:waypoint x="3190" y="2195"/><di:waypoint x="3190" y="2100"/><di:waypoint x="3270" y="2100"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="2140" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d244" bpmnElement="ss_f_rej1"><di:waypoint x="3370" y="2100"/><di:waypoint x="3432" y="2100"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d245" bpmnElement="ss_f_4e_ja"><di:waypoint x="3320" y="2245"/><di:waypoint x="3320" y="2340"/><di:waypoint x="3400" y="2340"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="2290" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d246" bpmnElement="ss_f_4e_nein"><di:waypoint x="3345" y="2220"/><di:waypoint x="3855" y="2220"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="2198" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d247" bpmnElement="ss_f_prep"><di:waypoint x="3500" y="2340"/><di:waypoint x="3550" y="2340"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d248" bpmnElement="ss_f_ut"><di:waypoint x="3650" y="2340"/><di:waypoint x="3725" y="2340"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d249" bpmnElement="ss_f_fr_ja"><di:waypoint x="3775" y="2340"/><di:waypoint x="3880" y="2340"/><di:waypoint x="3880" y="2245"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="2318" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d250" bpmnElement="ss_f_fr_nein"><di:waypoint x="3750" y="2365"/><di:waypoint x="3750" y="2440"/><di:waypoint x="3830" y="2440"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="2390" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d251" bpmnElement="ss_f_rej2"><di:waypoint x="3930" y="2440"/><di:waypoint x="3992" y="2440"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d252" bpmnElement="ss_f10"><di:waypoint x="3905" y="2220"/><di:waypoint x="3960" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d253" bpmnElement="ss_f11"><di:waypoint x="4060" y="2220"/><di:waypoint x="4110" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d254" bpmnElement="ss_f12"><di:waypoint x="4210" y="2220"/><di:waypoint x="4272" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d255" bpmnElement="t_f0"><di:waypoint x="2808" y="2850"/><di:waypoint x="2840" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d256" bpmnElement="t_f1"><di:waypoint x="2940" y="2850"/><di:waypoint x="2990" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d257" bpmnElement="t_f2"><di:waypoint x="3090" y="2850"/><di:waypoint x="3165" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d258" bpmnElement="t_f_ok_ja"><di:waypoint x="3215" y="2850"/><di:waypoint x="3295" y="2850"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="2828" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d259" bpmnElement="t_f_ok_nein"><di:waypoint x="3190" y="2825"/><di:waypoint x="3190" y="2730"/><di:waypoint x="3270" y="2730"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="2770" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d260" bpmnElement="t_f_rej1"><di:waypoint x="3370" y="2730"/><di:waypoint x="3432" y="2730"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d261" bpmnElement="t_f_4e_ja"><di:waypoint x="3320" y="2875"/><di:waypoint x="3320" y="2970"/><di:waypoint x="3400" y="2970"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="2920" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d262" bpmnElement="t_f_4e_nein"><di:waypoint x="3345" y="2850"/><di:waypoint x="3855" y="2850"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="2828" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d263" bpmnElement="t_f_prep"><di:waypoint x="3500" y="2970"/><di:waypoint x="3550" y="2970"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d264" bpmnElement="t_f_ut"><di:waypoint x="3650" y="2970"/><di:waypoint x="3725" y="2970"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d265" bpmnElement="t_f_fr_ja"><di:waypoint x="3775" y="2970"/><di:waypoint x="3880" y="2970"/><di:waypoint x="3880" y="2875"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="2948" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d266" bpmnElement="t_f_fr_nein"><di:waypoint x="3750" y="2995"/><di:waypoint x="3750" y="3070"/><di:waypoint x="3830" y="3070"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="3020" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d267" bpmnElement="t_f_rej2"><di:waypoint x="3930" y="3070"/><di:waypoint x="3992" y="3070"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d268" bpmnElement="t_f10"><di:waypoint x="3905" y="2850"/><di:waypoint x="3960" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d269" bpmnElement="t_f11"><di:waypoint x="4060" y="2850"/><di:waypoint x="4110" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d270" bpmnElement="t_f12"><di:waypoint x="4210" y="2850"/><di:waypoint x="4272" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d271" bpmnElement="u_f0"><di:waypoint x="2808" y="3480"/><di:waypoint x="2840" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d272" bpmnElement="u_f1"><di:waypoint x="2940" y="3480"/><di:waypoint x="2990" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d273" bpmnElement="u_f2"><di:waypoint x="3090" y="3480"/><di:waypoint x="3165" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d274" bpmnElement="u_f_ok_ja"><di:waypoint x="3215" y="3480"/><di:waypoint x="3295" y="3480"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="3458" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d275" bpmnElement="u_f_ok_nein"><di:waypoint x="3190" y="3455"/><di:waypoint x="3190" y="3360"/><di:waypoint x="3270" y="3360"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="3400" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d276" bpmnElement="u_f_rej1"><di:waypoint x="3370" y="3360"/><di:waypoint x="3432" y="3360"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d277" bpmnElement="u_f_4e_ja"><di:waypoint x="3320" y="3505"/><di:waypoint x="3320" y="3600"/><di:waypoint x="3400" y="3600"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="3550" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d278" bpmnElement="u_f_4e_nein"><di:waypoint x="3345" y="3480"/><di:waypoint x="3855" y="3480"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="3458" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d279" bpmnElement="u_f_prep"><di:waypoint x="3500" y="3600"/><di:waypoint x="3550" y="3600"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d280" bpmnElement="u_f_ut"><di:waypoint x="3650" y="3600"/><di:waypoint x="3725" y="3600"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d281" bpmnElement="u_f_fr_ja"><di:waypoint x="3775" y="3600"/><di:waypoint x="3880" y="3600"/><di:waypoint x="3880" y="3505"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="3578" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d282" bpmnElement="u_f_fr_nein"><di:waypoint x="3750" y="3625"/><di:waypoint x="3750" y="3700"/><di:waypoint x="3830" y="3700"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="3650" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d283" bpmnElement="u_f_rej2"><di:waypoint x="3930" y="3700"/><di:waypoint x="3992" y="3700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d284" bpmnElement="u_fx0"><di:waypoint x="4060" y="3480"/><di:waypoint x="4110" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d285" bpmnElement="u_f10"><di:waypoint x="3905" y="3480"/><di:waypoint x="3960" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d286" bpmnElement="u_f11"><di:waypoint x="4210" y="3480"/><di:waypoint x="4260" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d287" bpmnElement="u_f12"><di:waypoint x="4360" y="3480"/><di:waypoint x="4422" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d288" bpmnElement="b_f0"><di:waypoint x="2808" y="4110"/><di:waypoint x="2840" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d289" bpmnElement="b_f1"><di:waypoint x="2940" y="4110"/><di:waypoint x="2990" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d290" bpmnElement="b_f2"><di:waypoint x="3090" y="4110"/><di:waypoint x="3165" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d291" bpmnElement="b_f_ok_ja"><di:waypoint x="3215" y="4110"/><di:waypoint x="3295" y="4110"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="4088" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d292" bpmnElement="b_f_ok_nein"><di:waypoint x="3190" y="4085"/><di:waypoint x="3190" y="3990"/><di:waypoint x="3270" y="3990"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="4030" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d293" bpmnElement="b_f_rej1"><di:waypoint x="3370" y="3990"/><di:waypoint x="3432" y="3990"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d294" bpmnElement="b_f_4e_ja"><di:waypoint x="3320" y="4135"/><di:waypoint x="3320" y="4230"/><di:waypoint x="3400" y="4230"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="4180" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d295" bpmnElement="b_f_4e_nein"><di:waypoint x="3345" y="4110"/><di:waypoint x="3855" y="4110"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="4088" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d296" bpmnElement="b_f_prep"><di:waypoint x="3500" y="4230"/><di:waypoint x="3550" y="4230"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d297" bpmnElement="b_f_ut"><di:waypoint x="3650" y="4230"/><di:waypoint x="3725" y="4230"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d298" bpmnElement="b_f_fr_ja"><di:waypoint x="3775" y="4230"/><di:waypoint x="3880" y="4230"/><di:waypoint x="3880" y="4135"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="4208" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d299" bpmnElement="b_f_fr_nein"><di:waypoint x="3750" y="4255"/><di:waypoint x="3750" y="4330"/><di:waypoint x="3830" y="4330"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="4280" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d300" bpmnElement="b_f_rej2"><di:waypoint x="3930" y="4330"/><di:waypoint x="3992" y="4330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d301" bpmnElement="b_f10"><di:waypoint x="3905" y="4110"/><di:waypoint x="3960" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d302" bpmnElement="b_f11"><di:waypoint x="4060" y="4110"/><di:waypoint x="4110" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d303" bpmnElement="b_f12"><di:waypoint x="4210" y="4110"/><di:waypoint x="4272" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d304" bpmnElement="w_c0"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="960"/><di:waypoint x="2682" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d305" bpmnElement="w_s0"><di:waypoint x="2718" y="960"/><di:waypoint x="2750" y="960"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d306" bpmnElement="w_z0"><di:waypoint x="4500" y="960"/><di:waypoint x="4560" y="960"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d307" bpmnElement="w_c1"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="1590"/><di:waypoint x="2682" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d308" bpmnElement="w_s1"><di:waypoint x="2718" y="1590"/><di:waypoint x="2750" y="1590"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d309" bpmnElement="w_z1"><di:waypoint x="4500" y="1590"/><di:waypoint x="4560" y="1590"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d310" bpmnElement="w_c2"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="2220"/><di:waypoint x="2682" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d311" bpmnElement="w_s2"><di:waypoint x="2718" y="2220"/><di:waypoint x="2750" y="2220"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d312" bpmnElement="w_z2"><di:waypoint x="4500" y="2220"/><di:waypoint x="4560" y="2220"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d313" bpmnElement="w_c3"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="2850"/><di:waypoint x="2682" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d314" bpmnElement="w_s3"><di:waypoint x="2718" y="2850"/><di:waypoint x="2750" y="2850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d315" bpmnElement="w_z3"><di:waypoint x="4500" y="2850"/><di:waypoint x="4560" y="2850"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d316" bpmnElement="w_c4"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="3480"/><di:waypoint x="2682" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d317" bpmnElement="w_s4"><di:waypoint x="2718" y="3480"/><di:waypoint x="2750" y="3480"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d318" bpmnElement="w_z4"><di:waypoint x="4500" y="3480"/><di:waypoint x="4560" y="3480"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d319" bpmnElement="w_c5"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="4110"/><di:waypoint x="2682" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d320" bpmnElement="w_s5"><di:waypoint x="2718" y="4110"/><di:waypoint x="2750" y="4110"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d321" bpmnElement="w_z5"><di:waypoint x="4500" y="4110"/><di:waypoint x="4560" y="4110"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d322" bpmnElement="w_back"><di:waypoint x="4560" y="4505"/><di:waypoint x="4560" y="4540"/><di:waypoint x="2430" y="4540"/><di:waypoint x="2430" y="725"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d323" bpmnElement="rv_f1"><di:waypoint x="4858" y="700"/><di:waypoint x="4910" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d324" bpmnElement="rv_f2"><di:waypoint x="5010" y="700"/><di:waypoint x="5060" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d325" bpmnElement="rv_f3"><di:waypoint x="5160" y="700"/><di:waypoint x="5210" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d326" bpmnElement="rv_f4"><di:waypoint x="5310" y="700"/><di:waypoint x="5360" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d327" bpmnElement="rv_f5"><di:waypoint x="5460" y="700"/><di:waypoint x="5542" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d328" bpmnElement="r_f1"><di:waypoint x="4858" y="1030"/><di:waypoint x="4910" y="1030"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d329" bpmnElement="r_f2"><di:waypoint x="5010" y="1030"/><di:waypoint x="5060" y="1030"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d330" bpmnElement="r_f3"><di:waypoint x="5160" y="1030"/><di:waypoint x="5210" y="1030"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d331" bpmnElement="r_f4"><di:waypoint x="5310" y="1030"/><di:waypoint x="5360" y="1030"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d332" bpmnElement="r_f5"><di:waypoint x="5460" y="1030"/><di:waypoint x="5542" y="1030"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d333" bpmnElement="a_f1"><di:waypoint x="136" y="700"/><di:waypoint x="200" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d334" bpmnElement="a_f3"><di:waypoint x="1115" y="700"/><di:waypoint x="1170" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d335" bpmnElement="a_f4"><di:waypoint x="1270" y="700"/><di:waypoint x="1320" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d336" bpmnElement="a_f5"><di:waypoint x="1420" y="700"/><di:waypoint x="1475" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d337" bpmnElement="a_f6"><di:waypoint x="1500" y="675"/><di:waypoint x="1500" y="550"/><di:waypoint x="1580" y="550"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d338" bpmnElement="a_f7"><di:waypoint x="1680" y="550"/><di:waypoint x="1730" y="550"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d339" bpmnElement="a_f8"><di:waypoint x="1830" y="550"/><di:waypoint x="1910" y="550"/><di:waypoint x="1910" y="675"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d340" bpmnElement="a_f9"><di:waypoint x="1525" y="700"/><di:waypoint x="1580" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d341" bpmnElement="a_f10"><di:waypoint x="1680" y="700"/><di:waypoint x="1885" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d342" bpmnElement="a_f11"><di:waypoint x="1500" y="725"/><di:waypoint x="1500" y="850"/><di:waypoint x="1580" y="850"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d343" bpmnElement="a_f12"><di:waypoint x="1680" y="850"/><di:waypoint x="1910" y="850"/><di:waypoint x="1910" y="725"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d344" bpmnElement="a_f13"><di:waypoint x="1935" y="700"/><di:waypoint x="2120" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d345" bpmnElement="a_f13b"><di:waypoint x="2220" y="700"/><di:waypoint x="2250" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d346" bpmnElement="a_f14"><di:waypoint x="2350" y="700"/><di:waypoint x="2405" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d347" bpmnElement="w_f1"><di:waypoint x="2455" y="700"/><di:waypoint x="2565" y="700"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d348" bpmnElement="w_f3"><di:waypoint x="2590" y="675"/><di:waypoint x="2590" y="330"/><di:waypoint x="2682" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d349" bpmnElement="w_f5"><di:waypoint x="2718" y="330"/><di:waypoint x="2750" y="330"/></bpmndi:BPMNEdge>
-<bpmndi:BPMNEdge id="d350" bpmnElement="w_f7"><di:waypoint x="2780" y="150"/><di:waypoint x="2780" y="120"/><di:waypoint x="2430" y="120"/><di:waypoint x="2430" y="675"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNShape id="d160" bpmnElement="c_rueck"><dc:Bounds x="2682" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2655" y="722" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d161" bpmnElement="j_rueck"><dc:Bounds x="4775" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d162" bpmnElement="r_extern"><dc:Bounds x="4880" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d163" bpmnElement="r_delete"><dc:Bounds x="5030" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d164" bpmnElement="r_bill"><dc:Bounds x="5180" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d165" bpmnElement="r_info"><dc:Bounds x="5330" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d166" bpmnElement="r_end"><dc:Bounds x="5492" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="5455" y="722" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d167" bpmnElement="r_start"><dc:Bounds x="4652" y="1012" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4620" y="1052" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d168" bpmnElement="r_site"><dc:Bounds x="4750" y="990" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="d169" bpmnElement="a_f2"><di:waypoint x="300" y="700"/><di:waypoint x="375" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d170" bpmnElement="a_f_ok_ja"><di:waypoint x="425" y="700"/><di:waypoint x="505" y="700"/><bpmndi:BPMNLabel><dc:Bounds x="434" y="678" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d171" bpmnElement="a_f_ok_nein"><di:waypoint x="400" y="675"/><di:waypoint x="400" y="550"/><di:waypoint x="480" y="550"/><bpmndi:BPMNLabel><dc:Bounds x="408" y="600" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d172" bpmnElement="a_f_rej1"><di:waypoint x="580" y="550"/><di:waypoint x="642" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d173" bpmnElement="a_f_4e_ja"><di:waypoint x="530" y="725"/><di:waypoint x="530" y="850"/><di:waypoint x="610" y="850"/><bpmndi:BPMNLabel><dc:Bounds x="538" y="800" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d174" bpmnElement="a_f_4e_nein"><di:waypoint x="555" y="700"/><di:waypoint x="1065" y="700"/><bpmndi:BPMNLabel><dc:Bounds x="565" y="678" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d175" bpmnElement="a_f_prep"><di:waypoint x="710" y="850"/><di:waypoint x="760" y="850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d176" bpmnElement="a_f_ut"><di:waypoint x="860" y="850"/><di:waypoint x="935" y="850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d177" bpmnElement="a_f_fr_ja"><di:waypoint x="985" y="850"/><di:waypoint x="1090" y="850"/><di:waypoint x="1090" y="725"/><bpmndi:BPMNLabel><dc:Bounds x="995" y="828" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d178" bpmnElement="a_f_fr_nein"><di:waypoint x="960" y="875"/><di:waypoint x="960" y="980"/><di:waypoint x="1040" y="980"/><bpmndi:BPMNLabel><dc:Bounds x="968" y="920" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d179" bpmnElement="a_f_rej2"><di:waypoint x="1140" y="980"/><di:waypoint x="1202" y="980"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d180" bpmnElement="x_f0"><di:waypoint x="2808" y="330"/><di:waypoint x="2840" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d181" bpmnElement="x_f1"><di:waypoint x="2940" y="330"/><di:waypoint x="2990" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d182" bpmnElement="x_f2"><di:waypoint x="3090" y="330"/><di:waypoint x="3165" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d183" bpmnElement="x_f_ok_ja"><di:waypoint x="3215" y="330"/><di:waypoint x="3295" y="330"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="308" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d184" bpmnElement="x_f_ok_nein"><di:waypoint x="3190" y="305"/><di:waypoint x="3190" y="210"/><di:waypoint x="3270" y="210"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="250" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d185" bpmnElement="x_f_rej1"><di:waypoint x="3370" y="210"/><di:waypoint x="3432" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d186" bpmnElement="x_f_4e_ja"><di:waypoint x="3320" y="355"/><di:waypoint x="3320" y="450"/><di:waypoint x="3400" y="450"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="400" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d187" bpmnElement="x_f_4e_nein"><di:waypoint x="3345" y="330"/><di:waypoint x="3855" y="330"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="308" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d188" bpmnElement="x_f_prep"><di:waypoint x="3500" y="450"/><di:waypoint x="3550" y="450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d189" bpmnElement="x_f_ut"><di:waypoint x="3650" y="450"/><di:waypoint x="3725" y="450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d190" bpmnElement="x_f_fr_ja"><di:waypoint x="3775" y="450"/><di:waypoint x="3880" y="450"/><di:waypoint x="3880" y="355"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="428" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d191" bpmnElement="x_f_fr_nein"><di:waypoint x="3750" y="475"/><di:waypoint x="3750" y="550"/><di:waypoint x="3830" y="550"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="500" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d192" bpmnElement="x_f_rej2"><di:waypoint x="3930" y="550"/><di:waypoint x="3992" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d193" bpmnElement="x_f10"><di:waypoint x="3905" y="330"/><di:waypoint x="3960" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d194" bpmnElement="x_f11"><di:waypoint x="4060" y="330"/><di:waypoint x="4115" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d195" bpmnElement="x_f12"><di:waypoint x="4165" y="330"/><di:waypoint x="4232" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d196" bpmnElement="x_f13"><di:waypoint x="4268" y="330"/><di:waypoint x="4330" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d197" bpmnElement="x_f14"><di:waypoint x="4430" y="330"/><di:waypoint x="4480" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d198" bpmnElement="x_f15"><di:waypoint x="4580" y="330"/><di:waypoint x="4642" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d199" bpmnElement="x_f16"><di:waypoint x="4140" y="305"/><di:waypoint x="4140" y="210"/><di:waypoint x="4232" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d200" bpmnElement="x_f17"><di:waypoint x="4268" y="210"/><di:waypoint x="4330" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d201" bpmnElement="x_f18"><di:waypoint x="4430" y="210"/><di:waypoint x="4480" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d202" bpmnElement="x_f19"><di:waypoint x="4580" y="210"/><di:waypoint x="4642" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d203" bpmnElement="q_f0"><di:waypoint x="2808" y="960"/><di:waypoint x="2840" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d204" bpmnElement="q_f1"><di:waypoint x="2940" y="960"/><di:waypoint x="2990" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d205" bpmnElement="q_f2"><di:waypoint x="3090" y="960"/><di:waypoint x="3165" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d206" bpmnElement="q_f_ok_ja"><di:waypoint x="3215" y="960"/><di:waypoint x="3295" y="960"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="938" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d207" bpmnElement="q_f_ok_nein"><di:waypoint x="3190" y="935"/><di:waypoint x="3190" y="840"/><di:waypoint x="3270" y="840"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="880" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d208" bpmnElement="q_f_rej1"><di:waypoint x="3370" y="840"/><di:waypoint x="3432" y="840"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d209" bpmnElement="q_f_4e_ja"><di:waypoint x="3320" y="985"/><di:waypoint x="3320" y="1080"/><di:waypoint x="3400" y="1080"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="1030" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d210" bpmnElement="q_f_4e_nein"><di:waypoint x="3345" y="960"/><di:waypoint x="3855" y="960"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="938" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d211" bpmnElement="q_f_prep"><di:waypoint x="3500" y="1080"/><di:waypoint x="3550" y="1080"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d212" bpmnElement="q_f_ut"><di:waypoint x="3650" y="1080"/><di:waypoint x="3725" y="1080"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d213" bpmnElement="q_f_fr_ja"><di:waypoint x="3775" y="1080"/><di:waypoint x="3880" y="1080"/><di:waypoint x="3880" y="985"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="1058" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d214" bpmnElement="q_f_fr_nein"><di:waypoint x="3750" y="1105"/><di:waypoint x="3750" y="1180"/><di:waypoint x="3830" y="1180"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="1130" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d215" bpmnElement="q_f_rej2"><di:waypoint x="3930" y="1180"/><di:waypoint x="3992" y="1180"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d216" bpmnElement="q_f10"><di:waypoint x="3905" y="960"/><di:waypoint x="3960" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d217" bpmnElement="q_f11"><di:waypoint x="4060" y="960"/><di:waypoint x="4110" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d218" bpmnElement="q_f12"><di:waypoint x="4210" y="960"/><di:waypoint x="4272" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d219" bpmnElement="rp_f0"><di:waypoint x="2808" y="1590"/><di:waypoint x="2840" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d220" bpmnElement="rp_f1"><di:waypoint x="2940" y="1590"/><di:waypoint x="2990" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d221" bpmnElement="rp_f2"><di:waypoint x="3090" y="1590"/><di:waypoint x="3165" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d222" bpmnElement="rp_f_ok_ja"><di:waypoint x="3215" y="1590"/><di:waypoint x="3295" y="1590"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="1568" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d223" bpmnElement="rp_f_ok_nein"><di:waypoint x="3190" y="1565"/><di:waypoint x="3190" y="1470"/><di:waypoint x="3270" y="1470"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="1510" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d224" bpmnElement="rp_f_rej1"><di:waypoint x="3370" y="1470"/><di:waypoint x="3432" y="1470"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d225" bpmnElement="rp_f_4e_ja"><di:waypoint x="3320" y="1615"/><di:waypoint x="3320" y="1710"/><di:waypoint x="3400" y="1710"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="1660" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d226" bpmnElement="rp_f_4e_nein"><di:waypoint x="3345" y="1590"/><di:waypoint x="3855" y="1590"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="1568" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d227" bpmnElement="rp_f_prep"><di:waypoint x="3500" y="1710"/><di:waypoint x="3550" y="1710"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d228" bpmnElement="rp_f_ut"><di:waypoint x="3650" y="1710"/><di:waypoint x="3725" y="1710"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d229" bpmnElement="rp_f_fr_ja"><di:waypoint x="3775" y="1710"/><di:waypoint x="3880" y="1710"/><di:waypoint x="3880" y="1615"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="1688" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d230" bpmnElement="rp_f_fr_nein"><di:waypoint x="3750" y="1735"/><di:waypoint x="3750" y="1810"/><di:waypoint x="3830" y="1810"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="1760" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d231" bpmnElement="rp_f_rej2"><di:waypoint x="3930" y="1810"/><di:waypoint x="3992" y="1810"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d232" bpmnElement="rp_f10"><di:waypoint x="3905" y="1590"/><di:waypoint x="3960" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d233" bpmnElement="rp_f11"><di:waypoint x="4060" y="1590"/><di:waypoint x="4110" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d234" bpmnElement="rp_f12"><di:waypoint x="4210" y="1590"/><di:waypoint x="4272" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d235" bpmnElement="ss_f0"><di:waypoint x="2808" y="2220"/><di:waypoint x="2840" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d236" bpmnElement="ss_f1"><di:waypoint x="2940" y="2220"/><di:waypoint x="2990" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d237" bpmnElement="ss_f2"><di:waypoint x="3090" y="2220"/><di:waypoint x="3165" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d238" bpmnElement="ss_f_ok_ja"><di:waypoint x="3215" y="2220"/><di:waypoint x="3295" y="2220"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="2198" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d239" bpmnElement="ss_f_ok_nein"><di:waypoint x="3190" y="2195"/><di:waypoint x="3190" y="2100"/><di:waypoint x="3270" y="2100"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="2140" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d240" bpmnElement="ss_f_rej1"><di:waypoint x="3370" y="2100"/><di:waypoint x="3432" y="2100"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d241" bpmnElement="ss_f_4e_ja"><di:waypoint x="3320" y="2245"/><di:waypoint x="3320" y="2340"/><di:waypoint x="3400" y="2340"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="2290" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d242" bpmnElement="ss_f_4e_nein"><di:waypoint x="3345" y="2220"/><di:waypoint x="3855" y="2220"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="2198" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d243" bpmnElement="ss_f_prep"><di:waypoint x="3500" y="2340"/><di:waypoint x="3550" y="2340"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d244" bpmnElement="ss_f_ut"><di:waypoint x="3650" y="2340"/><di:waypoint x="3725" y="2340"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d245" bpmnElement="ss_f_fr_ja"><di:waypoint x="3775" y="2340"/><di:waypoint x="3880" y="2340"/><di:waypoint x="3880" y="2245"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="2318" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d246" bpmnElement="ss_f_fr_nein"><di:waypoint x="3750" y="2365"/><di:waypoint x="3750" y="2440"/><di:waypoint x="3830" y="2440"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="2390" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d247" bpmnElement="ss_f_rej2"><di:waypoint x="3930" y="2440"/><di:waypoint x="3992" y="2440"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d248" bpmnElement="ss_f10"><di:waypoint x="3905" y="2220"/><di:waypoint x="3960" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d249" bpmnElement="ss_f11"><di:waypoint x="4060" y="2220"/><di:waypoint x="4110" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d250" bpmnElement="ss_f12"><di:waypoint x="4210" y="2220"/><di:waypoint x="4272" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d251" bpmnElement="t_f0"><di:waypoint x="2808" y="2850"/><di:waypoint x="2840" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d252" bpmnElement="t_f1"><di:waypoint x="2940" y="2850"/><di:waypoint x="2990" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d253" bpmnElement="t_f2"><di:waypoint x="3090" y="2850"/><di:waypoint x="3165" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d254" bpmnElement="t_f_ok_ja"><di:waypoint x="3215" y="2850"/><di:waypoint x="3295" y="2850"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="2828" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d255" bpmnElement="t_f_ok_nein"><di:waypoint x="3190" y="2825"/><di:waypoint x="3190" y="2730"/><di:waypoint x="3270" y="2730"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="2770" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d256" bpmnElement="t_f_rej1"><di:waypoint x="3370" y="2730"/><di:waypoint x="3432" y="2730"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d257" bpmnElement="t_f_4e_ja"><di:waypoint x="3320" y="2875"/><di:waypoint x="3320" y="2970"/><di:waypoint x="3400" y="2970"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="2920" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d258" bpmnElement="t_f_4e_nein"><di:waypoint x="3345" y="2850"/><di:waypoint x="3855" y="2850"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="2828" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d259" bpmnElement="t_f_prep"><di:waypoint x="3500" y="2970"/><di:waypoint x="3550" y="2970"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d260" bpmnElement="t_f_ut"><di:waypoint x="3650" y="2970"/><di:waypoint x="3725" y="2970"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d261" bpmnElement="t_f_fr_ja"><di:waypoint x="3775" y="2970"/><di:waypoint x="3880" y="2970"/><di:waypoint x="3880" y="2875"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="2948" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d262" bpmnElement="t_f_fr_nein"><di:waypoint x="3750" y="2995"/><di:waypoint x="3750" y="3070"/><di:waypoint x="3830" y="3070"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="3020" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d263" bpmnElement="t_f_rej2"><di:waypoint x="3930" y="3070"/><di:waypoint x="3992" y="3070"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d264" bpmnElement="t_f10"><di:waypoint x="3905" y="2850"/><di:waypoint x="3960" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d265" bpmnElement="t_f11"><di:waypoint x="4060" y="2850"/><di:waypoint x="4110" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d266" bpmnElement="t_f12"><di:waypoint x="4210" y="2850"/><di:waypoint x="4272" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d267" bpmnElement="u_f0"><di:waypoint x="2808" y="3480"/><di:waypoint x="2840" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d268" bpmnElement="u_f1"><di:waypoint x="2940" y="3480"/><di:waypoint x="2990" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d269" bpmnElement="u_f2"><di:waypoint x="3090" y="3480"/><di:waypoint x="3165" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d270" bpmnElement="u_f_ok_ja"><di:waypoint x="3215" y="3480"/><di:waypoint x="3295" y="3480"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="3458" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d271" bpmnElement="u_f_ok_nein"><di:waypoint x="3190" y="3455"/><di:waypoint x="3190" y="3360"/><di:waypoint x="3270" y="3360"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="3400" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d272" bpmnElement="u_f_rej1"><di:waypoint x="3370" y="3360"/><di:waypoint x="3432" y="3360"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d273" bpmnElement="u_f_4e_ja"><di:waypoint x="3320" y="3505"/><di:waypoint x="3320" y="3600"/><di:waypoint x="3400" y="3600"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="3550" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d274" bpmnElement="u_f_4e_nein"><di:waypoint x="3345" y="3480"/><di:waypoint x="3855" y="3480"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="3458" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d275" bpmnElement="u_f_prep"><di:waypoint x="3500" y="3600"/><di:waypoint x="3550" y="3600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d276" bpmnElement="u_f_ut"><di:waypoint x="3650" y="3600"/><di:waypoint x="3725" y="3600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d277" bpmnElement="u_f_fr_ja"><di:waypoint x="3775" y="3600"/><di:waypoint x="3880" y="3600"/><di:waypoint x="3880" y="3505"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="3578" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d278" bpmnElement="u_f_fr_nein"><di:waypoint x="3750" y="3625"/><di:waypoint x="3750" y="3700"/><di:waypoint x="3830" y="3700"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="3650" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d279" bpmnElement="u_f_rej2"><di:waypoint x="3930" y="3700"/><di:waypoint x="3992" y="3700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d280" bpmnElement="u_fx0"><di:waypoint x="4060" y="3480"/><di:waypoint x="4110" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d281" bpmnElement="u_f10"><di:waypoint x="3905" y="3480"/><di:waypoint x="3960" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d282" bpmnElement="u_f11"><di:waypoint x="4210" y="3480"/><di:waypoint x="4260" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d283" bpmnElement="u_f12"><di:waypoint x="4360" y="3480"/><di:waypoint x="4422" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d284" bpmnElement="b_f0"><di:waypoint x="2808" y="4110"/><di:waypoint x="2840" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d285" bpmnElement="b_f1"><di:waypoint x="2940" y="4110"/><di:waypoint x="2990" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d286" bpmnElement="b_f2"><di:waypoint x="3090" y="4110"/><di:waypoint x="3165" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d287" bpmnElement="b_f_ok_ja"><di:waypoint x="3215" y="4110"/><di:waypoint x="3295" y="4110"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="4088" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d288" bpmnElement="b_f_ok_nein"><di:waypoint x="3190" y="4085"/><di:waypoint x="3190" y="3990"/><di:waypoint x="3270" y="3990"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="4030" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d289" bpmnElement="b_f_rej1"><di:waypoint x="3370" y="3990"/><di:waypoint x="3432" y="3990"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d290" bpmnElement="b_f_4e_ja"><di:waypoint x="3320" y="4135"/><di:waypoint x="3320" y="4230"/><di:waypoint x="3400" y="4230"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="4180" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d291" bpmnElement="b_f_4e_nein"><di:waypoint x="3345" y="4110"/><di:waypoint x="3855" y="4110"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="4088" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d292" bpmnElement="b_f_prep"><di:waypoint x="3500" y="4230"/><di:waypoint x="3550" y="4230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d293" bpmnElement="b_f_ut"><di:waypoint x="3650" y="4230"/><di:waypoint x="3725" y="4230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d294" bpmnElement="b_f_fr_ja"><di:waypoint x="3775" y="4230"/><di:waypoint x="3880" y="4230"/><di:waypoint x="3880" y="4135"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="4208" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d295" bpmnElement="b_f_fr_nein"><di:waypoint x="3750" y="4255"/><di:waypoint x="3750" y="4330"/><di:waypoint x="3830" y="4330"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="4280" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d296" bpmnElement="b_f_rej2"><di:waypoint x="3930" y="4330"/><di:waypoint x="3992" y="4330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d297" bpmnElement="b_f10"><di:waypoint x="3905" y="4110"/><di:waypoint x="3960" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d298" bpmnElement="b_f11"><di:waypoint x="4060" y="4110"/><di:waypoint x="4110" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d299" bpmnElement="b_f12"><di:waypoint x="4210" y="4110"/><di:waypoint x="4272" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d300" bpmnElement="w_c0"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="960"/><di:waypoint x="2682" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d301" bpmnElement="w_s0"><di:waypoint x="2718" y="960"/><di:waypoint x="2750" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d302" bpmnElement="w_z0"><di:waypoint x="4500" y="960"/><di:waypoint x="4560" y="960"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d303" bpmnElement="w_c1"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="1590"/><di:waypoint x="2682" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d304" bpmnElement="w_s1"><di:waypoint x="2718" y="1590"/><di:waypoint x="2750" y="1590"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d305" bpmnElement="w_z1"><di:waypoint x="4500" y="1590"/><di:waypoint x="4560" y="1590"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d306" bpmnElement="w_c2"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="2220"/><di:waypoint x="2682" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d307" bpmnElement="w_s2"><di:waypoint x="2718" y="2220"/><di:waypoint x="2750" y="2220"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d308" bpmnElement="w_z2"><di:waypoint x="4500" y="2220"/><di:waypoint x="4560" y="2220"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d309" bpmnElement="w_c3"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="2850"/><di:waypoint x="2682" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d310" bpmnElement="w_s3"><di:waypoint x="2718" y="2850"/><di:waypoint x="2750" y="2850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d311" bpmnElement="w_z3"><di:waypoint x="4500" y="2850"/><di:waypoint x="4560" y="2850"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d312" bpmnElement="w_c4"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="3480"/><di:waypoint x="2682" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d313" bpmnElement="w_s4"><di:waypoint x="2718" y="3480"/><di:waypoint x="2750" y="3480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d314" bpmnElement="w_z4"><di:waypoint x="4500" y="3480"/><di:waypoint x="4560" y="3480"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d315" bpmnElement="w_c5"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="4110"/><di:waypoint x="2682" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d316" bpmnElement="w_s5"><di:waypoint x="2718" y="4110"/><di:waypoint x="2750" y="4110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d317" bpmnElement="w_z5"><di:waypoint x="4500" y="4110"/><di:waypoint x="4560" y="4110"/><di:waypoint x="4560" y="4455"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d318" bpmnElement="w_back"><di:waypoint x="4560" y="4505"/><di:waypoint x="4560" y="4540"/><di:waypoint x="2430" y="4540"/><di:waypoint x="2430" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d319" bpmnElement="r_f0"><di:waypoint x="2615" y="700"/><di:waypoint x="2682" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d320" bpmnElement="r_f1"><di:waypoint x="2718" y="700"/><di:waypoint x="4775" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d321" bpmnElement="r_f2"><di:waypoint x="4688" y="1030"/><di:waypoint x="4750" y="1030"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d322" bpmnElement="r_f3"><di:waypoint x="4800" y="990"/><di:waypoint x="4800" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d323" bpmnElement="r_f4"><di:waypoint x="4825" y="700"/><di:waypoint x="4880" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d324" bpmnElement="r_f5"><di:waypoint x="4980" y="700"/><di:waypoint x="5030" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d325" bpmnElement="r_f6"><di:waypoint x="5130" y="700"/><di:waypoint x="5180" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d326" bpmnElement="r_f7"><di:waypoint x="5280" y="700"/><di:waypoint x="5330" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d327" bpmnElement="r_f8"><di:waypoint x="5430" y="700"/><di:waypoint x="5492" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d328" bpmnElement="a_f1"><di:waypoint x="136" y="700"/><di:waypoint x="200" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d329" bpmnElement="a_f3"><di:waypoint x="1115" y="700"/><di:waypoint x="1170" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d330" bpmnElement="a_f4"><di:waypoint x="1270" y="700"/><di:waypoint x="1320" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d331" bpmnElement="a_f5"><di:waypoint x="1420" y="700"/><di:waypoint x="1475" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d332" bpmnElement="a_f6"><di:waypoint x="1500" y="675"/><di:waypoint x="1500" y="550"/><di:waypoint x="1580" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d333" bpmnElement="a_f7"><di:waypoint x="1680" y="550"/><di:waypoint x="1730" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d334" bpmnElement="a_f8"><di:waypoint x="1830" y="550"/><di:waypoint x="1910" y="550"/><di:waypoint x="1910" y="675"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d335" bpmnElement="a_f9"><di:waypoint x="1525" y="700"/><di:waypoint x="1580" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d336" bpmnElement="a_f10"><di:waypoint x="1680" y="700"/><di:waypoint x="1885" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d337" bpmnElement="a_f11"><di:waypoint x="1500" y="725"/><di:waypoint x="1500" y="850"/><di:waypoint x="1580" y="850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d338" bpmnElement="a_f12"><di:waypoint x="1680" y="850"/><di:waypoint x="1910" y="850"/><di:waypoint x="1910" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d339" bpmnElement="a_f13"><di:waypoint x="1935" y="700"/><di:waypoint x="2120" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d340" bpmnElement="a_f13b"><di:waypoint x="2220" y="700"/><di:waypoint x="2250" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d341" bpmnElement="a_f14"><di:waypoint x="2350" y="700"/><di:waypoint x="2405" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d342" bpmnElement="w_f1"><di:waypoint x="2455" y="700"/><di:waypoint x="2565" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d343" bpmnElement="w_f3"><di:waypoint x="2590" y="675"/><di:waypoint x="2590" y="330"/><di:waypoint x="2682" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d344" bpmnElement="w_f5"><di:waypoint x="2718" y="330"/><di:waypoint x="2750" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d345" bpmnElement="w_f7"><di:waypoint x="2780" y="150"/><di:waypoint x="2780" y="120"/><di:waypoint x="2430" y="120"/><di:waypoint x="2430" y="675"/></bpmndi:BPMNEdge>
 </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </definitions>

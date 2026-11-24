@@ -6740,7 +6740,6 @@ carla@example.org,admins,GOLD</code></pre></li>
           <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
           <span class="tag">per-position</span>
           <span class="tag" data-l="de">Subprozesse</span><span class="tag" data-l="en">subprocesses</span>
-          <span class="tag" data-l="de">Ereignis-Subprozesse</span><span class="tag" data-l="en">event subprocesses</span>
           <span class="tag" data-l="de">Vier-Augen-Prinzip</span><span class="tag" data-l="en">four eyes</span>
           <span class="tag">DMN</span>
           <span class="tag">Mockup</span>
@@ -6771,8 +6770,8 @@ carla@example.org,admins,GOLD</code></pre></li>
               ein einziger Strang je Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b>;
               jede Aktion ist ein Zwischenereignis daran, gefolgt von einem <b>Subprozess</b> gleichen Aufbaus (lesen, Regel,
               Freigabe, ausführen, Shop-Aufgabe). Die Subprozesse stehen untereinander und münden in einen gemeinsamen Rückweg
-              zum Warten, damit kein Rückweg die Verzweigung kreuzt. Die Rückgabe ist ein unterbrechender
-              <b>Ereignis-Subprozess</b>, dazu ein Nachrichtenstart als Rückfallebene. Ergebnisse innerer Aufgaben bleiben im
+              zum Warten, damit kein Rückweg die Verzweigung kreuzt. Auch die Rückgabe ist ein
+              Zwischenereignis am Gateway, dazu ein Nachrichtenstart als Rückfallebene. Ergebnisse innerer Aufgaben bleiben im
               Subprozess; <b>Output-Mappings</b> setzen nur die geänderten Felder mit <code>context merge</code> in den Stand
               der Site (<code>site</code>, <code>quota</code>, <code>zusatz</code>, <code>gruppen</code>). Änderungen beantwortet
               je eine Shop-Aufgabe (<code>atlas:shopTask</code>), Bereitstellung und Rückgabe die Positionsroute. Die Ausführung
@@ -6781,7 +6780,7 @@ carla@example.org,admins,GOLD</code></pre></li>
               strand per position. After provisioning it waits at an <b>event-based gateway</b>; every action is an
               intermediate event on it, followed by a <b>subprocess</b> of the same shape (read, rule, approval, execute, shop
               task). The subprocesses are stacked and lead into one shared way back to the wait, so no way back crosses the
-              branching. The return is an interrupting <b>event subprocess</b>, with a message start as the fallback. Inner
+              branching. The return is an intermediate event on the gateway too, with a message start as the fallback. Inner
               tasks' results stay inside the subprocess; <b>output mappings</b> merge only the changed fields into the site's
               state with <code>context merge</code> (<code>site</code>, <code>quota</code>, <code>zusatz</code>,
               <code>gruppen</code>). Each change is answered by a shop task (<code>atlas:shopTask</code>), provisioning and

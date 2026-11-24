@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "**SharePoint OnPrem: Site zurückgeben**\n\nGilt für die Site dieser Position. Entfernt alle externen Zugriffe, verschiebt die Site in den Papierkorb, beendet ihre Zusatzleistungen und bricht eine laufende Änderung ab, auch eine, die auf eine Freigabe wartet."
+      "text": "**SharePoint OnPrem: Site zurückgeben**\n\nGilt für die Site dieser Position. Entfernt alle externen Zugriffe, verschiebt die Site in den Papierkorb und beendet ihre Zusatzleistungen. Während eine Änderung der Site läuft, etwa eine Freigabe aussteht, ist die Rückgabe erst nach deren Abschluss möglich."
     },
     {
       "key": "grund",

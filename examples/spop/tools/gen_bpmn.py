@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bpmnlib import (KEY, REASON_FREIGABE, REST_DOC, IU, brt, change_sub, check_block, ext, flow, mock, node,  # noqa: E402
-                     rest_decision, rest_status, script, shop, spbox, subprocess, write)
+                     rest_decision, rest_status, script, shop, spbox, write)
 
 OUT = sys.argv[1]
 
@@ -81,7 +81,7 @@ node("a_info", "serviceTask", "Position als erledigt melden", 2300, M, rest_stat
 # Jede Aktion ist ein Zwischenereignis direkt am ereignisbasierten Gateway, gefolgt von ihrem Subprozess. Die Einladung
 # liegt oberhalb und kehrt über die Oberkante zurück. Die übrigen Aktionen stehen untereinander; jeder Subprozess mündet
 # rechts in den gemeinsamen Rückweg j_zurueck, der unter allen hindurch zum Warten führt. So kreuzt kein Rückweg die
-# Verzweigung des Gateways. Die Rückgabe ist ein unterbrechender Ereignis-Subprozess (unten), keine Verzweigung.
+# Verzweigung des Gateways. Die Rückgabe geht nach rechts und endet den Strang; sie braucht keinen Rückweg.
 JX, GX, CX, SPX = 2430, 2590, 2700, 2750
 W = 1750                      # Breite jedes Änderungs-Subprozesses unterhalb
 XR = SPX + W + 60             # Spalte des gemeinsamen Rückwegs
@@ -90,7 +90,7 @@ node("g_warten", "eventBasedGateway", "Aktiv: auf Auftrag warten", GX, M, label=
      doc="Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Einladung, Speicher, Erweitertes "
          "Reporting, SubSite Quota, Umbenennung, URL-Änderung oder Berechtigungen. Jede Aktion ist an orderId/positionId "
          "korreliert. Während eine Aktion läuft, wartet der Strang nicht; eine zweite Aktion derselben Position wird erst nach "
-         "Abschluss der ersten angenommen. Die Rückgabe unterbricht jederzeit (Ereignis-Subprozess «Rückgabe»).")
+         "Abschluss der ersten angenommen; das gilt auch für die Rückgabe.")
 node("c_extern", "intermediateCatchEvent", "Einladung angefragt", CX, 330, '<messageEventDefinition messageRef="m_extern"/>',
      doc="GF-003: Aktion extern-einladen (Formular spop-extern-einladen: email, rolle, ablaufTage, nachricht).", lw=90)
 
@@ -356,59 +356,46 @@ for k, (cid, sid, yy) in enumerate(ROWS):
     flow(f"w_z{k}", sid, "j_zurueck", a=(SPX + W, yy), b=(XR, YJ - 25), via=[(XR, yy)])
 flow("w_back", "j_zurueck", "j_aktiv", a=(XR, YJ + 25), b=(JX, M + 25), via=[(XR, YJ + 60), (JX, YJ + 60)])
 
-# ----------------------------------------------------------------------- Rückgabe: unterbrechender Ereignis-Subprozess
-# Eine Rückgabe beendet alles, was in der Position läuft, auch eine wartende Freigabe, und baut die Site ab. Sie braucht
-# darum weder ein Catch-Event am Gateway noch Boundary-Events an den Subprozessen.
-RX, RY = XR + 240, M
-subprocess("sp_rueckgabe", "Rückgabe", RX, RY - 110, 860, 220,
-           "Unterbrechender Ereignis-Subprozess (ADR-0082) auf der Nachricht spop.teamsite.rueckgabe (Operation deprovision, "
-           "Formular spop-teamsite-rueckgabe: grund). Er unterbricht den Strang, wo immer er steht: beim Warten, in einer "
-           "Änderung oder in einer wartenden Freigabe. Entfernt die externen Zugriffe, löscht die Site und beendet die "
-           "Verrechnung der Site und ihrer Zusatzleistungen.",
-           attrs=' triggeredByEvent="true"')
-RP = dict(parent="sp_rueckgabe")
-node("rv_s", "startEvent", "Rückgabe angefordert", RX + 40, RY, '<messageEventDefinition messageRef="m_rueckgabe"/>', lw=90, **RP)
-node("rv_extern", "serviceTask", "Externe Zugriffe entfernen", RX + 160, RY,
+# ----------------------------------------------------------------------- Rückgabe
+# Wie jede Aktion ein Zwischenereignis am Gateway: rechts davon, zwischen Einladung und Speicher. Sie greift, wenn der
+# Strang wartet; während eine Änderung läuft, nimmt der Strang sie nicht an, und der Katalog lehnt sie ab, bis die
+# Änderung abgeschlossen ist. Ohne laufenden Strang startet die Rückfallebene und mündet in denselben Abbau.
+RJ = SPX + 2050                # rechts der Einladung und des gemeinsamen Rückwegs
+node("c_rueck", "intermediateCatchEvent", "Rückgabe angefordert", CX, M, '<messageEventDefinition messageRef="m_rueckgabe"/>',
+     doc="Operation deprovision (Formular spop-teamsite-rueckgabe: grund). Nur, wenn der Strang wartet.", lw=90)
+node("j_rueck", "exclusiveGateway", "", RJ, M,
+     doc="Rückgabe aus dem wartenden Strang und Rückgabe ohne laufenden Strang führen in denselben Abbau.")
+node("r_extern", "serviceTask", "Externe Zugriffe entfernen", RJ + 130, M,
      ext(mock('={ siteUrl: site.url, entfernt: if externe = null then [] else externe }', "externEntfernt")),
-     doc="Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen.", **RP)
-node("rv_delete", "serviceTask", "Site löschen", RX + 310, RY,
+     doc="Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen.")
+node("r_delete", "serviceTask", "Site löschen", RJ + 280, M,
      ext(mock('={ siteUrl: site.url, status: "im Papierkorb" }', "rueckbau")),
-     doc="Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).", **RP)
-node("rv_bill", "serviceTask", "Verrechnung beenden", RX + 460, RY,
+     doc="Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).")
+node("r_bill", "serviceTask", "Verrechnung beenden", RJ + 430, M,
      ext(mock('={ material: site.material, siteUrl: site.url, zusatz: zusatz, quota: quota, status: "beendet" }', "verrechnung")),
-     doc="Simuliert das Beenden der wiederkehrenden Verrechnung: Site-Material, Speicherplatzerweiterung und Zusatzleistungen.", **RP)
-node("rv_info", "serviceTask", "Rückgabe melden", RX + 610, RY, rest_status("returned"),
-     doc="Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand." + REST_DOC, **RP)
-node("rv_end", "endEvent", "Site zurückgegeben", RX + 760, RY, **RP)
-flow("rv_f1", "rv_s", "rv_extern", **RP)
-flow("rv_f2", "rv_extern", "rv_delete", **RP)
-flow("rv_f3", "rv_delete", "rv_bill", **RP)
-flow("rv_f4", "rv_bill", "rv_info", **RP)
-flow("rv_f5", "rv_info", "rv_end", **RP)
+     doc="Simuliert das Beenden der wiederkehrenden Verrechnung: Site-Material, Speicherplatzerweiterung und Zusatzleistungen.")
+node("r_info", "serviceTask", "Rückgabe melden", RJ + 580, M, rest_status("returned"),
+     doc="Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand." + REST_DOC)
+node("r_end", "endEvent", "Site zurückgegeben", RJ + 710, M, '<terminateEventDefinition/>',
+     doc="Terminierendes Ende: beendet den Strang der Position vollständig.")
 
-# ----------------------------------------------------------------------- Rückgabe ohne laufenden Strang (Rückfallebene)
 FY = M + 330
-node("r_start", "startEvent", "Rückgabe ohne laufenden Strang", RX + 40, FY, '<messageEventDefinition messageRef="m_rueckgabe"/>',
+node("r_start", "startEvent", "Rückgabe ohne laufenden Strang", RJ - 130, FY, '<messageEventDefinition messageRef="m_rueckgabe"/>',
      doc="Rückfallebene wie im Referenzmodell: Eine Rückgabe für eine Position ohne laufenden Strang startet hier. Der Katalog "
          "verlangt für per-position diesen Nachrichtenstart.", lw=100)
-node("r_site", "scriptTask", "Site ermitteln", RX + 160, FY,
+node("r_site", "scriptTask", "Site ermitteln", RJ, FY,
      script('={ url: "/sites/" + lower case(amtKuerzel) + "-" + kurzname }', "site"),
      doc="Bildet die Site-URL aus der Konfiguration der Position nach demselben Schema wie die Bereitstellung (Annahme: der "
          "Katalog liefert amtKuerzel und kurzname der Position mit). Eine spätere URL-Änderung kennt diese Ebene nicht.")
-node("r_delete", "serviceTask", "Site löschen", RX + 310, FY,
-     ext(mock('={ siteUrl: site.url, status: "im Papierkorb" }', "rueckbau")),
-     doc="Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).")
-node("r_bill", "serviceTask", "Verrechnung beenden", RX + 460, FY,
-     ext(mock('={ siteUrl: site.url, status: "beendet" }', "verrechnung")),
-     doc="Simuliert das Beenden der wiederkehrenden Verrechnung der Site und ihrer Zusatzleistungen.")
-node("r_info", "serviceTask", "Rückgabe melden", RX + 610, FY, rest_status("returned"),
-     doc="Meldet die Rückgabe über die Positionsroute (status returned)." + REST_DOC)
-node("r_end", "endEvent", "Site zurückgegeben", RX + 760, FY)
-flow("r_f1", "r_start", "r_site")
-flow("r_f2", "r_site", "r_delete")
-flow("r_f3", "r_delete", "r_bill")
-flow("r_f4", "r_bill", "r_info")
-flow("r_f5", "r_info", "r_end")
+flow("r_f0", "g_warten", "c_rueck")
+flow("r_f1", "c_rueck", "j_rueck")
+flow("r_f2", "r_start", "r_site")
+flow("r_f3", "r_site", "j_rueck", "t", "b")
+flow("r_f4", "j_rueck", "r_extern")
+flow("r_f5", "r_extern", "r_delete")
+flow("r_f6", "r_delete", "r_bill")
+flow("r_f7", "r_bill", "r_info")
+flow("r_f8", "r_info", "r_end")
 
 # ----------------------------------------------------------------------- Flüsse Hauptstrang
 flow("a_f1", "s_neu", "a_regel")
@@ -444,8 +431,9 @@ ist ein Zwischenereignis an diesem Gateway mit ihrem Subprozess (Katalog: change
 - spop.teamsite.titel          → «Site umbenennen»                      (Formular spop-site-umbenennen)
 - spop.teamsite.url            → «Site-URL ändern»                      (Formular spop-site-url-aendern)
 - spop.teamsite.berechtigungen → «Berechtigungen ändern»                (Formular spop-berechtigungen-aendern)
-Nach jedem Subprozess kehrt der Strang zum Warten zurück. Die Rückgabe (spop.teamsite.rueckgabe, Katalog: deprovision) ist ein
-unterbrechender Ereignis-Subprozess und als Nachrichtenstart die Rückfallebene ohne laufenden Strang. Alle späteren Aktionen sind an
+Nach jedem Subprozess kehrt der Strang zum Warten zurück. Die Rückgabe (spop.teamsite.rueckgabe, Katalog: deprovision) ist ebenfalls
+ein Zwischenereignis am Gateway und als Nachrichtenstart die Rückfallebene ohne laufenden Strang; während eine Änderung läuft, nimmt
+der Strang sie nicht an. Alle späteren Aktionen sind an
 orderId + "/" + positionId korreliert (Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, zusatz, gruppen,
 externe, verrechnung); jede Änderung setzt nur ihre eigenen Felder mit context merge ein. «Angaben ändern» im Shop korrigiert nur den
 Datensatz der Bestellung; die Sprache ist nach der Erstellung fest. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie

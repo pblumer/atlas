@@ -63,7 +63,7 @@ Reporting und SubSite Quota als eigene Produkte mit eigenem Prozess `proc_spop_z
 | PvN-GF-003 | Externen Benutzer einladen | «Externen Benutzer einladen» |
 | Collaboration | Zusatzleistungen | «Erweitertes Reporting», «SubSite Quota» |
 | Ergänzung | Angaben der Site ändern | «Site umbenennen», «Site-URL ändern», «Berechtigungen ändern» |
-| Ergänzung | Rückgabe | unterbrechender Ereignis-Subprozess «Rückgabe», Nachrichtenstart als Rückfallebene |
+| Ergänzung | Rückgabe | Zwischenereignis «Rückgabe angefordert», Nachrichtenstart als Rückfallebene |
 
 ## Modellierung
 
@@ -77,16 +77,16 @@ Bestellposition hat genau einen Strang.
    Subprozesse haben denselben Aufbau: lesen, Regel, zulässig?, Vier-Augen-Freigabe, ausführen,
    Shop-Aufgabe; eine Ablehnung endet im Subprozess mit einer Shop-Aufgabe «rejected».
 3. Die Einladung liegt oberhalb des Gateways und kehrt über die Oberkante zum Warten zurück.
-   Die übrigen sieben Aktionen stehen untereinander; jeder Subprozess mündet rechts in den
+   Die übrigen sieben Änderungen stehen untereinander; jeder Subprozess mündet rechts in den
    gemeinsamen Rückweg `j_zurueck`, der unter allen hindurch zum Warten führt. Nur so kreuzt
    kein Rückweg die Verzweigung des Gateways.
-4. Die Rückgabe ist ein unterbrechender Ereignis-Subprozess (ADR-0082). Sie unterbricht den
-   Strang, wo immer er steht, auch während einer wartenden Freigabe, und braucht darum weder
-   ein Catch-Event am Gateway noch Boundary-Events an den Subprozessen. Ohne laufenden Strang
-   startet der Nachrichtenstart «Rückgabe ohne laufenden Strang».
+4. Auch die Rückgabe ist ein Zwischenereignis am Gateway («Rückgabe angefordert»), rechts davon.
+   Sie baut die Site ab und endet den Strang mit einem terminierenden Ende. Ohne laufenden
+   Strang startet der Nachrichtenstart «Rückgabe ohne laufenden Strang» und mündet in denselben
+   Abbau.
 5. Alle späteren Aktionen sind an `orderId + "/" + positionId` korreliert. Während eine Aktion
-   läuft, wartet der Strang nicht; eine zweite Aktion derselben Position wird erst nach
-   Abschluss der ersten angenommen.
+   läuft, wartet der Strang nicht; eine zweite Aktion derselben Position, auch die Rückgabe,
+   wird erst nach Abschluss der ersten angenommen.
 
 Der Strang trägt den Stand der Site in `site`, `quota`, `zusatz`, `gruppen`, `externe` und
 `verrechnung`. Ergebnisse innerer Aufgaben bleiben im Subprozess (ADR-0074). Jede Ausführung
@@ -157,8 +157,7 @@ Danach `go test ./examples -update` (Katalog des Handbuchs) und
 ## Installation
 
 Das Beispiel wird nicht aus dem Handbuch installiert, weil seine Starts die Aktionen von
-Katalogprodukten sind. Es braucht Atlas 0.28 oder neuer: Ältere Versionen lehnen beim
-Veröffentlichen eine Rückgabe ab, die ein Ereignis-Subprozess entgegennimmt. Die Schritte:
+Katalogprodukten sind. Die Schritte:
 
 1. Eine Applikation anlegen, darin die zehn Formulare speichern.
 2. Die vier DMN-Modelle hochladen (Handles `spop-teamsite-richtlinie`,
@@ -213,10 +212,10 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
 - **Simulierte Ausführung:** Die Schritte gegen APS-BW (`atlas-provider-apsbw`) und die
   Verrechnung sind mit `atlas:mockupConnector` simuliert.
 - **Vier-Augen-Prinzip:** Getrennt wird nur über die Gruppe `SPoP-Freigabe`.
-- **Rückgabe während einer Änderung:** Die Rückgabe unterbricht auch eine Änderung, die auf
-  ihre Freigabe wartet (im Live-Test geprüft). Die unterbrochene Aktion erhält im Shop aber
-  keine Rückmeldung «rejected» oder «failed»; sie bleibt ohne Ergebnis. Eine Shop-Aufgabe im
-  Rückgabe-Subprozess könnte das nachholen, müsste dafür aber wissen, welche Aktion lief.
+- **Rückgabe während einer Änderung:** Wartet eine Änderung auf ihre Freigabe, nimmt der
+  Strang die Rückgabe nicht an, und der Katalog lehnt sie ab. Erst muss die Freigabe
+  entschieden sein. Eine frühere Fassung unterbrach mit einem Ereignis-Subprozess jede
+  laufende Änderung, liess die unterbrochene Aktion im Shop aber ohne Ergebnis.
 - **Rückgabe ohne laufenden Strang:** Die Rückfallebene bildet die Site-URL aus den Antworten
   der Bestellung. Eine spätere URL-Änderung kennt sie nicht.
 - **URL-Änderung (offen):** Ob und wie SharePoint OnPrem die URL einer Site-Collection
