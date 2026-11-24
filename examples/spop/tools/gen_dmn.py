@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Erzeugt die drei DMN-Modelle (Hit Policy FIRST) anstelle der OPA-Policies: python3 tools/gen_dmn.py . (aus examples/spop)."""
+"""Erzeugt die vier DMN-Modelle (Hit Policy FIRST) anstelle der OPA-Policies: python3 tools/gen_dmn.py . (aus examples/spop)."""
 import sys
 from xml.sax.saxutils import escape
 
@@ -116,6 +116,33 @@ decisions = [
         inputs=[("siteGefunden", "boolean"), ("siteGehoert", "boolean"), ("produkt", "string"), ("menge", "number"), ("unveraendert", "boolean")],
         outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("material", "string"), ("einheit", "string"), ("grund", "string")],
         rules=zusatz_rules),
+    dict(
+        id="SpopAenderungRichtlinie", name="Site-Änderung-Richtlinie",
+        doc="Prüft die Aktionen, die die Angaben einer bereitgestellten Site ändern: site-umbenennen (aenderung titel), "
+            "site-url-aendern (url) und berechtigungen-aendern (berechtigungen). Ob die neuen Angaben gültig sind, berechnet der "
+            "Prozess (gueltig), ebenso ob sie dem heutigen Stand entsprechen (unveraendert) und ob der Owner wechselt "
+            "(ownerWechsel). Annahmen: Titeländerung ohne Freigabe; eine neue URL macht bestehende Links ungültig und braucht "
+            "immer die Vier-Augen-Freigabe; ein Owner-Wechsel braucht sie bei Hermes, Communication und Publishing, wie die "
+            "Owner-Zuweisung bei der Bestellung.",
+        inputs=[("siteGefunden", "boolean"), ("aenderung", "string"), ("gueltig", "boolean"), ("unveraendert", "boolean"),
+                ("siteTyp", "string"), ("ownerWechsel", "boolean")],
+        outputs=[("zulaessig", "boolean"), ("vierAugen", "boolean"), ("grund", "string")],
+        rules=[
+            (["false", "-", "-", "-", "-", "-"], ["false", "false", S("Die Site ist noch nicht bereitgestellt.")]),
+            (["-", S("titel"), "false", "-", "-", "-"], ["false", "false", S("Der Titel muss 1 bis 80 Zeichen haben.")]),
+            (["-", S("url"), "false", "-", "-", "-"],
+             ["false", "false", S("Die neue URL ist ungültig oder vergeben: Amtskürzel 2 bis 6 Grossbuchstaben, Kurzname 3 bis 30 "
+                                  "Zeichen aus Kleinbuchstaben, Ziffern und Bindestrichen.")]),
+            (["-", S("berechtigungen"), "false", "-", "-", "-"],
+             ["false", "false", S("Der Owner muss als UPN (name@domain) angegeben sein und im AD existieren.")]),
+            (["-", "-", "-", "true", "-", "-"], ["false", "false", S("Die Angaben entsprechen dem heutigen Stand der Site; es gibt nichts zu ändern.")]),
+            (["-", S("titel"), "-", "-", "-", "-"], ["true", "false", S("Titeländerung im Self-Service: ohne Freigabe.")]),
+            (["-", S("url"), "-", "-", "-", "-"], ["true", "true", S("Eine neue Site-URL macht bestehende Links ungültig: Vier-Augen-Prinzip.")]),
+            (["-", S("berechtigungen"), "-", "-", BIG, "true"],
+             ["true", "true", S("Owner-Wechsel bei Hermes, Communication oder Publishing: Vier-Augen-Prinzip.")]),
+            (["-", S("berechtigungen"), "-", "-", "-", "-"], ["true", "false", S("Berechtigungsänderung im Self-Service: ohne Freigabe.")]),
+            (["-", "-", "-", "-", "-", "-"], ["false", "false", S("Unbekannte Änderung.")]),
+        ]),
 ]
 
 import os

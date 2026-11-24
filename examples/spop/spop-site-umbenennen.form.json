@@ -1,0 +1,30 @@
+{
+  "type": "default",
+  "id": "spop-site-umbenennen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: Site umbenennen**\n\nÄndert den Titel der Site dieser Position. Die URL bleibt gleich. Ohne Freigabe."
+    },
+    {
+      "key": "neuerTitel",
+      "type": "textfield",
+      "label": "Neuer Titel der Site",
+      "validate": {
+        "required": true,
+        "maxLength": 80
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

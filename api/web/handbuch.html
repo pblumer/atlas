@@ -6740,6 +6740,7 @@ carla@example.org,admins,GOLD</code></pre></li>
           <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
           <span class="tag">per-position</span>
           <span class="tag" data-l="de">Subprozesse</span><span class="tag" data-l="en">subprocesses</span>
+          <span class="tag" data-l="de">Ereignis-Subprozesse</span><span class="tag" data-l="en">event subprocesses</span>
           <span class="tag" data-l="de">Vier-Augen-Prinzip</span><span class="tag" data-l="en">four eyes</span>
           <span class="tag">DMN</span>
           <span class="tag">Mockup</span>
@@ -6752,14 +6753,17 @@ carla@example.org,admins,GOLD</code></pre></li>
             <p data-l="de">Ein Angebot an SharePoint-OnPrem-Sites als Katalog: sechs Site-Typen (Hermes, Communication,
               Publishing, Team Site Classic und Modern, Wiki) und zwei Zusatzleistungen (Erweitertes Reporting, SubSite Quota), deren
               Stufen Verrechnungsbänder einer Menge sind; Zusatzspeicher wird an der Site selbst bestellt. Eine Site bestellen, ihre Quota
-              erhöhen und einen externen Benutzer einladen, dazu die Rückgabe. Ämterspezifische Richtlinien
+              erhöhen, einen externen Benutzer einladen, sie umbenennen, ihre URL oder ihre Berechtigungen ändern, dazu
+              die Rückgabe. «Angaben ändern» im Shop korrigiert nur den Datensatz; was die Site selbst ändert, ist eine
+              Aktion. Ämterspezifische Richtlinien
               (Namensregel, Quota-Grenzen, erlaubte Mail-Domains) prüft je eine Entscheidungstabelle; was über der
               Schwelle liegt, gibt eine zweite Person frei. Eine Einladung bekommt ihre Berechtigung erst, wenn sie
               angenommen ist, und wird nach Ablauf der Gültigkeit widerrufen.</p>
             <p data-l="en">An offering of SharePoint OnPrem sites as a catalogue: six site types (Hermes, Communication,
               Publishing, Team Site Classic and Modern, Wiki) and two add-ons (extended reporting, subsite quota) whose tiers are
-              billing bands of a quantity; extra storage is ordered on the site itself. Order a site, raise its quota and invite an external user,
-              plus the return. Agency-specific rules (naming, quota limits,
+              billing bands of a quantity; extra storage is ordered on the site itself. Order a site, raise its quota, invite an external user,
+              rename it, change its URL or its permissions, plus the return. «Change details» in the shop corrects the
+              record only; what changes the site itself is an action. Agency-specific rules (naming, quota limits,
               allowed mail domains) are each checked by a decision table; anything above the threshold is approved by a
               second person. An invitation gets its permission only once it is accepted, and is revoked when it
               expires.</p>
@@ -6771,8 +6775,9 @@ carla@example.org,admins,GOLD</code></pre></li>
               bzw. aus der Menge das Verrechnungsband und die Materialnummer ab. Ein einziger Strang je Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b> auf die nächste
               Aktion; Quota-Erhöhung und Einladung sind <b>Subprozesse</b>, nach denen er zum Warten zurückkehrt, und
               die Rückgabe ist ein Catch-Event, ein unterbrechendes Boundary-Event an beiden Subprozessen und ein
-              Nachrichtenstart als Rückfallebene. Der Strang trägt den Stand der Site (<code>site</code>,
-              <code>quota</code>, <code>externe</code>); weil Ergebnisse innerer Aufgaben im Subprozess bleiben, heben
+              Nachrichtenstart als Rückfallebene. Titel, URL und Berechtigungen ändern drei nicht unterbrechende
+              <b>Ereignis-Subprozesse</b> mit Nachrichtenstart neben dem Strang. Der Strang trägt den Stand der Site (<code>site</code>,
+              <code>quota</code>, <code>gruppen</code>, <code>externe</code>); weil Ergebnisse innerer Aufgaben im Subprozess bleiben, heben
               <b>Output-Mappings</b> am Subprozess sie heraus. Änderungen beantwortet je eine Shop-Aufgabe
               (<code>atlas:shopTask</code>), Bereitstellung und Rückgabe die Positionsroute. Die Ausführung gegen das
               Zielsystem ist mit <code>atlas:mockupConnector</code> simuliert.</p>
@@ -6781,8 +6786,10 @@ carla@example.org,admins,GOLD</code></pre></li>
               band and material number from the quantity. One strand per position.
               After provisioning it waits at an <b>event-based gateway</b> for the next action; quota increase and
               invitation are <b>subprocesses</b> after which it returns to waiting, and the return is a catch event, an
-              interrupting boundary event on both subprocesses and a message start as the fallback. The strand carries
-              the site's state (<code>site</code>, <code>quota</code>, <code>externe</code>); since inner tasks' results
+              interrupting boundary event on both subprocesses and a message start as the fallback. Title, URL and
+              permissions are changed by three non-interrupting <b>event subprocesses</b> with a message start beside the
+              strand. The strand carries the site's state (<code>site</code>, <code>quota</code>, <code>gruppen</code>,
+              <code>externe</code>); since inner tasks' results
               stay inside the subprocess, <b>output mappings</b> on the subprocess lift them out. Each change is
               answered by a shop task (<code>atlas:shopTask</code>), provisioning and return by the position route.
               Execution against the target system is simulated with <code>atlas:mockupConnector</code>.</p>

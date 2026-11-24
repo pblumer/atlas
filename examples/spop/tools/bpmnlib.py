@@ -18,8 +18,8 @@ def node(nid, tag, name, cx, cy, inner="", attrs="", doc=None, label="below", pa
     pos[nid] = (cx, cy, KIND[tag])
 
 
-def subprocess(nid, name, x, y, w, h, doc, parent=None, inner=""):
-    nodes.append(dict(id=nid, tag="subProcess", name=name, inner=inner, attrs="", doc=doc, label=None, parent=parent, lw=None, lpos=None, tail=""))
+def subprocess(nid, name, x, y, w, h, doc, parent=None, inner="", attrs=""):
+    nodes.append(dict(id=nid, tag="subProcess", name=name, inner=inner, attrs=attrs, doc=doc, label=None, parent=parent, lw=None, lpos=None, tail=""))
     pos[nid] = (x + w / 2, y + h / 2, "sp")
     spbox[nid] = (x, y, w, h)
 
@@ -102,16 +102,24 @@ IU, IL1, IL2 = -120, 120, 220
 
 
 def change_sub(spx, p, sid, action, name, cy, width, doc, outputs, read_name, read_mock, read_doc,
-               rule_name, decision, inputs, rule_doc, summary, ut_name):
+               rule_name, decision, inputs, rule_doc, summary, ut_name, trigger=None):
     """Subprozess einer Änderungsaktion: lesen → Regel → zulässig? → Vier Augen? → (Freigabe) → join.
 
     Ablehnungen enden im Subprozess mit einer Shop-Aufgabe rejected. Gibt X (Offset → Koordinate) zurück; der Aufrufer
     hängt die eigentliche Änderung an f"{p}_join" an.
+
+    trigger=(message_id, Name des Starts) macht daraus einen nicht unterbrechenden Ereignis-Subprozess (ADR-0082): Er
+    startet bei jeder Nachricht neu, läuft neben dem Strang her und braucht keinen Rückweg zum Warten.
     """
     out = "".join(f'<zeebe:output source={quoteattr(src)} target="{tgt}"/>' for src, tgt in outputs)
-    subprocess(sid, name, spx, cy - 180, width, 480, doc, inner=ext("<zeebe:ioMapping>" + out + "</zeebe:ioMapping>"))
+    subprocess(sid, name, spx, cy - 180, width, 480, doc, inner=ext("<zeebe:ioMapping>" + out + "</zeebe:ioMapping>"),
+               attrs=' triggeredByEvent="true"' if trigger else "")
     X = lambda o: spx + o
-    node(f"{p}_s", "startEvent", "", X(40), cy, parent=sid)
+    if trigger:
+        node(f"{p}_s", "startEvent", trigger[1], X(40), cy, f'<messageEventDefinition messageRef="{trigger[0]}"/>',
+             attrs=' isInterrupting="false"', parent=sid, lw=90)
+    else:
+        node(f"{p}_s", "startEvent", "", X(40), cy, parent=sid)
     node(f"{p}_read", "serviceTask", read_name, X(140), cy, ext(mock(read_mock, "aktuell")), doc=read_doc, parent=sid)
     node(f"{p}_regel", "businessRuleTask", rule_name, X(290), cy, brt(decision, "regel", *inputs), doc=rule_doc, parent=sid)
     node(f"{p}_gw_ok", "exclusiveGateway", "Zulässig?", X(440), cy, attrs=f' default="{p}_f_ok_nein"', parent=sid)

@@ -1,5 +1,5 @@
 {
-  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Zurückgezogen (state withdrawn) sind spop-teamsite und spop-speicher; die Speicherplatzerweiterung ist die Aktion quota-erhoehen («Speicherplatz erweitern») der Site-Produkte.",
+  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Zurückgezogen (state withdrawn) sind spop-teamsite und spop-speicher; die Speicherplatzerweiterung ist die Aktion quota-erhoehen («Speicherplatz erweitern») der Site-Produkte. «Angaben ändern» korrigiert nur den Datensatz der Bestellung; Änderungen an der Site laufen über die Aktionen site-umbenennen, site-url-aendern und berechtigungen-aendern.",
   "products": [
     {
       "id": "spop-site-hermes",
@@ -10,7 +10,7 @@
         "de": "SharePoint OnP Project Site Hermes"
       },
       "descriptions": {
-        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -62,6 +62,45 @@
             "de": "Externen Benutzer einladen"
           },
           "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
         }
       ],
       "multipleAllowed": true,
@@ -85,7 +124,7 @@
         "de": "SharePoint OnP Communication Site"
       },
       "descriptions": {
-        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -137,6 +176,45 @@
             "de": "Externen Benutzer einladen"
           },
           "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
         }
       ],
       "multipleAllowed": true,
@@ -160,7 +238,7 @@
         "de": "SharePoint OnP Publishing Site"
       },
       "descriptions": {
-        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -212,6 +290,45 @@
             "de": "Externen Benutzer einladen"
           },
           "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
         }
       ],
       "multipleAllowed": true,
@@ -235,7 +352,7 @@
         "de": "SharePoint OnP Team Site Classic"
       },
       "descriptions": {
-        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -287,6 +404,45 @@
             "de": "Externen Benutzer einladen"
           },
           "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
         }
       ],
       "multipleAllowed": true,
@@ -310,7 +466,7 @@
         "de": "SharePoint OnP Team Site Modern"
       },
       "descriptions": {
-        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -362,6 +518,45 @@
             "de": "Externen Benutzer einladen"
           },
           "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
         }
       ],
       "multipleAllowed": true,
@@ -385,7 +580,7 @@
         "de": "SharePoint OnP Wiki Site"
       },
       "descriptions": {
-        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -437,6 +632,45 @@
             "de": "Externen Benutzer einladen"
           },
           "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
         }
       ],
       "multipleAllowed": true,

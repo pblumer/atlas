@@ -6,8 +6,8 @@ SharePoint OnPrem, und das Leistungsangebot «Collaboration» (Materialien der M
 
 - zwei Lebenszyklus-Prozessen
 - acht Katalogprodukten
-- drei Entscheidungstabellen
-- zehn Formularen
+- vier Entscheidungstabellen
+- dreizehn Formularen
 
 ## Produkte
 
@@ -83,6 +83,41 @@ Gründe für diesen Weg:
 | PvN-GF-002 | Quota-Erhöhung | Subprozess «Speicherplatz erweitern» (Zusatzspeicher in GB, Material 540007510) |
 | PvN-GF-003 | Externen Benutzer einladen | Subprozess «Externen Benutzer einladen» |
 | Ergänzung | Rückgabe | Catch-Event, Boundary-Events, Nachrichtenstart als Rückfallebene |
+| Ergänzung | Angaben der Site ändern | drei Ereignis-Subprozesse: «Site umbenennen», «Site-URL ändern», «Berechtigungen ändern» |
+
+## Angaben der Site ändern
+
+Im Shop korrigiert «Angaben ändern» bei einer bereitgestellten Site nur den Datensatz der
+Bestellung (ADR-0359): Die Korrektur wird festgehalten, erreicht aber weder den laufenden
+Strang noch SharePoint (ADR-0441). Darum hat jedes Feld des Bestellformulars einen
+prozessualen Weg, und das Formular sagt das in einem Hinweis:
+
+| Feld | Weg nach der Bereitstellung | Freigabe |
+|---|---|---|
+| `titel` | Aktion «Site umbenennen» (`site-umbenennen`) | keine |
+| `amtKuerzel`, `kurzname` | Aktion «Site-URL ändern» (`site-url-aendern`); führt `siteZugriff` und die Verrechnung nach | immer |
+| `ownerUpn`, `memberUpns` | Aktion «Berechtigungen ändern» (`berechtigungen-aendern`), vollständiger neuer Stand | bei Owner-Wechsel für Hermes, Communication, Publishing |
+| `quotaWahl`, `quotaMb`, `quotaBegruendung` | Aktion «Speicherplatz erweitern» (`quota-erhoehen`) | über 100 GB |
+| `sprache` | keiner: SharePoint legt die Standardsprache bei der Erstellung fest | – |
+| `bemerkung` | keiner nötig: reine Angabe ohne Wirkung auf die Site | – |
+
+Die drei neuen Aktionen sind nicht unterbrechende Ereignis-Subprozesse (ADR-0082) mit eigenem
+Nachrichtenstart. Sie brauchen keinen Rückweg zum ereignisbasierten Gateway: Ein dritter
+Rückweg liesse sich nicht zeichnen, ohne einen der bestehenden zu kreuzen. Geprüft werden sie
+mit `SpopAenderungRichtlinie`. Ihre Formularfelder heissen anders als die der Bestellung
+(`neuerTitel`, `neuesAmtKuerzel`, `neuerKurzname`, `neuerOwnerUpn`, `neueMemberUpns`), damit
+die ursprünglichen Antworten nicht überschrieben werden.
+
+Folgen der Ereignis-Subprozesse:
+
+- Sie sind ab dem Start des Strangs gebunden. Vor der Bereitstellung lehnt die Regel ab, weil
+  `site` noch fehlt.
+- Sie laufen neben einer laufenden Speichererweiterung oder Einladung, also nicht nach der
+  Regel «eine Aktion zur Zeit».
+- Die Rückgabe beendet sie über das terminierende Ende des Strangs; sie brauchen kein
+  Boundary-Event.
+- Die Bestellung zeigt weiterhin die ursprünglichen Antworten. Was die Site heute ist, steht
+  im Strang (`site`, `gruppen`).
 
 ## Modellierung
 
@@ -92,7 +127,9 @@ Bestellposition hat genau einen Strang.
 1. Nach der Bereitstellung (Richtlinie, gegebenenfalls Vier-Augen-Freigabe, Ausführung,
    Verrechnung, Meldung «erledigt») wartet der Strang am ereignisbasierten Gateway
    «Aktiv: auf Auftrag warten».
-2. Jede Änderungsaktion ist ein Subprozess, nach dem der Strang zum Warten zurückkehrt.
+2. Speicher und externe Einladung sind Subprozesse, nach denen der Strang zum Warten
+   zurückkehrt. Titel, URL und Berechtigungen ändern nicht unterbrechende
+   Ereignis-Subprozesse neben dem Strang.
 3. Die Rückgabe greift auch mitten in einem Subprozess (unterbrechendes Boundary-Event).
 4. Alle späteren Aktionen sind an `orderId + "/" + positionId` korreliert.
 
@@ -100,7 +137,7 @@ Der Strang trägt seinen Stand:
 
 | Prozess | Variablen |
 |---|---|
-| `proc_spop_teamsite` | `site`, `quota`, `externe` |
+| `proc_spop_teamsite` | `site`, `quota`, `gruppen`, `externe`, `siteZugriff` |
 | `proc_spop_zusatz` | `bestand` |
 
 Ergebnisse innerer Aufgaben bleiben im Subprozess (ADR-0074). Diese Variablen gelangen nur
@@ -115,8 +152,10 @@ Ergebnisse innerer Aufgaben bleiben im Subprozess (ADR-0074). Diese Variablen ge
 | `SpopTeamsiteRichtlinie.dmn` | Site-Typ, Vorlage, Features, Quota, Freigabe, Material (anstelle von `amt_naming.rego`, `quota_limits.rego`, `approval.rego`) |
 | `SpopExternRichtlinie.dmn` | Externe Benutzer: Mail-Domains, Gültigkeit, MFA, Vier-Augen-Prinzip |
 | `SpopZusatzRichtlinie.dmn` | Speicherplatzerweiterung und Zusatzprodukte: zulässige Menge, Verrechnungsband, Material |
+| `SpopAenderungRichtlinie.dmn` | Titel, URL und Berechtigungen einer Site ändern: gültig, unverändert, Freigabe |
 | `spop-teamsite-bestellung.form.json` | Bestellung einer Site (alle sechs Typen) |
 | `spop-quota-erhoehung.form.json`, `spop-extern-einladen.form.json`, `spop-teamsite-rueckgabe.form.json` | Aktionen der Site |
+| `spop-site-umbenennen.form.json`, `spop-site-url-aendern.form.json`, `spop-berechtigungen-aendern.form.json` | Angaben der Site ändern |
 | `spop-reporting-*`, `spop-subsite-*` (`-bestellung`, `-aendern`) | Bestellung und Mengenänderung der Zusatzprodukte |
 | `spop-zusatz-rueckgabe.form.json` | Rückgabe einer Zusatzleistung |
 | `spop-freigabe.form.json` | Vier-Augen-Freigabe (Gruppe `SPoP-Freigabe`) |
@@ -152,9 +191,9 @@ Danach `go test ./examples -update` (Katalog des Handbuchs) und
 Das Beispiel wird nicht aus dem Handbuch installiert, weil seine Starts die Aktionen von
 Katalogprodukten sind. Die Schritte:
 
-1. Eine Applikation anlegen, darin die zehn Formulare speichern.
-2. Die drei DMN-Modelle hochladen (Handles `spop-teamsite-richtlinie`,
-   `spop-extern-richtlinie`, `spop-zusatz-richtlinie`) und als Regeln
+1. Eine Applikation anlegen, darin die dreizehn Formulare speichern.
+2. Die vier DMN-Modelle hochladen (Handles `spop-teamsite-richtlinie`,
+   `spop-extern-richtlinie`, `spop-zusatz-richtlinie`, `spop-aenderung-richtlinie`) und als Regeln
    mit dem Namen der Datei registrieren.
 3. Beide Prozesse als Entwürfe speichern und die Applikation deployen.
 4. Die Produkte aus `produkte.json` mit einem Heimkatalog anlegen, in den Katalog aufnehmen
@@ -164,7 +203,7 @@ Katalogprodukten sind. Die Schritte:
    - die Applikationskonstante `ATLAS_API_BASE`, falls der Server nicht unter
      `http://127.0.0.1:8080` lauscht.
 
-Die Applikation trägt genau diese drei Regeln. Eine Installation aus einem früheren Stand
+Die Applikation trägt genau diese vier Regeln. Eine Installation aus einem früheren Stand
 bereinigt man so:
 
 - Regel und Modell `SpopQuotaRichtlinie` (`spop-quota-richtlinie`) in der Console löschen; das
@@ -189,6 +228,8 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
   - Freigabepflicht: Hermes, Communication und Publishing immer
 - **Grenzen der Zusatzleistungen (Annahmen):**
   - Speicherplatzerweiterung 1 bis 500 GB, Freigabe über 100 GB
+  - Titeländerung ohne Freigabe, neue URL immer mit Freigabe, Owner-Wechsel mit Freigabe bei
+    Hermes, Communication und Publishing
   - Die Freigabegrenze gilt für die Gesamtmenge, nicht für die einzelne Erhöhung: 90 → 110 GB
     braucht eine Freigabe, zwei Schritte zu je 50 GB bis 100 GB nicht.
   - Verrechnet wird die Gesamtmenge pro GB und Monat; ob APS-BW Gesamtmenge oder Differenz
@@ -202,9 +243,14 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
 - **Simulierte Ausführung:** Die Schritte gegen APS-BW (`atlas-provider-apsbw`) und die
   Verrechnung sind mit `atlas:mockupConnector` simuliert.
 - **Vier-Augen-Prinzip:** Getrennt wird nur über die Gruppe `SPoP-Freigabe`.
-- **Eine Aktion zur Zeit:** Während ein Subprozess läuft, nimmt der Strang keine weitere
-  Aktion an.
-- **Personendaten:** `ownerUpn`, `memberUpns` und `email` sind nicht als Personendaten
+- **Eine Aktion zur Zeit:** Während Speichererweiterung oder Einladung laufen, nimmt der
+  Strang keine dieser beiden Aktionen an. Die drei Ereignis-Subprozesse laufen daneben; eine
+  URL-Änderung kann sich so mit einer Speichererweiterung überschneiden, die noch die alte URL
+  gelesen hat.
+- **URL-Änderung (offen):** Ob und wie SharePoint OnPrem die URL einer Site-Collection
+  umbenennt und was mit Links, Gruppennamen und Suchindex geschieht, ist nicht geklärt; der
+  Schritt ist simuliert. Die Gruppennamen behalten die alte URL.
+- **Personendaten:** `ownerUpn`, `memberUpns`, `neuerOwnerUpn`, `neueMemberUpns` und `email` sind nicht als Personendaten
   deklariert (`atlas:personal`).
 - **Owner aus dem Formular (offen):** `ownerUpn` zählt bei der Eigentumsprüfung noch nicht.
   Eine Bestellung übergibt ihren Prozessen nur die Atlas-Kennung der Personen (`orderer`,

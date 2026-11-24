@@ -187,6 +187,123 @@ flow("x_f17", "x_ablauf", "x_widerruf", **SX)
 flow("x_f18", "x_widerruf", "x_info2", **SX)
 flow("x_f19", "x_info2", "x_end2", **SX)
 
+# ----------------------------------------------------------------------- Angaben der Site ändern: Ereignis-Subprozesse
+# Drei Aktionen ändern, was «Angaben ändern» im Shop nur im Datensatz der Bestellung korrigiert: Titel, URL, Owner und
+# Members. Sie sind nicht unterbrechende Ereignis-Subprozesse (ADR-0082): Jede Nachricht startet einen Lauf neben dem
+# Strang, ohne Rückweg zum Warten. Gebunden sind sie, solange der Strang lebt; vor der Bereitstellung lehnt die Regel ab
+# (siteGefunden), und die Rückgabe beendet laufende Läufe mit dem terminierenden Ende.
+ZUGRIFF = '=site.url + "|" + (if orderer = null then "" else orderer) + "|" + (if recipient = null then "" else recipient)'
+SITE_MIT = ('={{ url: {url}, titel: {titel}, typ: site.typ, template: site.template, material: site.material, '
+            'sprache: site.sprache{extra} }}')
+EVENT_DOC = (" Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position, läuft neben dem "
+             "Strang und ändert dessen Stand über das Output-Mapping; endet er mit einer Ablehnung, lösen die Ausdrücke den "
+             "unveränderten Wert auf (ADR-0074). Vor der Bereitstellung lehnt die Regel ab, weil site noch fehlt.")
+
+TY = 1600
+X = change_sub(
+    SPX, "t", "sp_titel", "site-umbenennen", "Site umbenennen", TY, 1600,
+    "Aktion site-umbenennen (Formular spop-site-umbenennen: neuerTitel, begruendung): ändert den Titel der Site; die URL "
+    "bleibt. Richtlinie SpopAenderungRichtlinie mit aenderung titel: 1 bis 80 Zeichen, ohne Freigabe." + EVENT_DOC,
+    [("=site", "site")],
+    "Site lesen (S1)",
+    '={ gefunden: site != null, titel: if site = null then null else site.titel }',
+    "Simuliert apsbw_sharepoint_site read aus dem Stand des Strangs (site). Schreibt aktuell.",
+    "Änderungs-Richtlinie prüfen", "SpopAenderungRichtlinie",
+    [("=aktuell.gefunden", "siteGefunden"), ('="titel"', "aenderung"),
+     ("=neuerTitel != null and string length(neuerTitel) >= 1 and string length(neuerTitel) <= 80", "gueltig"),
+     ("=neuerTitel = aktuell.titel", "unveraendert"), ('=if site = null then "" else site.typ', "siteTyp"),
+     ("=false", "ownerWechsel")],
+    "DMN SpopAenderungRichtlinie mit aenderung titel.",
+    '="Site umbenennen\\nSite: " + site.url + "\\nTitel bisher: " + aktuell.titel + "\\nNeu: " + neuerTitel + '
+    '"\\nRegel: " + regel.grund',
+    "Umbenennung freigeben", trigger=("m_titel", "Umbenennung angefragt"))
+node("t_apply", "serviceTask", "Titel setzen (S1)", X(1260), TY,
+     ext(mock(SITE_MIT.format(url="site.url", titel="neuerTitel", extra=", titelVorher: site.titel"), "site")),
+     doc="Simuliert apsbw_sharepoint_site update (Titel). Schreibt site mit dem neuen Titel; titelVorher bleibt für einen "
+         "Rollback erhalten.", parent="sp_titel")
+node("t_info", "sendTask", "Aktion als erledigt melden", X(1410), TY, shop("site-umbenennen", "completed"),
+     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-umbenennen mit completed.", parent="sp_titel")
+node("t_end", "endEvent", "Site umbenannt", X(1540), TY, parent="sp_titel")
+flow("t_f10", "t_join", "t_apply", parent="sp_titel")
+flow("t_f11", "t_apply", "t_info", parent="sp_titel")
+flow("t_f12", "t_info", "t_end", parent="sp_titel")
+
+UY = 2230
+NEUE_URL = '"/sites/" + lower case(neuesAmtKuerzel) + "-" + neuerKurzname'
+X = change_sub(
+    SPX, "u", "sp_url", "site-url-aendern", "Site-URL ändern", UY, 1750,
+    "Aktion site-url-aendern (Formular spop-site-url-aendern: neuesAmtKuerzel, neuerKurzname, begruendung): gibt der Site die "
+    "URL /sites/<amt>-<kurzname>. Bestehende Links werden ungültig; darum immer Vier-Augen-Freigabe (SpopAenderungRichtlinie, "
+    "aenderung url). Führt die Verrechnung und siteZugriff nach, damit die Eigentumsprüfung der Zusatzleistungen die Site "
+    "unter der neuen URL findet. Annahme: SharePoint OnPrem erlaubt das Umbenennen der Site-Collection-URL; technisch "
+    "nicht geklärt." + EVENT_DOC,
+    [("=site", "site"), ("=verrechnung", "verrechnung"), (ZUGRIFF, "siteZugriff")],
+    "Site und neue URL lesen (S1)",
+    '={ gefunden: site != null, url: if site = null then null else site.url, neueUrl: ' + NEUE_URL + ', urlFrei: true }',
+    "Simuliert apsbw_sharepoint_site read für die heutige und die neue URL; urlFrei sagt, ob unter der neuen URL noch keine "
+    "Site besteht. Schreibt aktuell.",
+    "Änderungs-Richtlinie prüfen", "SpopAenderungRichtlinie",
+    [("=aktuell.gefunden", "siteGefunden"), ('="url"', "aenderung"),
+     ('=neuesAmtKuerzel != null and matches(neuesAmtKuerzel, "^[A-Z]{2,6}$") and neuerKurzname != null and '
+      'matches(neuerKurzname, "^[a-z0-9][a-z0-9-]{2,29}$") and aktuell.urlFrei = true', "gueltig"),
+     ("=aktuell.neueUrl = aktuell.url", "unveraendert"), ('=if site = null then "" else site.typ', "siteTyp"),
+     ("=false", "ownerWechsel")],
+    "DMN SpopAenderungRichtlinie mit aenderung url: immer Vier-Augen-Prinzip.",
+    '="Site-URL ändern\\nURL bisher: " + aktuell.url + "\\nNeu: " + aktuell.neueUrl + '
+    '(if begruendung = null then "" else "\\nBegründung: " + begruendung) + "\\nRegel: " + regel.grund',
+    "URL-Änderung freigeben", trigger=("m_url", "URL-Änderung angefragt"))
+node("u_apply", "serviceTask", "Site-URL ändern (S1)", X(1260), UY,
+     ext(mock(SITE_MIT.format(url="aktuell.neueUrl", titel="site.titel", extra=", urlVorher: site.url"), "site", "PT2S", "PT4S")),
+     doc="Simuliert das Umbenennen der Site-Collection-URL (apsbw_sharepoint_site rename). Schreibt site mit der neuen URL; "
+         "urlVorher bleibt für einen Rollback erhalten.", parent="sp_url")
+node("u_bill", "serviceTask", "Verrechnung nachführen", X(1410), UY,
+     ext(mock('={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, '
+              'position: orderId + "/" + (if positionId = null then itemId else positionId) }', "verrechnung")),
+     doc="Simuliert die Anpassung der wiederkehrenden Verrechnung auf die neue URL.", parent="sp_url")
+node("u_info", "sendTask", "Aktion als erledigt melden", X(1560), UY, shop("site-url-aendern", "completed"),
+     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-url-aendern mit completed.", parent="sp_url")
+node("u_end", "endEvent", "URL geändert", X(1690), UY, parent="sp_url")
+flow("u_f10", "u_join", "u_apply", parent="sp_url")
+flow("u_f11", "u_apply", "u_bill", parent="sp_url")
+flow("u_f12", "u_bill", "u_info", parent="sp_url")
+flow("u_f13", "u_info", "u_end", parent="sp_url")
+
+BY = 2860
+MITGLIEDER = 'if neueMemberUpns = null then "" else neueMemberUpns'
+X = change_sub(
+    SPX, "b", "sp_rechte", "berechtigungen-aendern", "Berechtigungen ändern", BY, 1600,
+    "Aktion berechtigungen-aendern (Formular spop-berechtigungen-aendern: neuerOwnerUpn, neueMemberUpns, begruendung): setzt "
+    "Owner und Members der Site neu; anzugeben ist der vollständige neue Stand. Richtlinie SpopAenderungRichtlinie mit "
+    "aenderung berechtigungen: Owner-Wechsel bei Hermes, Communication und Publishing mit Vier-Augen-Freigabe. Die "
+    "Eigentumsprüfung der Zusatzleistungen hängt am Besteller und Empfänger der Position, nicht am Owner; sie ändert "
+    "sich hier nicht." + EVENT_DOC,
+    [("=gruppen", "gruppen")],
+    "Gruppen und neuen Owner lesen (S2)",
+    '={ gefunden: site != null, owner: if gruppen = null then null else gruppen.owner, '
+    'mitglieder: if gruppen = null then "" else (if gruppen.mitglieder = null then "" else gruppen.mitglieder), ownerExistiert: true }',
+    "Simuliert apsbw_sharepoint_group read und apsbw_ad_user read für den neuen Owner (ownerExistiert). Schreibt aktuell.",
+    "Änderungs-Richtlinie prüfen", "SpopAenderungRichtlinie",
+    [("=aktuell.gefunden", "siteGefunden"), ('="berechtigungen"', "aenderung"),
+     ('=neuerOwnerUpn != null and matches(neuerOwnerUpn, "^[^@ ]+@[^@ ]+[.][^@ ]+$") and aktuell.ownerExistiert = true', "gueltig"),
+     (f'=aktuell.owner != null and neuerOwnerUpn != null and lower case(neuerOwnerUpn) = lower case(aktuell.owner) and ({MITGLIEDER}) = aktuell.mitglieder', "unveraendert"),
+     ('=if site = null then "" else site.typ', "siteTyp"),
+     ('=aktuell.owner = null or neuerOwnerUpn = null or lower case(neuerOwnerUpn) != lower case(aktuell.owner)', "ownerWechsel")],
+    "DMN SpopAenderungRichtlinie mit aenderung berechtigungen.",
+    '="Berechtigungen ändern\\nSite: " + site.url + "\\nOwner bisher: " + aktuell.owner + "\\nNeu: " + neuerOwnerUpn + '
+    f'"\\nMembers neu: " + ({MITGLIEDER}) + "\\nRegel: " + regel.grund',
+    "Owner-Wechsel freigeben", trigger=("m_rechte", "Änderung angefragt"))
+node("b_apply", "serviceTask", "Gruppen aktualisieren (S2–S5)", X(1260), BY,
+     ext(mock('={ owners: gruppen.owners, members: gruppen.members, visitors: gruppen.visitors, owner: neuerOwnerUpn, '
+              f'mitglieder: {MITGLIEDER}, ownerVorher: gruppen.owner, mitgliederVorher: gruppen.mitglieder }}', "gruppen")),
+     doc="Simuliert apsbw_sharepoint_group add_member und remove_member für die Owner- und die Member-Gruppe. Schreibt gruppen "
+         "mit dem neuen Stand; ownerVorher und mitgliederVorher bleiben für einen Rollback erhalten.", parent="sp_rechte")
+node("b_info", "sendTask", "Aktion als erledigt melden", X(1410), BY, shop("berechtigungen-aendern", "completed"),
+     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion berechtigungen-aendern mit completed.", parent="sp_rechte")
+node("b_end", "endEvent", "Berechtigungen geändert", X(1540), BY, parent="sp_rechte")
+flow("b_f10", "b_join", "b_apply", parent="sp_rechte")
+flow("b_f11", "b_apply", "b_info", parent="sp_rechte")
+flow("b_f12", "b_info", "b_end", parent="sp_rechte")
+
 # ----------------------------------------------------------------------- Rückgabe
 qx, qy, qw, qh = spbox["sp_quota"]
 ex, ey, ew, eh = spbox["sp_extern"]
@@ -219,7 +336,7 @@ node("r_bill", "serviceTask", "Verrechnung beenden", BE + 430, M,
 node("r_info", "serviceTask", "Rückgabe melden", BE + 580, M, rest_status("returned"),
      doc="Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand." + REST_DOC)
 node("r_end", "endEvent", "Site zurückgegeben", BE + 710, M, '<terminateEventDefinition/>',
-     doc="Terminierendes Ende: beendet den Strang der Position vollständig.")
+     doc="Terminierendes Ende: beendet den Strang der Position vollständig, auch laufende Ereignis-Subprozesse.")
 
 # ----------------------------------------------------------------------- Flüsse Hauptstrang
 flow("a_f1", "s_neu", "a_regel")
@@ -267,10 +384,15 @@ Bereitstellung (GF-001) läuft flach; danach wartet der Strang am ereignisbasier
 - spop.teamsite.quota     → Subprozess «Speicherplatz erweitern (GF-002)»       (Katalog: change, Formular spop-quota-erhoehung)
 - spop.teamsite.extern    → Subprozess «Externen Benutzer einladen (GF-003)»    (Katalog: change, Formular spop-extern-einladen)
 - spop.teamsite.rueckgabe → Rückgabe, auch als Boundary an beiden Subprozessen  (Katalog: deprovision, Formular spop-teamsite-rueckgabe)
-Nach jedem Subprozess kehrt der Strang zum Warten zurück. Alle späteren Aktionen sind an orderId + "/" + positionId korreliert
-(Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, externe). Die Speicherplatzerweiterung (540007510, in GB)
+Nach jedem Subprozess kehrt der Strang zum Warten zurück. Daneben ändern drei nicht unterbrechende Ereignis-Subprozesse
+die Angaben der Site, jederzeit und ohne den Strang anzuhalten:
+- spop.teamsite.titel          → «Site umbenennen»        (Katalog: change, Formular spop-site-umbenennen)
+- spop.teamsite.url            → «Site-URL ändern»        (Katalog: change, Formular spop-site-url-aendern)
+- spop.teamsite.berechtigungen → «Berechtigungen ändern»  (Katalog: change, Formular spop-berechtigungen-aendern)
+«Angaben ändern» im Shop korrigiert nur den Datensatz der Bestellung; die Sprache ist nach der Erstellung fest. Alle späteren Aktionen sind an orderId + "/" + positionId korreliert
+(Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, gruppen, externe). Die Speicherplatzerweiterung (540007510, in GB)
 ist die Aktion quota-erhoehen der Site. Erweitertes Reporting und SubSite Quota sind eigene Produkte mit eigenem Prozess
-proc_spop_zusatz. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie (Speicher), SpopExternRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular spop-freigabe. Ausführung gegen APS-BW
+proc_spop_zusatz. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie (Speicher), SpopExternRichtlinie, SpopAenderungRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular spop-freigabe. Ausführung gegen APS-BW
 und Verrechnung im PoC simuliert (atlas:mockupConnector). Rückmeldungen an den Katalog sind echt: Decision-Route, Positionsroute
 (Secret "atlas", Konstante ATLAS_API_BASE) und Shop-Aufgaben."""
 
@@ -279,5 +401,8 @@ write(OUT, "defs_spop_teamsite", "proc_spop_teamsite", "SPoP: Site-Lebenszyklus"
        ("m_quota", "spop.teamsite.quota", KEY),
        ("m_extern", "spop.teamsite.extern", KEY),
        ("m_rueckgabe", "spop.teamsite.rueckgabe", KEY),
+       ("m_titel", "spop.teamsite.titel", KEY),
+       ("m_url", "spop.teamsite.url", KEY),
+       ("m_rechte", "spop.teamsite.berechtigungen", KEY),
        ("m_angenommen", "spop.extern.angenommen", "=einladung.einladungId")],
       process_attrs=' atlas:searchable="siteZugriff"')

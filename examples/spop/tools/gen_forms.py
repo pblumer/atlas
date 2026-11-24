@@ -43,6 +43,44 @@ forms = {
          "description": "Pflicht bei individueller Quota, mindestens 10 Zeichen.",
          "conditional": {"hide": "=quotaWahl != \"Custom\""}, "validate": {"minLength": 10}, "properties": NP},
         {"key": "bemerkung", "type": "textarea", "label": "Bemerkung", "properties": NP},
+        text("**Hinweis zu «Angaben ändern»:** Nach der Bereitstellung ändert eine Korrektur dieser Angaben nur den Datensatz "
+             "der Bestellung, nicht die Site. Änderungen an der Site laufen über die Aktionen der Position:\n\n"
+             "- Titel: «Site umbenennen»\n"
+             "- Amtskürzel und Kurzname (URL): «Site-URL ändern»\n"
+             "- Owner und Members: «Berechtigungen ändern»\n"
+             "- Quota: «Speicherplatz erweitern»\n\n"
+             "Die Sprache legt SharePoint bei der Erstellung der Site fest; sie lässt sich danach nicht ändern. Die Bemerkung "
+             "ist eine reine Angabe ohne Wirkung auf die Site."),
+    ]),
+    "spop-site-umbenennen": ("SPoP: Site umbenennen", [
+        text("**SharePoint OnPrem: Site umbenennen**\n\nÄndert den Titel der Site dieser Position. Die URL bleibt gleich. "
+             "Ohne Freigabe."),
+        {"key": "neuerTitel", "type": "textfield", "label": "Neuer Titel der Site",
+         "validate": {"required": True, "maxLength": 80}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
+    ]),
+    "spop-site-url-aendern": ("SPoP: Site-URL ändern", [
+        text("**SharePoint OnPrem: Site-URL ändern**\n\nGibt der Site dieser Position eine neue URL /sites/<amt>-<kurzname>. "
+             "Bestehende Links und Lesezeichen auf die alte URL werden ungültig. Eine neue URL braucht immer die "
+             "Vier-Augen-Freigabe. Zusatzleistungen für diese Site werden danach mit der neuen URL bestellt."),
+        {"key": "neuesAmtKuerzel", "type": "textfield", "label": "Amtskürzel",
+         "description": "2 bis 6 Grossbuchstaben, z. B. BIT.",
+         "validate": {"required": True, "pattern": "^[A-Z]{2,6}$"}, "properties": NP},
+        {"key": "neuerKurzname", "type": "textfield", "label": "Kurzname (URL-Teil)",
+         "description": "3 bis 30 Zeichen, Kleinbuchstaben, Ziffern und Bindestriche.",
+         "validate": {"required": True, "pattern": "^[a-z0-9][a-z0-9-]{2,29}$"}, "properties": NP},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "validate": {"required": True}, "properties": NP},
+    ]),
+    "spop-berechtigungen-aendern": ("SPoP: Berechtigungen ändern", [
+        text("**SharePoint OnPrem: Berechtigungen ändern**\n\nSetzt Owner und Members der Site dieser Position neu. Anzugeben "
+             "ist der **vollständige** neue Stand: Wer nicht mehr aufgeführt ist, wird aus der Gruppe entfernt. Ein Owner-Wechsel "
+             "bei Hermes, Communication und Publishing geht in die Vier-Augen-Freigabe."),
+        {"key": "neuerOwnerUpn", "type": "textfield", "label": "Owner (UPN)",
+         "description": "Verantwortliche Person, z. B. vorname.name@admin.ch.",
+         "validate": {"required": True, "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"}},
+        {"key": "neueMemberUpns", "type": "textarea", "label": "Members (UPN, eine pro Zeile)",
+         "description": "Leer lassen, wenn die Site keine Members haben soll."},
+        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
     ]),
     "spop-quota-erhoehung": ("SPoP: Speicherplatz erweitern (GF-002)", [
         text("**SharePoint OnP Speicherplatzerweiterung (PvN-GF-002, Material 540007510)**\n\nZusatzspeicher für die Site dieser "

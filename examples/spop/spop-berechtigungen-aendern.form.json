@@ -1,0 +1,34 @@
+{
+  "type": "default",
+  "id": "spop-berechtigungen-aendern",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: Berechtigungen ändern**\n\nSetzt Owner und Members der Site dieser Position neu. Anzugeben ist der **vollständige** neue Stand: Wer nicht mehr aufgeführt ist, wird aus der Gruppe entfernt. Ein Owner-Wechsel bei Hermes, Communication und Publishing geht in die Vier-Augen-Freigabe."
+    },
+    {
+      "key": "neuerOwnerUpn",
+      "type": "textfield",
+      "label": "Owner (UPN)",
+      "description": "Verantwortliche Person, z. B. vorname.name@admin.ch.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "neueMemberUpns",
+      "type": "textarea",
+      "label": "Members (UPN, eine pro Zeile)",
+      "description": "Leer lassen, wenn die Site keine Members haben soll."
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

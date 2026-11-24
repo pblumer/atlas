@@ -150,6 +150,10 @@
       "properties": {
         "personal": "false"
       }
+    },
+    {
+      "type": "text",
+      "text": "**Hinweis zu «Angaben ändern»:** Nach der Bereitstellung ändert eine Korrektur dieser Angaben nur den Datensatz der Bestellung, nicht die Site. Änderungen an der Site laufen über die Aktionen der Position:\n\n- Titel: «Site umbenennen»\n- Amtskürzel und Kurzname (URL): «Site-URL ändern»\n- Owner und Members: «Berechtigungen ändern»\n- Quota: «Speicherplatz erweitern»\n\nDie Sprache legt SharePoint bei der Erstellung der Site fest; sie lässt sich danach nicht ändern. Die Bemerkung ist eine reine Angabe ohne Wirkung auf die Site."
     }
   ]
 }
