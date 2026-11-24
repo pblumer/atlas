@@ -34,6 +34,16 @@ _Changed_ / _Removed_ for each version.
   `POST /api/v1/tasks/{key}/unclaim` now answers `409` for such a task and says to hand it to
   somebody instead. A task with candidate groups, and one its model addresses to nobody, are
   released as before.
+- **Why a client's metadata document could not be fetched is no longer told to a stranger.**
+  Naming a client by the URL of its metadata document makes Atlas fetch that URL, on a route
+  that answers without a session. What the fetch found was told to the caller word for word:
+  the address a name resolved to, the resolver's own error, the dial or TLS failure — which
+  made the server a way of asking what an internal name resolves to and what answers there. A
+  caller who is not an administrator is now told that the document could not be read; the
+  cause is in the log (`auth.oauth_denied`), and an administrator still reads it on the screen.
+  The budget for such reads is also counted per host as it resolves rather than as it was
+  spelt: another case, a trailing dot or an explicit `:443` used to be a new key each, with a
+  full budget.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other

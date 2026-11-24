@@ -292,7 +292,7 @@ func (f *clientMetadataFetcher) get(ctx context.Context, clientID string, fresh 
 			return md, nil
 		}
 	}
-	if !f.hosts.allow(u.Host) {
+	if !f.hosts.allow(metadataHostKey(u)) {
 		return clientMetadata{}, errors.New("the client's metadata document was read too often in a short time; try again shortly")
 	}
 	md, maxAge, err := f.read(ctx, u)
@@ -332,7 +332,7 @@ func (f *clientMetadataFetcher) read(ctx context.Context, u *url.URL) (clientMet
 	req.Header.Set("Accept", "application/json")
 	resp, err := f.http.Do(req)
 	if err != nil {
-		return clientMetadata{}, 0, fmt.Errorf("the client's metadata document could not be read: %w", unwrapURLError(err))
+		return clientMetadata{}, 0, &metadataUnreachable{cause: unwrapURLError(err)}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -362,6 +362,39 @@ func (f *clientMetadataFetcher) read(ctx context.Context, u *url.URL) (clientMet
 
 // unwrapURLError drops the "Get <url>:" prefix net/http puts on a failure, because the
 // person reading it was just shown the URL and the cause is what they need.
+// metadataHostKey is the name one host's reads are counted under. The budget is per
+// host, and u.Host is what the sender wrote: the same host in another case, with a
+// trailing dot or with the port https already implies was a new key each time, and a
+// key nobody has seen starts with a full budget.
+func metadataHostKey(u *url.URL) string {
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "http" {
+			port = "80"
+		} else {
+			port = "443"
+		}
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// metadataUnreachable is a metadata document Atlas could not fetch: the name did not
+// resolve, resolved to an address it may not read, nothing answered, or TLS failed.
+//
+// It is its own type because of who gets to read the cause. The fetch happens for a
+// request without a session, and its cause says what a name resolves to and what
+// answers there, seen from where this server stands. An administrator setting a
+// client up needs that; a stranger is told only that the document could not be read
+// (publicLookupError).
+type metadataUnreachable struct{ cause error }
+
+// metadataUnreachableSaid is everything a caller who is not an administrator learns.
+const metadataUnreachableSaid = "the client's metadata document could not be read"
+
+func (e *metadataUnreachable) Error() string { return metadataUnreachableSaid + ": " + e.cause.Error() }
+func (e *metadataUnreachable) Unwrap() error { return e.cause }
+
 func unwrapURLError(err error) error {
 	var ue *url.Error
 	if errors.As(err, &ue) {
