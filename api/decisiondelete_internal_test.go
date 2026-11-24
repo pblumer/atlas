@@ -324,3 +324,63 @@ func TestTheVersionListingSaysWhatIsPinnedToEachVersion(t *testing.T) {
 		t.Errorf("v2 pinnedBy = %+v, want none: no process has been deployed since", free.PinnedBy)
 	}
 }
+
+// labelledEligibilityDMN is the eligibility decision with a label that differs
+// from its FEEL identifier. eligibilityProcess calls "eligibility", which is the
+// identifier here, not the label — a name the registry resolves (ADR-0385) and a
+// deployment record does not carry.
+func labelledEligibilityDMN(label string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_labelled" name="Eligibility" namespace="http://atlas/dmn">
+  <decision id="eligibility" name="` + label + `">
+    <variable id="v_eligibility" name="eligibility"/>
+    <literalExpression><text>"approve"</text></literalExpression>
+  </decision>
+</definitions>`
+}
+
+// TestTheLastVersionIsRefusedWhenTheTaskNamesTheIdentifier is the regression for
+// the stranding guard comparing a record's labels with a task's names: with label
+// and identifier apart, the last deployment of a decision a process evaluates as
+// latest, with no copy bundled, was deleted, and the next instance stopped at an
+// incident ("no model deployed").
+func TestTheLastVersionIsRefusedWhenTheTaskNamesTheIdentifier(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	rep := deployOneDecision(t, x, "", labelledEligibilityDMN("Eligibility (label)"))
+	defKey := deployProcess(t, x, eligibilityProcess("orders", "latest"))
+
+	code, body := deleteDecisionDeployment(t, x, rep.Key)
+	if code != http.StatusConflict {
+		t.Fatalf("delete = %d %s, want 409: it is the only model the task can evaluate", code, body)
+	}
+	for _, want := range []string{"orders", fmt.Sprintf("key %d", defKey), "eligibility"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("refusal = %s, want it to name %q", body, want)
+		}
+	}
+	if got := runAndReadVerdict(t, x, defKey, "orders"); got != "approve" {
+		t.Errorf("verdict = %q, want the decision still answering", got)
+	}
+}
+
+// TestAnotherLabelProvidingTheIdentifierLetsTheOlderOneGo is the other side of
+// that regression: a decision relabelled starts a new version count under the new
+// label, yet still answers to the identifier the task names. Deleting the old
+// label's deployment strands nothing, because the new one still provides the
+// identifier — the guard must ask about the name the task carries, not refuse
+// every last version of a label.
+func TestAnotherLabelProvidingTheIdentifierLetsTheOlderOneGo(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	old := deployOneDecision(t, x, "", labelledEligibilityDMN("Eligibility (old)"))
+	deployOneDecision(t, x, "", labelledEligibilityDMN("Eligibility (new)"))
+	defKey := deployProcess(t, x, eligibilityProcess("orders", "latest"))
+
+	if code, body := deleteDecisionDeployment(t, x, old.Key); code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s, want 204: the newer label still provides the identifier", code, body)
+	}
+	if got := runAndReadVerdict(t, x, defKey, "orders"); got != "approve" {
+		t.Errorf("verdict = %q, want the remaining deployment answering", got)
+	}
+}

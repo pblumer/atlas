@@ -112,3 +112,44 @@ func TestUndeployDecisionLeavesABundledModelAlone(t *testing.T) {
 		t.Errorf("bundled model answered %v", out)
 	}
 }
+
+// labelledModel is one decision whose label differs from its FEEL identifier, the
+// shape a business rule task may address by either name (ADR-0385).
+func labelledModel(label string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_lab" name="Labelled" namespace="http://atlas/dmn">
+  <decision id="eligibility" name="` + label + `">
+    <variable id="v_elig" name="eligibility"/>
+    <literalExpression><text>"approve"</text></literalExpression>
+  </decision>
+</definitions>`
+}
+
+// TestProvidedByDecisionOtherThanAnswersForEitherName: the question a delete asks
+// before removing a key is answered by every name a task may carry, the label and
+// the identifier alike, counts decision deployments only, and leaves the key being
+// removed out.
+func TestProvidedByDecisionOtherThanAnswersForEitherName(t *testing.T) {
+	r := dmn.NewRegistry()
+	if err := r.DeployDecision(1, []byte(labelledModel("Eligibility (label)"))); err != nil {
+		t.Fatalf("DeployDecision: %v", err)
+	}
+	// A process's bundled copy is not a decision deployment and must not count.
+	if err := r.Deploy(2, []byte(labelledModel("Eligibility (label)"))); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	for _, name := range []string{"eligibility", "Eligibility (label)"} {
+		if r.ProvidedByDecisionOtherThan(name, 1) {
+			t.Errorf("%q: provided by another decision deployment, want only key 1 (key 2 is a bundled copy)", name)
+		}
+	}
+	if err := r.DeployDecision(3, []byte(labelledModel("Eligibility (renamed)"))); err != nil {
+		t.Fatalf("DeployDecision: %v", err)
+	}
+	if !r.ProvidedByDecisionOtherThan("eligibility", 1) {
+		t.Error("identifier: want key 3 to provide it under a different label")
+	}
+	if r.ProvidedByDecisionOtherThan("Eligibility (label)", 1) {
+		t.Error("old label: key 3 does not answer to it")
+	}
+}

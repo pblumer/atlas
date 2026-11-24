@@ -338,6 +338,26 @@ func (r *Registry) Provides(defKey uint64, decisionId string) bool {
 	return regProviding(r.definitions[defKey], decisionId) != nil
 }
 
+// ProvidedByDecisionOtherThan reports whether a decision deployment other than the
+// given key provides the decision — by any name a business rule task's decisionId
+// may carry for it, its label or its FEEL identifier (names.go). It is the question
+// a delete of the key has to ask before it can say a latest-bound task will still
+// find a model: a deployment record knows its decisions only by label, and a task
+// that names the identifier would otherwise go unseen.
+//
+// It reads registry state, so it runs on the registry's owning goroutine — the run
+// loop.
+func (r *Registry) ProvidedByDecisionOtherThan(decisionId string, key uint64) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for k := range r.decisionKeys {
+		if k != key && regProviding(r.definitions[k], decisionId) != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // LatestDecisionIDs returns the set of decision ids that have a decision
 // deployment — the ones a latest-bound reference resolves to something other than
 // the model bundled with its own process
