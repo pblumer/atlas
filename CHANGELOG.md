@@ -38,6 +38,13 @@ _Changed_ / _Removed_ for each version.
   the process's next instance stopped at a "no model deployed" incident. The check now asks the
   DMN registry, which answers to both names, whether another decision deployment still provides
   the name the task carries.
+- **A per-position action may be taken by a message event subprocess.** Publishing a
+  per-position product checks that its strand waits for every change and service action. The
+  check counted message catches, receive tasks and message boundaries, but not the start of a
+  message-triggered event subprocess (ADR-0082), although the shop already offers an action
+  whose armed event subprocess listens and the engine delivers it there. A product taking an
+  action beside the strand's wait was therefore refused at publish. The start of such an
+  event subprocess now counts, with its correlation key.
 
 ## [0.27.1] — 2026-11-18
 
