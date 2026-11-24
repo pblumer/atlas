@@ -358,3 +358,43 @@ func TestWhereACatalogueIsMaintainedSurvivesReopeningTheStore(t *testing.T) {
 		t.Fatalf("after reopening = %+v (found %v, err %v), want maintained in %+v", got.MaintainedIn, found, err, want)
 	}
 }
+
+// HeldElsewhere is the same decision for the server's own writes outside this
+// package (a purge): held for anyone but the maintaining system's grant, open for
+// that grant and for every caller once the catalogue is Atlas's again.
+func TestHeldElsewhereAnswersTheMaintainingSystemToTheServer(t *testing.T) {
+	s := maintainedService(t)
+	c := storedCatalog(t, s, "cat-wiki")
+	if m := s.HeldElsewhere(c, admin()); m == nil || m.Client != wikiClient || m.Name != wikiName {
+		t.Fatalf("an administrator's write is held by %+v, want the wiki", m)
+	}
+	if m := s.HeldElsewhere(c, shopGrantOf("https://other.example/c.json", "Anderes")); m == nil {
+		t.Error("another system's grant is not held")
+	}
+	if m := s.HeldElsewhere(c, shopGrantOf(wikiClient, wikiName)); m != nil {
+		t.Errorf("the maintaining system's own grant is held by %+v", m)
+	}
+	c.MaintainedIn = nil
+	if m := s.HeldElsewhere(c, admin()); m != nil {
+		t.Errorf("a catalogue maintained here is held by %+v", m)
+	}
+}
+
+// A product whose home catalogue is gone reads as absent to the picture's gate, as
+// it does everywhere else: there is no catalogue to ask whether it is maintained
+// here, so nothing is written.
+func TestAPictureOfAProductWithoutItsHomeIsNotFound(t *testing.T) {
+	s := maintainedService(t)
+	var saveErr error
+	s.loop.Do(func() {
+		it, _, _ := s.store.Item("laptop")
+		it.ID, it.HomeCatalog = "orphan", "cat-gone"
+		saveErr = s.store.SaveItem(it)
+	})
+	if saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	if rec := asTyped(t, s.HandleSetPicture, admin(), "PUT", "image/png", onePNG, "id", "orphan"); rec.Code != http.StatusNotFound {
+		t.Fatalf("a picture of a product without its home = %d (%s), want 404", rec.Code, rec.Body)
+	}
+}
