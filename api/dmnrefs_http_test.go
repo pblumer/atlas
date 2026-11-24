@@ -64,6 +64,9 @@ func TestDmnRefLifecycle(t *testing.T) {
 	// protected system project (ADR-0119) is always present with no artifacts, so
 	// ignore it.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/projects", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list projects: status=%d body=%s", code, body)
+	}
 	var projs []struct {
 		Artifacts int  `json:"artifacts"`
 		Protected bool `json:"protected"`
@@ -87,6 +90,9 @@ func TestDmnRefLifecycle(t *testing.T) {
 		t.Fatal("move ref to ungrouped")
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/dmnrefs?projectId="+proj.ID, "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list refs after the move: status=%d body=%s", code, body)
+	}
 	if err := json.Unmarshal(body, &refs); err != nil {
 		t.Fatalf("decode refs: %v", err)
 	}
@@ -249,6 +255,9 @@ func TestDmnRefSurvivesRestart(t *testing.T) {
 		t.Fatalf("ref after restart status=%d body=%s", code, body)
 	}
 	code, body = doReq(t, second.ts, http.MethodGet, "/api/v1/projects", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list projects after restart: status=%d body=%s", code, body)
+	}
 	if !strings.Contains(string(body), `"artifacts":1`) {
 		t.Fatalf("artifact count not restored: %s", body)
 	}

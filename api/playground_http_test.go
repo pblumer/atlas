@@ -322,6 +322,9 @@ func TestAScenarioIsSavedListedReadAndDeleted(t *testing.T) {
 		t.Fatalf("save baseline = %d, body %s", code, body)
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/playground/scenarios/nightly", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("read scenario after saving its baseline: status=%d body=%s", code, body)
+	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode scenario: %v (%s)", err, body)
 	}
@@ -336,6 +339,9 @@ func TestAScenarioIsSavedListedReadAndDeleted(t *testing.T) {
 		t.Fatalf("re-save = %d, body %s", code, body)
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/playground/scenarios/nightly", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("read scenario after re-saving it: status=%d body=%s", code, body)
+	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode scenario: %v (%s)", err, body)
 	}

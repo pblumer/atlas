@@ -99,6 +99,9 @@ func TestCollaborationReplayRuntime(t *testing.T) {
 	// The processes list flags both pools as a collaboration, pointing at the same
 	// group key (the smaller pool key).
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/processes", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list processes: status=%d body=%s", code, body)
+	}
 	var procs []replayProc
 	if err := json.Unmarshal(body, &procs); err != nil {
 		t.Fatalf("decode processes: %v (%s)", err, body)
@@ -278,6 +281,9 @@ func TestCollaborationRuntimeStandalone(t *testing.T) {
 	}
 
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/processes", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list processes: status=%d body=%s", code, body)
+	}
 	var procs []replayProc
 	if err := json.Unmarshal(body, &procs); err != nil {
 		t.Fatalf("decode processes: %v", err)

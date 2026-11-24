@@ -54,6 +54,9 @@ func TestDraftSaveListReopenDelete(t *testing.T) {
 		t.Fatalf("re-save status=%d", code)
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/drafts", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list drafts: status=%d body=%s", code, body)
+	}
 	var list []map[string]any
 	if err := json.Unmarshal(body, &list); err != nil {
 		t.Fatalf("decode list: %v", err)
