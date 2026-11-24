@@ -12,6 +12,40 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Security
+- **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
+  always said so — "must be https, or http on loopback" — but the check behind it only asked
+  that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other
+  scheme was accepted too. The consent page sends the browser to a client's registered redirect
+  URI by itself when a request cannot be approved, so with self-registration open
+  (`--oauth-dynamic-registration`) a URI of a scheme the browser runs rather than visits could be
+  registered by anyone and opened for whoever followed their link. The rule now names the two
+  schemes. It is asked when a client is registered and again where a request names its redirect
+  URI and where an answer is built for one, so a client record written before the rule cannot
+  use what it holds; such a request is answered like one naming a URI that was never
+  registered. The consent page itself now leaves only to `http:` and `https:`, in one place,
+  and is served with `frame-ancestors 'none'` like the other pages a link opens. Clients named
+  by a metadata document were not affected. Until this release is installed, keep
+  self-registration off.
+- **The grant a connected system holds is shown to an administrator alone.** The consent
+  screen of a system that is already connected says who approved it, when, and which projects
+  each of its reaches covers, because approving again replaces that grant.
+  `GET /api/v1/oauth/authorize-context`, which the screen reads, answers without a session, and
+  it added that grant for every caller: anybody who knew a connected system's client id could
+  read it. It is now part of the answer only for an administrator, the one account that can
+  approve a system; everybody else is still told what the system asks for and that they may not
+  approve it.
+- **Every request body is read against a budget.** Nineteen handlers read theirs with no
+  ceiling: placing an order, reporting and deciding one, completing a task or a job, claiming a
+  task, activating jobs, deciding approvals, saving one's preferences, a catalogue's content and
+  theme, a content source, a call override, and moving, rebinding or deactivating a process.
+  The body was read into memory whole before a field of it was looked at, so a single request
+  from any signed-in account could spend the memory of the one process that serves everybody.
+  Each now reads against the budget of what it carries — the one an ordinary JSON request has,
+  or the one a body with variables has, as starting an instance already did — and a body past
+  it is answered `413` and not parsed. A test now refuses a handler anywhere under `api/` that
+  reads a request body directly, so the next one cannot be written the old way.
+
 ## [0.28.0] — 2026-11-24
 
 **A per-position product can take an action in a message event subprocess, and SPoP shows a

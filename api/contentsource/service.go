@@ -12,6 +12,7 @@ import (
 	"log/slog"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -45,6 +46,16 @@ type Service struct {
 	// supplies something is refused rather than leaving bindings nothing can
 	// recheck. Off the loop. Nil answers none.
 	InUse func(id string) ([]string, error)
+	// Limits are the ceilings a request body is read against. The zero value reads
+	// against [limits.Default]; the server sets its own.
+	Limits limits.Limits
+}
+
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 // NewService builds the configuration API over a registry.
@@ -88,7 +99,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 // HandleCreate configures a new source. An id already taken is a conflict: a
 // create that silently replaced a source would rebind every product bound to it.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	in, ok := decodeSource(w, r)
+	in, ok := decodeSource(w, r, s.budgets().Request)
 	if !ok {
 		return
 	}
@@ -118,7 +129,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 // HandleUpdate replaces a source's configuration. The id is the path's.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	in, ok := decodeSourceAs(w, r, id)
+	in, ok := decodeSourceAs(w, r, id, s.budgets().Request)
 	if !ok {
 		return
 	}
@@ -212,9 +223,12 @@ func (s *Service) HandleCheck(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-func decodeSource(w http.ResponseWriter, r *http.Request) (Source, bool) {
+func decodeSource(w http.ResponseWriter, r *http.Request, limit int64) (Source, bool) {
 	var in Source
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, limit)).Decode(&in); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return Source{}, false
+		}
 		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("malformed JSON body: %v", err))
 		return Source{}, false
 	}
@@ -226,9 +240,12 @@ func decodeSource(w http.ResponseWriter, r *http.Request) (Source, bool) {
 	return in, true
 }
 
-func decodeSourceAs(w http.ResponseWriter, r *http.Request, id string) (Source, bool) {
+func decodeSourceAs(w http.ResponseWriter, r *http.Request, id string, limit int64) (Source, bool) {
 	var in Source
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, limit)).Decode(&in); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return Source{}, false
+		}
 		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("malformed JSON body: %v", err))
 		return Source{}, false
 	}

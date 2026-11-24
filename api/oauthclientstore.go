@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/subtle"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -94,10 +95,15 @@ type oauthClient struct {
 
 // allowsRedirect reports whether uri is one this client registered. Exact string
 // equality on purpose — see RedirectURIs.
+//
+// A registered URI of a scheme no longer accepted (redirectSchemeAllowed) is not one
+// the client may use: the record keeps it, and a request naming it is answered as one
+// naming a URI that was never registered.
 func (c oauthClient) allowsRedirect(uri string) bool {
 	for _, u := range c.RedirectURIs {
 		if u == uri {
-			return true
+			parsed, err := url.Parse(uri)
+			return err == nil && redirectSchemeAllowed(parsed)
 		}
 	}
 	return false

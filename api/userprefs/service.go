@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
 
 // Service serves one person's display preferences: GET and PUT on
@@ -18,6 +19,16 @@ type Service struct {
 	// now is injected so a test can pin the stamp. Unix nanos, like every other
 	// timestamp Atlas writes.
 	now func() int64
+	// Limits are the ceilings a request body is read against. The zero value reads
+	// against [limits.Default]; the server sets its own.
+	Limits limits.Limits
+}
+
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 // New builds the service over the store, serializing every access on the loop:
@@ -102,7 +113,10 @@ func (s *Service) HandleSave(w http.ResponseWriter, r *http.Request) {
 		Language   string `json:"language"`
 		Appearance string `json:"appearance"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().Request)).Decode(&body); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "malformed body: "+err.Error())
 		return
 	}

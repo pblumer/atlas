@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"slices"
@@ -298,4 +300,26 @@ func nonNil[T any](items []T) []T {
 		return []T{}
 	}
 	return items
+}
+
+// LimitBody is the request body read against a ceiling: at most limit bytes come out
+// of it, and what lies past them is never read. Every handler reads its body through
+// this or through a ceiling of its own, so that what a request can make the server
+// hold in memory is a budget and not whatever the sender chose
+// (TestNoHandlerReadsARequestBodyWithoutACeiling).
+func LimitBody(w http.ResponseWriter, r *http.Request, limit int64) io.ReadCloser {
+	return http.MaxBytesReader(w, r.Body, limit)
+}
+
+// BodyTooLarge answers 413 when err is a body that ran past the ceiling LimitBody
+// set, and reports whether it did. A handler asks it first when reading or decoding
+// fails: a body that was cut off is not malformed, it is too large, and saying so is
+// what lets the sender tell the two apart.
+func BodyTooLarge(w http.ResponseWriter, err error) bool {
+	var tooLarge *http.MaxBytesError
+	if !errors.As(err, &tooLarge) {
+		return false
+	}
+	Error(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("the request body is larger than the %d bytes this route reads", tooLarge.Limit))
+	return true
 }

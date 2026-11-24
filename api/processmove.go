@@ -46,7 +46,10 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		ProjectID string `json:"projectId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().Request)).Decode(&payload); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, `invalid body: expected {"projectId": "..."}`)
 		return
 	}

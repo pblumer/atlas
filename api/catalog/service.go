@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -227,11 +226,17 @@ func newID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b), nil
 }
 
-func decodeBody(r *http.Request, into any) error {
-	if err := json.NewDecoder(r.Body).Decode(into); err != nil {
-		return fmt.Errorf("malformed JSON body: %w", err)
+// decodeBody reads a JSON body against the catalogue's budget for one and answers
+// the refusal itself: 413 for a body past the budget, 400 for one that is not JSON.
+func (s *Service) decodeBody(w http.ResponseWriter, r *http.Request, into any) bool {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().ModelUpload)).Decode(into); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return false
+		}
+		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+		return false
 	}
-	return nil
+	return true
 }
 
 // HandleListCatalogs lists the catalogues the caller maintains, lowest rank
@@ -264,8 +269,7 @@ func (s *Service) HandleListCatalogs(w http.ResponseWriter, r *http.Request) {
 // HandleCreateCatalog creates one.
 func (s *Service) HandleCreateCatalog(w http.ResponseWriter, r *http.Request) {
 	var in Catalog
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 	// Refused here and never on the way out: an installation already carrying a
@@ -358,8 +362,7 @@ type catalogUpdate struct {
 func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var in catalogUpdate
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 
@@ -577,8 +580,7 @@ func (s *Service) HandleListItems(w http.ResponseWriter, r *http.Request) {
 // precondition is for the caller that is not a person.
 func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 	var in Item
-	if err := decodeBody(r, &in); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	if !s.decodeBody(w, r, &in) {
 		return
 	}
 	if in.ID == "" {

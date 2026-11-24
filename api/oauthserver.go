@@ -222,6 +222,8 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// A consent decision must be made on a page this server served, freshly: a
 	// cached one could name a client the operator has since removed.
 	w.Header().Set("Cache-Control", "no-store")
+	// And on a page nobody else has framed: the decision is one click.
+	setNoFraming(w.Header())
 	_, _ = w.Write(page)
 }
 
@@ -266,17 +268,20 @@ func (s *Server) handleAuthorizeContext(w http.ResponseWriter, r *http.Request) 
 	if isSystemResource(req.resource) && clientErr == "" {
 		// What the system asks for, and whether the person deciding may give it: only
 		// an administrator connects a system (ADR-0512 §2). The projects a reach may
-		// name are listed to that administrator alone.
+		// name are listed to that administrator alone, and so is the grant the system
+		// already holds: who approved it, when, and which projects it reaches. This
+		// route answers without a session, and that grant used to be added for every
+		// caller who knew a connected system's client id.
 		sys := map[string]any{"scopes": req.scopes, "scope": req.scopeParam, "mayApprove": false}
 		if p != nil && s.principalIsAdmin(p) {
 			sys["mayApprove"] = true
 			var projs map[string]project
 			s.do(func() { projs, _ = s.projectsByID() })
 			sys["projects"] = systemProjectsFor(projs)
-		}
-		if g, ok := s.oauthGrants.systemOf(req.client.ID); ok {
-			// Approving again replaces this one, which the screen says.
-			sys["current"] = s.systemView(g)
+			if g, ok := s.oauthGrants.systemOf(req.client.ID); ok {
+				// Approving again replaces this one, which the screen says.
+				sys["current"] = s.systemView(g)
+			}
 		}
 		out["system"] = sys
 	}
@@ -421,7 +426,7 @@ const oauthCodePrefix = "atlasoc_"
 // the client's registered set.
 func errorRedirect(redirectURI, code, state string) string {
 	u, err := url.Parse(redirectURI)
-	if err != nil {
+	if err != nil || !redirectSchemeAllowed(u) {
 		return ""
 	}
 	q := u.Query()

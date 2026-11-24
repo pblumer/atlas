@@ -212,7 +212,10 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 		TargetProcessID string `json:"targetProcessId"`
 		TargetVersion   int32  `json:"targetVersion"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(httpapi.LimitBody(w, r, s.budgets().Request)).Decode(&body); err != nil {
+		if httpapi.BodyTooLarge(w, err) {
+			return
+		}
 		httpapi.Error(w, http.StatusBadRequest, "invalid override body")
 		return
 	}

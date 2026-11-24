@@ -132,7 +132,7 @@ func validRedirectURIs(in []string) ([]string, error) {
 		if u.Fragment != "" || strings.Contains(uri, "#") {
 			return nil, errBadRedirect(uri, "must not carry a fragment")
 		}
-		if u.Scheme != "https" && !isLoopbackHost(u.Hostname()) {
+		if !redirectSchemeAllowed(u) {
 			return nil, errBadRedirect(uri, "must be https, or http on loopback")
 		}
 		out = append(out, uri)
@@ -141,6 +141,20 @@ func validRedirectURIs(in []string) ([]string, error) {
 		return nil, errBadRedirect("", "at least one redirect URI is required")
 	}
 	return out, nil
+}
+
+// redirectSchemeAllowed reports whether a redirect URI has a scheme this server sends
+// a browser to: https, or http to this machine, which is how a desktop client listens
+// for its answer (RFC 8252 §7.3).
+//
+// It names the two schemes rather than excluding plain http elsewhere, which is what
+// the check used to do: "not https" was refused only off this machine, so on a
+// loopback host every other scheme passed as well — one a browser runs as script
+// among them — and the consent page navigates to a registered redirect URI on its own.
+// Asked when a client is registered, and again wherever a stored URI is about to be
+// used, because a record written before the rule still holds what it registered.
+func redirectSchemeAllowed(u *url.URL) bool {
+	return u.Scheme == "https" || (u.Scheme == "http" && isLoopbackHost(u.Hostname()))
 }
 
 func errBadRedirect(uri, why string) error {
