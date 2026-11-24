@@ -217,10 +217,19 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
   Versionen von `proc_spop_teamsite`. Wird eine Version gelöscht, fehlen ihre Sites danach im
   Bestand, und Zusatzprodukte für sie werden abgelehnt. Eine Version mit aktiven Sites
   vorher migrieren oder behalten.
-- **Gelöschte Entscheidungsversionen:** Atlas hat auf der Testinstallation Entscheidungs-
-  versionen gelöscht, die eine noch deployte, ältere Prozessversion verwendet hatte. Das
-  Entscheidungsprotokoll ihrer Instanzen blieb lesbar; ein Neustart dieser Version fände die
-  Tabellen nicht mehr. Ob das so beabsichtigt ist, ist nicht geklärt.
+- **Entscheidungsversionen und alte Prozessversionen:** Seit ADR-0423 wertet eine Regelaufgabe
+  mit Bindung «latest» die neueste Entscheidungsversion aus, wenn sie läuft, sonst die mit dem
+  Prozess gebündelte Kopie. Ältere Entscheidungsversionen sind darum an nichts gebunden und
+  lassen sich löschen; das Entscheidungsprotokoll abgeschlossener Instanzen bleibt lesbar.
+  Zwei Folgen für SPoP:
+  - Die Tabellen rufen die Prozesse über den FEEL-Namen (`SpopTeamsiteRichtlinie`) auf; Atlas
+    zählt Versionen aber unter der Beschriftung («Site-Richtlinie (GF-001)»). Eine geänderte
+    Beschriftung beginnt eine neue Zählung, und «latest» springt trotzdem auf die neueste
+    Version. Die erhaltene Version 4 von `proc_spop_teamsite` würde heute die neue
+    Site-Richtlinie auswerten, deren Eingaben sie nicht liefert.
+  - Die Löschprüfung für die letzte Version einer Entscheidung vergleicht Beschriftung und
+    FEEL-Namen nicht miteinander und übersieht darum Prozesse ohne gebündelte Kopie. SPoP
+    ist nicht betroffen, weil die Applikation jedem Prozess eine Kopie mitgibt.
 - **Grösse der Prozessliste:** «Site-Prozessversionen lesen» legt die ganze Antwort von
   `GET /api/v1/processes` im Strang ab (auf der Testinstallation rund 160 KB). Ein
   Folgeschritt, der nur die Schlüssel behält, oder eine Abfrage nach Prozess-ID wäre
