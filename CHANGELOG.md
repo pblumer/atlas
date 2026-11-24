@@ -34,6 +34,16 @@ _Changed_ / _Removed_ for each version.
   `POST /api/v1/tasks/{key}/unclaim` now answers `409` for such a task and says to hand it to
   somebody instead. A task with candidate groups, and one its model addresses to nobody, are
   released as before.
+- **Nobody approves an order they placed themselves.** A `fixed` approval names a person at the
+  product and a `role` approval a group, and neither asked who had placed the order: the
+  person named, or a member of the group, could order the product and approve it. Action
+  approvals have always refused that; order approvals of these two kinds now do too, on both
+  ways an approval is decided — `POST /api/v1/approvals/decide` skips such a line and says why,
+  and `POST /api/v1/tasks/{key}/complete` answers `403`. The rule is about whose order it is,
+  so it holds for an operator and an administrator as well. Where the person a product names
+  is the one ordering, somebody else with the operator role decides. `superior`, which
+  resolves the approver from the orderer, and an installation's own approval process are not
+  affected.
 - **Why a client's metadata document could not be fetched is no longer told to a stranger.**
   Naming a client by the URL of its metadata document makes Atlas fetch that URL, on a route
   that answers without a session. What the fetch found was told to the caller word for word:

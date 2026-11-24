@@ -554,6 +554,25 @@ type Approval struct {
 	Ref string `json:"ref,omitempty"`
 }
 
+// ApproverNamedByProduct reports whether an approval kind is one where the product
+// itself says who approves: a person for "fixed", a group for "role". Those are the
+// kinds that can name the person who is ordering, which is why the rule that nobody
+// approves an order they placed is asked for exactly these.
+func ApproverNamedByProduct(kind string) bool {
+	return kind == "fixed" || kind == "role"
+}
+
+// ProcessDecidesByNamedApprover reports whether a process is one of Atlas's own
+// approval processes for such a kind.
+func ProcessDecidesByNamedApprover(processID string) bool {
+	for kind, id := range approvalProcesses {
+		if id == processID && ApproverNamedByProduct(kind) {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedsApproval reports whether this line waits on somebody before it is
 // provisioned. The fulfilment process asks it to decide which process to start,
 // so it has to be answerable from the line alone.

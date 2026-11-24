@@ -251,6 +251,10 @@ func (s *Server) approvalsByKey(pr *httpapi.Principal, keys []uint64) ([]approva
 				skipped = append(skipped, decisionOutcome{TaskKey: tr.Key, Error: "this task is not an approval"})
 				continue
 			}
+			if a.ownOrder(pr) {
+				skipped = append(skipped, decisionOutcome{TaskKey: tr.Key, OrderID: a.OrderID, ItemID: a.ItemID, Error: ownOrderRefusal})
+				continue
+			}
 			held = append(held, a)
 		}
 		return nil

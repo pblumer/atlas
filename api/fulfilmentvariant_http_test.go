@@ -49,7 +49,10 @@ func TestAPositionWithAVariantIsStarted(t *testing.T) {
 // TestAnApprovedPositionWithAVariantIsStarted: the approval starts it, through the
 // same route, once somebody has said yes.
 func TestAnApprovedPositionWithAVariantIsStarted(t *testing.T) {
-	ts, admin, ord := anOrderInAVariant(t, `{"kind":"fixed","ref":"root"}`)
+	// The approver is somebody other than the orderer: nobody approves an order they
+	// placed themselves, and root places this one.
+	ts, admin, ord := anOrderInAVariant(t, `{"kind":"fixed","ref":"alice"}`)
+	alice := twoUsers(t, ts, admin, "alice")[0]
 
 	var task uint64
 	deadline := time.Now().Add(20 * time.Second)
@@ -77,7 +80,7 @@ func TestAnApprovedPositionWithAVariantIsStarted(t *testing.T) {
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	if code, b := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/complete", task),
+	if code, b := cReq(t, alice, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/complete", task),
 		`{"variables":{"genehmigt":true,"begruendung":"ok"}}`); code != http.StatusOK {
 		t.Fatalf("approve: %d (%s)", code, b)
 	}

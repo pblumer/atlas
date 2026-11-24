@@ -6213,6 +6213,10 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
+	// Nobody approves an order they placed themselves, whichever door they use.
+	if s.refuseOwnOrderApproval(w, r, key) {
+		return
+	}
 	// A directory field's value is the business decision, so it is checked before it
 	// becomes one: its shape, and by default the directory once more
 	// (ADR-0473). Off the run loop; a form without such a
