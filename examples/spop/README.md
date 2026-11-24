@@ -213,6 +213,10 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
 - **Simulierte Ausführung:** Die Schritte gegen APS-BW (`atlas-provider-apsbw`) und die
   Verrechnung sind mit `atlas:mockupConnector` simuliert.
 - **Vier-Augen-Prinzip:** Getrennt wird nur über die Gruppe `SPoP-Freigabe`.
+- **Rückgabe während einer Änderung:** Die Rückgabe unterbricht auch eine Änderung, die auf
+  ihre Freigabe wartet (im Live-Test geprüft). Die unterbrochene Aktion erhält im Shop aber
+  keine Rückmeldung «rejected» oder «failed»; sie bleibt ohne Ergebnis. Eine Shop-Aufgabe im
+  Rückgabe-Subprozess könnte das nachholen, müsste dafür aber wissen, welche Aktion lief.
 - **Rückgabe ohne laufenden Strang:** Die Rückfallebene bildet die Site-URL aus den Antworten
   der Bestellung. Eine spätere URL-Änderung kennt sie nicht.
 - **URL-Änderung (offen):** Ob und wie SharePoint OnPrem die URL einer Site-Collection
