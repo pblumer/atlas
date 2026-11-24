@@ -298,80 +298,96 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	// Two seconds of work for the descendant, and half of it as the bound on the call
-	// itself. The two do not overlap on purpose: a shell that survived its own kill
-	// blocks in `wait` and trips the elapsed check, a descendant that survived one
-	// its shell did not writes the file, and neither failure can be mistaken for the
-	// other. The work has to match the `sleep` in timeoutScript.
+	// Two seconds of work for the descendant, and half of it as the bound on how long
+	// the call may go on after its context has ended. The two do not overlap on
+	// purpose: a shell that survived its own kill blocks in `wait` and trips the
+	// elapsed check, a descendant that survived one its shell did not writes the
+	// file, and neither failure can be mistaken for the other. The work has to match
+	// the `sleep` in timeoutScript.
 	const work = 2 * time.Second
 	const returnWithin = work / 2
 
-	// The deadline has to land after the shell has forked the descendant and recorded
-	// its pid, or the run proves nothing about the kill. At 30ms it usually does, but
-	// not on a loaded machine: the shell's redirection created the pid file before
-	// echo wrote into it, a kill in between left the file empty, and the test failed
-	// parsing "" although the group kill had worked.
+	// The context has to end after the shell has forked the descendant and recorded
+	// its pid, or the run proves nothing about the kill. That moment used to be
+	// guessed: a ladder of deadlines, 30ms first and then longer ones, each tried in
+	// turn until one landed late enough. Every rung was a bet on how long a shell
+	// takes to start, and the bet was lost three times — at 30ms on a loaded machine,
+	// at 250ms on a Windows runner where `sh` is Git Bash and its fork an emulation,
+	// and on 2026-11-11 at 600ms on the same kind of runner, where all four rungs
+	// fell before the descendant existed and the test failed having tested nothing.
+	// A longer ladder would have been a fourth bet.
 	//
-	// So the pid is written to a temporary name and renamed into place — the file
-	// either holds the whole pid or does not exist — and a run whose deadline fell
-	// before that point is repeated with a longer one. Every deadline stays well
-	// inside returnWithin, so the elapsed check keeps its meaning.
+	// So the moment is no longer guessed. The context is ended when the pid file
+	// appears, which is the event the ladder was trying to land behind: the shell
+	// writes the pid to a temporary name and renames it into place, so the file
+	// either holds the whole pid or does not exist.
 	//
-	// The ladder reaches 600ms because 250ms was not enough on a Windows runner:
-	// there `sh` is Git Bash, whose fork is an emulation, and on a loaded machine all
-	// three of 30, 100 and 250ms fell before the descendant existed, so the test
-	// failed having tested nothing. The work above doubled to keep the longest
-	// deadline well inside the bound on the call.
-	for _, deadline := range []time.Duration{30 * time.Millisecond, 100 * time.Millisecond, 250 * time.Millisecond, 600 * time.Millisecond} {
-		dir := t.TempDir()
-		pidFile := filepath.Join(dir, "child.pid")
-		outlived := filepath.Join(dir, "outlived")
+	// What ends the context is its cancellation and not the passing of its deadline,
+	// and for what is under test that is the same thing: os/exec calls the command's
+	// Cancel — the kill of the group, or of the Job Object on Windows — when the
+	// context is done, whichever way it got there. The context still carries a
+	// deadline, far enough out that it is never the one that fires on a machine that
+	// works at all, because execCommand bounds its wait for a held output pipe by it
+	// and the call has to be made the way a script's is.
+	const shellStartsWithin = 60 * time.Second
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	outlived := filepath.Join(dir, "outlived")
 
-		ctx, cancel := context.WithTimeout(context.Background(), deadline)
-		start := time.Now()
-		_, err := execCommand(ctx, "sh", []string{"-c",
-			timeoutScript, "sh", pidFile, outlived}, nil, defaultMaxOutput)
-		cancel()
-		if err == nil {
-			t.Fatal("timed command succeeded")
-		}
-		if elapsed := time.Since(start); elapsed > returnWithin {
-			t.Fatalf("execCommand returned after %s; a descendant kept the command alive", elapsed)
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), shellStartsWithin)
+	defer cancel()
 
-		// The pid file proves the descendant was forked before the deadline, which is
-		// what makes the rest of this a test of the kill rather than of the timing.
-		b, err := readKilledScriptFile(pidFile)
-		if errors.Is(err, os.ErrNotExist) {
-			t.Logf("the %s deadline fell before the shell recorded its descendant; "+
-				"repeating with a longer one", deadline)
-			continue
+	// Watches for the descendant and ends the context the moment it is recorded.
+	ended := make(chan time.Time, 1)
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(pidFile); err == nil {
+				at := time.Now()
+				cancel()
+				ended <- at
+				return
+			}
+			time.Sleep(2 * time.Millisecond)
 		}
-		if err != nil {
-			t.Fatalf("read child pid: %v", err)
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-		if err != nil {
-			t.Fatalf("child pid %q: %v", b, err)
-		}
+		close(ended)
+	}()
 
-		// Past the moment a surviving descendant would have finished its work. It was
-		// forked before the deadline, so that moment is up to deadline+work after
-		// start, not work: on the 600ms rung a descendant forked after 400ms would
-		// otherwise write its file after the test had looked, and an escape would pass.
-		time.Sleep(time.Until(start.Add(deadline + work + 400*time.Millisecond)))
-		if _, err := os.Stat(outlived); err == nil {
-			t.Errorf("descendant process %d ran to completion after its script timed out", pid)
-		}
-		if err := processExists(pid); err == nil {
-			t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
-				"work, so this is a pid that outlived its meaning rather than a failed kill",
-				pid, procSummary(pid))
-		}
-		return
+	_, err := execCommand(ctx, "sh", []string{"-c",
+		timeoutScript, "sh", pidFile, outlived}, nil, defaultMaxOutput)
+	returned := time.Now()
+	if err == nil {
+		t.Fatal("the command succeeded although its context ended while it ran")
 	}
-	t.Fatal("no deadline landed after the shell had recorded its descendant, so the kill " +
-		"was never tested")
+	endedAt, ok := <-ended
+	if !ok {
+		t.Fatalf("the shell had not recorded its descendant %s after it was started (%v), "+
+			"so the kill was never tested", shellStartsWithin, err)
+	}
+	if elapsed := returned.Sub(endedAt); elapsed > returnWithin {
+		t.Fatalf("execCommand returned %s after its context ended; a descendant kept the command alive", elapsed)
+	}
+
+	b, err := readKilledScriptFile(pidFile)
+	if err != nil {
+		t.Fatalf("read child pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatalf("child pid %q: %v", b, err)
+	}
+
+	// Past the moment a surviving descendant would have finished its work. It was
+	// forked before its pid was recorded, so that moment is no later than work after
+	// the context ended.
+	time.Sleep(time.Until(endedAt.Add(work + 400*time.Millisecond)))
+	if _, err := os.Stat(outlived); err == nil {
+		t.Errorf("descendant process %d ran to completion after its script was killed", pid)
+	}
+	if err := processExists(pid); err == nil {
+		t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
+			"work, so this is a pid that outlived its meaning rather than a failed kill",
+			pid, procSummary(pid))
+	}
 }
 
 // readKilledScriptFile reads a file that a script killed at its deadline may still
@@ -382,7 +398,7 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 // access, and os.ReadFile, which leaves FILE_SHARE_DELETE out of its share mode, is
 // refused with "being used by another process" until that handle closes. So a read
 // that fails for any reason but absence is tried again for a while; absence is the
-// answer at once, because it is how the test learns the deadline fell too early.
+// answer at once, because no handle closing will change it.
 func readKilledScriptFile(name string) ([]byte, error) {
 	until := time.Now().Add(2 * time.Second)
 	for {
