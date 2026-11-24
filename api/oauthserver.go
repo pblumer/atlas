@@ -222,6 +222,8 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// A consent decision must be made on a page this server served, freshly: a
 	// cached one could name a client the operator has since removed.
 	w.Header().Set("Cache-Control", "no-store")
+	// And on a page nobody else has framed: the decision is one click.
+	setNoFraming(w.Header())
 	_, _ = w.Write(page)
 }
 
@@ -421,7 +423,7 @@ const oauthCodePrefix = "atlasoc_"
 // the client's registered set.
 func errorRedirect(redirectURI, code, state string) string {
 	u, err := url.Parse(redirectURI)
-	if err != nil {
+	if err != nil || !redirectSchemeAllowed(u) {
 		return ""
 	}
 	q := u.Query()

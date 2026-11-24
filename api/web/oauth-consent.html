@@ -104,7 +104,17 @@ function fatal(message, redirect) {
     application, go back to it and try again.</p>`;
   // Only ever a URI the server already matched against the client's registered
   // set — this page never builds a redirect of its own.
-  if (redirect) setTimeout(() => { location.href = redirect; }, 1500);
+  if (redirect) setTimeout(() => leaveTo(redirect), 1500);
+}
+
+// leaveTo is the one place this page sends the browser somewhere, and it sends it
+// only to http and https. The server accepts no other scheme for a redirect URI and
+// answers with none; this asks once more on the last step, so that a URI which got
+// past both is still never handed to the browser as a script to run here.
+function leaveTo(target) {
+  let u;
+  try { u = new URL(target, location.href); } catch (e) { return; }
+  if (u.protocol === "https:" || u.protocol === "http:") location.href = target;
 }
 
 // signInFailure names what refused a sign-in — deliberately the same three answers
@@ -284,7 +294,7 @@ async function decideSystem(approve, capabilities, preconsent) {
       preconsent: !!preconsent,
       approve,
     });
-    location.href = out.redirect;
+    leaveTo(out.redirect);
   } catch (e) {
     fatal(e.message || "the decision could not be recorded");
   }
@@ -335,7 +345,7 @@ function consent(ctx) {
         resource: q.get("resource"),
         approve,
       });
-      location.href = out.redirect;
+      leaveTo(out.redirect);
     } catch (e) {
       fatal(e.message || "the decision could not be recorded");
     }

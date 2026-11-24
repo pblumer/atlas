@@ -12,6 +12,22 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Security
+- **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
+  always said so — "must be https, or http on loopback" — but the check behind it only asked
+  that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other
+  scheme was accepted too. The consent page sends the browser to a client's registered redirect
+  URI by itself when a request cannot be approved, so with self-registration open
+  (`--oauth-dynamic-registration`) a URI of a scheme the browser runs rather than visits could be
+  registered by anyone and opened for whoever followed their link. The rule now names the two
+  schemes. It is asked when a client is registered and again where a request names its redirect
+  URI and where an answer is built for one, so a client record written before the rule cannot
+  use what it holds; such a request is answered like one naming a URI that was never
+  registered. The consent page itself now leaves only to `http:` and `https:`, in one place,
+  and is served with `frame-ancestors 'none'` like the other pages a link opens. Clients named
+  by a metadata document were not affected. Until this release is installed, keep
+  self-registration off.
+
 ## [0.28.0] — 2026-11-24
 
 **A per-position product can take an action in a message event subprocess, and SPoP shows a
