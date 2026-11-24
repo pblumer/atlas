@@ -62,6 +62,10 @@ type oidcClaims struct {
 	Email             string
 	Name              string
 	PreferredUsername string
+	// EmailUnverified is the provider saying it has not verified Email
+	// (email_verified false). A provider that says nothing about it is not saying
+	// that: several send an address and never the claim.
+	EmailUnverified bool
 
 	// Raw is the whole validated claim set, for the one caller that cannot know in
 	// advance which claim it needs: the mapping from a provider's groups onto roles
@@ -279,6 +283,21 @@ func verifyIDToken(raw string, keys *jwkSet, want oidcExpect) (oidcClaims, error
 		Email:             c.Email,
 		Name:              c.Name,
 		PreferredUsername: c.PreferredUsername,
+		EmailUnverified:   saysUnverified(claimSet["email_verified"]),
 		Raw:               claimSet,
 	}, nil
+}
+
+// saysUnverified reads an email_verified claim that states the address is not
+// verified. The claim is a boolean by the standard and a string from more than one
+// provider, so both spellings of false count; anything else, absence included, does
+// not.
+func saysUnverified(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return !x
+	case string:
+		return strings.EqualFold(strings.TrimSpace(x), "false")
+	}
+	return false
 }

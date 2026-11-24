@@ -44,6 +44,15 @@ _Changed_ / _Removed_ for each version.
   The budget for such reads is also counted per host as it resolves rather than as it was
   spelt: another case, a trailing dot or an explicit `:443` used to be a new key each, with a
   full budget.
+- **A federated login no longer takes an e-mail address it cannot vouch for.** The provider's
+  `email` claim was copied onto the account at every login, as it came. Directory
+  synchronisation, reconciliation and password recovery all read an address as the person, and
+  the administrator's own path refuses a second account the same address — this path saved it
+  without asking, so a person whose provider let them choose the claim could carry a
+  colleague's address. An address another account holds is now left alone, and so is one the
+  provider marks unverified (`email_verified` false); the account keeps the address it had, and
+  the log says why (`auth.user_updated`). A provider that sends an address and no
+  `email_verified` claim is treated as before.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other
