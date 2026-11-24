@@ -114,6 +114,12 @@ Folgen der Ereignis-Subprozesse:
   `site` noch fehlt.
 - Sie laufen neben einer laufenden Speichererweiterung oder Einladung, also nicht nach der
   Regel «eine Aktion zur Zeit».
+- Gleichzeitige Läufe überschreiben sich nicht: Jeder Lauf schreibt nur seine eigenen Felder
+  in die lokale Variable `neu`, und erst das Output-Mapping setzt sie beim Abschluss mit
+  `context merge` in den dann aktuellen Stand von `site` oder `gruppen` ein. Atlas wertet das
+  Mapping in demselben Verarbeitungsschritt aus, in dem es die Variable schreibt; dazwischen
+  kann kein anderer Lauf schreiben. Eine Umbenennung während einer laufenden URL-Freigabe
+  bleibt so erhalten, und umgekehrt.
 - Die Rückgabe beendet sie über das terminierende Ende des Strangs; sie brauchen kein
   Boundary-Event.
 - Die Bestellung zeigt weiterhin die ursprünglichen Antworten. Was die Site heute ist, steht
@@ -244,9 +250,11 @@ Auf einen anderen Server überträgt `atlas export --application … --catalog �
   Verrechnung sind mit `atlas:mockupConnector` simuliert.
 - **Vier-Augen-Prinzip:** Getrennt wird nur über die Gruppe `SPoP-Freigabe`.
 - **Eine Aktion zur Zeit:** Während Speichererweiterung oder Einladung laufen, nimmt der
-  Strang keine dieser beiden Aktionen an. Die drei Ereignis-Subprozesse laufen daneben; eine
-  URL-Änderung kann sich so mit einer Speichererweiterung überschneiden, die noch die alte URL
-  gelesen hat.
+  Strang keine dieser beiden Aktionen an. Die drei Ereignis-Subprozesse laufen daneben und
+  ändern nur ihre eigenen Felder. Was ein Lauf gelesen hat, kann beim Abschluss veraltet
+  sein: Die Prüfung «unverändert» und die Zusammenfassung für die Freigabe beruhen auf dem
+  Stand beim Lesen, und `quota.siteUrl` behält die URL, die die Speichererweiterung gelesen
+  hat. Die massgebende URL steht in `site.url`.
 - **URL-Änderung (offen):** Ob und wie SharePoint OnPrem die URL einer Site-Collection
   umbenennt und was mit Links, Gruppennamen und Suchindex geschieht, ist nicht geklärt; der
   Schritt ist simuliert. Die Gruppennamen behalten die alte URL.

@@ -21,7 +21,9 @@ _Changed_ / _Removed_ for each version.
   action on the site) and two add-ons whose tiers are billing bands of a quantity. Renaming a site,
   changing its URL and changing its owner and members are actions too, run as non-interrupting
   event subprocesses beside the strand, and the order form says that correcting its details
-  changes the record only. Each strand provisions, then waits at an event-based gateway
+  changes the record only. Each of them writes only its own fields and merges them into the
+  strand's state when it completes, so changes running at the same time do not overwrite each
+  other. Each strand provisions, then waits at an event-based gateway
   for the next action; changes (quota, external invitation, quantity) are subprocesses with
   output mappings, and the return is a catch, interrupting boundaries and a fallback message
   start. Four decision tables stand in for the policies, a user task carries the four-eyes

@@ -192,19 +192,28 @@ flow("x_f19", "x_info2", "x_end2", **SX)
 # Members. Sie sind nicht unterbrechende Ereignis-Subprozesse (ADR-0082): Jede Nachricht startet einen Lauf neben dem
 # Strang, ohne Rückweg zum Warten. Gebunden sind sie, solange der Strang lebt; vor der Bereitstellung lehnt die Regel ab
 # (siteGefunden), und die Rückgabe beendet laufende Läufe mit dem terminierenden Ende.
-ZUGRIFF = '=site.url + "|" + (if orderer = null then "" else orderer) + "|" + (if recipient = null then "" else recipient)'
-SITE_MIT = ('={{ url: {url}, titel: {titel}, typ: site.typ, template: site.template, material: site.material, '
-            'sprache: site.sprache{extra} }}')
-EVENT_DOC = (" Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position, läuft neben dem "
-             "Strang und ändert dessen Stand über das Output-Mapping; endet er mit einer Ablehnung, lösen die Ausdrücke den "
-             "unveränderten Wert auf (ADR-0074). Vor der Bereitstellung lehnt die Regel ab, weil site noch fehlt.")
+# Gleichzeitige Läufe: Jeder Lauf schreibt nur seine eigenen Felder in die lokale Variable neu (Ergebnisse innerer
+# Aufgaben bleiben im Subprozess, ADR-0074). Erst das Output-Mapping beim Abschluss setzt sie mit context merge in den
+# dann aktuellen Stand des Strangs ein; Atlas wertet es in demselben Verarbeitungsschritt aus, der die Variable schreibt.
+# So überschreibt eine Umbenennung keine URL-Änderung, die während ihrer Freigabe abgeschlossen wurde, und umgekehrt.
+def merged(var, part="neu"):
+    return f"=if {part} = null then {var} else context merge([{var}, {part}])"
+
+
+ZUGRIFF = ('=(if neu = null then site.url else neu.url) + "|" + (if orderer = null then "" else orderer) + "|" + '
+           '(if recipient = null then "" else recipient)')
+EVENT_DOC = (" Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position und läuft neben "
+             "dem Strang. Die Ausführung schreibt nur die geänderten Felder in die lokale Variable neu; das Output-Mapping "
+             "setzt sie beim Abschluss mit context merge in den dann aktuellen Stand ein. Gleichzeitige Läufe überschreiben "
+             "sich darum nicht gegenseitig. Endet der Lauf mit einer Ablehnung, ist neu leer und der Stand bleibt. Vor der "
+             "Bereitstellung lehnt die Regel ab, weil site noch fehlt.")
 
 TY = 1600
 X = change_sub(
     SPX, "t", "sp_titel", "site-umbenennen", "Site umbenennen", TY, 1600,
     "Aktion site-umbenennen (Formular spop-site-umbenennen: neuerTitel, begruendung): ändert den Titel der Site; die URL "
     "bleibt. Richtlinie SpopAenderungRichtlinie mit aenderung titel: 1 bis 80 Zeichen, ohne Freigabe." + EVENT_DOC,
-    [("=site", "site")],
+    [(merged("site"), "site")],
     "Site lesen (S1)",
     '={ gefunden: site != null, titel: if site = null then null else site.titel }',
     "Simuliert apsbw_sharepoint_site read aus dem Stand des Strangs (site). Schreibt aktuell.",
@@ -218,9 +227,9 @@ X = change_sub(
     '"\\nRegel: " + regel.grund',
     "Umbenennung freigeben", trigger=("m_titel", "Umbenennung angefragt"))
 node("t_apply", "serviceTask", "Titel setzen (S1)", X(1260), TY,
-     ext(mock(SITE_MIT.format(url="site.url", titel="neuerTitel", extra=", titelVorher: site.titel"), "site")),
-     doc="Simuliert apsbw_sharepoint_site update (Titel). Schreibt site mit dem neuen Titel; titelVorher bleibt für einen "
-         "Rollback erhalten.", parent="sp_titel")
+     ext(mock('={ titel: neuerTitel, titelVorher: site.titel }', "neu")),
+     doc="Simuliert apsbw_sharepoint_site update (Titel). Schreibt neu mit dem neuen Titel und titelVorher für einen "
+         "Rollback; das Output-Mapping setzt beides in site ein.", parent="sp_titel")
 node("t_info", "sendTask", "Aktion als erledigt melden", X(1410), TY, shop("site-umbenennen", "completed"),
      doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-umbenennen mit completed.", parent="sp_titel")
 node("t_end", "endEvent", "Site umbenannt", X(1540), TY, parent="sp_titel")
@@ -237,7 +246,7 @@ X = change_sub(
     "aenderung url). Führt die Verrechnung und siteZugriff nach, damit die Eigentumsprüfung der Zusatzleistungen die Site "
     "unter der neuen URL findet. Annahme: SharePoint OnPrem erlaubt das Umbenennen der Site-Collection-URL; technisch "
     "nicht geklärt." + EVENT_DOC,
-    [("=site", "site"), ("=verrechnung", "verrechnung"), (ZUGRIFF, "siteZugriff")],
+    [(merged("site"), "site"), (merged("verrechnung", "neuVerrechnung"), "verrechnung"), (ZUGRIFF, "siteZugriff")],
     "Site und neue URL lesen (S1)",
     '={ gefunden: site != null, url: if site = null then null else site.url, neueUrl: ' + NEUE_URL + ', urlFrei: true }',
     "Simuliert apsbw_sharepoint_site read für die heutige und die neue URL; urlFrei sagt, ob unter der neuen URL noch keine "
@@ -253,13 +262,14 @@ X = change_sub(
     '(if begruendung = null then "" else "\\nBegründung: " + begruendung) + "\\nRegel: " + regel.grund',
     "URL-Änderung freigeben", trigger=("m_url", "URL-Änderung angefragt"))
 node("u_apply", "serviceTask", "Site-URL ändern (S1)", X(1260), UY,
-     ext(mock(SITE_MIT.format(url="aktuell.neueUrl", titel="site.titel", extra=", urlVorher: site.url"), "site", "PT2S", "PT4S")),
-     doc="Simuliert das Umbenennen der Site-Collection-URL (apsbw_sharepoint_site rename). Schreibt site mit der neuen URL; "
-         "urlVorher bleibt für einen Rollback erhalten.", parent="sp_url")
+     ext(mock('={ url: aktuell.neueUrl, urlVorher: site.url }', "neu", "PT2S", "PT4S")),
+     doc="Simuliert das Umbenennen der Site-Collection-URL (apsbw_sharepoint_site rename). Schreibt neu mit der neuen URL "
+         "und urlVorher für einen Rollback; das Output-Mapping setzt beides in site ein und bildet siteZugriff neu.",
+     parent="sp_url")
 node("u_bill", "serviceTask", "Verrechnung nachführen", X(1410), UY,
-     ext(mock('={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, '
-              'position: orderId + "/" + (if positionId = null then itemId else positionId) }', "verrechnung")),
-     doc="Simuliert die Anpassung der wiederkehrenden Verrechnung auf die neue URL.", parent="sp_url")
+     ext(mock('={ siteUrl: neu.url }', "neuVerrechnung")),
+     doc="Simuliert die Anpassung der wiederkehrenden Verrechnung auf die neue URL. Schreibt neuVerrechnung; das "
+         "Output-Mapping setzt siteUrl in verrechnung ein.", parent="sp_url")
 node("u_info", "sendTask", "Aktion als erledigt melden", X(1560), UY, shop("site-url-aendern", "completed"),
      doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-url-aendern mit completed.", parent="sp_url")
 node("u_end", "endEvent", "URL geändert", X(1690), UY, parent="sp_url")
@@ -277,7 +287,7 @@ X = change_sub(
     "aenderung berechtigungen: Owner-Wechsel bei Hermes, Communication und Publishing mit Vier-Augen-Freigabe. Die "
     "Eigentumsprüfung der Zusatzleistungen hängt am Besteller und Empfänger der Position, nicht am Owner; sie ändert "
     "sich hier nicht." + EVENT_DOC,
-    [("=gruppen", "gruppen")],
+    [(merged("gruppen"), "gruppen")],
     "Gruppen und neuen Owner lesen (S2)",
     '={ gefunden: site != null, owner: if gruppen = null then null else gruppen.owner, '
     'mitglieder: if gruppen = null then "" else (if gruppen.mitglieder = null then "" else gruppen.mitglieder), ownerExistiert: true }',
@@ -293,10 +303,11 @@ X = change_sub(
     f'"\\nMembers neu: " + ({MITGLIEDER}) + "\\nRegel: " + regel.grund',
     "Owner-Wechsel freigeben", trigger=("m_rechte", "Änderung angefragt"))
 node("b_apply", "serviceTask", "Gruppen aktualisieren (S2–S5)", X(1260), BY,
-     ext(mock('={ owners: gruppen.owners, members: gruppen.members, visitors: gruppen.visitors, owner: neuerOwnerUpn, '
-              f'mitglieder: {MITGLIEDER}, ownerVorher: gruppen.owner, mitgliederVorher: gruppen.mitglieder }}', "gruppen")),
-     doc="Simuliert apsbw_sharepoint_group add_member und remove_member für die Owner- und die Member-Gruppe. Schreibt gruppen "
-         "mit dem neuen Stand; ownerVorher und mitgliederVorher bleiben für einen Rollback erhalten.", parent="sp_rechte")
+     ext(mock(f'={{ owner: neuerOwnerUpn, mitglieder: {MITGLIEDER}, ownerVorher: gruppen.owner, '
+              'mitgliederVorher: gruppen.mitglieder }', "neu")),
+     doc="Simuliert apsbw_sharepoint_group add_member und remove_member für die Owner- und die Member-Gruppe. Schreibt neu "
+         "mit Owner und Members sowie ownerVorher und mitgliederVorher für einen Rollback; das Output-Mapping setzt sie in "
+         "gruppen ein.", parent="sp_rechte")
 node("b_info", "sendTask", "Aktion als erledigt melden", X(1410), BY, shop("berechtigungen-aendern", "completed"),
      doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion berechtigungen-aendern mit completed.", parent="sp_rechte")
 node("b_end", "endEvent", "Berechtigungen geändert", X(1540), BY, parent="sp_rechte")
