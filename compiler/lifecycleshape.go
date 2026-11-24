@@ -10,7 +10,10 @@ package compiler
 // read from the compiled graph at publish, never at runtime (I5).
 
 // MessageCatchPoint is one element that waits for a message: an intermediate message
-// catch event, a receive task, or a message boundary event.
+// catch event, a receive task, a message boundary event, or the start event of a
+// message-triggered event subprocess (ADR-0082) — which a strand arms on entering its
+// scope and which takes a delivered action beside the strand's own wait, exactly as
+// the shop's availability already reads it (api/orderactionavail.go).
 type MessageCatchPoint struct {
 	// Element is the BPMN element id.
 	Element string
@@ -38,6 +41,19 @@ func (p *CompiledProcess) MessageCatchPoints() []MessageCatchPoint {
 			if b := p.BoundaryEvent(n.Detail); b.Kind == BoundaryMessage {
 				d = &MessageDetail{MessageName: b.MessageName, CorrelationKey: b.CorrelationKey}
 			}
+		case TypeSubProcess:
+			// An event subprocess waits at its start event; the container is what the
+			// compiled graph holds, so the point is named after the start.
+			if n.EventSub >= 0 {
+				if e := p.EventSubProcess(n.EventSub); e.Kind == BoundaryMessage {
+					out = append(out, MessageCatchPoint{
+						Element:     p.ElementBpmnId(e.StartNode),
+						MessageName: e.MessageName,
+						Correlated:  e.CorrelationKey != nil,
+					})
+				}
+			}
+			continue
 		}
 		if d == nil {
 			continue

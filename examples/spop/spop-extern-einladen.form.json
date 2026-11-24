@@ -1,0 +1,68 @@
+{
+  "type": "default",
+  "id": "spop-extern-einladen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: Externen Benutzer einladen (PvN-GF-003)**\n\nGilt für die TeamSite dieser Position. Private Mail-Domains sind nicht zugelassen; für externe Benutzer gilt MFA-Pflicht. Contribute und Full Control gehen in die Vier-Augen-Freigabe. Die Berechtigung wird erst gesetzt, wenn die Einladung angenommen ist; sonst wird sie nach Ablauf widerrufen."
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse des externen Benutzers",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "rolle",
+      "type": "select",
+      "label": "Berechtigung",
+      "defaultValue": "Read",
+      "validate": {
+        "required": true
+      },
+      "description": "Least Privilege: nur so viel wie nötig.",
+      "values": [
+        {
+          "label": "Lesen (Read)",
+          "value": "Read"
+        },
+        {
+          "label": "Bearbeiten (Contribute)",
+          "value": "Contribute"
+        },
+        {
+          "label": "Vollzugriff (Full Control)",
+          "value": "Full Control"
+        }
+      ],
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ablaufTage",
+      "type": "number",
+      "label": "Gültigkeit der Einladung (Tage)",
+      "defaultValue": 30,
+      "validate": {
+        "required": true,
+        "min": 1,
+        "max": 90
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "nachricht",
+      "type": "textarea",
+      "label": "Nachricht an den eingeladenen Benutzer",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -524,6 +524,82 @@ func TestAnActionIsAvailableWhereverTheStrandListensForIt(t *testing.T) {
 	}
 }
 
+// eventSubStrandBPMN is listeningStrandBPMN with the audit taken by a
+// non-interrupting message event subprocess beside the strand's wait instead of a
+// boundary on it (ADR-0082): a run per message, no way back to the wait needed.
+const eventSubStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0">
+  <message id="m_prov" name="tool.provision"/>
+  <message id="m_deprov" name="tool.deprovision">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <message id="m_reset" name="tool.reset">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <message id="m_audit" name="tool.audit">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <process id="tool-strand" isExecutable="true">
+    <startEvent id="Provision"><messageEventDefinition messageRef="m_prov"/></startEvent>
+    <exclusiveGateway id="Wait"/>
+    <receiveTask id="Listen" messageRef="m_reset"/>
+    <scriptTask id="R"><extensionElements><zeebe:script expression="=true" resultVariable="wasReset"/></extensionElements></scriptTask>
+    <sendTask id="ResetDone"><extensionElements><atlas:shopTask mode="outcome" action="password-reset" outcome="completed"/></extensionElements></sendTask>
+    <boundaryEvent id="Returned" attachedToRef="Listen"><messageEventDefinition messageRef="m_deprov"/></boundaryEvent>
+    <startEvent id="Fallback"><messageEventDefinition messageRef="m_deprov"/></startEvent>
+    <exclusiveGateway id="Return"/>
+    <endEvent id="End"/>
+    <subProcess id="AuditRun" triggeredByEvent="true">
+      <extensionElements><zeebe:ioMapping><zeebe:output source="=audited" target="audited"/></zeebe:ioMapping></extensionElements>
+      <startEvent id="Audit" isInterrupting="false"><messageEventDefinition messageRef="m_audit"/></startEvent>
+      <scriptTask id="A"><extensionElements><zeebe:script expression="=true" resultVariable="audited"/></extensionElements></scriptTask>
+      <sendTask id="AuditDone"><extensionElements><atlas:shopTask mode="outcome" action="audit" outcome="completed"/></extensionElements></sendTask>
+      <endEvent id="AEnd"/>
+      <sequenceFlow id="a1" sourceRef="Audit" targetRef="A"/>
+      <sequenceFlow id="a2" sourceRef="A" targetRef="AuditDone"/>
+      <sequenceFlow id="a3" sourceRef="AuditDone" targetRef="AEnd"/>
+    </subProcess>
+    <sequenceFlow id="s1" sourceRef="Provision" targetRef="Wait"/>
+    <sequenceFlow id="s2" sourceRef="Wait" targetRef="Listen"/>
+    <sequenceFlow id="s3" sourceRef="Listen" targetRef="R"/>
+    <sequenceFlow id="s4" sourceRef="R" targetRef="ResetDone"/>
+    <sequenceFlow id="s4b" sourceRef="ResetDone" targetRef="Wait"/>
+    <sequenceFlow id="r1" sourceRef="Returned" targetRef="Return"/>
+    <sequenceFlow id="r2" sourceRef="Fallback" targetRef="Return"/>
+    <sequenceFlow id="r3" sourceRef="Return" targetRef="End"/>
+  </process>
+</definitions>`
+
+// TestAnActionReachesAMessageEventSubprocessBesideTheStrand: a per-position product
+// whose audit is taken by a message event subprocess publishes — the start counts as
+// a catch point — the audit is offered while the strand waits elsewhere, and asking
+// for it runs the event subprocess and reports its outcome without disturbing the
+// strand's own wait.
+func TestAnActionReachesAMessageEventSubprocessBesideTheStrand(t *testing.T) {
+	actions := `[{"key":"provision","message":"tool.provision","effect":"provision"},` +
+		`{"key":"deprovision","message":"tool.deprovision","effect":"deprovision","triggers":["customer","operator"]},` +
+		`{"key":"password-reset","message":"tool.reset","effect":"service","triggers":["customer"],"labels":{"de":"Zurücksetzen"}},` +
+		`{"key":"audit","message":"tool.audit","effect":"service","triggers":["operator"],"labels":{"de":"Prüfen"}}]`
+	ts, admin, _, _, ord, strand := aHeldTool(t, eventSubStrandBPMN, actions)
+
+	code, offered, body := actionsOf(t, admin, ts, ord)
+	if code != http.StatusOK || !offered["audit"].Available || !offered["password-reset"].Available {
+		t.Fatalf("a strand with an armed message event subprocess: %d (%s), want both available", code, body)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/audit",
+		`{"commandId":"es-1","trigger":"operator"}`); code != http.StatusOK {
+		t.Fatalf("audit through the event subprocess: %d (%s)", code, b)
+	}
+	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"audited"`) {
+		t.Fatalf("the event subprocess did not run, or its output did not reach the strand: %s", vars)
+	}
+	if code, offered, body := actionsOf(t, admin, ts, ord); code != http.StatusOK ||
+		!offered["audit"].Available || !offered["password-reset"].Available {
+		t.Fatalf("after the audit: %d (%s), want the trigger re-armed and the receive task still listening", code, body)
+	}
+}
+
 // TestAnActionOfAPerOperationProductIsToldItsVariant: an action that starts its own
 // instance is given the variant the position was ordered in, as the provision and the
 // return are — so a decision over the licence tier it changes does not see null.

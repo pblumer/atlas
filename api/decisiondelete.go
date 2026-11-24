@@ -90,7 +90,7 @@ func (s *Server) handleDeleteDecisionDeployment(w http.ResponseWriter, r *http.R
 		if superseded = currentVersionsWithHistory(rec, all); len(superseded) > 0 {
 			return
 		}
-		if stranded = s.definitionsStrandedBy(rec, all); len(stranded) > 0 {
+		if stranded = s.definitionsStrandedBy(key); len(stranded) > 0 {
 			return
 		}
 		if loadErr = s.decisionDeploys.Delete(decisionKeyName(key)); loadErr != nil {
@@ -185,25 +185,14 @@ func (s *Server) definitionsPinnedTo(key uint64) []decisionPinRef {
 // delete that changes what latest resolves to is the one that removes a decision's
 // last deployment — and it strands a definition only when that definition carries
 // no copy of the decision itself.
-func (s *Server) definitionsStrandedBy(rec persistedDecision, all []persistedDecision) []decisionPinRef {
-	remaining := map[string]bool{}
-	for _, other := range all {
-		if other.Key == rec.Key {
-			continue
-		}
-		for _, d := range other.Decisions {
-			remaining[d.ID] = true
-		}
-	}
-	going := map[string]bool{}
-	for _, d := range rec.Decisions {
-		if !remaining[d.ID] {
-			going[d.ID] = true
-		}
-	}
-	if len(going) == 0 {
-		return nil
-	}
+//
+// The question is put to the registry, by the name the task carries, and not to
+// the deployment records. A record knows its decisions only by label, while a task
+// may name the decision's FEEL identifier instead (ADR-0385), and the registry
+// resolves both; comparing the record's labels with the task's names would miss
+// every task that names an identifier differing from its label, and let the last
+// model it can evaluate be deleted.
+func (s *Server) definitionsStrandedBy(key uint64) []decisionPinRef {
 	var out []decisionPinRef
 	for _, defKey := range s.order {
 		d := s.deployments[defKey]
@@ -211,7 +200,9 @@ func (s *Server) definitionsStrandedBy(rec persistedDecision, all []persistedDec
 			continue
 		}
 		for _, id := range d.cp.LatestBoundDecisions() {
-			if going[id] && !s.dmnRegistry.Provides(d.Key, id) {
+			if s.dmnRegistry.Provides(key, id) &&
+				!s.dmnRegistry.ProvidedByDecisionOtherThan(id, key) &&
+				!s.dmnRegistry.Provides(d.Key, id) {
 				out = append(out, decisionPinRef{
 					Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version, DecisionID: id,
 					Binding: pinBindingLatest,

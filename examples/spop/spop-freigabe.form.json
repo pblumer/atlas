@@ -1,0 +1,49 @@
+{
+  "type": "default",
+  "id": "spop-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Vier-Augen-Freigabe**\n\nBitte den Antrag prüfen. Die Freigabe darf nicht durch die antragstellende Person erfolgen."
+    },
+    {
+      "key": "zusammenfassung",
+      "type": "textarea",
+      "label": "Antrag",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "freigabeEntscheid",
+      "type": "radio",
+      "label": "Entscheid",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        {
+          "label": "Freigeben",
+          "value": "freigegeben"
+        },
+        {
+          "label": "Ablehnen",
+          "value": "abgelehnt"
+        }
+      ],
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "freigabeKommentar",
+      "type": "textarea",
+      "label": "Kommentar",
+      "description": "Bei einer Ablehnung wird der Kommentar der antragstellenden Person mitgeteilt.",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

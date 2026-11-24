@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "spop-quota-erhoehung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnP Speicherplatzerweiterung (PvN-GF-002, Material 540007510)**\n\nZusatzspeicher für die Site dieser Position, über ihre inbegriffene Quota hinaus. Anzugeben ist die neue **Gesamtmenge** an Zusatzspeicher in GB, nicht die Differenz; 0 ist nicht möglich, für weniger Speicher ist eine kleinere Menge anzugeben. Verrechnung pro GB und Monat. Über 100 GB geht die Erweiterung in die Vier-Augen-Freigabe."
+    },
+    {
+      "key": "menge",
+      "type": "number",
+      "label": "Zusatzspeicher gesamt (GB)",
+      "description": "1 bis 500 GB.",
+      "validate": {
+        "required": true,
+        "min": 1,
+        "max": 500
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

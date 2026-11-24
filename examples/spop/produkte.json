@@ -1,0 +1,821 @@
+{
+  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Zurückgezogen (state withdrawn) sind spop-teamsite und spop-speicher; die Speicherplatzerweiterung ist die Aktion quota-erhoehen («Speicherplatz erweitern») der Site-Produkte. «Angaben ändern» korrigiert nur den Datensatz der Bestellung; Änderungen an der Site laufen über die Aktionen site-umbenennen, site-url-aendern und berechtigungen-aendern.",
+  "products": [
+    {
+      "id": "spop-site-hermes",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "users-group",
+      "texts": {
+        "de": "SharePoint OnP Project Site Hermes"
+      },
+      "descriptions": {
+        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_teamsite",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-teamsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.teamsite.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.teamsite.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site zurückgeben"
+          },
+          "form": "spop-teamsite-rueckgabe"
+        },
+        {
+          "key": "quota-erhoehen",
+          "message": "spop.teamsite.quota",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherplatz erweitern"
+          },
+          "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "extern-einladen",
+          "message": "spop.teamsite.extern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externen Benutzer einladen"
+          },
+          "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Site",
+        "540007512"
+      ],
+      "category": "sharepoint-sites",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Sites"
+      }
+    },
+    {
+      "id": "spop-site-communication",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "presentation-analytics",
+      "texts": {
+        "de": "SharePoint OnP Communication Site"
+      },
+      "descriptions": {
+        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_teamsite",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-teamsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.teamsite.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.teamsite.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site zurückgeben"
+          },
+          "form": "spop-teamsite-rueckgabe"
+        },
+        {
+          "key": "quota-erhoehen",
+          "message": "spop.teamsite.quota",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherplatz erweitern"
+          },
+          "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "extern-einladen",
+          "message": "spop.teamsite.extern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externen Benutzer einladen"
+          },
+          "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Site",
+        "540007514"
+      ],
+      "category": "sharepoint-sites",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Sites"
+      }
+    },
+    {
+      "id": "spop-site-publishing",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "file-text",
+      "texts": {
+        "de": "SharePoint OnP Publishing Site"
+      },
+      "descriptions": {
+        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_teamsite",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-teamsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.teamsite.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.teamsite.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site zurückgeben"
+          },
+          "form": "spop-teamsite-rueckgabe"
+        },
+        {
+          "key": "quota-erhoehen",
+          "message": "spop.teamsite.quota",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherplatz erweitern"
+          },
+          "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "extern-einladen",
+          "message": "spop.teamsite.extern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externen Benutzer einladen"
+          },
+          "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Site",
+        "540007515"
+      ],
+      "category": "sharepoint-sites",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Sites"
+      }
+    },
+    {
+      "id": "spop-site-teamsite-classic",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "users",
+      "texts": {
+        "de": "SharePoint OnP Team Site Classic"
+      },
+      "descriptions": {
+        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_teamsite",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-teamsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.teamsite.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.teamsite.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site zurückgeben"
+          },
+          "form": "spop-teamsite-rueckgabe"
+        },
+        {
+          "key": "quota-erhoehen",
+          "message": "spop.teamsite.quota",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherplatz erweitern"
+          },
+          "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "extern-einladen",
+          "message": "spop.teamsite.extern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externen Benutzer einladen"
+          },
+          "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Site",
+        "540007516"
+      ],
+      "category": "sharepoint-sites",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Sites"
+      }
+    },
+    {
+      "id": "spop-site-teamsite-modern",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "users",
+      "texts": {
+        "de": "SharePoint OnP Team Site Modern"
+      },
+      "descriptions": {
+        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_teamsite",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-teamsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.teamsite.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.teamsite.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site zurückgeben"
+          },
+          "form": "spop-teamsite-rueckgabe"
+        },
+        {
+          "key": "quota-erhoehen",
+          "message": "spop.teamsite.quota",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherplatz erweitern"
+          },
+          "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "extern-einladen",
+          "message": "spop.teamsite.extern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externen Benutzer einladen"
+          },
+          "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Site",
+        "540007560"
+      ],
+      "category": "sharepoint-sites",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Sites"
+      }
+    },
+    {
+      "id": "spop-site-wiki",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "list-check",
+      "texts": {
+        "de": "SharePoint OnP Wiki Site"
+      },
+      "descriptions": {
+        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_teamsite",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-teamsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.teamsite.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.teamsite.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site zurückgeben"
+          },
+          "form": "spop-teamsite-rueckgabe"
+        },
+        {
+          "key": "quota-erhoehen",
+          "message": "spop.teamsite.quota",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherplatz erweitern"
+          },
+          "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "extern-einladen",
+          "message": "spop.teamsite.extern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externen Benutzer einladen"
+          },
+          "form": "spop-extern-einladen"
+        },
+        {
+          "key": "site-umbenennen",
+          "message": "spop.teamsite.titel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site umbenennen"
+          },
+          "form": "spop-site-umbenennen"
+        },
+        {
+          "key": "site-url-aendern",
+          "message": "spop.teamsite.url",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-URL ändern"
+          },
+          "form": "spop-site-url-aendern"
+        },
+        {
+          "key": "berechtigungen-aendern",
+          "message": "spop.teamsite.berechtigungen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigungen ändern"
+          },
+          "form": "spop-berechtigungen-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Site",
+        "540008180"
+      ],
+      "category": "sharepoint-sites",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Sites"
+      }
+    },
+    {
+      "id": "spop-reporting",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "presentation-analytics",
+      "texts": {
+        "de": "SharePoint OnP Erweitertes Reporting"
+      },
+      "descriptions": {
+        "de": "Report-Pakete für eine bestehende Site. Die Anzahl (1–20) bestimmt das Verrechnungsband und die Materialnummer. Material 540007511, 540007703, 540007702, 540007704. PoC: Ausführung und Verrechnung simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_zusatz",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-reporting-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.zusatz.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.zusatz.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Zusatzleistung zurückgeben"
+          },
+          "form": "spop-zusatz-rueckgabe"
+        },
+        {
+          "key": "menge-aendern",
+          "message": "spop.zusatz.aendern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Menge ändern"
+          },
+          "form": "spop-reporting-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Zusatzleistung",
+        "540007511",
+        "540007703",
+        "540007702",
+        "540007704"
+      ],
+      "category": "sharepoint-zusatz",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Zusatzleistungen"
+      },
+      "price": "CHF 25.– pro Paket"
+    },
+    {
+      "id": "spop-subsite-quota",
+      "homeCatalog": "",
+      "state": "active",
+      "icon": "sitemap",
+      "texts": {
+        "de": "SharePoint OnP SubSite Quota"
+      },
+      "descriptions": {
+        "de": "Mehr Subsites für eine bestehende Site. Die Anzahl (11–500) bestimmt das Verrechnungsband und die Materialnummer. Material 540007513, 540007705, 540007706, 540007707, 540007708. PoC: Ausführung und Verrechnung simuliert."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_spop_zusatz",
+      "lifecycleForm": "per-position",
+      "configForm": "spop-subsite-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "spop.zusatz.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "spop.zusatz.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Zusatzleistung zurückgeben"
+          },
+          "form": "spop-zusatz-rueckgabe"
+        },
+        {
+          "key": "menge-aendern",
+          "message": "spop.zusatz.aendern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Menge ändern"
+          },
+          "form": "spop-subsite-aendern"
+        }
+      ],
+      "multipleAllowed": true,
+      "keywords": [
+        "SharePoint",
+        "OnPrem",
+        "Zusatzleistung",
+        "540007513",
+        "540007705",
+        "540007706",
+        "540007707",
+        "540007708"
+      ],
+      "category": "sharepoint-zusatz",
+      "categoryTexts": {
+        "de": "SharePoint OnP: Zusatzleistungen"
+      }
+    }
+  ]
+}

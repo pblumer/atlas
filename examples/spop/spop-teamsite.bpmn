@@ -1,0 +1,565 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" id="defs_spop_teamsite" targetNamespace="http://atlas/bpmn">
+<message id="m_bestellen" name="spop.teamsite.bestellen"/>
+<message id="m_quota" name="spop.teamsite.quota"><extensionElements><zeebe:subscription correlationKey='=orderId + "/" + (if positionId = null then itemId else positionId)'/></extensionElements></message>
+<message id="m_extern" name="spop.teamsite.extern"><extensionElements><zeebe:subscription correlationKey='=orderId + "/" + (if positionId = null then itemId else positionId)'/></extensionElements></message>
+<message id="m_rueckgabe" name="spop.teamsite.rueckgabe"><extensionElements><zeebe:subscription correlationKey='=orderId + "/" + (if positionId = null then itemId else positionId)'/></extensionElements></message>
+<message id="m_titel" name="spop.teamsite.titel"><extensionElements><zeebe:subscription correlationKey='=orderId + "/" + (if positionId = null then itemId else positionId)'/></extensionElements></message>
+<message id="m_url" name="spop.teamsite.url"><extensionElements><zeebe:subscription correlationKey='=orderId + "/" + (if positionId = null then itemId else positionId)'/></extensionElements></message>
+<message id="m_rechte" name="spop.teamsite.berechtigungen"><extensionElements><zeebe:subscription correlationKey='=orderId + "/" + (if positionId = null then itemId else positionId)'/></extensionElements></message>
+<message id="m_angenommen" name="spop.extern.angenommen"><extensionElements><zeebe:subscription correlationKey="=einladung.einladungId"/></extensionElements></message>
+<process id="proc_spop_teamsite" name="SPoP: Site-Lebenszyklus" isExecutable="true" atlas:searchable="siteZugriff">
+<documentation>SPoP: Lebenszyklus einer SharePoint-OnPrem-Site als ein einziger Strang je Position (Muster lc_proc_m365_funktionspostfach).
+Sechs Katalogprodukte binden diesen Prozess, je Site-Typ eines: Project Site Hermes (540007512), Communication Site (540007514),
+Publishing Site (540007515), Team Site Classic (540007516), Team Site Modern (540007560), Wiki Site (540008180). Den Typ, seine
+Vorlage, Features, Quota-Grenzen, Freigabepflicht und Materialnummer bestimmt die Richtlinie SpopTeamsiteRichtlinie aus itemId.
+Bereitstellung (GF-001) läuft flach; danach wartet der Strang am ereignisbasierten Gateway «Aktiv: auf Auftrag warten» auf:
+- spop.teamsite.quota     → Subprozess «Speicherplatz erweitern (GF-002)»       (Katalog: change, Formular spop-quota-erhoehung)
+- spop.teamsite.extern    → Subprozess «Externen Benutzer einladen (GF-003)»    (Katalog: change, Formular spop-extern-einladen)
+- spop.teamsite.rueckgabe → Rückgabe, auch als Boundary an beiden Subprozessen  (Katalog: deprovision, Formular spop-teamsite-rueckgabe)
+Nach jedem Subprozess kehrt der Strang zum Warten zurück. Daneben ändern drei nicht unterbrechende Ereignis-Subprozesse
+die Angaben der Site, jederzeit und ohne den Strang anzuhalten:
+- spop.teamsite.titel          → «Site umbenennen»        (Katalog: change, Formular spop-site-umbenennen)
+- spop.teamsite.url            → «Site-URL ändern»        (Katalog: change, Formular spop-site-url-aendern)
+- spop.teamsite.berechtigungen → «Berechtigungen ändern»  (Katalog: change, Formular spop-berechtigungen-aendern)
+«Angaben ändern» im Shop korrigiert nur den Datensatz der Bestellung; die Sprache ist nach der Erstellung fest. Alle späteren Aktionen sind an orderId + "/" + positionId korreliert
+(Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, gruppen, externe). Die Speicherplatzerweiterung (540007510, in GB)
+ist die Aktion quota-erhoehen der Site. Erweitertes Reporting und SubSite Quota sind eigene Produkte mit eigenem Prozess
+proc_spop_zusatz. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie (Speicher), SpopExternRichtlinie, SpopAenderungRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular spop-freigabe. Ausführung gegen APS-BW
+und Verrechnung im PoC simuliert (atlas:mockupConnector). Rückmeldungen an den Katalog sind echt: Decision-Route, Positionsroute
+(Secret "atlas", Konstante ATLAS_API_BASE) und Shop-Aufgaben.</documentation>
+<extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" value="http://127.0.0.1:8080" source="application"/></atlas:constants></extensionElements>
+<startEvent id="s_neu" name="Site bestellt"><documentation>GF-001: Start der Operation provision. Sechs Produkte binden diesen Prozess, je Site-Typ eines (spop-site-hermes, -communication, -publishing, -teamsite-classic, -teamsite-modern, -wiki); der Typ kommt aus itemId. Formular spop-teamsite-bestellung: titel, amtKuerzel, kurzname, sprache, ownerUpn, memberUpns, quotaWahl, quotaMb, quotaBegruendung, bemerkung. Vom Katalog kommen orderId, positionId, itemId; sie bilden den Korrelationsschlüssel.</documentation><outgoing>a_f1</outgoing><messageEventDefinition messageRef="m_bestellen"/></startEvent>
+<businessRuleTask id="a_regel" name="Richtlinien prüfen (S6)"><documentation>DMN SpopTeamsiteRichtlinie anstelle von amt_naming.rego, quota_limits.rego und approval.rego. Bildet das Produkt auf den Site-Typ ab und liefert regel = {zulaessig, vierAugen, quotaEffektivMb, siteTyp, template, features, material, grund}. Vorlagen, Grenzwerte und Freigabepflicht je Typ sind Annahmen und im DMN gepflegt. Die Antworten eines Bestellformulars kommen als Text an; quotaMb wird deshalb vor der Regel in eine Zahl umgewandelt.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopTeamsiteRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source='=amtKuerzel != null and matches(amtKuerzel, "^[A-Z]{2,6}$")' target="amtGueltig"/><zeebe:input source='=kurzname != null and matches(kurzname, "^[a-z0-9][a-z0-9-]{2,29}$")' target="kurznameGueltig"/><zeebe:input source="=itemId" target="produkt"/><zeebe:input source='=if quotaWahl = null then "Standard" else quotaWahl' target="quotaWahl"/><zeebe:input source="=if quotaMb = null then 0 else number(string(quotaMb))" target="quotaMb"/><zeebe:input source="=quotaBegruendung != null and string length(quotaBegruendung) &gt;= 10" target="begruendungVorhanden"/></zeebe:ioMapping></extensionElements><incoming>a_f1</incoming><outgoing>a_f2</outgoing></businessRuleTask>
+<exclusiveGateway id="a_gw_ok" name="Zulässig?" default="a_f_ok_nein"><documentation>Fail-closed: Der Default-Fluss ist die Ablehnung.</documentation><incoming>a_f2</incoming><outgoing>a_f_ok_ja</outgoing><outgoing>a_f_ok_nein</outgoing></exclusiveGateway>
+<exclusiveGateway id="a_gw_4e" name="Vier-Augen nötig?" default="a_f_4e_nein"><incoming>a_f_ok_ja</incoming><outgoing>a_f_4e_ja</outgoing><outgoing>a_f_4e_nein</outgoing></exclusiveGateway>
+<serviceTask id="a_rej1" name="Ablehnung melden"><documentation>Meldet die Ablehnung über POST /api/v1/orders/{orderId}/lines/{itemId}/decision mit dem Grund der Richtlinie. Eine verletzte Richtlinie ist eine Entscheidung, keine Störung. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + itemId + "/decision"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="Richtlinie SpopTeamsiteRichtlinie"' target="by"/><zeebe:input source="=regel.grund" target="reason"/></zeebe:ioMapping></extensionElements><incoming>a_f_ok_nein</incoming><outgoing>a_f_rej1</outgoing></serviceTask>
+<endEvent id="a_end_rej1" name="Abgelehnt: Richtlinie"><incoming>a_f_rej1</incoming></endEvent>
+<scriptTask id="a_prep" name="Freigabe vorbereiten"><documentation>Schreibt die Zusammenfassung für das Freigabeformular spop-freigabe.</documentation><extensionElements><zeebe:script expression='="Site-Bestellung (GF-001)\nTyp: " + regel.siteTyp + " (Material " + regel.material + ")\nAmt: " + amtKuerzel + "\nURL: /sites/" + lower case(amtKuerzel) + "-" + kurzname + "\nTitel: " + titel + "\nOwner: " + ownerUpn + "\nQuota: " + string(regel.quotaEffektivMb) + " MB (" + quotaWahl + ")" + (if quotaBegruendung = null then "" else "\nBegründung: " + quotaBegruendung) + "\nRegel: " + regel.grund' resultVariable="zusammenfassung"/></extensionElements><incoming>a_f_4e_ja</incoming><outgoing>a_f_prep</outgoing></scriptTask>
+<userTask id="a_ut" name="Bestellung freigeben"><documentation>Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe (Service Owner DO-COC-SPC), Formular spop-freigabe.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="SPoP-Freigabe"/><zeebe:formDefinition formId="spop-freigabe"/></extensionElements><incoming>a_f_prep</incoming><outgoing>a_f_ut</outgoing></userTask>
+<exclusiveGateway id="a_gw_fr" name="Freigegeben?" default="a_f_fr_nein"><incoming>a_f_ut</incoming><outgoing>a_f_fr_ja</outgoing><outgoing>a_f_fr_nein</outgoing></exclusiveGateway>
+<serviceTask id="a_rej2" name="Ablehnung melden"><documentation>Meldet die verweigerte Vier-Augen-Freigabe über die Decision-Route der Position, mit dem Kommentar als Grund. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + itemId + "/decision"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="Vier-Augen-Freigabe"' target="by"/><zeebe:input source='="Freigabe verweigert: " + (if freigabeKommentar = null then "ohne Kommentar" else freigabeKommentar)' target="reason"/></zeebe:ioMapping></extensionElements><incoming>a_f_fr_nein</incoming><outgoing>a_f_rej2</outgoing></serviceTask>
+<endEvent id="a_end_rej2" name="Abgelehnt: Freigabe"><incoming>a_f_rej2</incoming></endEvent>
+<exclusiveGateway id="a_join"><incoming>a_f_4e_nein</incoming><incoming>a_f_fr_ja</incoming><outgoing>a_f3</outgoing></exclusiveGateway>
+<serviceTask id="a_owner" name="Owner im AD prüfen"><documentation>Simuliert apsbw_ad_user read.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ existiert: true, upn: ownerUpn }" resultVariable="ownerPruefung"/></extensionElements><incoming>a_f3</incoming><outgoing>a_f4</outgoing></serviceTask>
+<serviceTask id="a_site" name="Site erstellen (S1)"><documentation>Simuliert apsbw_sharepoint_site create mit der Vorlage des Site-Typs (Worker sharepointserver: create-site). URL /sites/&lt;amt&gt;-&lt;kurzname&gt;. Schreibt site (url, typ, template, material); der Strang trägt site bis zur Rückgabe.</documentation><extensionElements><atlas:mockupConnector minDuration="PT2S" maxDuration="PT4S" resultExpression='={ url: "/sites/" + lower case(amtKuerzel) + "-" + kurzname, titel: titel, typ: regel.siteTyp, template: regel.template, material: regel.material, sprache: if sprache = null then "1031" else sprache }' resultVariable="site"/></extensionElements><incoming>a_f4</incoming><outgoing>a_f5</outgoing></serviceTask>
+<parallelGateway id="a_par"><incoming>a_f5</incoming><outgoing>a_f6</outgoing><outgoing>a_f9</outgoing><outgoing>a_f11</outgoing></parallelGateway>
+<serviceTask id="a_grp" name="Gruppen anlegen (S2–S4)"><documentation>Simuliert apsbw_sharepoint_group create und add_member.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ owners: site.url + " Owners", members: site.url + " Members", visitors: site.url + " Visitors", owner: ownerUpn, mitglieder: memberUpns }' resultVariable="gruppen"/></extensionElements><incoming>a_f6</incoming><outgoing>a_f7</outgoing></serviceTask>
+<serviceTask id="a_rechte" name="Berechtigungen zuweisen (S5)"><documentation>Simuliert apsbw_sharepoint_roleassignment create.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ owners: "Full Control", members: "Contribute", visitors: "Read" }' resultVariable="berechtigungen"/></extensionElements><incoming>a_f7</incoming><outgoing>a_f8</outgoing></serviceTask>
+<serviceTask id="a_quota" name="Quota setzen (S7)"><documentation>Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota). Schreibt quota: die inbegriffene Quota des Site-Typs (basisMb), den Zusatzspeicher (zusatzGb, anfangs 0) und die gesetzte Quota (storageMb). Die Speicherplatzerweiterung liest und schreibt quota fort.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, basisMb: regel.quotaEffektivMb, zusatzGb: 0, storageMb: regel.quotaEffektivMb }" resultVariable="quota"/></extensionElements><incoming>a_f9</incoming><outgoing>a_f10</outgoing></serviceTask>
+<serviceTask id="a_feat" name="Features aktivieren (S8)"><documentation>Simuliert apsbw_sharepoint_feature activate mit den Features des Site-Typs aus der Richtlinie (Annahme).</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, features: regel.features }" resultVariable="features"/></extensionElements><incoming>a_f11</incoming><outgoing>a_f12</outgoing></serviceTask>
+<parallelGateway id="a_parj"><incoming>a_f8</incoming><incoming>a_f10</incoming><incoming>a_f12</incoming><outgoing>a_f13</outgoing></parallelGateway>
+<scriptTask id="a_reg" name="Zugriff registrieren"><documentation>Setzt siteZugriff = &lt;Site-URL&gt;|&lt;Besteller&gt;|&lt;Empfänger&gt; als durchsuchbare Variable (atlas:searchable). Daran erkennt der Zusatzprozess proc_spop_zusatz über die Instanzsuche, ob eine Site der Person gehört, die eine Zusatzleistung bestellt. Eine Inhaltssuche liefert je Treffer nur die passende Variable; darum stehen alle drei Angaben in einer.</documentation><extensionElements><zeebe:script expression='=site.url + "|" + (if orderer = null then "" else orderer) + "|" + (if recipient = null then "" else recipient)' resultVariable="siteZugriff"/></extensionElements><incoming>a_f13</incoming><outgoing>a_f13a</outgoing></scriptTask>
+<serviceTask id="a_bill" name="Verrechnung erfassen"><documentation>Simuliert die Erfassung der wiederkehrenden Verrechnung (Marktleistungsstruktur ML Redesign SharePoint) mit der Materialnummer des Site-Typs.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, position: orderId + "/" + (if positionId = null then itemId else positionId) }' resultVariable="verrechnung"/></extensionElements><incoming>a_f13a</incoming><outgoing>a_f13b</outgoing></serviceTask>
+<serviceTask id="a_info" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status done); erst damit steht die Site im Bestand und die Aktionen werden möglich. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + replace((if positionId = null then itemId else positionId), "#", "%23")' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>a_f13b</incoming><outgoing>a_f14</outgoing></serviceTask>
+<exclusiveGateway id="j_aktiv"><incoming>a_f14</incoming><incoming>w_f7</incoming><incoming>w_f8</incoming><outgoing>w_f1</outgoing></exclusiveGateway>
+<eventBasedGateway id="g_warten" name="Aktiv: auf Auftrag warten"><documentation>Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Quota-Erhöhung, externe Einladung oder Rückgabe. Jede Aktion ist an orderId/positionId korreliert. Während eine Aktion läuft, wartet der Strang nicht; eine zweite Aktion derselben Position wird erst nach Abschluss der ersten angenommen.</documentation><incoming>w_f1</incoming><outgoing>w_f2</outgoing><outgoing>w_f3</outgoing><outgoing>w_f4</outgoing></eventBasedGateway>
+<intermediateCatchEvent id="c_rueck" name="Rückgabe angefordert"><documentation>Operation deprovision (Formular spop-teamsite-rueckgabe: grund).</documentation><incoming>w_f2</incoming><outgoing>r_f1</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></intermediateCatchEvent>
+<intermediateCatchEvent id="c_extern" name="Einladung angefragt"><documentation>GF-003: Aktion extern-einladen (Formular spop-extern-einladen: email, rolle, ablaufTage, nachricht).</documentation><incoming>w_f3</incoming><outgoing>w_f5</outgoing><messageEventDefinition messageRef="m_extern"/></intermediateCatchEvent>
+<intermediateCatchEvent id="c_quota" name="Speichererweiterung angefragt"><documentation>GF-002: Aktion quota-erhoehen, im Shop «Speicherplatz erweitern» (Formular spop-quota-erhoehung: menge = Zusatzspeicher in GB, begruendung).</documentation><incoming>w_f4</incoming><outgoing>w_f6</outgoing><messageEventDefinition messageRef="m_quota"/></intermediateCatchEvent>
+<subProcess id="sp_quota" name="Speicherplatz erweitern (GF-002)"><documentation>GF-002 SP OnPrem Quota-Erhöhung als Speicherplatzerweiterung (Material 540007510, Verrechnung pro GB und Monat): Die Aktion nennt die neue Gesamtmenge Zusatzspeicher in GB. Die Site behält ihre inbegriffene Quota (quota.basisMb); die gesetzte Quota ist basisMb + zusatzGb × 1024. Die Richtlinie ist SpopZusatzRichtlinie mit dem Produkt spop-speicher: 1 bis 500 GB, Vier-Augen-Prinzip über 100 GB. Output-Mapping quota: Ergebnisse innerer Aufgaben bleiben im Subprozess (ADR-0074); endet er mit einer Ablehnung, löst =quota den unveränderten Wert auf.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=quota" target="quota"/></zeebe:ioMapping></extensionElements><incoming>w_f6</incoming><outgoing>w_f8</outgoing><startEvent id="q_s"><outgoing>q_f0</outgoing></startEvent>
+<serviceTask id="q_read" name="Site und Speicher lesen (S1)"><documentation>Simuliert apsbw_sharepoint_site read und apsbw_sharepoint_quota read aus dem Stand des Strangs (site, quota). Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ gefunden: site != null, siteUrl: site.url, basisMb: if quota.basisMb = null then quota.storageMb else quota.basisMb, gb: if quota.zusatzGb = null then 0 else quota.zusatzGb }" resultVariable="aktuell"/></extensionElements><incoming>q_f0</incoming><outgoing>q_f1</outgoing></serviceTask>
+<businessRuleTask id="q_regel" name="Speicher-Richtlinie prüfen (S3)"><documentation>DMN SpopZusatzRichtlinie mit dem Produkt spop-speicher: zulässige Menge, Material 540007510, Vier-Augen-Prinzip über 100 GB. Die Site gehört dem Strang selbst, darum siteGehoert = true.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopZusatzRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source="=true" target="siteGehoert"/><zeebe:input source='="spop-speicher"' target="produkt"/><zeebe:input source="=if menge = null then 0 else number(string(menge))" target="menge"/><zeebe:input source="=(if menge = null then 0 else number(string(menge))) = aktuell.gb" target="unveraendert"/></zeebe:ioMapping></extensionElements><incoming>q_f1</incoming><outgoing>q_f2</outgoing></businessRuleTask>
+<exclusiveGateway id="q_gw_ok" name="Zulässig?" default="q_f_ok_nein"><incoming>q_f2</incoming><outgoing>q_f_ok_ja</outgoing><outgoing>q_f_ok_nein</outgoing></exclusiveGateway>
+<exclusiveGateway id="q_gw_4e" name="Vier-Augen nötig?" default="q_f_4e_nein"><incoming>q_f_ok_ja</incoming><outgoing>q_f_4e_ja</outgoing><outgoing>q_f_4e_nein</outgoing></exclusiveGateway>
+<sendTask id="q_rej1" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion quota-erhoehen mit rejected, weil die Richtlinie sie nicht zulässt.</documentation><extensionElements><atlas:shopTask mode="outcome" action="quota-erhoehen" outcome="rejected"/></extensionElements><incoming>q_f_ok_nein</incoming><outgoing>q_f_rej1</outgoing></sendTask>
+<endEvent id="q_end_rej1" name="Abgelehnt: Richtlinie"><incoming>q_f_rej1</incoming></endEvent>
+<scriptTask id="q_prep" name="Freigabe vorbereiten"><documentation>Schreibt die Zusammenfassung für das Freigabeformular spop-freigabe.</documentation><extensionElements><zeebe:script expression='="Speicherplatzerweiterung (GF-002, Material " + regel.material + ")&#10;Site: " + site.url + " (" + site.typ + ")&#10;Zusatzspeicher bisher: " + string(aktuell.gb) + " GB&#10;Neu: " + string(menge) + " GB" + (if begruendung = null then "" else "&#10;Begründung: " + begruendung) + "&#10;Regel: " + regel.grund' resultVariable="zusammenfassung"/></extensionElements><incoming>q_f_4e_ja</incoming><outgoing>q_f_prep</outgoing></scriptTask>
+<userTask id="q_ut" name="Speichererweiterung freigeben"><documentation>Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="SPoP-Freigabe"/><zeebe:formDefinition formId="spop-freigabe"/></extensionElements><incoming>q_f_prep</incoming><outgoing>q_f_ut</outgoing></userTask>
+<exclusiveGateway id="q_gw_fr" name="Freigegeben?" default="q_f_fr_nein"><incoming>q_f_ut</incoming><outgoing>q_f_fr_ja</outgoing><outgoing>q_f_fr_nein</outgoing></exclusiveGateway>
+<sendTask id="q_rej2" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion quota-erhoehen mit rejected, weil die Vier-Augen-Freigabe verweigert wurde.</documentation><extensionElements><atlas:shopTask mode="outcome" action="quota-erhoehen" outcome="rejected"/></extensionElements><incoming>q_f_fr_nein</incoming><outgoing>q_f_rej2</outgoing></sendTask>
+<endEvent id="q_end_rej2" name="Abgelehnt: Freigabe"><incoming>q_f_rej2</incoming></endEvent>
+<exclusiveGateway id="q_join"><incoming>q_f_4e_nein</incoming><incoming>q_f_fr_ja</incoming><outgoing>q_f10</outgoing></exclusiveGateway>
+<serviceTask id="q_apply" name="Speicher setzen (S2)"><documentation>Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota) mit basisMb + zusatzGb × 1024 und die Umstellung der Verrechnung auf zusatzGb × Material 540007510; zusatzGbVorher bleibt für einen Rollback erhalten.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, basisMb: aktuell.basisMb, zusatzGb: number(string(menge)), zusatzGbVorher: aktuell.gb, storageMb: aktuell.basisMb + number(string(menge)) * 1024, material: regel.material }" resultVariable="quota"/></extensionElements><incoming>q_f10</incoming><outgoing>q_f11</outgoing></serviceTask>
+<sendTask id="q_info" name="Aktion als erledigt melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion quota-erhoehen mit completed.</documentation><extensionElements><atlas:shopTask mode="outcome" action="quota-erhoehen" outcome="completed"/></extensionElements><incoming>q_f11</incoming><outgoing>q_f12</outgoing></sendTask>
+<endEvent id="q_end" name="Speicher erweitert"><incoming>q_f12</incoming></endEvent>
+<sequenceFlow id="q_f0" sourceRef="q_s" targetRef="q_read"/>
+<sequenceFlow id="q_f1" sourceRef="q_read" targetRef="q_regel"/>
+<sequenceFlow id="q_f2" sourceRef="q_regel" targetRef="q_gw_ok"/>
+<sequenceFlow id="q_f_ok_ja" name="Ja" sourceRef="q_gw_ok" targetRef="q_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="q_f_ok_nein" name="Nein" sourceRef="q_gw_ok" targetRef="q_rej1"/>
+<sequenceFlow id="q_f_rej1" sourceRef="q_rej1" targetRef="q_end_rej1"/>
+<sequenceFlow id="q_f_4e_ja" name="Ja" sourceRef="q_gw_4e" targetRef="q_prep"><conditionExpression>=regel.vierAugen = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="q_f_4e_nein" name="Nein" sourceRef="q_gw_4e" targetRef="q_join"/>
+<sequenceFlow id="q_f_prep" sourceRef="q_prep" targetRef="q_ut"/>
+<sequenceFlow id="q_f_ut" sourceRef="q_ut" targetRef="q_gw_fr"/>
+<sequenceFlow id="q_f_fr_ja" name="Ja" sourceRef="q_gw_fr" targetRef="q_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
+<sequenceFlow id="q_f_fr_nein" name="Nein" sourceRef="q_gw_fr" targetRef="q_rej2"/>
+<sequenceFlow id="q_f_rej2" sourceRef="q_rej2" targetRef="q_end_rej2"/>
+<sequenceFlow id="q_f10" sourceRef="q_join" targetRef="q_apply"/>
+<sequenceFlow id="q_f11" sourceRef="q_apply" targetRef="q_info"/>
+<sequenceFlow id="q_f12" sourceRef="q_info" targetRef="q_end"/>
+</subProcess>
+<subProcess id="sp_extern" name="Externen Benutzer einladen (GF-003)"><documentation>GF-003 SP OnPrem Invite External User als Subprozess des Strangs. Prüft Site und Richtlinie, holt bei Contribute oder Full Control die Vier-Augen-Freigabe, lädt ein und setzt die Berechtigung erst nach der Annahme. Läuft die Gültigkeit ab, wird die Einladung widerrufen. Bis dahin nimmt der Strang keine weitere Aktion an. Output-Mapping externe: hängt eine angenommene Einladung an die Liste der externen Benutzer des Strangs an; die Rückgabe entfernt diese Zugriffe.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=if berechtigung = null then externe else append(if externe = null then [] else externe, { email: email, rolle: rolle })" target="externe"/></zeebe:ioMapping></extensionElements><incoming>w_f5</incoming><outgoing>w_f7</outgoing><startEvent id="x_s"><outgoing>x_f0</outgoing></startEvent>
+<serviceTask id="x_read" name="Site prüfen (S1)"><documentation>Simuliert apsbw_sharepoint_site read aus dem Stand des Strangs (site). Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ gefunden: site != null, siteUrl: site.url }" resultVariable="aktuell"/></extensionElements><incoming>x_f0</incoming><outgoing>x_f1</outgoing></serviceTask>
+<businessRuleTask id="x_regel" name="Externe-Benutzer-Richtlinie prüfen (S4)"><documentation>DMN SpopExternRichtlinie anstelle von external_user.rego, mfa_required.rego und approval.rego.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopExternRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source='=if email = null then "" else lower case(substring after(email, "@"))' target="emailDomain"/><zeebe:input source="=rolle" target="rolle"/><zeebe:input source="=if ablaufTage = null then 30 else number(string(ablaufTage))" target="ablaufTage"/></zeebe:ioMapping></extensionElements><incoming>x_f1</incoming><outgoing>x_f2</outgoing></businessRuleTask>
+<exclusiveGateway id="x_gw_ok" name="Zulässig?" default="x_f_ok_nein"><incoming>x_f2</incoming><outgoing>x_f_ok_ja</outgoing><outgoing>x_f_ok_nein</outgoing></exclusiveGateway>
+<exclusiveGateway id="x_gw_4e" name="Vier-Augen nötig?" default="x_f_4e_nein"><incoming>x_f_ok_ja</incoming><outgoing>x_f_4e_ja</outgoing><outgoing>x_f_4e_nein</outgoing></exclusiveGateway>
+<sendTask id="x_rej1" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion extern-einladen mit rejected, weil die Richtlinie sie nicht zulässt.</documentation><extensionElements><atlas:shopTask mode="outcome" action="extern-einladen" outcome="rejected"/></extensionElements><incoming>x_f_ok_nein</incoming><outgoing>x_f_rej1</outgoing></sendTask>
+<endEvent id="x_end_rej1" name="Abgelehnt: Richtlinie"><incoming>x_f_rej1</incoming></endEvent>
+<scriptTask id="x_prep" name="Freigabe vorbereiten"><documentation>Schreibt die Zusammenfassung für das Freigabeformular spop-freigabe.</documentation><extensionElements><zeebe:script expression='="Externe Einladung (GF-003)\nSite: " + site.url + "\nE-Mail: " + email + "\nRolle: " + rolle + "\nGültigkeit: " + string(ablaufTage) + " Tage\nRegel: " + regel.grund' resultVariable="zusammenfassung"/></extensionElements><incoming>x_f_4e_ja</incoming><outgoing>x_f_prep</outgoing></scriptTask>
+<userTask id="x_ut" name="Einladung freigeben"><documentation>Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="SPoP-Freigabe"/><zeebe:formDefinition formId="spop-freigabe"/></extensionElements><incoming>x_f_prep</incoming><outgoing>x_f_ut</outgoing></userTask>
+<exclusiveGateway id="x_gw_fr" name="Freigegeben?" default="x_f_fr_nein"><incoming>x_f_ut</incoming><outgoing>x_f_fr_ja</outgoing><outgoing>x_f_fr_nein</outgoing></exclusiveGateway>
+<sendTask id="x_rej2" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion extern-einladen mit rejected, weil die Vier-Augen-Freigabe verweigert wurde.</documentation><extensionElements><atlas:shopTask mode="outcome" action="extern-einladen" outcome="rejected"/></extensionElements><incoming>x_f_fr_nein</incoming><outgoing>x_f_rej2</outgoing></sendTask>
+<endEvent id="x_end_rej2" name="Abgelehnt: Freigabe"><incoming>x_f_rej2</incoming></endEvent>
+<exclusiveGateway id="x_join"><incoming>x_f_4e_nein</incoming><incoming>x_f_fr_ja</incoming><outgoing>x_f10</outgoing></exclusiveGateway>
+<serviceTask id="x_invite" name="Externen Benutzer einladen (S2)"><documentation>Simuliert apsbw_sharepoint_externaluser invite und die Gast-Anlage (apsbw_ad_user create). Der Worker sharepointserver hat dafür keine Operation. Schreibt einladung.einladungId, den Korrelationsschlüssel der Annahme.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ einladungId: site.url + "|" + lower case(email), email: email, mfaPflicht: regel.mfaPflicht, gueltigTage: ablaufTage }' resultVariable="einladung"/></extensionElements><incoming>x_f10</incoming><outgoing>x_f11</outgoing></serviceTask>
+<eventBasedGateway id="x_wait" name="Annahme oder Ablauf"><documentation>Wartet auf die Annahme (Nachricht spop.extern.angenommen, Schlüssel einladungId) oder den Ablauf der Gültigkeit.</documentation><incoming>x_f11</incoming><outgoing>x_f12</outgoing><outgoing>x_f16</outgoing></eventBasedGateway>
+<intermediateCatchEvent id="x_ang" name="Einladung angenommen"><incoming>x_f12</incoming><outgoing>x_f13</outgoing><messageEventDefinition messageRef="m_angenommen"/></intermediateCatchEvent>
+<serviceTask id="x_rechte" name="Berechtigung zuweisen (S3)"><documentation>Simuliert apsbw_sharepoint_roleassignment create; Vorbedingung: Einladung angenommen.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, email: email, rolle: rolle, mfaPflicht: true }" resultVariable="berechtigung"/></extensionElements><incoming>x_f13</incoming><outgoing>x_f14</outgoing></serviceTask>
+<sendTask id="x_info" name="Aktion als erledigt melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion extern-einladen mit completed.</documentation><extensionElements><atlas:shopTask mode="outcome" action="extern-einladen" outcome="completed"/></extensionElements><incoming>x_f14</incoming><outgoing>x_f15</outgoing></sendTask>
+<endEvent id="x_end" name="Externer Zugriff aktiv"><incoming>x_f15</incoming></endEvent>
+<intermediateCatchEvent id="x_ablauf" name="Einladung abgelaufen"><incoming>x_f16</incoming><outgoing>x_f17</outgoing><timerEventDefinition><timeDuration>="P" + string(ablaufTage) + "D"</timeDuration></timerEventDefinition></intermediateCatchEvent>
+<serviceTask id="x_widerruf" name="Einladung widerrufen"><documentation>Simuliert apsbw_sharepoint_externaluser remove nach Ablauf.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ einladungId: einladung.einladungId, status: "widerrufen" }' resultVariable="widerruf"/></extensionElements><incoming>x_f17</incoming><outgoing>x_f18</outgoing></serviceTask>
+<sendTask id="x_info2" name="Aktion als fehlgeschlagen melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion extern-einladen mit failed; die Einladung wurde nicht angenommen und ist widerrufen.</documentation><extensionElements><atlas:shopTask mode="outcome" action="extern-einladen" outcome="failed"/></extensionElements><incoming>x_f18</incoming><outgoing>x_f19</outgoing></sendTask>
+<endEvent id="x_end2" name="Einladung verfallen"><incoming>x_f19</incoming></endEvent>
+<sequenceFlow id="x_f0" sourceRef="x_s" targetRef="x_read"/>
+<sequenceFlow id="x_f1" sourceRef="x_read" targetRef="x_regel"/>
+<sequenceFlow id="x_f2" sourceRef="x_regel" targetRef="x_gw_ok"/>
+<sequenceFlow id="x_f_ok_ja" name="Ja" sourceRef="x_gw_ok" targetRef="x_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="x_f_ok_nein" name="Nein" sourceRef="x_gw_ok" targetRef="x_rej1"/>
+<sequenceFlow id="x_f_rej1" sourceRef="x_rej1" targetRef="x_end_rej1"/>
+<sequenceFlow id="x_f_4e_ja" name="Ja" sourceRef="x_gw_4e" targetRef="x_prep"><conditionExpression>=regel.vierAugen = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="x_f_4e_nein" name="Nein" sourceRef="x_gw_4e" targetRef="x_join"/>
+<sequenceFlow id="x_f_prep" sourceRef="x_prep" targetRef="x_ut"/>
+<sequenceFlow id="x_f_ut" sourceRef="x_ut" targetRef="x_gw_fr"/>
+<sequenceFlow id="x_f_fr_ja" name="Ja" sourceRef="x_gw_fr" targetRef="x_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
+<sequenceFlow id="x_f_fr_nein" name="Nein" sourceRef="x_gw_fr" targetRef="x_rej2"/>
+<sequenceFlow id="x_f_rej2" sourceRef="x_rej2" targetRef="x_end_rej2"/>
+<sequenceFlow id="x_f10" sourceRef="x_join" targetRef="x_invite"/>
+<sequenceFlow id="x_f11" sourceRef="x_invite" targetRef="x_wait"/>
+<sequenceFlow id="x_f12" sourceRef="x_wait" targetRef="x_ang"/>
+<sequenceFlow id="x_f13" sourceRef="x_ang" targetRef="x_rechte"/>
+<sequenceFlow id="x_f14" sourceRef="x_rechte" targetRef="x_info"/>
+<sequenceFlow id="x_f15" sourceRef="x_info" targetRef="x_end"/>
+<sequenceFlow id="x_f16" sourceRef="x_wait" targetRef="x_ablauf"/>
+<sequenceFlow id="x_f17" sourceRef="x_ablauf" targetRef="x_widerruf"/>
+<sequenceFlow id="x_f18" sourceRef="x_widerruf" targetRef="x_info2"/>
+<sequenceFlow id="x_f19" sourceRef="x_info2" targetRef="x_end2"/>
+</subProcess>
+<subProcess id="sp_titel" name="Site umbenennen" triggeredByEvent="true"><documentation>Aktion site-umbenennen (Formular spop-site-umbenennen: neuerTitel, begruendung): ändert den Titel der Site; die URL bleibt. Richtlinie SpopAenderungRichtlinie mit aenderung titel: 1 bis 80 Zeichen, ohne Freigabe. Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position, läuft neben dem Strang und ändert dessen Stand über das Output-Mapping; endet er mit einer Ablehnung, lösen die Ausdrücke den unveränderten Wert auf (ADR-0074). Vor der Bereitstellung lehnt die Regel ab, weil site noch fehlt.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=site" target="site"/></zeebe:ioMapping></extensionElements><startEvent id="t_s" name="Umbenennung angefragt" isInterrupting="false"><outgoing>t_f0</outgoing><messageEventDefinition messageRef="m_titel"/></startEvent>
+<serviceTask id="t_read" name="Site lesen (S1)"><documentation>Simuliert apsbw_sharepoint_site read aus dem Stand des Strangs (site). Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ gefunden: site != null, titel: if site = null then null else site.titel }" resultVariable="aktuell"/></extensionElements><incoming>t_f0</incoming><outgoing>t_f1</outgoing></serviceTask>
+<businessRuleTask id="t_regel" name="Änderungs-Richtlinie prüfen"><documentation>DMN SpopAenderungRichtlinie mit aenderung titel.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopAenderungRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source='="titel"' target="aenderung"/><zeebe:input source="=neuerTitel != null and string length(neuerTitel) &gt;= 1 and string length(neuerTitel) &lt;= 80" target="gueltig"/><zeebe:input source="=neuerTitel = aktuell.titel" target="unveraendert"/><zeebe:input source='=if site = null then "" else site.typ' target="siteTyp"/><zeebe:input source="=false" target="ownerWechsel"/></zeebe:ioMapping></extensionElements><incoming>t_f1</incoming><outgoing>t_f2</outgoing></businessRuleTask>
+<exclusiveGateway id="t_gw_ok" name="Zulässig?" default="t_f_ok_nein"><incoming>t_f2</incoming><outgoing>t_f_ok_ja</outgoing><outgoing>t_f_ok_nein</outgoing></exclusiveGateway>
+<exclusiveGateway id="t_gw_4e" name="Vier-Augen nötig?" default="t_f_4e_nein"><incoming>t_f_ok_ja</incoming><outgoing>t_f_4e_ja</outgoing><outgoing>t_f_4e_nein</outgoing></exclusiveGateway>
+<sendTask id="t_rej1" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-umbenennen mit rejected, weil die Richtlinie sie nicht zulässt.</documentation><extensionElements><atlas:shopTask mode="outcome" action="site-umbenennen" outcome="rejected"/></extensionElements><incoming>t_f_ok_nein</incoming><outgoing>t_f_rej1</outgoing></sendTask>
+<endEvent id="t_end_rej1" name="Abgelehnt: Richtlinie"><incoming>t_f_rej1</incoming></endEvent>
+<scriptTask id="t_prep" name="Freigabe vorbereiten"><documentation>Schreibt die Zusammenfassung für das Freigabeformular spop-freigabe.</documentation><extensionElements><zeebe:script expression='="Site umbenennen\nSite: " + site.url + "\nTitel bisher: " + aktuell.titel + "\nNeu: " + neuerTitel + "\nRegel: " + regel.grund' resultVariable="zusammenfassung"/></extensionElements><incoming>t_f_4e_ja</incoming><outgoing>t_f_prep</outgoing></scriptTask>
+<userTask id="t_ut" name="Umbenennung freigeben"><documentation>Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="SPoP-Freigabe"/><zeebe:formDefinition formId="spop-freigabe"/></extensionElements><incoming>t_f_prep</incoming><outgoing>t_f_ut</outgoing></userTask>
+<exclusiveGateway id="t_gw_fr" name="Freigegeben?" default="t_f_fr_nein"><incoming>t_f_ut</incoming><outgoing>t_f_fr_ja</outgoing><outgoing>t_f_fr_nein</outgoing></exclusiveGateway>
+<sendTask id="t_rej2" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-umbenennen mit rejected, weil die Vier-Augen-Freigabe verweigert wurde.</documentation><extensionElements><atlas:shopTask mode="outcome" action="site-umbenennen" outcome="rejected"/></extensionElements><incoming>t_f_fr_nein</incoming><outgoing>t_f_rej2</outgoing></sendTask>
+<endEvent id="t_end_rej2" name="Abgelehnt: Freigabe"><incoming>t_f_rej2</incoming></endEvent>
+<exclusiveGateway id="t_join"><incoming>t_f_4e_nein</incoming><incoming>t_f_fr_ja</incoming><outgoing>t_f10</outgoing></exclusiveGateway>
+<serviceTask id="t_apply" name="Titel setzen (S1)"><documentation>Simuliert apsbw_sharepoint_site update (Titel). Schreibt site mit dem neuen Titel; titelVorher bleibt für einen Rollback erhalten.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ url: site.url, titel: neuerTitel, typ: site.typ, template: site.template, material: site.material, sprache: site.sprache, titelVorher: site.titel }" resultVariable="site"/></extensionElements><incoming>t_f10</incoming><outgoing>t_f11</outgoing></serviceTask>
+<sendTask id="t_info" name="Aktion als erledigt melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-umbenennen mit completed.</documentation><extensionElements><atlas:shopTask mode="outcome" action="site-umbenennen" outcome="completed"/></extensionElements><incoming>t_f11</incoming><outgoing>t_f12</outgoing></sendTask>
+<endEvent id="t_end" name="Site umbenannt"><incoming>t_f12</incoming></endEvent>
+<sequenceFlow id="t_f0" sourceRef="t_s" targetRef="t_read"/>
+<sequenceFlow id="t_f1" sourceRef="t_read" targetRef="t_regel"/>
+<sequenceFlow id="t_f2" sourceRef="t_regel" targetRef="t_gw_ok"/>
+<sequenceFlow id="t_f_ok_ja" name="Ja" sourceRef="t_gw_ok" targetRef="t_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="t_f_ok_nein" name="Nein" sourceRef="t_gw_ok" targetRef="t_rej1"/>
+<sequenceFlow id="t_f_rej1" sourceRef="t_rej1" targetRef="t_end_rej1"/>
+<sequenceFlow id="t_f_4e_ja" name="Ja" sourceRef="t_gw_4e" targetRef="t_prep"><conditionExpression>=regel.vierAugen = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="t_f_4e_nein" name="Nein" sourceRef="t_gw_4e" targetRef="t_join"/>
+<sequenceFlow id="t_f_prep" sourceRef="t_prep" targetRef="t_ut"/>
+<sequenceFlow id="t_f_ut" sourceRef="t_ut" targetRef="t_gw_fr"/>
+<sequenceFlow id="t_f_fr_ja" name="Ja" sourceRef="t_gw_fr" targetRef="t_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
+<sequenceFlow id="t_f_fr_nein" name="Nein" sourceRef="t_gw_fr" targetRef="t_rej2"/>
+<sequenceFlow id="t_f_rej2" sourceRef="t_rej2" targetRef="t_end_rej2"/>
+<sequenceFlow id="t_f10" sourceRef="t_join" targetRef="t_apply"/>
+<sequenceFlow id="t_f11" sourceRef="t_apply" targetRef="t_info"/>
+<sequenceFlow id="t_f12" sourceRef="t_info" targetRef="t_end"/>
+</subProcess>
+<subProcess id="sp_url" name="Site-URL ändern" triggeredByEvent="true"><documentation>Aktion site-url-aendern (Formular spop-site-url-aendern: neuesAmtKuerzel, neuerKurzname, begruendung): gibt der Site die URL /sites/&lt;amt&gt;-&lt;kurzname&gt;. Bestehende Links werden ungültig; darum immer Vier-Augen-Freigabe (SpopAenderungRichtlinie, aenderung url). Führt die Verrechnung und siteZugriff nach, damit die Eigentumsprüfung der Zusatzleistungen die Site unter der neuen URL findet. Annahme: SharePoint OnPrem erlaubt das Umbenennen der Site-Collection-URL; technisch nicht geklärt. Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position, läuft neben dem Strang und ändert dessen Stand über das Output-Mapping; endet er mit einer Ablehnung, lösen die Ausdrücke den unveränderten Wert auf (ADR-0074). Vor der Bereitstellung lehnt die Regel ab, weil site noch fehlt.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=site" target="site"/><zeebe:output source="=verrechnung" target="verrechnung"/><zeebe:output source='=site.url + "|" + (if orderer = null then "" else orderer) + "|" + (if recipient = null then "" else recipient)' target="siteZugriff"/></zeebe:ioMapping></extensionElements><startEvent id="u_s" name="URL-Änderung angefragt" isInterrupting="false"><outgoing>u_f0</outgoing><messageEventDefinition messageRef="m_url"/></startEvent>
+<serviceTask id="u_read" name="Site und neue URL lesen (S1)"><documentation>Simuliert apsbw_sharepoint_site read für die heutige und die neue URL; urlFrei sagt, ob unter der neuen URL noch keine Site besteht. Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ gefunden: site != null, url: if site = null then null else site.url, neueUrl: "/sites/" + lower case(neuesAmtKuerzel) + "-" + neuerKurzname, urlFrei: true }' resultVariable="aktuell"/></extensionElements><incoming>u_f0</incoming><outgoing>u_f1</outgoing></serviceTask>
+<businessRuleTask id="u_regel" name="Änderungs-Richtlinie prüfen"><documentation>DMN SpopAenderungRichtlinie mit aenderung url: immer Vier-Augen-Prinzip.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopAenderungRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source='="url"' target="aenderung"/><zeebe:input source='=neuesAmtKuerzel != null and matches(neuesAmtKuerzel, "^[A-Z]{2,6}$") and neuerKurzname != null and matches(neuerKurzname, "^[a-z0-9][a-z0-9-]{2,29}$") and aktuell.urlFrei = true' target="gueltig"/><zeebe:input source="=aktuell.neueUrl = aktuell.url" target="unveraendert"/><zeebe:input source='=if site = null then "" else site.typ' target="siteTyp"/><zeebe:input source="=false" target="ownerWechsel"/></zeebe:ioMapping></extensionElements><incoming>u_f1</incoming><outgoing>u_f2</outgoing></businessRuleTask>
+<exclusiveGateway id="u_gw_ok" name="Zulässig?" default="u_f_ok_nein"><incoming>u_f2</incoming><outgoing>u_f_ok_ja</outgoing><outgoing>u_f_ok_nein</outgoing></exclusiveGateway>
+<exclusiveGateway id="u_gw_4e" name="Vier-Augen nötig?" default="u_f_4e_nein"><incoming>u_f_ok_ja</incoming><outgoing>u_f_4e_ja</outgoing><outgoing>u_f_4e_nein</outgoing></exclusiveGateway>
+<sendTask id="u_rej1" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-url-aendern mit rejected, weil die Richtlinie sie nicht zulässt.</documentation><extensionElements><atlas:shopTask mode="outcome" action="site-url-aendern" outcome="rejected"/></extensionElements><incoming>u_f_ok_nein</incoming><outgoing>u_f_rej1</outgoing></sendTask>
+<endEvent id="u_end_rej1" name="Abgelehnt: Richtlinie"><incoming>u_f_rej1</incoming></endEvent>
+<scriptTask id="u_prep" name="Freigabe vorbereiten"><documentation>Schreibt die Zusammenfassung für das Freigabeformular spop-freigabe.</documentation><extensionElements><zeebe:script expression='="Site-URL ändern\nURL bisher: " + aktuell.url + "\nNeu: " + aktuell.neueUrl + (if begruendung = null then "" else "\nBegründung: " + begruendung) + "\nRegel: " + regel.grund' resultVariable="zusammenfassung"/></extensionElements><incoming>u_f_4e_ja</incoming><outgoing>u_f_prep</outgoing></scriptTask>
+<userTask id="u_ut" name="URL-Änderung freigeben"><documentation>Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="SPoP-Freigabe"/><zeebe:formDefinition formId="spop-freigabe"/></extensionElements><incoming>u_f_prep</incoming><outgoing>u_f_ut</outgoing></userTask>
+<exclusiveGateway id="u_gw_fr" name="Freigegeben?" default="u_f_fr_nein"><incoming>u_f_ut</incoming><outgoing>u_f_fr_ja</outgoing><outgoing>u_f_fr_nein</outgoing></exclusiveGateway>
+<sendTask id="u_rej2" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-url-aendern mit rejected, weil die Vier-Augen-Freigabe verweigert wurde.</documentation><extensionElements><atlas:shopTask mode="outcome" action="site-url-aendern" outcome="rejected"/></extensionElements><incoming>u_f_fr_nein</incoming><outgoing>u_f_rej2</outgoing></sendTask>
+<endEvent id="u_end_rej2" name="Abgelehnt: Freigabe"><incoming>u_f_rej2</incoming></endEvent>
+<exclusiveGateway id="u_join"><incoming>u_f_4e_nein</incoming><incoming>u_f_fr_ja</incoming><outgoing>u_f10</outgoing></exclusiveGateway>
+<serviceTask id="u_apply" name="Site-URL ändern (S1)"><documentation>Simuliert das Umbenennen der Site-Collection-URL (apsbw_sharepoint_site rename). Schreibt site mit der neuen URL; urlVorher bleibt für einen Rollback erhalten.</documentation><extensionElements><atlas:mockupConnector minDuration="PT2S" maxDuration="PT4S" resultExpression="={ url: aktuell.neueUrl, titel: site.titel, typ: site.typ, template: site.template, material: site.material, sprache: site.sprache, urlVorher: site.url }" resultVariable="site"/></extensionElements><incoming>u_f10</incoming><outgoing>u_f11</outgoing></serviceTask>
+<serviceTask id="u_bill" name="Verrechnung nachführen"><documentation>Simuliert die Anpassung der wiederkehrenden Verrechnung auf die neue URL.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, position: orderId + "/" + (if positionId = null then itemId else positionId) }' resultVariable="verrechnung"/></extensionElements><incoming>u_f11</incoming><outgoing>u_f12</outgoing></serviceTask>
+<sendTask id="u_info" name="Aktion als erledigt melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-url-aendern mit completed.</documentation><extensionElements><atlas:shopTask mode="outcome" action="site-url-aendern" outcome="completed"/></extensionElements><incoming>u_f12</incoming><outgoing>u_f13</outgoing></sendTask>
+<endEvent id="u_end" name="URL geändert"><incoming>u_f13</incoming></endEvent>
+<sequenceFlow id="u_f0" sourceRef="u_s" targetRef="u_read"/>
+<sequenceFlow id="u_f1" sourceRef="u_read" targetRef="u_regel"/>
+<sequenceFlow id="u_f2" sourceRef="u_regel" targetRef="u_gw_ok"/>
+<sequenceFlow id="u_f_ok_ja" name="Ja" sourceRef="u_gw_ok" targetRef="u_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="u_f_ok_nein" name="Nein" sourceRef="u_gw_ok" targetRef="u_rej1"/>
+<sequenceFlow id="u_f_rej1" sourceRef="u_rej1" targetRef="u_end_rej1"/>
+<sequenceFlow id="u_f_4e_ja" name="Ja" sourceRef="u_gw_4e" targetRef="u_prep"><conditionExpression>=regel.vierAugen = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="u_f_4e_nein" name="Nein" sourceRef="u_gw_4e" targetRef="u_join"/>
+<sequenceFlow id="u_f_prep" sourceRef="u_prep" targetRef="u_ut"/>
+<sequenceFlow id="u_f_ut" sourceRef="u_ut" targetRef="u_gw_fr"/>
+<sequenceFlow id="u_f_fr_ja" name="Ja" sourceRef="u_gw_fr" targetRef="u_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
+<sequenceFlow id="u_f_fr_nein" name="Nein" sourceRef="u_gw_fr" targetRef="u_rej2"/>
+<sequenceFlow id="u_f_rej2" sourceRef="u_rej2" targetRef="u_end_rej2"/>
+<sequenceFlow id="u_f10" sourceRef="u_join" targetRef="u_apply"/>
+<sequenceFlow id="u_f11" sourceRef="u_apply" targetRef="u_bill"/>
+<sequenceFlow id="u_f12" sourceRef="u_bill" targetRef="u_info"/>
+<sequenceFlow id="u_f13" sourceRef="u_info" targetRef="u_end"/>
+</subProcess>
+<subProcess id="sp_rechte" name="Berechtigungen ändern" triggeredByEvent="true"><documentation>Aktion berechtigungen-aendern (Formular spop-berechtigungen-aendern: neuerOwnerUpn, neueMemberUpns, begruendung): setzt Owner und Members der Site neu; anzugeben ist der vollständige neue Stand. Richtlinie SpopAenderungRichtlinie mit aenderung berechtigungen: Owner-Wechsel bei Hermes, Communication und Publishing mit Vier-Augen-Freigabe. Die Eigentumsprüfung der Zusatzleistungen hängt am Besteller und Empfänger der Position, nicht am Owner; sie ändert sich hier nicht. Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position, läuft neben dem Strang und ändert dessen Stand über das Output-Mapping; endet er mit einer Ablehnung, lösen die Ausdrücke den unveränderten Wert auf (ADR-0074). Vor der Bereitstellung lehnt die Regel ab, weil site noch fehlt.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=gruppen" target="gruppen"/></zeebe:ioMapping></extensionElements><startEvent id="b_s" name="Änderung angefragt" isInterrupting="false"><outgoing>b_f0</outgoing><messageEventDefinition messageRef="m_rechte"/></startEvent>
+<serviceTask id="b_read" name="Gruppen und neuen Owner lesen (S2)"><documentation>Simuliert apsbw_sharepoint_group read und apsbw_ad_user read für den neuen Owner (ownerExistiert). Schreibt aktuell.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ gefunden: site != null, owner: if gruppen = null then null else gruppen.owner, mitglieder: if gruppen = null then "" else (if gruppen.mitglieder = null then "" else gruppen.mitglieder), ownerExistiert: true }' resultVariable="aktuell"/></extensionElements><incoming>b_f0</incoming><outgoing>b_f1</outgoing></serviceTask>
+<businessRuleTask id="b_regel" name="Änderungs-Richtlinie prüfen"><documentation>DMN SpopAenderungRichtlinie mit aenderung berechtigungen.</documentation><extensionElements><zeebe:calledDecision decisionId="SpopAenderungRichtlinie" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source="=aktuell.gefunden" target="siteGefunden"/><zeebe:input source='="berechtigungen"' target="aenderung"/><zeebe:input source='=neuerOwnerUpn != null and matches(neuerOwnerUpn, "^[^@ ]+@[^@ ]+[.][^@ ]+$") and aktuell.ownerExistiert = true' target="gueltig"/><zeebe:input source='=aktuell.owner != null and neuerOwnerUpn != null and lower case(neuerOwnerUpn) = lower case(aktuell.owner) and (if neueMemberUpns = null then "" else neueMemberUpns) = aktuell.mitglieder' target="unveraendert"/><zeebe:input source='=if site = null then "" else site.typ' target="siteTyp"/><zeebe:input source="=aktuell.owner = null or neuerOwnerUpn = null or lower case(neuerOwnerUpn) != lower case(aktuell.owner)" target="ownerWechsel"/></zeebe:ioMapping></extensionElements><incoming>b_f1</incoming><outgoing>b_f2</outgoing></businessRuleTask>
+<exclusiveGateway id="b_gw_ok" name="Zulässig?" default="b_f_ok_nein"><incoming>b_f2</incoming><outgoing>b_f_ok_ja</outgoing><outgoing>b_f_ok_nein</outgoing></exclusiveGateway>
+<exclusiveGateway id="b_gw_4e" name="Vier-Augen nötig?" default="b_f_4e_nein"><incoming>b_f_ok_ja</incoming><outgoing>b_f_4e_ja</outgoing><outgoing>b_f_4e_nein</outgoing></exclusiveGateway>
+<sendTask id="b_rej1" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion berechtigungen-aendern mit rejected, weil die Richtlinie sie nicht zulässt.</documentation><extensionElements><atlas:shopTask mode="outcome" action="berechtigungen-aendern" outcome="rejected"/></extensionElements><incoming>b_f_ok_nein</incoming><outgoing>b_f_rej1</outgoing></sendTask>
+<endEvent id="b_end_rej1" name="Abgelehnt: Richtlinie"><incoming>b_f_rej1</incoming></endEvent>
+<scriptTask id="b_prep" name="Freigabe vorbereiten"><documentation>Schreibt die Zusammenfassung für das Freigabeformular spop-freigabe.</documentation><extensionElements><zeebe:script expression='="Berechtigungen ändern\nSite: " + site.url + "\nOwner bisher: " + aktuell.owner + "\nNeu: " + neuerOwnerUpn + "\nMembers neu: " + (if neueMemberUpns = null then "" else neueMemberUpns) + "\nRegel: " + regel.grund' resultVariable="zusammenfassung"/></extensionElements><incoming>b_f_4e_ja</incoming><outgoing>b_f_prep</outgoing></scriptTask>
+<userTask id="b_ut" name="Owner-Wechsel freigeben"><documentation>Vier-Augen-Freigabe durch die Gruppe SPoP-Freigabe.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="SPoP-Freigabe"/><zeebe:formDefinition formId="spop-freigabe"/></extensionElements><incoming>b_f_prep</incoming><outgoing>b_f_ut</outgoing></userTask>
+<exclusiveGateway id="b_gw_fr" name="Freigegeben?" default="b_f_fr_nein"><incoming>b_f_ut</incoming><outgoing>b_f_fr_ja</outgoing><outgoing>b_f_fr_nein</outgoing></exclusiveGateway>
+<sendTask id="b_rej2" name="Ablehnung melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion berechtigungen-aendern mit rejected, weil die Vier-Augen-Freigabe verweigert wurde.</documentation><extensionElements><atlas:shopTask mode="outcome" action="berechtigungen-aendern" outcome="rejected"/></extensionElements><incoming>b_f_fr_nein</incoming><outgoing>b_f_rej2</outgoing></sendTask>
+<endEvent id="b_end_rej2" name="Abgelehnt: Freigabe"><incoming>b_f_rej2</incoming></endEvent>
+<exclusiveGateway id="b_join"><incoming>b_f_4e_nein</incoming><incoming>b_f_fr_ja</incoming><outgoing>b_f10</outgoing></exclusiveGateway>
+<serviceTask id="b_apply" name="Gruppen aktualisieren (S2–S5)"><documentation>Simuliert apsbw_sharepoint_group add_member und remove_member für die Owner- und die Member-Gruppe. Schreibt gruppen mit dem neuen Stand; ownerVorher und mitgliederVorher bleiben für einen Rollback erhalten.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ owners: gruppen.owners, members: gruppen.members, visitors: gruppen.visitors, owner: neuerOwnerUpn, mitglieder: if neueMemberUpns = null then "" else neueMemberUpns, ownerVorher: gruppen.owner, mitgliederVorher: gruppen.mitglieder }' resultVariable="gruppen"/></extensionElements><incoming>b_f10</incoming><outgoing>b_f11</outgoing></serviceTask>
+<sendTask id="b_info" name="Aktion als erledigt melden"><documentation>Shop-Aufgabe (Modus outcome): beantwortet die Aktion berechtigungen-aendern mit completed.</documentation><extensionElements><atlas:shopTask mode="outcome" action="berechtigungen-aendern" outcome="completed"/></extensionElements><incoming>b_f11</incoming><outgoing>b_f12</outgoing></sendTask>
+<endEvent id="b_end" name="Berechtigungen geändert"><incoming>b_f12</incoming></endEvent>
+<sequenceFlow id="b_f0" sourceRef="b_s" targetRef="b_read"/>
+<sequenceFlow id="b_f1" sourceRef="b_read" targetRef="b_regel"/>
+<sequenceFlow id="b_f2" sourceRef="b_regel" targetRef="b_gw_ok"/>
+<sequenceFlow id="b_f_ok_ja" name="Ja" sourceRef="b_gw_ok" targetRef="b_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="b_f_ok_nein" name="Nein" sourceRef="b_gw_ok" targetRef="b_rej1"/>
+<sequenceFlow id="b_f_rej1" sourceRef="b_rej1" targetRef="b_end_rej1"/>
+<sequenceFlow id="b_f_4e_ja" name="Ja" sourceRef="b_gw_4e" targetRef="b_prep"><conditionExpression>=regel.vierAugen = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="b_f_4e_nein" name="Nein" sourceRef="b_gw_4e" targetRef="b_join"/>
+<sequenceFlow id="b_f_prep" sourceRef="b_prep" targetRef="b_ut"/>
+<sequenceFlow id="b_f_ut" sourceRef="b_ut" targetRef="b_gw_fr"/>
+<sequenceFlow id="b_f_fr_ja" name="Ja" sourceRef="b_gw_fr" targetRef="b_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
+<sequenceFlow id="b_f_fr_nein" name="Nein" sourceRef="b_gw_fr" targetRef="b_rej2"/>
+<sequenceFlow id="b_f_rej2" sourceRef="b_rej2" targetRef="b_end_rej2"/>
+<sequenceFlow id="b_f10" sourceRef="b_join" targetRef="b_apply"/>
+<sequenceFlow id="b_f11" sourceRef="b_apply" targetRef="b_info"/>
+<sequenceFlow id="b_f12" sourceRef="b_info" targetRef="b_end"/>
+</subProcess>
+<boundaryEvent id="b_rueck_q" name="Rückgabe" attachedToRef="sp_quota" cancelActivity="true"><documentation>Eine Rückgabe bricht eine laufende Quota-Erhöhung ab.</documentation><outgoing>r_f2</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></boundaryEvent>
+<boundaryEvent id="b_rueck_x" name="Rückgabe" attachedToRef="sp_extern" cancelActivity="true"><documentation>Eine Rückgabe bricht eine laufende Einladung ab, auch während auf die Annahme gewartet wird.</documentation><outgoing>r_f4</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></boundaryEvent>
+<exclusiveGateway id="j_rueck1"><incoming>r_f1</incoming><incoming>r_f2</incoming><outgoing>r_f3</outgoing></exclusiveGateway>
+<exclusiveGateway id="j_rueck2"><incoming>r_f3</incoming><incoming>r_f4</incoming><incoming>r_f6</incoming><outgoing>r_f7</outgoing></exclusiveGateway>
+<startEvent id="r_start" name="Rückgabe ohne laufenden Strang"><documentation>Rückfallebene wie im Referenzmodell: Eine Rückgabe für eine Position ohne laufenden Strang startet hier. Der Katalog verlangt für per-position diesen Nachrichtenstart.</documentation><outgoing>r_f5</outgoing><messageEventDefinition messageRef="m_rueckgabe"/></startEvent>
+<scriptTask id="r_site" name="Site ermitteln"><documentation>Bildet die Site-URL aus der Konfiguration der Position nach demselben Schema wie die Bereitstellung (Annahme: der Katalog liefert amtKuerzel und kurzname der Position mit).</documentation><extensionElements><zeebe:script expression='={ url: "/sites/" + lower case(amtKuerzel) + "-" + kurzname }' resultVariable="site"/></extensionElements><incoming>r_f5</incoming><outgoing>r_f6</outgoing></scriptTask>
+<serviceTask id="r_extern" name="Externe Zugriffe entfernen"><documentation>Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen des Strangs.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression="={ siteUrl: site.url, entfernt: if externe = null then [] else externe }" resultVariable="externEntfernt"/></extensionElements><incoming>r_f7</incoming><outgoing>r_f8</outgoing></serviceTask>
+<serviceTask id="r_delete" name="Site löschen"><documentation>Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ siteUrl: site.url, status: "im Papierkorb" }' resultVariable="rueckbau"/></extensionElements><incoming>r_f8</incoming><outgoing>r_f9</outgoing></serviceTask>
+<serviceTask id="r_bill" name="Verrechnung beenden"><documentation>Simuliert das Beenden der wiederkehrenden Verrechnung des Site-Materials.</documentation><extensionElements><atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S" resultExpression='={ material: site.material, siteUrl: site.url, status: "beendet" }' resultVariable="verrechnung"/></extensionElements><incoming>r_f9</incoming><outgoing>r_f9b</outgoing></serviceTask>
+<serviceTask id="r_info" name="Rückgabe melden"><documentation>Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator; die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE. Eine Position mit Variante heisst itemId#variantId; das # wird als %23 kodiert, sonst schneidet es die URL ab.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + replace((if positionId = null then itemId else positionId), "#", "%23")' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>r_f9b</incoming><outgoing>r_f10</outgoing></serviceTask>
+<endEvent id="r_end" name="Site zurückgegeben"><documentation>Terminierendes Ende: beendet den Strang der Position vollständig, auch laufende Ereignis-Subprozesse.</documentation><incoming>r_f10</incoming><terminateEventDefinition/></endEvent>
+<sequenceFlow id="a_f2" sourceRef="a_regel" targetRef="a_gw_ok"/>
+<sequenceFlow id="a_f_ok_ja" name="Ja" sourceRef="a_gw_ok" targetRef="a_gw_4e"><conditionExpression>=regel.zulaessig = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="a_f_ok_nein" name="Nein" sourceRef="a_gw_ok" targetRef="a_rej1"/>
+<sequenceFlow id="a_f_rej1" sourceRef="a_rej1" targetRef="a_end_rej1"/>
+<sequenceFlow id="a_f_4e_ja" name="Ja" sourceRef="a_gw_4e" targetRef="a_prep"><conditionExpression>=regel.vierAugen = true</conditionExpression></sequenceFlow>
+<sequenceFlow id="a_f_4e_nein" name="Nein" sourceRef="a_gw_4e" targetRef="a_join"/>
+<sequenceFlow id="a_f_prep" sourceRef="a_prep" targetRef="a_ut"/>
+<sequenceFlow id="a_f_ut" sourceRef="a_ut" targetRef="a_gw_fr"/>
+<sequenceFlow id="a_f_fr_ja" name="Ja" sourceRef="a_gw_fr" targetRef="a_join"><conditionExpression>=freigabeEntscheid = "freigegeben"</conditionExpression></sequenceFlow>
+<sequenceFlow id="a_f_fr_nein" name="Nein" sourceRef="a_gw_fr" targetRef="a_rej2"/>
+<sequenceFlow id="a_f_rej2" sourceRef="a_rej2" targetRef="a_end_rej2"/>
+<sequenceFlow id="a_f1" sourceRef="s_neu" targetRef="a_regel"/>
+<sequenceFlow id="a_f3" sourceRef="a_join" targetRef="a_owner"/>
+<sequenceFlow id="a_f4" sourceRef="a_owner" targetRef="a_site"/>
+<sequenceFlow id="a_f5" sourceRef="a_site" targetRef="a_par"/>
+<sequenceFlow id="a_f6" sourceRef="a_par" targetRef="a_grp"/>
+<sequenceFlow id="a_f7" sourceRef="a_grp" targetRef="a_rechte"/>
+<sequenceFlow id="a_f8" sourceRef="a_rechte" targetRef="a_parj"/>
+<sequenceFlow id="a_f9" sourceRef="a_par" targetRef="a_quota"/>
+<sequenceFlow id="a_f10" sourceRef="a_quota" targetRef="a_parj"/>
+<sequenceFlow id="a_f11" sourceRef="a_par" targetRef="a_feat"/>
+<sequenceFlow id="a_f12" sourceRef="a_feat" targetRef="a_parj"/>
+<sequenceFlow id="a_f13" sourceRef="a_parj" targetRef="a_reg"/>
+<sequenceFlow id="a_f13a" sourceRef="a_reg" targetRef="a_bill"/>
+<sequenceFlow id="a_f13b" sourceRef="a_bill" targetRef="a_info"/>
+<sequenceFlow id="a_f14" sourceRef="a_info" targetRef="j_aktiv"/>
+<sequenceFlow id="w_f1" sourceRef="j_aktiv" targetRef="g_warten"/>
+<sequenceFlow id="w_f2" sourceRef="g_warten" targetRef="c_rueck"/>
+<sequenceFlow id="w_f3" sourceRef="g_warten" targetRef="c_extern"/>
+<sequenceFlow id="w_f4" sourceRef="g_warten" targetRef="c_quota"/>
+<sequenceFlow id="w_f5" sourceRef="c_extern" targetRef="sp_extern"/>
+<sequenceFlow id="w_f6" sourceRef="c_quota" targetRef="sp_quota"/>
+<sequenceFlow id="w_f7" sourceRef="sp_extern" targetRef="j_aktiv"/>
+<sequenceFlow id="w_f8" sourceRef="sp_quota" targetRef="j_aktiv"/>
+<sequenceFlow id="r_f1" sourceRef="c_rueck" targetRef="j_rueck1"/>
+<sequenceFlow id="r_f2" sourceRef="b_rueck_q" targetRef="j_rueck1"/>
+<sequenceFlow id="r_f3" sourceRef="j_rueck1" targetRef="j_rueck2"/>
+<sequenceFlow id="r_f4" sourceRef="b_rueck_x" targetRef="j_rueck2"/>
+<sequenceFlow id="r_f5" sourceRef="r_start" targetRef="r_site"/>
+<sequenceFlow id="r_f6" sourceRef="r_site" targetRef="j_rueck2"/>
+<sequenceFlow id="r_f7" sourceRef="j_rueck2" targetRef="r_extern"/>
+<sequenceFlow id="r_f8" sourceRef="r_extern" targetRef="r_delete"/>
+<sequenceFlow id="r_f9" sourceRef="r_delete" targetRef="r_bill"/>
+<sequenceFlow id="r_f9b" sourceRef="r_bill" targetRef="r_info"/>
+<sequenceFlow id="r_f10" sourceRef="r_info" targetRef="r_end"/>
+</process>
+<bpmndi:BPMNDiagram id="dia_proc_spop_teamsite"><bpmndi:BPMNPlane id="plane_proc_spop_teamsite" bpmnElement="proc_spop_teamsite">
+<bpmndi:BPMNShape id="d1" bpmnElement="s_neu"><dc:Bounds x="100" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="72.5" y="722" width="91" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d2" bpmnElement="a_regel"><dc:Bounds x="200" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d3" bpmnElement="a_gw_ok"><dc:Bounds x="375" y="675" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="368.5" y="729" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d4" bpmnElement="a_gw_4e"><dc:Bounds x="505" y="675" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="475" y="642" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d5" bpmnElement="a_rej1"><dc:Bounds x="480" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d6" bpmnElement="a_end_rej1"><dc:Bounds x="642" y="532" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="605" y="572" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d7" bpmnElement="a_prep"><dc:Bounds x="610" y="810" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d8" bpmnElement="a_ut"><dc:Bounds x="760" y="810" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d9" bpmnElement="a_gw_fr"><dc:Bounds x="935" y="825" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="918" y="805" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d10" bpmnElement="a_rej2"><dc:Bounds x="1040" y="940" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d11" bpmnElement="a_end_rej2"><dc:Bounds x="1202" y="962" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1165" y="1002" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d12" bpmnElement="a_join"><dc:Bounds x="1065" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d13" bpmnElement="a_owner"><dc:Bounds x="1170" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d14" bpmnElement="a_site"><dc:Bounds x="1320" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d15" bpmnElement="a_par"><dc:Bounds x="1475" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d16" bpmnElement="a_grp"><dc:Bounds x="1580" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d17" bpmnElement="a_rechte"><dc:Bounds x="1730" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d18" bpmnElement="a_quota"><dc:Bounds x="1580" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d19" bpmnElement="a_feat"><dc:Bounds x="1580" y="810" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d20" bpmnElement="a_parj"><dc:Bounds x="1885" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d21" bpmnElement="a_reg"><dc:Bounds x="1990" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d22" bpmnElement="a_bill"><dc:Bounds x="2120" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d23" bpmnElement="a_info"><dc:Bounds x="2250" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d24" bpmnElement="j_aktiv"><dc:Bounds x="2405" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d25" bpmnElement="g_warten"><dc:Bounds x="2565" y="675" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="2455" y="638" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d26" bpmnElement="c_rueck"><dc:Bounds x="2682" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2655" y="722" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d27" bpmnElement="c_extern"><dc:Bounds x="2682" y="312" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2655" y="352" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d28" bpmnElement="c_quota"><dc:Bounds x="2682" y="942" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2655" y="982" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d29" bpmnElement="sp_quota" isExpanded="true"><dc:Bounds x="2750" y="780" width="1600" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d30" bpmnElement="q_s"><dc:Bounds x="2772" y="942" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d31" bpmnElement="q_read"><dc:Bounds x="2840" y="920" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d32" bpmnElement="q_regel"><dc:Bounds x="2990" y="920" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d33" bpmnElement="q_gw_ok"><dc:Bounds x="3165" y="935" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3158.5" y="989" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d34" bpmnElement="q_gw_4e"><dc:Bounds x="3295" y="935" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3265" y="902" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d35" bpmnElement="q_rej1"><dc:Bounds x="3270" y="800" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d36" bpmnElement="q_end_rej1"><dc:Bounds x="3432" y="822" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3395" y="862" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d37" bpmnElement="q_prep"><dc:Bounds x="3400" y="1040" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d38" bpmnElement="q_ut"><dc:Bounds x="3550" y="1040" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d39" bpmnElement="q_gw_fr"><dc:Bounds x="3725" y="1055" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3708" y="1035" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d40" bpmnElement="q_rej2"><dc:Bounds x="3830" y="1140" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d41" bpmnElement="q_end_rej2"><dc:Bounds x="3992" y="1162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3955" y="1202" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d42" bpmnElement="q_join"><dc:Bounds x="3855" y="935" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d43" bpmnElement="q_apply"><dc:Bounds x="3960" y="920" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d44" bpmnElement="q_info"><dc:Bounds x="4110" y="920" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d45" bpmnElement="q_end"><dc:Bounds x="4272" y="942" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4235" y="982" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d46" bpmnElement="sp_extern" isExpanded="true"><dc:Bounds x="2750" y="150" width="1970" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d47" bpmnElement="x_s"><dc:Bounds x="2772" y="312" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d48" bpmnElement="x_read"><dc:Bounds x="2840" y="290" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d49" bpmnElement="x_regel"><dc:Bounds x="2990" y="290" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d50" bpmnElement="x_gw_ok"><dc:Bounds x="3165" y="305" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3158.5" y="359" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d51" bpmnElement="x_gw_4e"><dc:Bounds x="3295" y="305" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3265" y="272" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d52" bpmnElement="x_rej1"><dc:Bounds x="3270" y="170" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d53" bpmnElement="x_end_rej1"><dc:Bounds x="3432" y="192" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3395" y="232" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d54" bpmnElement="x_prep"><dc:Bounds x="3400" y="410" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d55" bpmnElement="x_ut"><dc:Bounds x="3550" y="410" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d56" bpmnElement="x_gw_fr"><dc:Bounds x="3725" y="425" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3708" y="405" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d57" bpmnElement="x_rej2"><dc:Bounds x="3830" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d58" bpmnElement="x_end_rej2"><dc:Bounds x="3992" y="532" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3955" y="572" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d59" bpmnElement="x_join"><dc:Bounds x="3855" y="305" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d60" bpmnElement="x_invite"><dc:Bounds x="3960" y="290" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d61" bpmnElement="x_wait"><dc:Bounds x="4115" y="305" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="4085" y="359" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d62" bpmnElement="x_ang"><dc:Bounds x="4232" y="312" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4195" y="352" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d63" bpmnElement="x_rechte"><dc:Bounds x="4330" y="290" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d64" bpmnElement="x_info"><dc:Bounds x="4480" y="290" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d65" bpmnElement="x_end"><dc:Bounds x="4642" y="312" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4605" y="352" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d66" bpmnElement="x_ablauf"><dc:Bounds x="4232" y="192" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4195" y="232" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d67" bpmnElement="x_widerruf"><dc:Bounds x="4330" y="170" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d68" bpmnElement="x_info2"><dc:Bounds x="4480" y="170" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d69" bpmnElement="x_end2"><dc:Bounds x="4642" y="192" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4605" y="232" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d70" bpmnElement="sp_titel" isExpanded="true"><dc:Bounds x="2750" y="1420" width="1600" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d71" bpmnElement="t_s"><dc:Bounds x="2772" y="1582" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2745" y="1622" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d72" bpmnElement="t_read"><dc:Bounds x="2840" y="1560" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d73" bpmnElement="t_regel"><dc:Bounds x="2990" y="1560" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d74" bpmnElement="t_gw_ok"><dc:Bounds x="3165" y="1575" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3158.5" y="1629" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d75" bpmnElement="t_gw_4e"><dc:Bounds x="3295" y="1575" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3265" y="1542" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d76" bpmnElement="t_rej1"><dc:Bounds x="3270" y="1440" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d77" bpmnElement="t_end_rej1"><dc:Bounds x="3432" y="1462" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3395" y="1502" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d78" bpmnElement="t_prep"><dc:Bounds x="3400" y="1680" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d79" bpmnElement="t_ut"><dc:Bounds x="3550" y="1680" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d80" bpmnElement="t_gw_fr"><dc:Bounds x="3725" y="1695" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3708" y="1675" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d81" bpmnElement="t_rej2"><dc:Bounds x="3830" y="1780" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d82" bpmnElement="t_end_rej2"><dc:Bounds x="3992" y="1802" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3955" y="1842" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d83" bpmnElement="t_join"><dc:Bounds x="3855" y="1575" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d84" bpmnElement="t_apply"><dc:Bounds x="3960" y="1560" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d85" bpmnElement="t_info"><dc:Bounds x="4110" y="1560" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d86" bpmnElement="t_end"><dc:Bounds x="4272" y="1582" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4241" y="1622" width="98" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d87" bpmnElement="sp_url" isExpanded="true"><dc:Bounds x="2750" y="2050" width="1750" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d88" bpmnElement="u_s"><dc:Bounds x="2772" y="2212" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2745" y="2252" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d89" bpmnElement="u_read"><dc:Bounds x="2840" y="2190" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d90" bpmnElement="u_regel"><dc:Bounds x="2990" y="2190" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d91" bpmnElement="u_gw_ok"><dc:Bounds x="3165" y="2205" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3158.5" y="2259" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d92" bpmnElement="u_gw_4e"><dc:Bounds x="3295" y="2205" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3265" y="2172" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d93" bpmnElement="u_rej1"><dc:Bounds x="3270" y="2070" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d94" bpmnElement="u_end_rej1"><dc:Bounds x="3432" y="2092" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3395" y="2132" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d95" bpmnElement="u_prep"><dc:Bounds x="3400" y="2310" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d96" bpmnElement="u_ut"><dc:Bounds x="3550" y="2310" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d97" bpmnElement="u_gw_fr"><dc:Bounds x="3725" y="2325" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3708" y="2305" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d98" bpmnElement="u_rej2"><dc:Bounds x="3830" y="2410" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d99" bpmnElement="u_end_rej2"><dc:Bounds x="3992" y="2432" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3955" y="2472" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d100" bpmnElement="u_join"><dc:Bounds x="3855" y="2205" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d101" bpmnElement="u_apply"><dc:Bounds x="3960" y="2190" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d102" bpmnElement="u_bill"><dc:Bounds x="4110" y="2190" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d103" bpmnElement="u_info"><dc:Bounds x="4260" y="2190" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d104" bpmnElement="u_end"><dc:Bounds x="4422" y="2212" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4398" y="2252" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d105" bpmnElement="sp_rechte" isExpanded="true"><dc:Bounds x="2750" y="2680" width="1600" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d106" bpmnElement="b_s"><dc:Bounds x="2772" y="2842" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="2745" y="2882" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d107" bpmnElement="b_read"><dc:Bounds x="2840" y="2820" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d108" bpmnElement="b_regel"><dc:Bounds x="2990" y="2820" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d109" bpmnElement="b_gw_ok"><dc:Bounds x="3165" y="2835" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3158.5" y="2889" width="63" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d110" bpmnElement="b_gw_4e"><dc:Bounds x="3295" y="2835" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3265" y="2802" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d111" bpmnElement="b_rej1"><dc:Bounds x="3270" y="2700" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d112" bpmnElement="b_end_rej1"><dc:Bounds x="3432" y="2722" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3395" y="2762" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d113" bpmnElement="b_prep"><dc:Bounds x="3400" y="2940" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d114" bpmnElement="b_ut"><dc:Bounds x="3550" y="2940" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d115" bpmnElement="b_gw_fr"><dc:Bounds x="3725" y="2955" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="3708" y="2935" width="84" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d116" bpmnElement="b_rej2"><dc:Bounds x="3830" y="3040" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d117" bpmnElement="b_end_rej2"><dc:Bounds x="3992" y="3062" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="3955" y="3102" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d118" bpmnElement="b_join"><dc:Bounds x="3855" y="2835" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d119" bpmnElement="b_apply"><dc:Bounds x="3960" y="2820" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d120" bpmnElement="b_info"><dc:Bounds x="4110" y="2820" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d121" bpmnElement="b_end"><dc:Bounds x="4272" y="2842" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4235" y="2882" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d122" bpmnElement="b_rueck_q"><dc:Bounds x="4272" y="762" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4312" y="746" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d123" bpmnElement="b_rueck_x"><dc:Bounds x="4642" y="612" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4578" y="650" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d124" bpmnElement="j_rueck1"><dc:Bounds x="4265" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d125" bpmnElement="j_rueck2"><dc:Bounds x="4635" y="675" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d126" bpmnElement="r_start"><dc:Bounds x="4402" y="942" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="4370" y="982" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d127" bpmnElement="r_site"><dc:Bounds x="4500" y="920" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d128" bpmnElement="r_extern"><dc:Bounds x="4740" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d129" bpmnElement="r_delete"><dc:Bounds x="4890" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d130" bpmnElement="r_bill"><dc:Bounds x="5040" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d131" bpmnElement="r_info"><dc:Bounds x="5190" y="660" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="d132" bpmnElement="r_end"><dc:Bounds x="5352" y="682" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="5315" y="722" width="110" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="d133" bpmnElement="a_f2"><di:waypoint x="300" y="700"/><di:waypoint x="375" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d134" bpmnElement="a_f_ok_ja"><di:waypoint x="425" y="700"/><di:waypoint x="505" y="700"/><bpmndi:BPMNLabel><dc:Bounds x="434" y="678" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d135" bpmnElement="a_f_ok_nein"><di:waypoint x="400" y="675"/><di:waypoint x="400" y="550"/><di:waypoint x="480" y="550"/><bpmndi:BPMNLabel><dc:Bounds x="408" y="600" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d136" bpmnElement="a_f_rej1"><di:waypoint x="580" y="550"/><di:waypoint x="642" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d137" bpmnElement="a_f_4e_ja"><di:waypoint x="530" y="725"/><di:waypoint x="530" y="850"/><di:waypoint x="610" y="850"/><bpmndi:BPMNLabel><dc:Bounds x="538" y="800" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d138" bpmnElement="a_f_4e_nein"><di:waypoint x="555" y="700"/><di:waypoint x="1065" y="700"/><bpmndi:BPMNLabel><dc:Bounds x="565" y="678" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d139" bpmnElement="a_f_prep"><di:waypoint x="710" y="850"/><di:waypoint x="760" y="850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d140" bpmnElement="a_f_ut"><di:waypoint x="860" y="850"/><di:waypoint x="935" y="850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d141" bpmnElement="a_f_fr_ja"><di:waypoint x="985" y="850"/><di:waypoint x="1090" y="850"/><di:waypoint x="1090" y="725"/><bpmndi:BPMNLabel><dc:Bounds x="995" y="828" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d142" bpmnElement="a_f_fr_nein"><di:waypoint x="960" y="875"/><di:waypoint x="960" y="980"/><di:waypoint x="1040" y="980"/><bpmndi:BPMNLabel><dc:Bounds x="968" y="920" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d143" bpmnElement="a_f_rej2"><di:waypoint x="1140" y="980"/><di:waypoint x="1202" y="980"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d144" bpmnElement="q_f0"><di:waypoint x="2808" y="960"/><di:waypoint x="2840" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d145" bpmnElement="q_f1"><di:waypoint x="2940" y="960"/><di:waypoint x="2990" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d146" bpmnElement="q_f2"><di:waypoint x="3090" y="960"/><di:waypoint x="3165" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d147" bpmnElement="q_f_ok_ja"><di:waypoint x="3215" y="960"/><di:waypoint x="3295" y="960"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="938" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d148" bpmnElement="q_f_ok_nein"><di:waypoint x="3190" y="935"/><di:waypoint x="3190" y="840"/><di:waypoint x="3270" y="840"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="880" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d149" bpmnElement="q_f_rej1"><di:waypoint x="3370" y="840"/><di:waypoint x="3432" y="840"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d150" bpmnElement="q_f_4e_ja"><di:waypoint x="3320" y="985"/><di:waypoint x="3320" y="1080"/><di:waypoint x="3400" y="1080"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="1030" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d151" bpmnElement="q_f_4e_nein"><di:waypoint x="3345" y="960"/><di:waypoint x="3855" y="960"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="938" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d152" bpmnElement="q_f_prep"><di:waypoint x="3500" y="1080"/><di:waypoint x="3550" y="1080"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d153" bpmnElement="q_f_ut"><di:waypoint x="3650" y="1080"/><di:waypoint x="3725" y="1080"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d154" bpmnElement="q_f_fr_ja"><di:waypoint x="3775" y="1080"/><di:waypoint x="3880" y="1080"/><di:waypoint x="3880" y="985"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="1058" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d155" bpmnElement="q_f_fr_nein"><di:waypoint x="3750" y="1105"/><di:waypoint x="3750" y="1180"/><di:waypoint x="3830" y="1180"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="1130" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d156" bpmnElement="q_f_rej2"><di:waypoint x="3930" y="1180"/><di:waypoint x="3992" y="1180"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d157" bpmnElement="q_f10"><di:waypoint x="3905" y="960"/><di:waypoint x="3960" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d158" bpmnElement="q_f11"><di:waypoint x="4060" y="960"/><di:waypoint x="4110" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d159" bpmnElement="q_f12"><di:waypoint x="4210" y="960"/><di:waypoint x="4272" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d160" bpmnElement="x_f0"><di:waypoint x="2808" y="330"/><di:waypoint x="2840" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d161" bpmnElement="x_f1"><di:waypoint x="2940" y="330"/><di:waypoint x="2990" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d162" bpmnElement="x_f2"><di:waypoint x="3090" y="330"/><di:waypoint x="3165" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d163" bpmnElement="x_f_ok_ja"><di:waypoint x="3215" y="330"/><di:waypoint x="3295" y="330"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="308" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d164" bpmnElement="x_f_ok_nein"><di:waypoint x="3190" y="305"/><di:waypoint x="3190" y="210"/><di:waypoint x="3270" y="210"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="250" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d165" bpmnElement="x_f_rej1"><di:waypoint x="3370" y="210"/><di:waypoint x="3432" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d166" bpmnElement="x_f_4e_ja"><di:waypoint x="3320" y="355"/><di:waypoint x="3320" y="450"/><di:waypoint x="3400" y="450"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="400" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d167" bpmnElement="x_f_4e_nein"><di:waypoint x="3345" y="330"/><di:waypoint x="3855" y="330"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="308" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d168" bpmnElement="x_f_prep"><di:waypoint x="3500" y="450"/><di:waypoint x="3550" y="450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d169" bpmnElement="x_f_ut"><di:waypoint x="3650" y="450"/><di:waypoint x="3725" y="450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d170" bpmnElement="x_f_fr_ja"><di:waypoint x="3775" y="450"/><di:waypoint x="3880" y="450"/><di:waypoint x="3880" y="355"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="428" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d171" bpmnElement="x_f_fr_nein"><di:waypoint x="3750" y="475"/><di:waypoint x="3750" y="550"/><di:waypoint x="3830" y="550"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="500" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d172" bpmnElement="x_f_rej2"><di:waypoint x="3930" y="550"/><di:waypoint x="3992" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d173" bpmnElement="x_f10"><di:waypoint x="3905" y="330"/><di:waypoint x="3960" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d174" bpmnElement="x_f11"><di:waypoint x="4060" y="330"/><di:waypoint x="4115" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d175" bpmnElement="x_f12"><di:waypoint x="4165" y="330"/><di:waypoint x="4232" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d176" bpmnElement="x_f13"><di:waypoint x="4268" y="330"/><di:waypoint x="4330" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d177" bpmnElement="x_f14"><di:waypoint x="4430" y="330"/><di:waypoint x="4480" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d178" bpmnElement="x_f15"><di:waypoint x="4580" y="330"/><di:waypoint x="4642" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d179" bpmnElement="x_f16"><di:waypoint x="4140" y="305"/><di:waypoint x="4140" y="210"/><di:waypoint x="4232" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d180" bpmnElement="x_f17"><di:waypoint x="4268" y="210"/><di:waypoint x="4330" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d181" bpmnElement="x_f18"><di:waypoint x="4430" y="210"/><di:waypoint x="4480" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d182" bpmnElement="x_f19"><di:waypoint x="4580" y="210"/><di:waypoint x="4642" y="210"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d183" bpmnElement="t_f0"><di:waypoint x="2808" y="1600"/><di:waypoint x="2840" y="1600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d184" bpmnElement="t_f1"><di:waypoint x="2940" y="1600"/><di:waypoint x="2990" y="1600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d185" bpmnElement="t_f2"><di:waypoint x="3090" y="1600"/><di:waypoint x="3165" y="1600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d186" bpmnElement="t_f_ok_ja"><di:waypoint x="3215" y="1600"/><di:waypoint x="3295" y="1600"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="1578" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d187" bpmnElement="t_f_ok_nein"><di:waypoint x="3190" y="1575"/><di:waypoint x="3190" y="1480"/><di:waypoint x="3270" y="1480"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="1520" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d188" bpmnElement="t_f_rej1"><di:waypoint x="3370" y="1480"/><di:waypoint x="3432" y="1480"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d189" bpmnElement="t_f_4e_ja"><di:waypoint x="3320" y="1625"/><di:waypoint x="3320" y="1720"/><di:waypoint x="3400" y="1720"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="1670" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d190" bpmnElement="t_f_4e_nein"><di:waypoint x="3345" y="1600"/><di:waypoint x="3855" y="1600"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="1578" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d191" bpmnElement="t_f_prep"><di:waypoint x="3500" y="1720"/><di:waypoint x="3550" y="1720"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d192" bpmnElement="t_f_ut"><di:waypoint x="3650" y="1720"/><di:waypoint x="3725" y="1720"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d193" bpmnElement="t_f_fr_ja"><di:waypoint x="3775" y="1720"/><di:waypoint x="3880" y="1720"/><di:waypoint x="3880" y="1625"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="1698" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d194" bpmnElement="t_f_fr_nein"><di:waypoint x="3750" y="1745"/><di:waypoint x="3750" y="1820"/><di:waypoint x="3830" y="1820"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="1770" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d195" bpmnElement="t_f_rej2"><di:waypoint x="3930" y="1820"/><di:waypoint x="3992" y="1820"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d196" bpmnElement="t_f10"><di:waypoint x="3905" y="1600"/><di:waypoint x="3960" y="1600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d197" bpmnElement="t_f11"><di:waypoint x="4060" y="1600"/><di:waypoint x="4110" y="1600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d198" bpmnElement="t_f12"><di:waypoint x="4210" y="1600"/><di:waypoint x="4272" y="1600"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d199" bpmnElement="u_f0"><di:waypoint x="2808" y="2230"/><di:waypoint x="2840" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d200" bpmnElement="u_f1"><di:waypoint x="2940" y="2230"/><di:waypoint x="2990" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d201" bpmnElement="u_f2"><di:waypoint x="3090" y="2230"/><di:waypoint x="3165" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d202" bpmnElement="u_f_ok_ja"><di:waypoint x="3215" y="2230"/><di:waypoint x="3295" y="2230"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="2208" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d203" bpmnElement="u_f_ok_nein"><di:waypoint x="3190" y="2205"/><di:waypoint x="3190" y="2110"/><di:waypoint x="3270" y="2110"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="2150" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d204" bpmnElement="u_f_rej1"><di:waypoint x="3370" y="2110"/><di:waypoint x="3432" y="2110"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d205" bpmnElement="u_f_4e_ja"><di:waypoint x="3320" y="2255"/><di:waypoint x="3320" y="2350"/><di:waypoint x="3400" y="2350"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="2300" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d206" bpmnElement="u_f_4e_nein"><di:waypoint x="3345" y="2230"/><di:waypoint x="3855" y="2230"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="2208" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d207" bpmnElement="u_f_prep"><di:waypoint x="3500" y="2350"/><di:waypoint x="3550" y="2350"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d208" bpmnElement="u_f_ut"><di:waypoint x="3650" y="2350"/><di:waypoint x="3725" y="2350"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d209" bpmnElement="u_f_fr_ja"><di:waypoint x="3775" y="2350"/><di:waypoint x="3880" y="2350"/><di:waypoint x="3880" y="2255"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="2328" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d210" bpmnElement="u_f_fr_nein"><di:waypoint x="3750" y="2375"/><di:waypoint x="3750" y="2450"/><di:waypoint x="3830" y="2450"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="2400" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d211" bpmnElement="u_f_rej2"><di:waypoint x="3930" y="2450"/><di:waypoint x="3992" y="2450"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d212" bpmnElement="u_f10"><di:waypoint x="3905" y="2230"/><di:waypoint x="3960" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d213" bpmnElement="u_f11"><di:waypoint x="4060" y="2230"/><di:waypoint x="4110" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d214" bpmnElement="u_f12"><di:waypoint x="4210" y="2230"/><di:waypoint x="4260" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d215" bpmnElement="u_f13"><di:waypoint x="4360" y="2230"/><di:waypoint x="4422" y="2230"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d216" bpmnElement="b_f0"><di:waypoint x="2808" y="2860"/><di:waypoint x="2840" y="2860"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d217" bpmnElement="b_f1"><di:waypoint x="2940" y="2860"/><di:waypoint x="2990" y="2860"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d218" bpmnElement="b_f2"><di:waypoint x="3090" y="2860"/><di:waypoint x="3165" y="2860"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d219" bpmnElement="b_f_ok_ja"><di:waypoint x="3215" y="2860"/><di:waypoint x="3295" y="2860"/><bpmndi:BPMNLabel><dc:Bounds x="3224" y="2838" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d220" bpmnElement="b_f_ok_nein"><di:waypoint x="3190" y="2835"/><di:waypoint x="3190" y="2740"/><di:waypoint x="3270" y="2740"/><bpmndi:BPMNLabel><dc:Bounds x="3198" y="2780" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d221" bpmnElement="b_f_rej1"><di:waypoint x="3370" y="2740"/><di:waypoint x="3432" y="2740"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d222" bpmnElement="b_f_4e_ja"><di:waypoint x="3320" y="2885"/><di:waypoint x="3320" y="2980"/><di:waypoint x="3400" y="2980"/><bpmndi:BPMNLabel><dc:Bounds x="3328" y="2930" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d223" bpmnElement="b_f_4e_nein"><di:waypoint x="3345" y="2860"/><di:waypoint x="3855" y="2860"/><bpmndi:BPMNLabel><dc:Bounds x="3355" y="2838" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d224" bpmnElement="b_f_prep"><di:waypoint x="3500" y="2980"/><di:waypoint x="3550" y="2980"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d225" bpmnElement="b_f_ut"><di:waypoint x="3650" y="2980"/><di:waypoint x="3725" y="2980"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d226" bpmnElement="b_f_fr_ja"><di:waypoint x="3775" y="2980"/><di:waypoint x="3880" y="2980"/><di:waypoint x="3880" y="2885"/><bpmndi:BPMNLabel><dc:Bounds x="3785" y="2958" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d227" bpmnElement="b_f_fr_nein"><di:waypoint x="3750" y="3005"/><di:waypoint x="3750" y="3080"/><di:waypoint x="3830" y="3080"/><bpmndi:BPMNLabel><dc:Bounds x="3758" y="3030" width="26" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d228" bpmnElement="b_f_rej2"><di:waypoint x="3930" y="3080"/><di:waypoint x="3992" y="3080"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d229" bpmnElement="b_f10"><di:waypoint x="3905" y="2860"/><di:waypoint x="3960" y="2860"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d230" bpmnElement="b_f11"><di:waypoint x="4060" y="2860"/><di:waypoint x="4110" y="2860"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d231" bpmnElement="b_f12"><di:waypoint x="4210" y="2860"/><di:waypoint x="4272" y="2860"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d232" bpmnElement="a_f1"><di:waypoint x="136" y="700"/><di:waypoint x="200" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d233" bpmnElement="a_f3"><di:waypoint x="1115" y="700"/><di:waypoint x="1170" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d234" bpmnElement="a_f4"><di:waypoint x="1270" y="700"/><di:waypoint x="1320" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d235" bpmnElement="a_f5"><di:waypoint x="1420" y="700"/><di:waypoint x="1475" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d236" bpmnElement="a_f6"><di:waypoint x="1500" y="675"/><di:waypoint x="1500" y="550"/><di:waypoint x="1580" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d237" bpmnElement="a_f7"><di:waypoint x="1680" y="550"/><di:waypoint x="1730" y="550"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d238" bpmnElement="a_f8"><di:waypoint x="1830" y="550"/><di:waypoint x="1910" y="550"/><di:waypoint x="1910" y="675"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d239" bpmnElement="a_f9"><di:waypoint x="1525" y="700"/><di:waypoint x="1580" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d240" bpmnElement="a_f10"><di:waypoint x="1680" y="700"/><di:waypoint x="1885" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d241" bpmnElement="a_f11"><di:waypoint x="1500" y="725"/><di:waypoint x="1500" y="850"/><di:waypoint x="1580" y="850"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d242" bpmnElement="a_f12"><di:waypoint x="1680" y="850"/><di:waypoint x="1910" y="850"/><di:waypoint x="1910" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d243" bpmnElement="a_f13"><di:waypoint x="1935" y="700"/><di:waypoint x="1990" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d244" bpmnElement="a_f13a"><di:waypoint x="2090" y="700"/><di:waypoint x="2120" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d245" bpmnElement="a_f13b"><di:waypoint x="2220" y="700"/><di:waypoint x="2250" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d246" bpmnElement="a_f14"><di:waypoint x="2350" y="700"/><di:waypoint x="2405" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d247" bpmnElement="w_f1"><di:waypoint x="2455" y="700"/><di:waypoint x="2565" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d248" bpmnElement="w_f2"><di:waypoint x="2615" y="700"/><di:waypoint x="2682" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d249" bpmnElement="w_f3"><di:waypoint x="2590" y="675"/><di:waypoint x="2590" y="330"/><di:waypoint x="2682" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d250" bpmnElement="w_f4"><di:waypoint x="2590" y="725"/><di:waypoint x="2590" y="960"/><di:waypoint x="2682" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d251" bpmnElement="w_f5"><di:waypoint x="2718" y="330"/><di:waypoint x="2750" y="330"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d252" bpmnElement="w_f6"><di:waypoint x="2718" y="960"/><di:waypoint x="2750" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d253" bpmnElement="w_f7"><di:waypoint x="2780" y="150"/><di:waypoint x="2780" y="120"/><di:waypoint x="2430" y="120"/><di:waypoint x="2430" y="675"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d254" bpmnElement="w_f8"><di:waypoint x="2780" y="1260"/><di:waypoint x="2780" y="1290"/><di:waypoint x="2430" y="1290"/><di:waypoint x="2430" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d255" bpmnElement="r_f1"><di:waypoint x="2718" y="700"/><di:waypoint x="4265" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d256" bpmnElement="r_f2"><di:waypoint x="4290" y="762"/><di:waypoint x="4290" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d257" bpmnElement="r_f3"><di:waypoint x="4315" y="700"/><di:waypoint x="4635" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d258" bpmnElement="r_f4"><di:waypoint x="4660" y="648"/><di:waypoint x="4660" y="675"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d259" bpmnElement="r_f5"><di:waypoint x="4438" y="960"/><di:waypoint x="4500" y="960"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d260" bpmnElement="r_f6"><di:waypoint x="4600" y="960"/><di:waypoint x="4660" y="960"/><di:waypoint x="4660" y="725"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d261" bpmnElement="r_f7"><di:waypoint x="4685" y="700"/><di:waypoint x="4740" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d262" bpmnElement="r_f8"><di:waypoint x="4840" y="700"/><di:waypoint x="4890" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d263" bpmnElement="r_f9"><di:waypoint x="4990" y="700"/><di:waypoint x="5040" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d264" bpmnElement="r_f9b"><di:waypoint x="5140" y="700"/><di:waypoint x="5190" y="700"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d265" bpmnElement="r_f10"><di:waypoint x="5290" y="700"/><di:waypoint x="5352" y="700"/></bpmndi:BPMNEdge>
+</bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>

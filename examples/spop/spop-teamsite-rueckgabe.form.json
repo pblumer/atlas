@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "spop-teamsite-rueckgabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: TeamSite zurückgeben**\n\nGilt für die TeamSite dieser Position. Entfernt alle externen Zugriffe, verschiebt die Site in den Papierkorb und bricht eine laufende Quota-Erhöhung oder Einladung ab."
+    },
+    {
+      "key": "grund",
+      "type": "textarea",
+      "label": "Grund der Rückgabe",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

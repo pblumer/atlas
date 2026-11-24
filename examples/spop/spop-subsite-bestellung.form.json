@@ -1,0 +1,45 @@
+{
+  "type": "default",
+  "id": "spop-subsite-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnP SubSite Quota**\n\nErhöht die Zahl der erlaubten Subsites einer bestehenden Site. Bis 10 Subsites sind in der Basis enthalten. Die Anzahl bestimmt das Verrechnungsband: 11–20, 21–50, 51–100, 101–200 oder 201–500; ab 101 geht die Bestellung in die Vier-Augen-Freigabe."
+    },
+    {
+      "key": "siteUrl",
+      "type": "textfield",
+      "label": "Site-URL",
+      "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
+      "validate": {
+        "required": true,
+        "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "menge",
+      "type": "number",
+      "label": "Anzahl Subsites",
+      "description": "11 bis 500 Subsites.",
+      "validate": {
+        "required": true,
+        "min": 11,
+        "max": 500
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

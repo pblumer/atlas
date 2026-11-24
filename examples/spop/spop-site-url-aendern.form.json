@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "spop-site-url-aendern",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnPrem: Site-URL ändern**\n\nGibt der Site dieser Position eine neue URL /sites/<amt>-<kurzname>. Bestehende Links und Lesezeichen auf die alte URL werden ungültig. Eine neue URL braucht immer die Vier-Augen-Freigabe. Zusatzleistungen für diese Site werden danach mit der neuen URL bestellt."
+    },
+    {
+      "key": "neuesAmtKuerzel",
+      "type": "textfield",
+      "label": "Amtskürzel",
+      "description": "2 bis 6 Grossbuchstaben, z. B. BIT.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Z]{2,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "neuerKurzname",
+      "type": "textfield",
+      "label": "Kurzname (URL-Teil)",
+      "description": "3 bis 30 Zeichen, Kleinbuchstaben, Ziffern und Bindestriche.",
+      "validate": {
+        "required": true,
+        "pattern": "^[a-z0-9][a-z0-9-]{2,29}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

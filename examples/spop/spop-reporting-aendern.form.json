@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "spop-reporting-aendern",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Erweitertes Reporting ändern**\n\nNeue Anzahl Report-Pakete dieser Position; ein Wechsel des Bands wechselt die Materialnummer."
+    },
+    {
+      "key": "menge",
+      "type": "number",
+      "label": "Neue Anzahl Report-Pakete",
+      "description": "1 bis 20 Pakete.",
+      "validate": {
+        "required": true,
+        "min": 1,
+        "max": 20
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}
