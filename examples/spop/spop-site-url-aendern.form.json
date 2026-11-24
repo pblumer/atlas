@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "**SharePoint OnPrem: Site-URL ändern**\n\nGibt der Site dieser Position eine neue URL /sites/<amt>-<kurzname>. Bestehende Links und Lesezeichen auf die alte URL werden ungültig. Eine neue URL braucht immer die Vier-Augen-Freigabe. Zusatzleistungen für diese Site werden danach mit der neuen URL bestellt."
+      "text": "**SharePoint OnPrem: Site-URL ändern**\n\nGibt der Site dieser Position eine neue URL /sites/<amt>-<kurzname>. Bestehende Links und Lesezeichen auf die alte URL werden ungültig. Eine neue URL braucht immer die Vier-Augen-Freigabe."
     },
     {
       "key": "neuesAmtKuerzel",

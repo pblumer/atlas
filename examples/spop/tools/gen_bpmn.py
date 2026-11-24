@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bpmnlib import (KEY, REASON_FREIGABE, REST_DOC, IU, brt, change_sub, check_block, ext, flow, mock, node,  # noqa: E402
-                     rest_decision, rest_status, script, shop, spbox, write)
+                     rest_decision, rest_status, script, shop, spbox, subprocess, write)
 
 OUT = sys.argv[1]
 
@@ -69,11 +69,6 @@ node("a_feat", "serviceTask", "Features aktivieren (S8)", 1630, M + L1,
      ext(mock('={ siteUrl: site.url, features: regel.features }', "features")),
      doc="Simuliert apsbw_sharepoint_feature activate mit den Features des Site-Typs aus der Richtlinie (Annahme).")
 node("a_parj", "parallelGateway", "", 1910, M)
-node("a_reg", "scriptTask", "Zugriff registrieren", 2040, M,
-     script('=site.url + "|" + (if orderer = null then "" else orderer) + "|" + (if recipient = null then "" else recipient)', "siteZugriff"),
-     doc="Setzt siteZugriff = <Site-URL>|<Besteller>|<Empfänger> als durchsuchbare Variable (atlas:searchable). Daran erkennt der "
-         "Zusatzprozess proc_spop_zusatz über die Instanzsuche, ob eine Site der Person gehört, die eine Zusatzleistung bestellt. "
-         "Eine Inhaltssuche liefert je Treffer nur die passende Variable; darum stehen alle drei Angaben in einer.")
 node("a_bill", "serviceTask", "Verrechnung erfassen", 2170, M,
      ext(mock('={ material: site.material, menge: 1, einheit: "Site", siteUrl: site.url, position: orderId + "/" + (if positionId = null then itemId else positionId) }', "verrechnung")),
      doc="Simuliert die Erfassung der wiederkehrenden Verrechnung (Marktleistungsstruktur ML Redesign SharePoint) mit der "
@@ -83,56 +78,21 @@ node("a_info", "serviceTask", "Position als erledigt melden", 2300, M, rest_stat
          "steht die Site im Bestand und die Aktionen werden möglich." + REST_DOC)
 
 # ======================================================================= Warten auf Aufträge
+# Jede Aktion ist ein Zwischenereignis direkt am ereignisbasierten Gateway, gefolgt von ihrem Subprozess. Die Einladung
+# liegt oberhalb und kehrt über die Oberkante zurück. Die übrigen Aktionen stehen untereinander; jeder Subprozess mündet
+# rechts in den gemeinsamen Rückweg j_zurueck, der unter allen hindurch zum Warten führt. So kreuzt kein Rückweg die
+# Verzweigung des Gateways. Die Rückgabe ist ein unterbrechender Ereignis-Subprozess (unten), keine Verzweigung.
 JX, GX, CX, SPX = 2430, 2590, 2700, 2750
+W = 1750                      # Breite jedes Änderungs-Subprozesses unterhalb
+XR = SPX + W + 60             # Spalte des gemeinsamen Rückwegs
 node("j_aktiv", "exclusiveGateway", "", JX, M)
 node("g_warten", "eventBasedGateway", "Aktiv: auf Auftrag warten", GX, M, label="custom", lpos=(JX + 25, M - 62, 100, 27),
-     doc="Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Quota-Erhöhung, externe Einladung "
-         "oder Rückgabe. Jede Aktion ist an orderId/positionId korreliert. Während eine Aktion läuft, wartet der Strang nicht; "
-         "eine zweite Aktion derselben Position wird erst nach Abschluss der ersten angenommen.")
-node("c_rueck", "intermediateCatchEvent", "Rückgabe angefordert", CX, M, '<messageEventDefinition messageRef="m_rueckgabe"/>',
-     doc="Operation deprovision (Formular spop-teamsite-rueckgabe: grund).", lw=90)
+     doc="Die Site ist in Betrieb. Der Strang wartet auf die nächste Aktion der Position: Einladung, Speicher, Erweitertes "
+         "Reporting, SubSite Quota, Umbenennung, URL-Änderung oder Berechtigungen. Jede Aktion ist an orderId/positionId "
+         "korreliert. Während eine Aktion läuft, wartet der Strang nicht; eine zweite Aktion derselben Position wird erst nach "
+         "Abschluss der ersten angenommen. Die Rückgabe unterbricht jederzeit (Ereignis-Subprozess «Rückgabe»).")
 node("c_extern", "intermediateCatchEvent", "Einladung angefragt", CX, 330, '<messageEventDefinition messageRef="m_extern"/>',
      doc="GF-003: Aktion extern-einladen (Formular spop-extern-einladen: email, rolle, ablaufTage, nachricht).", lw=90)
-node("c_quota", "intermediateCatchEvent", "Speichererweiterung angefragt", CX, 960, '<messageEventDefinition messageRef="m_quota"/>',
-     doc="GF-002: Aktion quota-erhoehen, im Shop «Speicherplatz erweitern» (Formular spop-quota-erhoehung: menge = "
-         "Zusatzspeicher in GB, begruendung).", lw=90)
-
-# ----------------------------------------------------------------------- Subprozess Speicher (GF-002), unterhalb
-QY = 960
-GB = 'if menge = null then 0 else number(string(menge))'
-X = change_sub(
-    SPX, "q", "sp_quota", "quota-erhoehen", "Speicherplatz erweitern (GF-002)", QY, 1600,
-    "GF-002 SP OnPrem Quota-Erhöhung als Speicherplatzerweiterung (Material 540007510, Verrechnung pro GB und Monat): Die "
-    "Aktion nennt die neue Gesamtmenge Zusatzspeicher in GB. Die Site behält ihre inbegriffene Quota (quota.basisMb); die "
-    "gesetzte Quota ist basisMb + zusatzGb × 1024. Die Richtlinie ist SpopZusatzRichtlinie mit dem Produkt spop-speicher: "
-    "1 bis 500 GB, Vier-Augen-Prinzip über 100 GB. Output-Mapping quota: Ergebnisse innerer Aufgaben bleiben im Subprozess "
-    "(ADR-0074); endet er mit einer Ablehnung, löst =quota den unveränderten Wert auf.",
-    [("=quota", "quota")],
-    "Site und Speicher lesen (S1)",
-    '={ gefunden: site != null, siteUrl: site.url, basisMb: if quota.basisMb = null then quota.storageMb else quota.basisMb, '
-    'gb: if quota.zusatzGb = null then 0 else quota.zusatzGb }',
-    "Simuliert apsbw_sharepoint_site read und apsbw_sharepoint_quota read aus dem Stand des Strangs (site, quota). Schreibt aktuell.",
-    "Speicher-Richtlinie prüfen (S3)", "SpopZusatzRichtlinie",
-    [("=aktuell.gefunden", "siteGefunden"), ("=true", "siteGehoert"), ('="spop-speicher"', "produkt"),
-     (f"={GB}", "menge"), (f"=({GB}) = aktuell.gb", "unveraendert")],
-    "DMN SpopZusatzRichtlinie mit dem Produkt spop-speicher: zulässige Menge, Material 540007510, Vier-Augen-Prinzip über "
-    "100 GB. Die Site gehört dem Strang selbst, darum siteGehoert = true.",
-    '="Speicherplatzerweiterung (GF-002, Material " + regel.material + ")\nSite: " + site.url + " (" + site.typ + ")\n'
-    'Zusatzspeicher bisher: " + string(aktuell.gb) + " GB\nNeu: " + string(menge) + " GB" + '
-    '(if begruendung = null then "" else "\nBegründung: " + begruendung) + "\nRegel: " + regel.grund',
-    "Speichererweiterung freigeben")
-node("q_apply", "serviceTask", "Speicher setzen (S2)", X(1260), QY,
-     ext(mock('={ siteUrl: site.url, basisMb: aktuell.basisMb, zusatzGb: number(string(menge)), zusatzGbVorher: aktuell.gb, '
-              'storageMb: aktuell.basisMb + number(string(menge)) * 1024, material: regel.material }', "quota")),
-     doc="Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota) mit basisMb + zusatzGb × 1024 und "
-         "die Umstellung der Verrechnung auf zusatzGb × Material 540007510; zusatzGbVorher bleibt für einen Rollback erhalten.",
-     parent="sp_quota")
-node("q_info", "sendTask", "Aktion als erledigt melden", X(1410), QY, shop("quota-erhoehen", "completed"),
-     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion quota-erhoehen mit completed.", parent="sp_quota")
-node("q_end", "endEvent", "Speicher erweitert", X(1540), QY, parent="sp_quota")
-flow("q_f10", "q_join", "q_apply", parent="sp_quota")
-flow("q_f11", "q_apply", "q_info", parent="sp_quota")
-flow("q_f12", "q_info", "q_end", parent="sp_quota")
 
 # ----------------------------------------------------------------------- Subprozess Einladung (GF-003), oberhalb
 EY = 330
@@ -187,32 +147,125 @@ flow("x_f17", "x_ablauf", "x_widerruf", **SX)
 flow("x_f18", "x_widerruf", "x_info2", **SX)
 flow("x_f19", "x_info2", "x_end2", **SX)
 
-# ----------------------------------------------------------------------- Angaben der Site ändern: Ereignis-Subprozesse
-# Drei Aktionen ändern, was «Angaben ändern» im Shop nur im Datensatz der Bestellung korrigiert: Titel, URL, Owner und
-# Members. Sie sind nicht unterbrechende Ereignis-Subprozesse (ADR-0082): Jede Nachricht startet einen Lauf neben dem
-# Strang, ohne Rückweg zum Warten. Gebunden sind sie, solange der Strang lebt; vor der Bereitstellung lehnt die Regel ab
-# (siteGefunden), und die Rückgabe beendet laufende Läufe mit dem terminierenden Ende.
-# Gleichzeitige Läufe: Jeder Lauf schreibt nur seine eigenen Felder in die lokale Variable neu (Ergebnisse innerer
-# Aufgaben bleiben im Subprozess, ADR-0074). Erst das Output-Mapping beim Abschluss setzt sie mit context merge in den
-# dann aktuellen Stand des Strangs ein; Atlas wertet es in demselben Verarbeitungsschritt aus, der die Variable schreibt.
-# So überschreibt eine Umbenennung keine URL-Änderung, die während ihrer Freigabe abgeschlossen wurde, und umgekehrt.
-def merged(var, part="neu"):
-    return f"=if {part} = null then {var} else context merge([{var}, {part}])"
+
+ROWS = []                     # (Catch-Id, Subprozess-Id, y) der Aktionen unterhalb, von oben nach unten
 
 
-ZUGRIFF = ('=(if neu = null then site.url else neu.url) + "|" + (if orderer = null then "" else orderer) + "|" + '
-           '(if recipient = null then "" else recipient)')
-EVENT_DOC = (" Nicht unterbrechender Ereignis-Subprozess (ADR-0082): startet bei jeder Nachricht der Position und läuft neben "
-             "dem Strang. Die Ausführung schreibt nur die geänderten Felder in die lokale Variable neu; das Output-Mapping "
-             "setzt sie beim Abschluss mit context merge in den dann aktuellen Stand ein. Gleichzeitige Läufe überschreiben "
-             "sich darum nicht gegenseitig. Endet der Lauf mit einer Ablehnung, ist neu leer und der Stand bleibt. Vor der "
-             "Bereitstellung lehnt die Regel ab, weil site noch fehlt.")
+def action_row(i, cid, cname, msg, cdoc):
+    y = 960 + 630 * i
+    node(cid, "intermediateCatchEvent", cname, CX, y, f'<messageEventDefinition messageRef="{msg}"/>', doc=cdoc, lw=90)
+    return y
 
-TY = 1600
+
+def merged(var, part="neu", empty="null"):
+    """Setzt die lokalen Felder eines Laufs beim Abschluss in den Stand des Strangs ein (context merge)."""
+    base = var if empty == "null" else f"(if {var} = null then {empty} else {var})"
+    return f"=if {part} = null then {var} else context merge([{base}, {part}])"
+
+
+def finish(p, sid, X, y, apply_name, apply_inner, apply_doc, action, end_name, extra=()):
+    """Ausführung, (weitere Schritte), Shop-Meldung und Ende hinter f"{p}_join"."""
+    P = dict(parent=sid)
+    node(f"{p}_apply", "serviceTask", apply_name, X(1260), y, apply_inner, doc=apply_doc, **P)
+    prev, x = f"{p}_apply", 1410
+    for k, (nid, name, inner, doc) in enumerate(extra):
+        node(nid, "serviceTask", name, X(x), y, inner, doc=doc, **P)
+        flow(f"{p}_fx{k}", prev, nid, **P)
+        prev, x = nid, x + 150
+    node(f"{p}_info", "sendTask", "Aktion als erledigt melden", X(x), y, shop(action, "completed"),
+         doc=f"Shop-Aufgabe (Modus outcome): beantwortet die Aktion {action} mit completed.", **P)
+    node(f"{p}_end", "endEvent", end_name, X(x + 130), y, **P)
+    flow(f"{p}_f10", f"{p}_join", f"{p}_apply", **P)
+    flow(f"{p}_f11", prev, f"{p}_info", **P)
+    flow(f"{p}_f12", f"{p}_info", f"{p}_end", **P)
+
+
+MERGE_DOC = (" Die Ausführung schreibt nur die geänderten Felder in die lokale Variable neu (Ergebnisse innerer Aufgaben bleiben "
+             "im Subprozess, ADR-0074); das Output-Mapping setzt sie beim Abschluss mit context merge in den Stand des Strangs "
+             "ein. Endet der Subprozess mit einer Ablehnung, ist neu leer und der Stand bleibt.")
+
+# ----------------------------------------------------------------------- Speicherplatz erweitern (GF-002)
+GB = 'if menge = null then 0 else number(string(menge))'
+y = action_row(0, "c_quota", "Speichererweiterung angefragt", "m_quota",
+               "GF-002: Aktion quota-erhoehen, im Shop «Speicherplatz erweitern» (Formular spop-quota-erhoehung: menge = "
+               "Zusatzspeicher in GB, begruendung).")
 X = change_sub(
-    SPX, "t", "sp_titel", "site-umbenennen", "Site umbenennen", TY, 1600,
-    "Aktion site-umbenennen (Formular spop-site-umbenennen: neuerTitel, begruendung): ändert den Titel der Site; die URL "
-    "bleibt. Richtlinie SpopAenderungRichtlinie mit aenderung titel: 1 bis 80 Zeichen, ohne Freigabe." + EVENT_DOC,
+    SPX, "q", "sp_quota", "quota-erhoehen", "Speicherplatz erweitern (GF-002)", y, W,
+    "GF-002 SP OnPrem Quota-Erhöhung als Speicherplatzerweiterung (Material 540007510, Verrechnung pro GB und Monat): Die "
+    "Aktion nennt die neue Gesamtmenge Zusatzspeicher in GB. Die Site behält ihre inbegriffene Quota (quota.basisMb); die "
+    "gesetzte Quota ist basisMb + zusatzGb × 1024. Richtlinie SpopZusatzRichtlinie mit dem Produktschlüssel spop-speicher: "
+    "1 bis 500 GB, Vier-Augen-Prinzip über 100 GB." + MERGE_DOC,
+    [(merged("quota"), "quota")],
+    "Site und Speicher lesen (S1)",
+    '={ gefunden: site != null, basisMb: if quota.basisMb = null then quota.storageMb else quota.basisMb, '
+    'gb: if quota.zusatzGb = null then 0 else quota.zusatzGb }',
+    "Simuliert apsbw_sharepoint_site read und apsbw_sharepoint_quota read aus dem Stand des Strangs (site, quota). Schreibt aktuell.",
+    "Speicher-Richtlinie prüfen (S3)", "SpopZusatzRichtlinie",
+    [("=aktuell.gefunden", "siteGefunden"), ('="spop-speicher"', "produkt"),
+     (f"={GB}", "menge"), (f"=({GB}) = aktuell.gb", "unveraendert")],
+    "DMN SpopZusatzRichtlinie mit dem Produktschlüssel spop-speicher: zulässige Menge, Material 540007510, Vier-Augen-Prinzip "
+    "über 100 GB.",
+    '="Speicherplatzerweiterung (GF-002, Material " + regel.material + ")\\nSite: " + site.url + " (" + site.typ + ")\\n'
+    'Zusatzspeicher bisher: " + string(aktuell.gb) + " GB\\nNeu: " + string(menge) + " GB" + '
+    '(if begruendung = null then "" else "\\nBegründung: " + begruendung) + "\\nRegel: " + regel.grund',
+    "Speichererweiterung freigeben")
+finish("q", "sp_quota", X, y, "Speicher setzen (S2)",
+       ext(mock('={ zusatzGb: number(string(menge)), zusatzGbVorher: aktuell.gb, '
+                'storageMb: aktuell.basisMb + number(string(menge)) * 1024, material: regel.material }', "neu")),
+       "Simuliert apsbw_sharepoint_quota apply (Worker sharepointserver: set-site-quota) mit basisMb + zusatzGb × 1024 und die "
+       "Umstellung der Verrechnung auf zusatzGb × Material 540007510; zusatzGbVorher bleibt für einen Rollback erhalten.",
+       "quota-erhoehen", "Speicher erweitert")
+ROWS.append(("c_quota", "sp_quota", y))
+
+
+# ----------------------------------------------------------------------- Zusatzleistungen: Erweitertes Reporting, SubSite Quota
+def zusatz_row(i, p, cid, cname, msg, sid, name, action, key, produkt, label, default, einheit, form, doc, ut_name, end_name):
+    menge = 'if menge = null then 0 else number(string(menge))'
+    y = action_row(i, cid, cname, msg, f"Aktion {action} (Formular {form}: menge = neue Gesamtmenge, begruendung).")
+    X = change_sub(
+        SPX, p, sid, action, name, y, W, doc + MERGE_DOC,
+        [(merged("zusatz", empty="{}"), "zusatz")],
+        "Site und Zusatzleistung lesen (S1)",
+        f'={{ gefunden: site != null, menge: if zusatz = null then {default} else '
+        f'(if zusatz.{key} = null then {default} else zusatz.{key}.menge) }}',
+        f"Simuliert apsbw_sharepoint_site read und liest den Stand der Zusatzleistung aus zusatz.{key}. Schreibt aktuell.",
+        f"{label}-Richtlinie prüfen", "SpopZusatzRichtlinie",
+        [("=aktuell.gefunden", "siteGefunden"), (f'="{produkt}"', "produkt"),
+         (f"={menge}", "menge"), (f"=({menge}) = aktuell.menge", "unveraendert")],
+        f"DMN SpopZusatzRichtlinie mit dem Produktschlüssel {produkt}: zulässige Menge, Verrechnungsband und Materialnummer.",
+        f'="{label}\\nSite: " + site.url + "\\nBisher: " + string(aktuell.menge) + " {einheit}\\nNeu: " + string(menge) + '
+        f'" {einheit}" + (if begruendung = null then "" else "\\nBegründung: " + begruendung) + "\\nRegel: " + regel.grund',
+        ut_name)
+    finish(p, sid, X, y, "Zusatzleistung setzen (S2)",
+           ext(mock(f'={{ {key}: {{ menge: number(string(menge)), mengeVorher: aktuell.menge, material: regel.material, '
+                    'einheit: regel.einheit } }', "neu")),
+           f"Simuliert die Ausführung in SharePoint und die Umstellung der Verrechnung auf das Band der neuen Menge (Material "
+           f"aus der Richtlinie, leer, wenn die Leistung endet). Schreibt neu.{key}; mengeVorher bleibt für einen Rollback.",
+           action, end_name)
+    ROWS.append((cid, sid, y))
+
+
+zusatz_row(1, "rp", "c_reporting", "Reporting angefragt", "m_reporting", "sp_reporting", "Erweitertes Reporting",
+           "reporting-aendern", "reporting", "spop-reporting", "Erweitertes Reporting", 0, "Pakete", "spop-reporting",
+           "Erweitertes Reporting der Site: Report-Pakete 0 bis 20, CHF 25.– pro Paket; 0 beendet die Leistung. Die Anzahl "
+           "bestimmt das Verrechnungsband: 1–5 (540007511), 6–10 (540007703), 11–15 (540007702), 16–20 (540007704). Die "
+           "Leistung gehört zur Site und endet mit ihrer Rückgabe.",
+           "Reporting freigeben", "Reporting gesetzt")
+zusatz_row(2, "ss", "c_subsites", "SubSite Quota angefragt", "m_subsites", "sp_subsites", "SubSite Quota",
+           "subsites-aendern", "subsites", "spop-subsite-quota", "SubSite Quota", 10, "Subsites", "spop-subsites",
+           "SubSite Quota der Site: erlaubte Subsites 10 bis 500; bis 10 sind in der Basis enthalten, 10 beendet die "
+           "Leistung. Bänder 11–20 (540007513), 21–50 (540007705), 51–100 (540007706), 101–200 (540007707), 201–500 "
+           "(540007708); ab 101 Vier-Augen-Prinzip. Die Leistung gehört zur Site und endet mit ihrer Rückgabe.",
+           "SubSite Quota freigeben", "SubSite Quota gesetzt")
+
+# ----------------------------------------------------------------------- Angaben der Site: Titel, URL, Berechtigungen
+# Was «Angaben ändern» im Shop nur im Datensatz der Bestellung korrigiert (ADR-0359), ändert hier je eine Aktion.
+y = action_row(3, "c_titel", "Umbenennung angefragt", "m_titel",
+               "Aktion site-umbenennen (Formular spop-site-umbenennen: neuerTitel, begruendung).")
+X = change_sub(
+    SPX, "t", "sp_titel", "site-umbenennen", "Site umbenennen", y, W,
+    "Aktion site-umbenennen: ändert den Titel der Site; die URL bleibt. Richtlinie SpopAenderungRichtlinie mit aenderung "
+    "titel: 1 bis 80 Zeichen, ohne Freigabe." + MERGE_DOC,
     [(merged("site"), "site")],
     "Site lesen (S1)",
     '={ gefunden: site != null, titel: if site = null then null else site.titel }',
@@ -225,28 +278,21 @@ X = change_sub(
     "DMN SpopAenderungRichtlinie mit aenderung titel.",
     '="Site umbenennen\\nSite: " + site.url + "\\nTitel bisher: " + aktuell.titel + "\\nNeu: " + neuerTitel + '
     '"\\nRegel: " + regel.grund',
-    "Umbenennung freigeben", trigger=("m_titel", "Umbenennung angefragt"))
-node("t_apply", "serviceTask", "Titel setzen (S1)", X(1260), TY,
-     ext(mock('={ titel: neuerTitel, titelVorher: site.titel }', "neu")),
-     doc="Simuliert apsbw_sharepoint_site update (Titel). Schreibt neu mit dem neuen Titel und titelVorher für einen "
-         "Rollback; das Output-Mapping setzt beides in site ein.", parent="sp_titel")
-node("t_info", "sendTask", "Aktion als erledigt melden", X(1410), TY, shop("site-umbenennen", "completed"),
-     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-umbenennen mit completed.", parent="sp_titel")
-node("t_end", "endEvent", "Site umbenannt", X(1540), TY, parent="sp_titel")
-flow("t_f10", "t_join", "t_apply", parent="sp_titel")
-flow("t_f11", "t_apply", "t_info", parent="sp_titel")
-flow("t_f12", "t_info", "t_end", parent="sp_titel")
+    "Umbenennung freigeben")
+finish("t", "sp_titel", X, y, "Titel setzen (S1)", ext(mock('={ titel: neuerTitel, titelVorher: site.titel }', "neu")),
+       "Simuliert apsbw_sharepoint_site update (Titel). Schreibt neu mit dem neuen Titel und titelVorher für einen Rollback.",
+       "site-umbenennen", "Site umbenannt")
+ROWS.append(("c_titel", "sp_titel", y))
 
-UY = 2230
 NEUE_URL = '"/sites/" + lower case(neuesAmtKuerzel) + "-" + neuerKurzname'
+y = action_row(4, "c_url", "URL-Änderung angefragt", "m_url",
+               "Aktion site-url-aendern (Formular spop-site-url-aendern: neuesAmtKuerzel, neuerKurzname, begruendung).")
 X = change_sub(
-    SPX, "u", "sp_url", "site-url-aendern", "Site-URL ändern", UY, 1750,
-    "Aktion site-url-aendern (Formular spop-site-url-aendern: neuesAmtKuerzel, neuerKurzname, begruendung): gibt der Site die "
-    "URL /sites/<amt>-<kurzname>. Bestehende Links werden ungültig; darum immer Vier-Augen-Freigabe (SpopAenderungRichtlinie, "
-    "aenderung url). Führt die Verrechnung und siteZugriff nach, damit die Eigentumsprüfung der Zusatzleistungen die Site "
-    "unter der neuen URL findet. Annahme: SharePoint OnPrem erlaubt das Umbenennen der Site-Collection-URL; technisch "
-    "nicht geklärt." + EVENT_DOC,
-    [(merged("site"), "site"), (merged("verrechnung", "neuVerrechnung"), "verrechnung"), (ZUGRIFF, "siteZugriff")],
+    SPX, "u", "sp_url", "site-url-aendern", "Site-URL ändern", y, W,
+    "Aktion site-url-aendern: gibt der Site die URL /sites/<amt>-<kurzname>. Bestehende Links werden ungültig; darum immer "
+    "Vier-Augen-Freigabe (SpopAenderungRichtlinie, aenderung url). Führt die Verrechnung nach. Annahme: SharePoint OnPrem "
+    "erlaubt das Umbenennen der Site-Collection-URL; technisch nicht geklärt." + MERGE_DOC,
+    [(merged("site"), "site"), (merged("verrechnung", "neuVerrechnung"), "verrechnung")],
     "Site und neue URL lesen (S1)",
     '={ gefunden: site != null, url: if site = null then null else site.url, neueUrl: ' + NEUE_URL + ', urlFrei: true }',
     "Simuliert apsbw_sharepoint_site read für die heutige und die neue URL; urlFrei sagt, ob unter der neuen URL noch keine "
@@ -260,33 +306,23 @@ X = change_sub(
     "DMN SpopAenderungRichtlinie mit aenderung url: immer Vier-Augen-Prinzip.",
     '="Site-URL ändern\\nURL bisher: " + aktuell.url + "\\nNeu: " + aktuell.neueUrl + '
     '(if begruendung = null then "" else "\\nBegründung: " + begruendung) + "\\nRegel: " + regel.grund',
-    "URL-Änderung freigeben", trigger=("m_url", "URL-Änderung angefragt"))
-node("u_apply", "serviceTask", "Site-URL ändern (S1)", X(1260), UY,
-     ext(mock('={ url: aktuell.neueUrl, urlVorher: site.url }', "neu", "PT2S", "PT4S")),
-     doc="Simuliert das Umbenennen der Site-Collection-URL (apsbw_sharepoint_site rename). Schreibt neu mit der neuen URL "
-         "und urlVorher für einen Rollback; das Output-Mapping setzt beides in site ein und bildet siteZugriff neu.",
-     parent="sp_url")
-node("u_bill", "serviceTask", "Verrechnung nachführen", X(1410), UY,
-     ext(mock('={ siteUrl: neu.url }', "neuVerrechnung")),
-     doc="Simuliert die Anpassung der wiederkehrenden Verrechnung auf die neue URL. Schreibt neuVerrechnung; das "
-         "Output-Mapping setzt siteUrl in verrechnung ein.", parent="sp_url")
-node("u_info", "sendTask", "Aktion als erledigt melden", X(1560), UY, shop("site-url-aendern", "completed"),
-     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion site-url-aendern mit completed.", parent="sp_url")
-node("u_end", "endEvent", "URL geändert", X(1690), UY, parent="sp_url")
-flow("u_f10", "u_join", "u_apply", parent="sp_url")
-flow("u_f11", "u_apply", "u_bill", parent="sp_url")
-flow("u_f12", "u_bill", "u_info", parent="sp_url")
-flow("u_f13", "u_info", "u_end", parent="sp_url")
+    "URL-Änderung freigeben")
+finish("u", "sp_url", X, y, "Site-URL ändern (S1)", ext(mock('={ url: aktuell.neueUrl, urlVorher: site.url }', "neu", "PT2S", "PT4S")),
+       "Simuliert das Umbenennen der Site-Collection-URL (apsbw_sharepoint_site rename). Schreibt neu mit der neuen URL und "
+       "urlVorher für einen Rollback.",
+       "site-url-aendern", "URL geändert",
+       extra=[("u_bill", "Verrechnung nachführen", ext(mock('={ siteUrl: neu.url }', "neuVerrechnung")),
+               "Simuliert die Anpassung der wiederkehrenden Verrechnung auf die neue URL. Schreibt neuVerrechnung.")])
+ROWS.append(("c_url", "sp_url", y))
 
-BY = 2860
 MITGLIEDER = 'if neueMemberUpns = null then "" else neueMemberUpns'
+y = action_row(5, "c_rechte", "Berechtigungsänderung angefragt", "m_rechte",
+               "Aktion berechtigungen-aendern (Formular spop-berechtigungen-aendern: neuerOwnerUpn, neueMemberUpns, begruendung).")
 X = change_sub(
-    SPX, "b", "sp_rechte", "berechtigungen-aendern", "Berechtigungen ändern", BY, 1600,
-    "Aktion berechtigungen-aendern (Formular spop-berechtigungen-aendern: neuerOwnerUpn, neueMemberUpns, begruendung): setzt "
-    "Owner und Members der Site neu; anzugeben ist der vollständige neue Stand. Richtlinie SpopAenderungRichtlinie mit "
-    "aenderung berechtigungen: Owner-Wechsel bei Hermes, Communication und Publishing mit Vier-Augen-Freigabe. Die "
-    "Eigentumsprüfung der Zusatzleistungen hängt am Besteller und Empfänger der Position, nicht am Owner; sie ändert "
-    "sich hier nicht." + EVENT_DOC,
+    SPX, "b", "sp_rechte", "berechtigungen-aendern", "Berechtigungen ändern", y, W,
+    "Aktion berechtigungen-aendern: setzt Owner und Members der Site neu; anzugeben ist der vollständige neue Stand. "
+    "Richtlinie SpopAenderungRichtlinie mit aenderung berechtigungen: Owner-Wechsel bei Hermes, Communication und Publishing "
+    "mit Vier-Augen-Freigabe." + MERGE_DOC,
     [(merged("gruppen"), "gruppen")],
     "Gruppen und neuen Owner lesen (S2)",
     '={ gefunden: site != null, owner: if gruppen = null then null else gruppen.owner, '
@@ -301,53 +337,78 @@ X = change_sub(
     "DMN SpopAenderungRichtlinie mit aenderung berechtigungen.",
     '="Berechtigungen ändern\\nSite: " + site.url + "\\nOwner bisher: " + aktuell.owner + "\\nNeu: " + neuerOwnerUpn + '
     f'"\\nMembers neu: " + ({MITGLIEDER}) + "\\nRegel: " + regel.grund',
-    "Owner-Wechsel freigeben", trigger=("m_rechte", "Änderung angefragt"))
-node("b_apply", "serviceTask", "Gruppen aktualisieren (S2–S5)", X(1260), BY,
-     ext(mock(f'={{ owner: neuerOwnerUpn, mitglieder: {MITGLIEDER}, ownerVorher: gruppen.owner, '
-              'mitgliederVorher: gruppen.mitglieder }', "neu")),
-     doc="Simuliert apsbw_sharepoint_group add_member und remove_member für die Owner- und die Member-Gruppe. Schreibt neu "
-         "mit Owner und Members sowie ownerVorher und mitgliederVorher für einen Rollback; das Output-Mapping setzt sie in "
-         "gruppen ein.", parent="sp_rechte")
-node("b_info", "sendTask", "Aktion als erledigt melden", X(1410), BY, shop("berechtigungen-aendern", "completed"),
-     doc="Shop-Aufgabe (Modus outcome): beantwortet die Aktion berechtigungen-aendern mit completed.", parent="sp_rechte")
-node("b_end", "endEvent", "Berechtigungen geändert", X(1540), BY, parent="sp_rechte")
-flow("b_f10", "b_join", "b_apply", parent="sp_rechte")
-flow("b_f11", "b_apply", "b_info", parent="sp_rechte")
-flow("b_f12", "b_info", "b_end", parent="sp_rechte")
+    "Owner-Wechsel freigeben")
+finish("b", "sp_rechte", X, y, "Gruppen aktualisieren (S2–S5)",
+       ext(mock(f'={{ owner: neuerOwnerUpn, mitglieder: {MITGLIEDER}, ownerVorher: gruppen.owner, '
+                'mitgliederVorher: gruppen.mitglieder }', "neu")),
+       "Simuliert apsbw_sharepoint_group add_member und remove_member für die Owner- und die Member-Gruppe. Schreibt neu mit "
+       "Owner und Members sowie ownerVorher und mitgliederVorher für einen Rollback.",
+       "berechtigungen-aendern", "Berechtigungen geändert")
+ROWS.append(("c_rechte", "sp_rechte", y))
 
-# ----------------------------------------------------------------------- Rückgabe
-qx, qy, qw, qh = spbox["sp_quota"]
-ex, ey, ew, eh = spbox["sp_extern"]
-BQ = qx + qw - 60          # Boundary auf der Oberkante des Quota-Subprozesses
-BE = ex + ew - 60          # Boundary auf der Unterkante des Einladungs-Subprozesses
-node("b_rueck_q", "boundaryEvent", "Rückgabe", BQ, qy, '<messageEventDefinition messageRef="m_rueckgabe"/>',
-     attrs=' attachedToRef="sp_quota" cancelActivity="true"', label="custom", lpos=(BQ + 22, qy - 34, 60, 14),
-     doc="Eine Rückgabe bricht eine laufende Quota-Erhöhung ab.")
-node("b_rueck_x", "boundaryEvent", "Rückgabe", BE, ey + eh, '<messageEventDefinition messageRef="m_rueckgabe"/>',
-     attrs=' attachedToRef="sp_extern" cancelActivity="true"', label="custom", lpos=(BE - 82, ey + eh + 20, 60, 14),
-     doc="Eine Rückgabe bricht eine laufende Einladung ab, auch während auf die Annahme gewartet wird.")
-node("j_rueck1", "exclusiveGateway", "", BQ, M)
-node("j_rueck2", "exclusiveGateway", "", BE, M)
-node("r_start", "startEvent", "Rückgabe ohne laufenden Strang", BQ + 130, QY, '<messageEventDefinition messageRef="m_rueckgabe"/>',
+# ----------------------------------------------------------------------- Gemeinsamer Rückweg zum Warten
+YJ = ROWS[-1][2] + 300 + 70
+node("j_zurueck", "exclusiveGateway", "", XR, YJ,
+     doc="Gemeinsamer Rückweg: Jeder Änderungs-Subprozess unterhalb mündet hier; von hier geht der Strang zurück zum Warten.")
+for k, (cid, sid, yy) in enumerate(ROWS):
+    flow(f"w_c{k}", "g_warten", cid, "b", "l")
+    flow(f"w_s{k}", cid, sid, b=(SPX, yy))
+    flow(f"w_z{k}", sid, "j_zurueck", a=(SPX + W, yy), b=(XR, YJ - 25), via=[(XR, yy)])
+flow("w_back", "j_zurueck", "j_aktiv", a=(XR, YJ + 25), b=(JX, M + 25), via=[(XR, YJ + 60), (JX, YJ + 60)])
+
+# ----------------------------------------------------------------------- Rückgabe: unterbrechender Ereignis-Subprozess
+# Eine Rückgabe beendet alles, was in der Position läuft, auch eine wartende Freigabe, und baut die Site ab. Sie braucht
+# darum weder ein Catch-Event am Gateway noch Boundary-Events an den Subprozessen.
+RX, RY = XR + 240, M
+subprocess("sp_rueckgabe", "Rückgabe", RX, RY - 110, 860, 220,
+           "Unterbrechender Ereignis-Subprozess (ADR-0082) auf der Nachricht spop.teamsite.rueckgabe (Operation deprovision, "
+           "Formular spop-teamsite-rueckgabe: grund). Er unterbricht den Strang, wo immer er steht: beim Warten, in einer "
+           "Änderung oder in einer wartenden Freigabe. Entfernt die externen Zugriffe, löscht die Site und beendet die "
+           "Verrechnung der Site und ihrer Zusatzleistungen.",
+           attrs=' triggeredByEvent="true"')
+RP = dict(parent="sp_rueckgabe")
+node("rv_s", "startEvent", "Rückgabe angefordert", RX + 40, RY, '<messageEventDefinition messageRef="m_rueckgabe"/>', lw=90, **RP)
+node("rv_extern", "serviceTask", "Externe Zugriffe entfernen", RX + 160, RY,
+     ext(mock('={ siteUrl: site.url, entfernt: if externe = null then [] else externe }', "externEntfernt")),
+     doc="Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen.", **RP)
+node("rv_delete", "serviceTask", "Site löschen", RX + 310, RY,
+     ext(mock('={ siteUrl: site.url, status: "im Papierkorb" }', "rueckbau")),
+     doc="Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).", **RP)
+node("rv_bill", "serviceTask", "Verrechnung beenden", RX + 460, RY,
+     ext(mock('={ material: site.material, siteUrl: site.url, zusatz: zusatz, quota: quota, status: "beendet" }', "verrechnung")),
+     doc="Simuliert das Beenden der wiederkehrenden Verrechnung: Site-Material, Speicherplatzerweiterung und Zusatzleistungen.", **RP)
+node("rv_info", "serviceTask", "Rückgabe melden", RX + 610, RY, rest_status("returned"),
+     doc="Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand." + REST_DOC, **RP)
+node("rv_end", "endEvent", "Site zurückgegeben", RX + 760, RY, **RP)
+flow("rv_f1", "rv_s", "rv_extern", **RP)
+flow("rv_f2", "rv_extern", "rv_delete", **RP)
+flow("rv_f3", "rv_delete", "rv_bill", **RP)
+flow("rv_f4", "rv_bill", "rv_info", **RP)
+flow("rv_f5", "rv_info", "rv_end", **RP)
+
+# ----------------------------------------------------------------------- Rückgabe ohne laufenden Strang (Rückfallebene)
+FY = M + 330
+node("r_start", "startEvent", "Rückgabe ohne laufenden Strang", RX + 40, FY, '<messageEventDefinition messageRef="m_rueckgabe"/>',
      doc="Rückfallebene wie im Referenzmodell: Eine Rückgabe für eine Position ohne laufenden Strang startet hier. Der Katalog "
          "verlangt für per-position diesen Nachrichtenstart.", lw=100)
-node("r_site", "scriptTask", "Site ermitteln", BQ + 260, QY,
+node("r_site", "scriptTask", "Site ermitteln", RX + 160, FY,
      script('={ url: "/sites/" + lower case(amtKuerzel) + "-" + kurzname }', "site"),
      doc="Bildet die Site-URL aus der Konfiguration der Position nach demselben Schema wie die Bereitstellung (Annahme: der "
-         "Katalog liefert amtKuerzel und kurzname der Position mit).")
-node("r_extern", "serviceTask", "Externe Zugriffe entfernen", BE + 130, M,
-     ext(mock('={ siteUrl: site.url, entfernt: if externe = null then [] else externe }', "externEntfernt")),
-     doc="Simuliert apsbw_sharepoint_externaluser remove für jeden Eintrag in externe, der Liste der angenommenen Einladungen des Strangs.")
-node("r_delete", "serviceTask", "Site löschen", BE + 280, M,
+         "Katalog liefert amtKuerzel und kurzname der Position mit). Eine spätere URL-Änderung kennt diese Ebene nicht.")
+node("r_delete", "serviceTask", "Site löschen", RX + 310, FY,
      ext(mock('={ siteUrl: site.url, status: "im Papierkorb" }', "rueckbau")),
      doc="Simuliert apsbw_sharepoint_site delete (Worker sharepointserver: delete-site, Papierkorb).")
-node("r_bill", "serviceTask", "Verrechnung beenden", BE + 430, M,
-     ext(mock('={ material: site.material, siteUrl: site.url, status: "beendet" }', "verrechnung")),
-     doc="Simuliert das Beenden der wiederkehrenden Verrechnung des Site-Materials.")
-node("r_info", "serviceTask", "Rückgabe melden", BE + 580, M, rest_status("returned"),
-     doc="Meldet die Rückgabe über die Positionsroute (status returned); damit endet das Recht im Bestand." + REST_DOC)
-node("r_end", "endEvent", "Site zurückgegeben", BE + 710, M, '<terminateEventDefinition/>',
-     doc="Terminierendes Ende: beendet den Strang der Position vollständig, auch laufende Ereignis-Subprozesse.")
+node("r_bill", "serviceTask", "Verrechnung beenden", RX + 460, FY,
+     ext(mock('={ siteUrl: site.url, status: "beendet" }', "verrechnung")),
+     doc="Simuliert das Beenden der wiederkehrenden Verrechnung der Site und ihrer Zusatzleistungen.")
+node("r_info", "serviceTask", "Rückgabe melden", RX + 610, FY, rest_status("returned"),
+     doc="Meldet die Rückgabe über die Positionsroute (status returned)." + REST_DOC)
+node("r_end", "endEvent", "Site zurückgegeben", RX + 760, FY)
+flow("r_f1", "r_start", "r_site")
+flow("r_f2", "r_site", "r_delete")
+flow("r_f3", "r_delete", "r_bill")
+flow("r_f4", "r_bill", "r_info")
+flow("r_f5", "r_info", "r_end")
 
 # ----------------------------------------------------------------------- Flüsse Hauptstrang
 flow("a_f1", "s_neu", "a_regel")
@@ -361,59 +422,45 @@ flow("a_f9", "a_par", "a_quota")
 flow("a_f10", "a_quota", "a_parj")
 flow("a_f11", "a_par", "a_feat", "b", "l")
 flow("a_f12", "a_feat", "a_parj", "r", "b")
-flow("a_f13", "a_parj", "a_reg")
-flow("a_f13a", "a_reg", "a_bill")
+flow("a_f13", "a_parj", "a_bill")
 flow("a_f13b", "a_bill", "a_info")
 flow("a_f14", "a_info", "j_aktiv")
 flow("w_f1", "j_aktiv", "g_warten")
-flow("w_f2", "g_warten", "c_rueck")
 flow("w_f3", "g_warten", "c_extern", "t", "l")
-flow("w_f4", "g_warten", "c_quota", "b", "l")
 flow("w_f5", "c_extern", "sp_extern", b=(SPX, EY))
-flow("w_f6", "c_quota", "sp_quota", b=(SPX, QY))
-# Rückkehr der Subprozesse zum Warten (Back-Edges)
+ex, ey, ew, eh = spbox["sp_extern"]
 flow("w_f7", "sp_extern", "j_aktiv", a=(SPX + 30, ey), b=(JX, M - 25), via=[(SPX + 30, ey - 30), (JX, ey - 30)])
-flow("w_f8", "sp_quota", "j_aktiv", a=(SPX + 30, qy + qh), b=(JX, M + 25), via=[(SPX + 30, qy + qh + 30), (JX, qy + qh + 30)])
-# Rückgabe
-flow("r_f1", "c_rueck", "j_rueck1")
-flow("r_f2", "b_rueck_q", "j_rueck1", a=(BQ, qy - 18), b=(BQ, M + 25), via=[])
-flow("r_f3", "j_rueck1", "j_rueck2")
-flow("r_f4", "b_rueck_x", "j_rueck2", a=(BE, ey + eh + 18), b=(BE, M - 25), via=[])
-flow("r_f5", "r_start", "r_site")
-flow("r_f6", "r_site", "j_rueck2", "r", "b")
-flow("r_f7", "j_rueck2", "r_extern")
-flow("r_f8", "r_extern", "r_delete")
-flow("r_f9", "r_delete", "r_bill")
-flow("r_f9b", "r_bill", "r_info")
-flow("r_f10", "r_info", "r_end")
 
 PROCESS_DOC = """SPoP: Lebenszyklus einer SharePoint-OnPrem-Site als ein einziger Strang je Position (Muster lc_proc_m365_funktionspostfach).
 Sechs Katalogprodukte binden diesen Prozess, je Site-Typ eines: Project Site Hermes (540007512), Communication Site (540007514),
 Publishing Site (540007515), Team Site Classic (540007516), Team Site Modern (540007560), Wiki Site (540008180). Den Typ, seine
 Vorlage, Features, Quota-Grenzen, Freigabepflicht und Materialnummer bestimmt die Richtlinie SpopTeamsiteRichtlinie aus itemId.
-Bereitstellung (GF-001) läuft flach; danach wartet der Strang am ereignisbasierten Gateway «Aktiv: auf Auftrag warten» auf:
-- spop.teamsite.quota     → Subprozess «Speicherplatz erweitern (GF-002)»       (Katalog: change, Formular spop-quota-erhoehung)
-- spop.teamsite.extern    → Subprozess «Externen Benutzer einladen (GF-003)»    (Katalog: change, Formular spop-extern-einladen)
-- spop.teamsite.rueckgabe → Rückgabe, auch als Boundary an beiden Subprozessen  (Katalog: deprovision, Formular spop-teamsite-rueckgabe)
-Nach jedem Subprozess kehrt der Strang zum Warten zurück. Daneben ändern drei nicht unterbrechende Ereignis-Subprozesse
-die Angaben der Site, jederzeit und ohne den Strang anzuhalten:
-- spop.teamsite.titel          → «Site umbenennen»        (Katalog: change, Formular spop-site-umbenennen)
-- spop.teamsite.url            → «Site-URL ändern»        (Katalog: change, Formular spop-site-url-aendern)
-- spop.teamsite.berechtigungen → «Berechtigungen ändern»  (Katalog: change, Formular spop-berechtigungen-aendern)
-«Angaben ändern» im Shop korrigiert nur den Datensatz der Bestellung; die Sprache ist nach der Erstellung fest. Alle späteren Aktionen sind an orderId + "/" + positionId korreliert
-(Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, gruppen, externe). Die Speicherplatzerweiterung (540007510, in GB)
-ist die Aktion quota-erhoehen der Site. Erweitertes Reporting und SubSite Quota sind eigene Produkte mit eigenem Prozess
-proc_spop_zusatz. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie (Speicher), SpopExternRichtlinie, SpopAenderungRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular spop-freigabe. Ausführung gegen APS-BW
-und Verrechnung im PoC simuliert (atlas:mockupConnector). Rückmeldungen an den Katalog sind echt: Decision-Route, Positionsroute
-(Secret "atlas", Konstante ATLAS_API_BASE) und Shop-Aufgaben."""
+Bereitstellung (GF-001) läuft flach; danach wartet der Strang am ereignisbasierten Gateway «Aktiv: auf Auftrag warten». Jede Aktion
+ist ein Zwischenereignis an diesem Gateway mit ihrem Subprozess (Katalog: change):
+- spop.teamsite.extern         → «Externen Benutzer einladen (GF-003)»  (Formular spop-extern-einladen)
+- spop.teamsite.quota          → «Speicherplatz erweitern (GF-002)»     (Formular spop-quota-erhoehung, Material 540007510)
+- spop.teamsite.reporting      → «Erweitertes Reporting»                (Formular spop-reporting)
+- spop.teamsite.subsites       → «SubSite Quota»                        (Formular spop-subsites)
+- spop.teamsite.titel          → «Site umbenennen»                      (Formular spop-site-umbenennen)
+- spop.teamsite.url            → «Site-URL ändern»                      (Formular spop-site-url-aendern)
+- spop.teamsite.berechtigungen → «Berechtigungen ändern»                (Formular spop-berechtigungen-aendern)
+Nach jedem Subprozess kehrt der Strang zum Warten zurück. Die Rückgabe (spop.teamsite.rueckgabe, Katalog: deprovision) ist ein
+unterbrechender Ereignis-Subprozess und als Nachrichtenstart die Rückfallebene ohne laufenden Strang. Alle späteren Aktionen sind an
+orderId + "/" + positionId korreliert (Katalogform per-position). Der Strang trägt den Stand der Site (site, quota, zusatz, gruppen,
+externe, verrechnung); jede Änderung setzt nur ihre eigenen Felder mit context merge ein. «Angaben ändern» im Shop korrigiert nur den
+Datensatz der Bestellung; die Sprache ist nach der Erstellung fest. Regeln: DMN SpopTeamsiteRichtlinie, SpopZusatzRichtlinie
+(Speicher, Reporting, SubSites), SpopExternRichtlinie, SpopAenderungRichtlinie. Vier-Augen-Freigabe: Gruppe SPoP-Freigabe, Formular
+spop-freigabe. Ausführung gegen APS-BW und Verrechnung im PoC simuliert (atlas:mockupConnector). Rückmeldungen an den Katalog sind
+echt: Decision-Route, Positionsroute (Secret "atlas", Konstante ATLAS_API_BASE) und Shop-Aufgaben."""
 
 write(OUT, "defs_spop_teamsite", "proc_spop_teamsite", "SPoP: Site-Lebenszyklus", PROCESS_DOC,
       [("m_bestellen", "spop.teamsite.bestellen", None),
-       ("m_quota", "spop.teamsite.quota", KEY),
        ("m_extern", "spop.teamsite.extern", KEY),
-       ("m_rueckgabe", "spop.teamsite.rueckgabe", KEY),
+       ("m_quota", "spop.teamsite.quota", KEY),
+       ("m_reporting", "spop.teamsite.reporting", KEY),
+       ("m_subsites", "spop.teamsite.subsites", KEY),
        ("m_titel", "spop.teamsite.titel", KEY),
        ("m_url", "spop.teamsite.url", KEY),
        ("m_rechte", "spop.teamsite.berechtigungen", KEY),
-       ("m_angenommen", "spop.extern.angenommen", "=einladung.einladungId")],
-      process_attrs=' atlas:searchable="siteZugriff"')
+       ("m_rueckgabe", "spop.teamsite.rueckgabe", KEY),
+       ("m_angenommen", "spop.extern.angenommen", "=einladung.einladungId")])

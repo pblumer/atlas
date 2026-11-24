@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "spop-subsites",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnP SubSite Quota**\n\nErlaubte Zahl der Subsites der Site dieser Position. Bis 10 Subsites sind in der Basis enthalten; 10 beendet die Leistung. Die Anzahl bestimmt das Verrechnungsband: 11–20, 21–50, 51–100, 101–200 oder 201–500; ab 101 geht die Änderung in die Vier-Augen-Freigabe."
+    },
+    {
+      "key": "menge",
+      "type": "number",
+      "label": "Erlaubte Subsites gesamt",
+      "description": "10 bis 500 Subsites; 10 = Basis.",
+      "validate": {
+        "required": true,
+        "min": 10,
+        "max": 500
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

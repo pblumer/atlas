@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "**SharePoint OnPrem: TeamSite zurückgeben**\n\nGilt für die TeamSite dieser Position. Entfernt alle externen Zugriffe, verschiebt die Site in den Papierkorb und bricht eine laufende Quota-Erhöhung oder Einladung ab."
+      "text": "**SharePoint OnPrem: Site zurückgeben**\n\nGilt für die Site dieser Position. Entfernt alle externen Zugriffe, verschiebt die Site in den Papierkorb, beendet ihre Zusatzleistungen und bricht eine laufende Änderung ab, auch eine, die auf eine Freigabe wartet."
     },
     {
       "key": "grund",

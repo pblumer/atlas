@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "spop-reporting",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint OnP Erweitertes Reporting**\n\nReport-Pakete für die Site dieser Position (z. B. Nutzung, Speicher, Berechtigungen, Performance). CHF 25.– pro Paket und Monat. Anzugeben ist die neue **Gesamtzahl** der Pakete; 0 beendet die Leistung. Die Anzahl bestimmt das Verrechnungsband: 1–5, 6–10, 11–15 oder 16–20 Pakete."
+    },
+    {
+      "key": "menge",
+      "type": "number",
+      "label": "Report-Pakete gesamt",
+      "description": "0 bis 20 Pakete; 0 beendet das Reporting.",
+      "validate": {
+        "required": true,
+        "min": 0,
+        "max": 20
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

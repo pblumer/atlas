@@ -1,5 +1,5 @@
 {
-  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Zurückgezogen (state withdrawn) sind spop-teamsite und spop-speicher; die Speicherplatzerweiterung ist die Aktion quota-erhoehen («Speicherplatz erweitern») der Site-Produkte. «Angaben ändern» korrigiert nur den Datensatz der Bestellung; Änderungen an der Site laufen über die Aktionen site-umbenennen, site-url-aendern und berechtigungen-aendern.",
+  "_comment": "Die Katalogprodukte der SPoP-App, wie sie auf dem Server mit atlas_save_catalog_product angelegt sind. homeCatalog ist installationsabhängig und deshalb leer. Aktiv sind die sechs Site-Produkte; Speicherplatzerweiterung, Erweitertes Reporting und SubSite Quota sind Aktionen der Site. Zurückgezogen (state withdrawn) sind spop-teamsite, spop-speicher, spop-reporting und spop-subsite-quota. «Angaben ändern» korrigiert nur den Datensatz der Bestellung; Änderungen an der Site laufen über die Aktionen.",
   "products": [
     {
       "id": "spop-site-hermes",
@@ -10,7 +10,7 @@
         "de": "SharePoint OnP Project Site Hermes"
       },
       "descriptions": {
-        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Vorkonfigurierte Projektablage für HERMES-Projekte mit Phasen-, Meilenstein- und Rollenstruktur (Projektleitung, Team, Steuerung, QS). Material 540007512. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), Erweitertes Reporting, SubSite Quota, externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -49,6 +49,32 @@
             "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "reporting-aendern",
+          "message": "spop.teamsite.reporting",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Erweitertes Reporting"
+          },
+          "form": "spop-reporting"
+        },
+        {
+          "key": "subsites-aendern",
+          "message": "spop.teamsite.subsites",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "SubSite Quota"
+          },
+          "form": "spop-subsites"
         },
         {
           "key": "extern-einladen",
@@ -124,7 +150,7 @@
         "de": "SharePoint OnP Communication Site"
       },
       "descriptions": {
-        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Informations- und Publikationsplattform einer Organisationseinheit für News, Ankündigungen und Richtlinien. Material 540007514. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), Erweitertes Reporting, SubSite Quota, externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -163,6 +189,32 @@
             "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "reporting-aendern",
+          "message": "spop.teamsite.reporting",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Erweitertes Reporting"
+          },
+          "form": "spop-reporting"
+        },
+        {
+          "key": "subsites-aendern",
+          "message": "spop.teamsite.subsites",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "SubSite Quota"
+          },
+          "form": "spop-subsites"
         },
         {
           "key": "extern-einladen",
@@ -238,7 +290,7 @@
         "de": "SharePoint OnP Publishing Site"
       },
       "descriptions": {
-        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Redaktionell gesteuerte Publishing-Site-Collection mit mehrstufigem Freigabeprozess. Material 540007515. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), Erweitertes Reporting, SubSite Quota, externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -277,6 +329,32 @@
             "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "reporting-aendern",
+          "message": "spop.teamsite.reporting",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Erweitertes Reporting"
+          },
+          "form": "spop-reporting"
+        },
+        {
+          "key": "subsites-aendern",
+          "message": "spop.teamsite.subsites",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "SubSite Quota"
+          },
+          "form": "spop-subsites"
         },
         {
           "key": "extern-einladen",
@@ -352,7 +430,7 @@
         "de": "SharePoint OnP Team Site Classic"
       },
       "descriptions": {
-        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Klassische Teamsite (Classic Experience) mit Bibliotheken, Listen und Besitzer-, Mitglieder- und Besuchergruppe. Material 540007516. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), Erweitertes Reporting, SubSite Quota, externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -391,6 +469,32 @@
             "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "reporting-aendern",
+          "message": "spop.teamsite.reporting",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Erweitertes Reporting"
+          },
+          "form": "spop-reporting"
+        },
+        {
+          "key": "subsites-aendern",
+          "message": "spop.teamsite.subsites",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "SubSite Quota"
+          },
+          "form": "spop-subsites"
         },
         {
           "key": "extern-einladen",
@@ -466,7 +570,7 @@
         "de": "SharePoint OnP Team Site Modern"
       },
       "descriptions": {
-        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Moderne Teamsite (Modern Experience) auf der SharePoint-OnPrem-Umgebung Neo. Material 540007560. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), Erweitertes Reporting, SubSite Quota, externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -505,6 +609,32 @@
             "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "reporting-aendern",
+          "message": "spop.teamsite.reporting",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Erweitertes Reporting"
+          },
+          "form": "spop-reporting"
+        },
+        {
+          "key": "subsites-aendern",
+          "message": "spop.teamsite.subsites",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "SubSite Quota"
+          },
+          "form": "spop-subsites"
         },
         {
           "key": "extern-einladen",
@@ -580,7 +710,7 @@
         "de": "SharePoint OnP Wiki Site"
       },
       "descriptions": {
-        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
+        "de": "Wiki-Site für interne Wissensdatenbanken mit Seitenbibliothek, Kategorisierung und Seitenvorlagen. Material 540008180. Danach als Aktionen: Speicherplatz erweitern (PvN-GF-002, Material 540007510), Erweitertes Reporting, SubSite Quota, externen Benutzer einladen (PvN-GF-003), Site umbenennen, Site-URL ändern, Berechtigungen ändern, Rückgabe. PoC: Ausführung gegen APS-BW simuliert."
       },
       "approval": {
         "kind": "none"
@@ -619,6 +749,32 @@
             "de": "Speicherplatz erweitern"
           },
           "form": "spop-quota-erhoehung"
+        },
+        {
+          "key": "reporting-aendern",
+          "message": "spop.teamsite.reporting",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Erweitertes Reporting"
+          },
+          "form": "spop-reporting"
+        },
+        {
+          "key": "subsites-aendern",
+          "message": "spop.teamsite.subsites",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "SubSite Quota"
+          },
+          "form": "spop-subsites"
         },
         {
           "key": "extern-einladen",
@@ -688,7 +844,7 @@
     {
       "id": "spop-reporting",
       "homeCatalog": "",
-      "state": "active",
+      "state": "withdrawn",
       "icon": "presentation-analytics",
       "texts": {
         "de": "SharePoint OnP Erweitertes Reporting"
@@ -754,7 +910,7 @@
     {
       "id": "spop-subsite-quota",
       "homeCatalog": "",
-      "state": "active",
+      "state": "withdrawn",
       "icon": "sitemap",
       "texts": {
         "de": "SharePoint OnP SubSite Quota"

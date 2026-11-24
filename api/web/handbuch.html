@@ -6735,7 +6735,7 @@ carla@example.org,admins,GOLD</code></pre></li>
       </div>
       <div class="bsp" id="bsp-spop">
         <h4><span class="rz-emoji" aria-hidden="true">🗄️</span>
-          <span data-l="de">SPoP: SharePoint-OnPrem-Sites und Zusatzleistungen im Lebenszyklus</span><span data-l="en">SPoP: SharePoint OnPrem sites and add-ons through their lifecycle</span></h4>
+          <span data-l="de">SPoP: SharePoint-OnPrem-Sites im Lebenszyklus</span><span data-l="en">SPoP: SharePoint OnPrem sites through their lifecycle</span></h4>
         <p class="bsp-tags">
           <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
           <span class="tag">per-position</span>
@@ -6751,48 +6751,42 @@ carla@example.org,admins,GOLD</code></pre></li>
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Ein Angebot an SharePoint-OnPrem-Sites als Katalog: sechs Site-Typen (Hermes, Communication,
-              Publishing, Team Site Classic und Modern, Wiki) und zwei Zusatzleistungen (Erweitertes Reporting, SubSite Quota), deren
-              Stufen Verrechnungsbänder einer Menge sind; Zusatzspeicher wird an der Site selbst bestellt. Eine Site bestellen, ihre Quota
-              erhöhen, einen externen Benutzer einladen, sie umbenennen, ihre URL oder ihre Berechtigungen ändern, dazu
-              die Rückgabe. «Angaben ändern» im Shop korrigiert nur den Datensatz; was die Site selbst ändert, ist eine
-              Aktion. Ämterspezifische Richtlinien
-              (Namensregel, Quota-Grenzen, erlaubte Mail-Domains) prüft je eine Entscheidungstabelle; was über der
-              Schwelle liegt, gibt eine zweite Person frei. Eine Einladung bekommt ihre Berechtigung erst, wenn sie
-              angenommen ist, und wird nach Ablauf der Gültigkeit widerrufen.</p>
+              Publishing, Team Site Classic und Modern, Wiki), je ein Produkt. Alles, was es nur zu einer bestehenden Site gibt,
+              ist eine Aktion der Site: Speicher erweitern, Erweitertes Reporting und SubSite Quota, deren Stufen
+              Verrechnungsbänder einer Menge sind, einen externen Benutzer einladen, die Site umbenennen, ihre URL oder ihre
+              Berechtigungen ändern, dazu die Rückgabe. «Angaben ändern» im Shop korrigiert nur den Datensatz. Ämterspezifische
+              Richtlinien (Namensregel, Quota-Grenzen, erlaubte Mail-Domains, Bänder) prüfen Entscheidungstabellen; was über der
+              Schwelle liegt, gibt eine zweite Person frei.</p>
             <p data-l="en">An offering of SharePoint OnPrem sites as a catalogue: six site types (Hermes, Communication,
-              Publishing, Team Site Classic and Modern, Wiki) and two add-ons (extended reporting, subsite quota) whose tiers are
-              billing bands of a quantity; extra storage is ordered on the site itself. Order a site, raise its quota, invite an external user,
-              rename it, change its URL or its permissions, plus the return. «Change details» in the shop corrects the
-              record only; what changes the site itself is an action. Agency-specific rules (naming, quota limits,
-              allowed mail domains) are each checked by a decision table; anything above the threshold is approved by a
-              second person. An invitation gets its permission only once it is accepted, and is revoked when it
-              expires.</p>
+              Publishing, Team Site Classic and Modern, Wiki), one product each. Everything that exists only for an existing
+              site is an action on the site: extend storage, extended reporting and subsite quota, whose tiers are billing
+              bands of a quantity, invite an external user, rename the site, change its URL or its permissions, plus the
+              return. «Change details» in the shop corrects the record only. Agency-specific rules (naming, quota limits,
+              allowed mail domains, bands) are checked by decision tables; anything above the threshold is approved by a
+              second person.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Zwei Lebenszyklus-Prozesse in der Katalogform <code>per-position</code>, einer für die sechs
-              Site-Produkte und einer für die zwei Zusatzprodukte; eine Entscheidungstabelle leitet aus dem Produkt den Site-Typ
-              bzw. aus der Menge das Verrechnungsband und die Materialnummer ab. Ein einziger Strang je Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b> auf die nächste
-              Aktion; Quota-Erhöhung und Einladung sind <b>Subprozesse</b>, nach denen er zum Warten zurückkehrt, und
-              die Rückgabe ist ein Catch-Event, ein unterbrechendes Boundary-Event an beiden Subprozessen und ein
-              Nachrichtenstart als Rückfallebene. Titel, URL und Berechtigungen ändern drei nicht unterbrechende
-              <b>Ereignis-Subprozesse</b> mit Nachrichtenstart neben dem Strang. Der Strang trägt den Stand der Site (<code>site</code>,
-              <code>quota</code>, <code>gruppen</code>, <code>externe</code>); weil Ergebnisse innerer Aufgaben im Subprozess bleiben, heben
-              <b>Output-Mappings</b> am Subprozess sie heraus. Änderungen beantwortet je eine Shop-Aufgabe
-              (<code>atlas:shopTask</code>), Bereitstellung und Rückgabe die Positionsroute. Die Ausführung gegen das
-              Zielsystem ist mit <code>atlas:mockupConnector</code> simuliert.</p>
-            <p data-l="en">Two lifecycle processes in the catalogue form <code>per-position</code>, one for the six site
-              products and one for the two add-ons; a decision table derives the site type from the product, or the billing
-              band and material number from the quantity. One strand per position.
-              After provisioning it waits at an <b>event-based gateway</b> for the next action; quota increase and
-              invitation are <b>subprocesses</b> after which it returns to waiting, and the return is a catch event, an
-              interrupting boundary event on both subprocesses and a message start as the fallback. Title, URL and
-              permissions are changed by three non-interrupting <b>event subprocesses</b> with a message start beside the
-              strand. The strand carries the site's state (<code>site</code>, <code>quota</code>, <code>gruppen</code>,
-              <code>externe</code>); since inner tasks' results
-              stay inside the subprocess, <b>output mappings</b> on the subprocess lift them out. Each change is
-              answered by a shop task (<code>atlas:shopTask</code>), provisioning and return by the position route.
-              Execution against the target system is simulated with <code>atlas:mockupConnector</code>.</p>
+            <p data-l="de">Ein Lebenszyklus-Prozess in der Katalogform <code>per-position</code> für alle sechs Produkte,
+              ein einziger Strang je Position. Nach der Bereitstellung wartet er an einem <b>ereignisbasierten Gateway</b>;
+              jede Aktion ist ein Zwischenereignis daran, gefolgt von einem <b>Subprozess</b> gleichen Aufbaus (lesen, Regel,
+              Freigabe, ausführen, Shop-Aufgabe). Die Subprozesse stehen untereinander und münden in einen gemeinsamen Rückweg
+              zum Warten, damit kein Rückweg die Verzweigung kreuzt. Die Rückgabe ist ein unterbrechender
+              <b>Ereignis-Subprozess</b>, dazu ein Nachrichtenstart als Rückfallebene. Ergebnisse innerer Aufgaben bleiben im
+              Subprozess; <b>Output-Mappings</b> setzen nur die geänderten Felder mit <code>context merge</code> in den Stand
+              der Site (<code>site</code>, <code>quota</code>, <code>zusatz</code>, <code>gruppen</code>). Änderungen beantwortet
+              je eine Shop-Aufgabe (<code>atlas:shopTask</code>), Bereitstellung und Rückgabe die Positionsroute. Die Ausführung
+              gegen das Zielsystem ist mit <code>atlas:mockupConnector</code> simuliert.</p>
+            <p data-l="en">One lifecycle process in the catalogue form <code>per-position</code> for all six products, one
+              strand per position. After provisioning it waits at an <b>event-based gateway</b>; every action is an
+              intermediate event on it, followed by a <b>subprocess</b> of the same shape (read, rule, approval, execute, shop
+              task). The subprocesses are stacked and lead into one shared way back to the wait, so no way back crosses the
+              branching. The return is an interrupting <b>event subprocess</b>, with a message start as the fallback. Inner
+              tasks' results stay inside the subprocess; <b>output mappings</b> merge only the changed fields into the site's
+              state with <code>context merge</code> (<code>site</code>, <code>quota</code>, <code>zusatz</code>,
+              <code>gruppen</code>). Each change is answered by a shop task (<code>atlas:shopTask</code>), provisioning and
+              return by the position route. Execution against the target system is simulated with
+              <code>atlas:mockupConnector</code>.</p>
           </div>
         </div>
         <div class="rz-actions"></div>

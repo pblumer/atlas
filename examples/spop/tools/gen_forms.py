@@ -62,7 +62,7 @@ forms = {
     "spop-site-url-aendern": ("SPoP: Site-URL ändern", [
         text("**SharePoint OnPrem: Site-URL ändern**\n\nGibt der Site dieser Position eine neue URL /sites/<amt>-<kurzname>. "
              "Bestehende Links und Lesezeichen auf die alte URL werden ungültig. Eine neue URL braucht immer die "
-             "Vier-Augen-Freigabe. Zusatzleistungen für diese Site werden danach mit der neuen URL bestellt."),
+             "Vier-Augen-Freigabe."),
         {"key": "neuesAmtKuerzel", "type": "textfield", "label": "Amtskürzel",
          "description": "2 bis 6 Grossbuchstaben, z. B. BIT.",
          "validate": {"required": True, "pattern": "^[A-Z]{2,6}$"}, "properties": NP},
@@ -105,9 +105,10 @@ forms = {
          "validate": {"required": True, "min": 1, "max": 90}, "properties": NP},
         {"key": "nachricht", "type": "textarea", "label": "Nachricht an den eingeladenen Benutzer", "properties": NP},
     ]),
-    "spop-teamsite-rueckgabe": ("SPoP: TeamSite zurückgeben", [
-        text("**SharePoint OnPrem: TeamSite zurückgeben**\n\nGilt für die TeamSite dieser Position. Entfernt alle externen Zugriffe, "
-             "verschiebt die Site in den Papierkorb und bricht eine laufende Quota-Erhöhung oder Einladung ab."),
+    "spop-teamsite-rueckgabe": ("SPoP: Site zurückgeben", [
+        text("**SharePoint OnPrem: Site zurückgeben**\n\nGilt für die Site dieser Position. Entfernt alle externen Zugriffe, "
+             "verschiebt die Site in den Papierkorb, beendet ihre Zusatzleistungen und bricht eine laufende Änderung ab, auch "
+             "eine, die auf eine Freigabe wartet."),
         {"key": "grund", "type": "textarea", "label": "Grund der Rückgabe", "validate": {"required": True}, "properties": NP},
     ]),
     "spop-freigabe": ("SPoP: Vier-Augen-Freigabe", [
@@ -118,42 +119,21 @@ forms = {
         {"key": "freigabeKommentar", "type": "textarea", "label": "Kommentar",
          "description": "Bei einer Ablehnung wird der Kommentar der antragstellenden Person mitgeteilt.", "properties": NP},
     ]),
-    "spop-reporting-bestellung": ("SPoP: Erweitertes Reporting bestellen", [
-        text("**SharePoint OnP Erweitertes Reporting**\n\nReport-Pakete für eine bestehende Site (z. B. Nutzung, Speicher, "
-             "Berechtigungen, Performance). CHF 25.– pro Paket. Die Anzahl bestimmt das Verrechnungsband: 1–5, 6–10, 11–15 oder 16–20 Pakete."),
-        {"key": "siteUrl", "type": "textfield", "label": "Site-URL",
-         "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
-         "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
-        {"key": "menge", "type": "number", "label": "Anzahl Report-Pakete", "description": "1 bis 20 Pakete.",
-         "validate": {"required": True, "min": 1, "max": 20}, "properties": NP},
+    "spop-reporting": ("SPoP: Erweitertes Reporting", [
+        text("**SharePoint OnP Erweitertes Reporting**\n\nReport-Pakete für die Site dieser Position (z. B. Nutzung, Speicher, "
+             "Berechtigungen, Performance). CHF 25.– pro Paket und Monat. Anzugeben ist die neue **Gesamtzahl** der Pakete; "
+             "0 beendet die Leistung. Die Anzahl bestimmt das Verrechnungsband: 1–5, 6–10, 11–15 oder 16–20 Pakete."),
+        {"key": "menge", "type": "number", "label": "Report-Pakete gesamt", "description": "0 bis 20 Pakete; 0 beendet das Reporting.",
+         "validate": {"required": True, "min": 0, "max": 20}, "properties": NP},
         {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
     ]),
-    "spop-subsite-bestellung": ("SPoP: SubSite Quota bestellen", [
-        text("**SharePoint OnP SubSite Quota**\n\nErhöht die Zahl der erlaubten Subsites einer bestehenden Site. Bis 10 Subsites "
-             "sind in der Basis enthalten. Die Anzahl bestimmt das Verrechnungsband: 11–20, 21–50, 51–100, 101–200 oder 201–500; "
-             "ab 101 geht die Bestellung in die Vier-Augen-Freigabe."),
-        {"key": "siteUrl", "type": "textfield", "label": "Site-URL",
-         "description": "Die Site, für die die Leistung gilt, serverrelativ, z. B. /sites/bit-projektablage.",
-         "validate": {"required": True, "pattern": "^/sites/[a-z0-9][a-z0-9_-]{2,63}$"}, "properties": NP},
-        {"key": "menge", "type": "number", "label": "Anzahl Subsites", "description": "11 bis 500 Subsites.",
-         "validate": {"required": True, "min": 11, "max": 500}, "properties": NP},
+    "spop-subsites": ("SPoP: SubSite Quota", [
+        text("**SharePoint OnP SubSite Quota**\n\nErlaubte Zahl der Subsites der Site dieser Position. Bis 10 Subsites sind in der "
+             "Basis enthalten; 10 beendet die Leistung. Die Anzahl bestimmt das Verrechnungsband: 11–20, 21–50, 51–100, "
+             "101–200 oder 201–500; ab 101 geht die Änderung in die Vier-Augen-Freigabe."),
+        {"key": "menge", "type": "number", "label": "Erlaubte Subsites gesamt", "description": "10 bis 500 Subsites; 10 = Basis.",
+         "validate": {"required": True, "min": 10, "max": 500}, "properties": NP},
         {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
-    ]),
-    "spop-reporting-aendern": ("SPoP: Erweitertes Reporting ändern", [
-        text("**Erweitertes Reporting ändern**\n\nNeue Anzahl Report-Pakete dieser Position; ein Wechsel des Bands wechselt die Materialnummer."),
-        {"key": "menge", "type": "number", "label": "Neue Anzahl Report-Pakete", "description": "1 bis 20 Pakete.",
-         "validate": {"required": True, "min": 1, "max": 20}, "properties": NP},
-        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
-    ]),
-    "spop-subsite-aendern": ("SPoP: SubSite Quota ändern", [
-        text("**SubSite Quota ändern**\n\nNeue Anzahl Subsites dieser Position; ein Wechsel des Bands wechselt die Materialnummer."),
-        {"key": "menge", "type": "number", "label": "Neue Anzahl Subsites", "description": "11 bis 500 Subsites.",
-         "validate": {"required": True, "min": 11, "max": 500}, "properties": NP},
-        {"key": "begruendung", "type": "textarea", "label": "Begründung", "properties": NP},
-    ]),
-    "spop-zusatz-rueckgabe": ("SPoP: Zusatzleistung zurückgeben", [
-        text("**Zusatzleistung zurückgeben**\n\nEntfernt die Zusatzleistung dieser Position von der Site und beendet ihre Verrechnung."),
-        {"key": "grund", "type": "textarea", "label": "Grund der Rückgabe", "validate": {"required": True}, "properties": NP},
     ]),
 }
 
