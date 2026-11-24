@@ -3893,7 +3893,7 @@ func (s *Server) Close() {
 // /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux, policy := s.mountRoutes()
-	return s.withHSTS(s.withAuth(policy, s.withStorageAdmission(mux)))
+	return withSecurityHeaders(s.withHSTS(s.withAuth(policy, s.withStorageAdmission(mux))))
 }
 
 // mountRoutes registers every route this server serves and, in the same pass,

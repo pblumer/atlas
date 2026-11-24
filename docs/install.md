@@ -446,6 +446,14 @@ unless you set them ([the record](adr/0560-https-redirect-and-hsts.md)):
   everything works (`31536000` is a year), and set `0` before taking TLS away, which
   tells browsers to forget it. It is never sent with `includeSubDomains` or `preload`.
 
+Three headers need no setting, because they bind nothing but atlas's own answers. Every
+answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and
+`Content-Security-Policy: frame-ancestors 'self'` with `X-Frame-Options: SAMEORIGIN`, so
+a page of another site cannot show the Console in a frame. The one thing meant to be
+framed elsewhere stays frameable: a public start form under `/public/forms/`
+([embedding](adr/0186-embed-public-forms-cross-origin.md)). A proxy in front may set
+stricter values of its own; it should not remove these.
+
 Where TLS is on, the server also opens a second listener on `127.0.0.1` with an
 ephemeral port, in plaintext, for its own child processes — the MCP adapter's
 loopback calls and any worker this server supervises. It is not reachable from
