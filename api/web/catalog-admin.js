@@ -1245,6 +1245,9 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   const sharing = sharingCard(cat, me, enforced, dir);
   const transfer = transferCard(cat);
   const purge = mayTheme(me, enforced) ? purgeCard(cat, items, langs) : null;
+  // A catalogue maintained in another system is changed there: the server refuses
+  // every edit made here, so the page says where and locks what it would refuse.
+  const held = cat.maintainedIn || null;
 
   view.innerHTML = `
     <div class="row">
@@ -1252,6 +1255,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <span class="muted">${esc(cat.id)}</span>
     </div>
     <p><a href="#/catalog">← All catalogues</a></p>
+    ${held ? maintainedBanner(held, mayTheme(me, enforced)) : ""}
     <p class="muted cat-steps-intro">Four steps, in the order a catalogue is filled: put
       products in, describe them, assemble them, publish. Each section folds away; this
       browser remembers which ones you keep open.</p>
@@ -1389,6 +1393,79 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   mountCatalogRefresh(view.querySelector(".content-catalog"), { api, toast, reload: redraw }, cat.id,
     offered.filter((iid) => byID[iid] && byID[iid].contentSource).length);
   wirePurge({ api, toast, view }, cat);
+  if (held) {
+    holdEditing(view, held);
+    wireTakeBack({ api, toast, view }, cat);
+  }
+}
+
+// ---------- A catalogue maintained in another system ----------
+//
+// A wiki that keeps a catalogue as its own pages publishes it through the document
+// import, and the next publish replaces what the import carries
+// (ADR-draft-a-shop-and-its-catalogues-from-another-system). So the server refuses
+// every change made here while the catalogue is maintained there, and the page says so
+// before anybody makes one: a banner naming the system with a link to where the
+// catalogue is maintained, and every control in the sections the server would refuse
+// disabled. The appearance stays an administrator's, and exporting stays open. An
+// administrator sees the one way out — taking the catalogue back.
+
+// HELD_SECTIONS are the sections whose writes the server refuses while the catalogue
+// is maintained elsewhere.
+const HELD_SECTIONS = ["products", "content", "relations", "publish", "settings", "sharing", "reporting", "purge"];
+
+// safeLink answers an address the banner may link to: an absolute https URL, or "".
+function safeLink(u) {
+  try {
+    const url = new URL(String(u || ""));
+    return url.protocol === "https:" ? url.href : "";
+  } catch { return ""; }
+}
+
+// maintainedBanner says where the catalogue is maintained and, to an administrator,
+// how to take it back.
+export function maintainedBanner(m, admin) {
+  const name = m.name || m.client;
+  const href = safeLink(m.url);
+  return `<div class="card cat-maintained" role="status" style="border-color:var(--warn); background:var(--warn-soft)">
+    <p style="margin-top:0"><b>${esc(t("catalog.maintained.title", { name }))}</b></p>
+    <p>${esc(t("catalog.maintained.body", { name }))}</p>
+    ${href ? `<p><a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(t("catalog.maintained.open", { name }))}</a></p>` : ""}
+    ${admin ? `<p class="muted">${esc(t("catalog.maintained.takeBackAbout", { name }))}</p>
+      <div class="row"><button class="btn ghost danger" data-act="take-back">${esc(t("catalog.maintained.takeBack"))}</button></div>` : ""}
+  </div>`;
+}
+
+// holdEditing disables every control in the sections the server would refuse, so a
+// save is not offered that can only be answered 409. The product table's export
+// ticks stay, because exporting reads.
+export function holdEditing(view, m) {
+  const why = t("catalog.maintained.locked", { name: m.name || m.client });
+  for (const key of HELD_SECTIONS) {
+    const sec = view.querySelector(`.cat-section[data-section="${key}"]`);
+    if (!sec) continue;
+    for (const el of sec.querySelectorAll("button, input, select, textarea")) {
+      if (el.classList.contains("export-pick")) continue;
+      el.disabled = true;
+      el.title = why;
+    }
+  }
+}
+
+// wireTakeBack asks before it takes the catalogue back, and reloads the page, which is
+// then an ordinary catalogue again.
+function wireTakeBack({ api, toast, view }, cat) {
+  const btn = view.querySelector("button[data-act='take-back']");
+  if (!btn) return;
+  const name = cat.maintainedIn.name || cat.maintainedIn.client;
+  btn.addEventListener("click", async () => {
+    if (!window.confirm(t("catalog.maintained.confirm", { name }))) return;
+    try {
+      await api("DELETE", `/api/v1/catalogs/${encodeURIComponent(cat.id)}/maintainer`);
+      toast(t("catalog.maintained.done"));
+      redraw();
+    } catch (err) { toast(err.message, "err"); }
+  });
 }
 
 // ---------- Deleting for good ----------

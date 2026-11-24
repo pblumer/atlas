@@ -506,6 +506,10 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 				Roles:    g.Roles,
 				GroupIDs: g.GroupIDs,
 				Scope:    g.scope(),
+				// Which system the person is acting through: what a catalogue maintained
+				// in another system asks of a write to it (catalogPublisher).
+				ClientID:   g.ClientID,
+				ClientName: g.ClientName,
 			}
 		}
 	}
