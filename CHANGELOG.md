@@ -25,6 +25,15 @@ _Changed_ / _Removed_ for each version.
   records an approval under a name other than the one a `fixed` or `role` product names. An
   approval model of your own that builds a call from instance variables after a user task
   needs the same output mappings; a task without them still writes to the instance, as before.
+- **Releasing a task addressed to one person no longer opens it to everybody.** A task that
+  names nobody is open work (ADR-0317), and releasing a task empties its assignee. For a task
+  its model addresses to a person and to no group, that left exactly such a task: an approval
+  routed to a product's approver became every account's to answer once that approver released
+  it — the person who had placed the order among them. Releasing gives a task back to the group
+  it came from; where the model names no group there is nobody to give it back to, so
+  `POST /api/v1/tasks/{key}/unclaim` now answers `409` for such a task and says to hand it to
+  somebody instead. A task with candidate groups, and one its model addresses to nobody, are
+  released as before.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other

@@ -194,17 +194,24 @@ func TestATasksGrantWorksThePersonsTasksAsThemAndNothingElse(t *testing.T) {
 		t.Errorf("carol's grant completed alice's task")
 	}
 
-	// alice sees it, gives it back, takes it on and completes it.
+	// alice sees it, and her grant reaches the three commands on it. The task names
+	// her and no group, so there is nobody to release it to: the release is answered
+	// 409, as it is for alice signed in herself — which is the grant reaching the
+	// command and being told what anybody is told, not being turned away from it.
+	// Taking it on and completing it go through.
 	if code, b := bearerDo(t, ts.URL, http.MethodGet, "/api/v1/tasks", "", alice); code != http.StatusOK || !strings.Contains(string(b), fmt.Sprint(key)) {
 		t.Errorf("alice's grant lists %d %s, want her task %d", code, b, key)
 	}
-	for _, step := range []struct{ path, body string }{
-		{fmt.Sprintf("/api/v1/tasks/%d/unclaim", key), ""},
-		{fmt.Sprintf("/api/v1/tasks/%d/claim", key), "{}"},
-		{fmt.Sprintf("/api/v1/tasks/%d/complete", key), `{"variables":{"ok":true}}`},
+	for _, step := range []struct {
+		path, body string
+		want       int
+	}{
+		{fmt.Sprintf("/api/v1/tasks/%d/unclaim", key), "", http.StatusConflict},
+		{fmt.Sprintf("/api/v1/tasks/%d/claim", key), "{}", http.StatusOK},
+		{fmt.Sprintf("/api/v1/tasks/%d/complete", key), `{"variables":{"ok":true}}`, http.StatusOK},
 	} {
-		if code, b := bearerDo(t, ts.URL, http.MethodPost, step.path, step.body, alice); code != http.StatusOK {
-			t.Fatalf("alice's grant on POST %s = %d %s, want 200", step.path, code, b)
+		if code, b := bearerDo(t, ts.URL, http.MethodPost, step.path, step.body, alice); code != step.want {
+			t.Fatalf("alice's grant on POST %s = %d %s, want %d", step.path, code, b, step.want)
 		}
 	}
 
