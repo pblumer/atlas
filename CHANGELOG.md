@@ -53,6 +53,18 @@ _Changed_ / _Removed_ for each version.
   provider marks unverified (`email_verified` false); the account keeps the address it had, and
   the log says why (`auth.user_updated`). A provider that sends an address and no
   `email_verified` claim is treated as before.
+- **An ID token that is not valid yet, or was issued to another client, is refused.** The
+  check read `exp`, `iat`, `aud` and the nonce, and neither `nbf` nor `azp`: a token whose
+  `nbf` lies in the future was accepted, and so was one that lists this client among several
+  audiences while naming another client as the party it was issued to.
+
+### Fixed
+- **A provider whose issuer ends in a slash can sign people in.** The issuer an operator
+  configures is trimmed of its trailing slash, and discovery accepts a document that names the
+  issuer with one — but a token's issuer was compared with the trimmed spelling, exactly. A
+  provider that names itself with a slash, as several do, passed discovery and then failed
+  every login with nothing on the screen but "sign-in failed". A token's issuer is now
+  compared with the one the discovery document names, as the provider spells it.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other

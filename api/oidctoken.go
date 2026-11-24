@@ -202,6 +202,8 @@ type idTokenClaims struct {
 	Audience          audience `json:"aud"`
 	Expiry            int64    `json:"exp"`
 	IssuedAt          int64    `json:"iat"`
+	NotBefore         int64    `json:"nbf"`
+	AuthorizedParty   string   `json:"azp"`
 	Nonce             string   `json:"nonce"`
 	Email             string   `json:"email"`
 	Name              string   `json:"name"`
@@ -273,6 +275,13 @@ func verifyIDToken(raw string, keys *jwkSet, want oidcExpect) (oidcClaims, error
 		return oidcClaims{}, errors.New("oidc: id token has expired")
 	case c.IssuedAt != 0 && time.Unix(c.IssuedAt, 0).After(want.now.Add(oidcClockSkew)):
 		return oidcClaims{}, errors.New("oidc: id token was issued in the future")
+	case c.NotBefore != 0 && time.Unix(c.NotBefore, 0).After(want.now.Add(oidcClockSkew)):
+		return oidcClaims{}, errors.New("oidc: id token is not valid yet")
+	case c.AuthorizedParty != "" && c.AuthorizedParty != want.clientID:
+		// A token can list this client among its audiences and still have been
+		// issued to another one, which azp names. Being an audience of somebody
+		// else's token is not being the party it was issued to.
+		return oidcClaims{}, fmt.Errorf("oidc: id token's authorized party is %q, not this client", c.AuthorizedParty)
 	case c.Nonce != want.nonce:
 		// The nonce ties the token to the login that started it, which is what stops
 		// a token obtained elsewhere from being replayed into somebody's browser.

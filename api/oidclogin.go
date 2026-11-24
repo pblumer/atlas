@@ -457,8 +457,16 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 // A rotation at the provider is otherwise an outage here until the cache expires,
 // and rotating keys is a thing providers are supposed to do.
 func (s *Server) verifyOIDCToken(r *http.Request, idToken, nonce string, now time.Time) (oidcClaims, error) {
+	// The issuer a token must name is the one the discovery document names, as the
+	// provider spells it. The configured value is trimmed of a trailing slash and
+	// discovery accepts a document that has one; comparing a token with the trimmed
+	// spelling refused every login of a provider that names itself with a slash.
+	issuer := s.oidc.cfg.Issuer
+	if d, err := s.oidc.endpoints(r.Context(), now); err == nil && d.Issuer != "" {
+		issuer = d.Issuer
+	}
 	want := oidcExpect{
-		issuer:   s.oidc.cfg.Issuer,
+		issuer:   issuer,
 		clientID: s.oidc.cfg.ClientID,
 		nonce:    nonce,
 		now:      now,
