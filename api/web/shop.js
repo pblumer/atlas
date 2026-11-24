@@ -80,6 +80,7 @@ const STRINGS = {
     'status.blocked': 'Blockiert',
     'order.running': 'In Arbeit',
     'proc.open': 'Prozess ansehen',
+    'position.named': '{label} «{name}»',
     'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
     'proc.archived': 'Der Prozess zu diesem Auftrag steht nur noch im ausgelagerten Ereignisprotokoll. Dieser Server hat ihn nicht mehr und kann ihn nicht anzeigen.',
     'proc.asking': 'Wird abgefragt …',
@@ -366,6 +367,7 @@ const STRINGS = {
     'status.blocked': 'Blocked',
     'order.running': 'In progress',
     'proc.open': 'View the process',
+    'position.named': '{label} “{name}”',
     'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
     'proc.archived': 'This order\'s process is only in the exported event log now. This server no longer holds it and cannot show it.',
     'proc.asking': 'Asking …',
@@ -650,6 +652,7 @@ const STRINGS = {
     'status.blocked': 'Bloqué',
     'order.running': 'En traitement',
     'proc.open': 'Voir le processus',
+    'position.named': '{label} « {name} »',
     'proc.none.order': 'Aucune instance de processus en cours ne correspond à cette commande : soit aucune n’a encore été lancée, soit elle est déjà terminée, soit la conservation l’a supprimée.',
     'proc.archived': 'Le processus de cette commande ne figure plus que dans le journal d’événements externalisé. Ce serveur ne le possède plus et ne peut pas l’afficher.',
     'proc.asking': 'Interrogation en cours …',
@@ -933,6 +936,7 @@ const STRINGS = {
     'status.blocked': 'Bloccato',
     'order.running': 'In lavorazione',
     'proc.open': 'Visualizzare il processo',
+    'position.named': '{label} «{name}»',
     'proc.none.order': 'Per questo ordine non risulta alcuna istanza di processo in corso: o non ne è ancora stata avviata una, o è già terminata, oppure la conservazione l’ha rimossa.',
     'proc.archived': 'Il processo di questo ordine si trova ormai solo nel registro eventi esternalizzato. Questo server non lo possiede più e non può mostrarlo.',
     'proc.asking': 'Interrogazione in corso …',
@@ -4064,15 +4068,27 @@ async function mountConfigForms() {
 // that nobody reads the note as a page about to arrive.
 const FOLLOW_TIMEOUT_MS = 20000;
 
-// followProcess opens the instance fulfilling one order.
+// followProcess opens the lifecycle instance of one position of an order — the
+// process that provisioned it and that later takes its actions and its return.
+//
+// It used to open the order's fulfilment process (atlas-auftrag-erfuellung). That
+// orchestration answers "how was this order worked", which is not what somebody
+// asks from a service they hold: they ask what the instance carrying that service
+// is doing, which is the lifecycle process the actions on this page are sent to.
+// Asked for so (2026-11-24): the link on an order opens the lifecycle instance of
+// the position the entry is about.
+//
+// The instance is the one the order recorded on the position (ADR-0416), chosen by
+// lifecycleOf: the strand a per-position lifecycle delivers every operation to, else
+// the newest instance of the position's own process. A position placed before the
+// server kept that record has no key, and is found by the search alone.
 //
 // Looked up when the link is pressed rather than resolved for every row: finding
 // an instance is a search, and a table of thirty orders would be thirty searches
-// to draw a column most readers never use.
-//
-// Narrowed to the fulfilment process by name. Every provisioning sub-process is
-// started with the order id too, so a search that took the first hit would open
-// one position's process and call it the order.
+// to draw a column most readers never use. The recorded key is still checked
+// against the search, because a key alone cannot say whether the instance is still
+// held here: retention deletes an instance long before its order, and following a
+// key to nothing reaches a replay view with nothing to replay.
 //
 // Whatever it finds out is said beside the row it was pressed from. It used to be
 // said in state.error, which is painted above the table: an order further down the
@@ -4084,24 +4100,33 @@ const FOLLOW_TIMEOUT_MS = 20000;
 // names no definition reads every instance on the server and every variable of
 // each, and on an installation of any size that does not come back: the note said
 // "Wird abgefragt …" and stayed, which is how it was reported. Named, the search
-// reads that definition's own index — the instances of the fulfilment process,
-// which is one per order. Every deployed version is asked, newest first, because an
-// order placed before the last redeploy is worked by the version it started on.
+// reads that definition's own index. Every deployed version is asked, newest
+// first, because a position provisioned before the last redeploy is carried by the
+// version it started on.
 //
 // And bounded in time. A lookup that never answers is the one outcome that must not
 // look like "still asking": the reader waits for a page that is not coming.
-async function followProcess(order) {
-  state.following.set(order.id, t('proc.asking'));
+async function followProcess(order, line) {
+  const ref = followRef(order, line);
+  state.following.set(ref, t('proc.asking'));
   render();
-  const said = (what) => { state.following.set(order.id, what); render(); };
+  const said = (what) => { state.following.set(ref, what); render(); };
   const giveUp = new AbortController();
   const timer = setTimeout(() => giveUp.abort(), FOLLOW_TIMEOUT_MS);
   try {
+    const { process, key } = lifecycleOf(line);
+    if (!process) {
+      said(t('proc.none.order'));
+      return;
+    }
     const defs = await api('/api/v1/processes', { signal: giveUp.signal });
     const versions = (defs || [])
-      .filter((d) => d.processId === 'atlas-auftrag-erfuellung')
+      .filter((d) => d.processId === process)
       .sort((a, b) => b.version - a.version);
     const query = `orderId=${order.id}`;
+    // The recorded instance where there is one; any instance of the position's
+    // process for this order where the record predates it.
+    const wanted = (i) => i.processId === process && (!key || String(i.key) === String(key));
     const hits = [];
     let hit = null;
     for (const d of versions) {
@@ -4115,17 +4140,15 @@ async function followProcess(order) {
       // in the export. Following one reaches a replay view with nothing to replay,
       // which says "Could not load this instance's replay." — a dead end two screens
       // from the page that knew better.
-      hit = found.find((i) => !i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      hit = found.find((i) => !i.archived && wanted(i));
       if (hit) break;
     }
     if (!hit) {
-      // What is known, and not a cause that was guessed. This said the instance had
-      // been removed by retention, which is one of three reasons it is not found and
-      // the least likely of them: an order whose fulfilment never started has no
-      // instance to remove, and that is what somebody reads this message about on the
-      // day they ordered. A page that names a cause it cannot know sends whoever
-      // reads it to look in the wrong place.
-      const archived = hits.some((i) => i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      // What is known, and not a cause that was guessed. An instance that was never
+      // started has no instance to remove, and that is what somebody reads this
+      // message about on the day they ordered. A page that names a cause it cannot
+      // know sends whoever reads it to look in the wrong place.
+      const archived = hits.some((i) => i.archived && wanted(i));
       said(t(archived ? 'proc.archived' : 'proc.none.order'));
       return;
     }
@@ -4137,10 +4160,46 @@ async function followProcess(order) {
   }
 }
 
-// followNote is what the link last found for this order, or nothing where it was
+// lifecycleOf is the process carrying a position's lifecycle and the instance of it
+// the order recorded (ADR-0416), or key 0 where none was recorded.
+//
+// A position bound to one lifecycle process (ADR-0425) is carried by that process;
+// one still on the two-process binding by its provisioning process. A per-position
+// lifecycle (ADR-0428) is the strand its provisioning started, which every later
+// operation is delivered to — the server's own Line.StrandOf, read the same way; a
+// per-operation one starts an instance per action, and the newest is the one that
+// says how the position stands now.
+function lifecycleOf(line) {
+  const process = line.lifecycleProcess || line.provisionProcess || '';
+  const perPosition = !!line.lifecycleProcess && line.lifecycleForm === 'per-position';
+  const all = line.instances || [];
+  for (let i = all.length - 1; i >= 0; i--) {
+    const x = all[i];
+    if (x.processId !== process) continue;
+    if (perPosition && x.operation !== 'provision') continue;
+    return { process, key: x.key };
+  }
+  return { process, key: 0 };
+}
+
+// followedLine is the position of an order whose lifecycle the order's link opens,
+// under the entry it is drawn in: the Marktleistung the entry is about where the
+// order carries it, else the first of its positions there that has a process at
+// all. An order filed under two entries opens a different position under each,
+// which is what each entry is about.
+function followedLine(o, e) {
+  const lines = e.refs.filter((r) => r.order === o).map((r) => r.line)
+    .filter((l) => lifecycleOf(l).process);
+  return lines.find((l) => l.itemId === e.id) || lines[0] || null;
+}
+
+// followRef is the row a lookup's answer belongs to.
+function followRef(order, line) { return `${order.id}|${lineKey(line)}`; }
+
+// followNote is what the link last found for this position, or nothing where it was
 // never pressed. It sits under the button, which is what makes the press visible.
-function followNote(order) {
-  const said = state.following.get(order.id);
+function followNote(order, line) {
+  const said = line ? state.following.get(followRef(order, line)) : '';
   return said ? el('div', { class: 'muted follow-note' }, said) : null;
 }
 
@@ -4169,6 +4228,103 @@ function lineLabel(line) {
   if (!line.variantId) return name;
   const shape = (item && (item.variants || []).find((v) => v.id === line.variantId));
   return `${name} — ${shape ? textOf(shape.texts, line.variantId) : line.variantId}`;
+}
+
+// --- What a position is called -------------------------------------------------
+//
+// Two Team Sites ordered twice are two positions with one product name, and the
+// actions of both stood side by side under the same words: nobody could tell which
+// site a button acts on. So a position somebody answered an order form for is named
+// by that answer — the first one given, in the form's own order (asked for so,
+// 2026-11-24). A name field, one the form checks for availability (ADR-0519), comes
+// first, because that is the form itself saying which answer is a name.
+//
+// Read from the answers the line carries, as corrected since (ADR-0359); nothing on
+// the server changes. The order is the form's and not the answers': those arrive as
+// an object with sorted keys, which would name a site after its cost centre because
+// "costCentre" sorts before "siteName". So the form definition is read — once per
+// form, when an entry with answered positions is opened — and until it arrives a
+// position is called by its product, as before, rather than by a name that changes
+// a moment later. A form that no longer resolves falls back to the answers in key
+// order: something somebody typed is still a better handle than none.
+
+// NAMING_TYPES are the fields whose answer can name a position: what somebody typed
+// or chose. A checkbox's "true" names nothing.
+const NAMING_TYPES = new Set(['textfield', 'textarea', 'number', 'select', 'radio']);
+// NAME_MAX bounds a name drawn beside a product, so a long text answer stays a handle.
+const NAME_MAX = 60;
+// namingAsked are the forms the naming asked for; namingFailed the ones that did not
+// resolve.
+const namingAsked = new Set();
+const namingFailed = new Set();
+
+// askPositionNames reads the forms the answered positions of one entry were ordered
+// on, where the page does not hold them yet, and redraws once they are here.
+function askPositionNames(refs) {
+  const asks = [];
+  for (const { line: l } of refs) {
+    const id = l.configForm;
+    if (!id || !l.config || schemas.has(id) || namingAsked.has(id)) continue;
+    namingAsked.add(id);
+    asks.push(api(`/api/v1/forms/${encodeURIComponent(id)}`)
+      .then((def) => {
+        if (def && def.schema) schemas.set(id, def.schema);
+        else namingFailed.add(id);
+      })
+      // A form that cannot be read leaves the position named by its answers' keys.
+      .catch(() => { namingFailed.add(id); }));
+  }
+  if (asks.length) Promise.all(asks).then(() => render());
+}
+
+// positionName is what names one position: the first answer given on its order
+// form, or '' where it has none or its form is still being read.
+function positionName(line) {
+  const answers = line.config || {};
+  const id = line.configForm;
+  if (!id || !Object.keys(answers).length) return '';
+  const said = (v) => (v == null ? '' : String(v).trim());
+  const cut = (v) => (v.length > NAME_MAX ? `${v.slice(0, NAME_MAX - 1)}\u2026` : v);
+  let schema = schemas.get(id);
+  if (typeof schema === 'string') {
+    try { schema = JSON.parse(schema); } catch { schema = null; }
+  }
+  if (!schema || !Array.isArray(schema.components)) {
+    if (!namingFailed.has(id) && !schemas.has(id)) return '';
+    for (const k of Object.keys(answers).sort()) {
+      const v = said(answers[k]);
+      if (v && v !== 'true' && v !== 'false') return cut(v);
+    }
+    return '';
+  }
+  const fields = [];
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== 'object') continue;
+      if (typeof c.key === 'string' && c.key && NAMING_TYPES.has(c.type)) fields.push(c);
+      if (Array.isArray(c.components)) walk(c.components);
+    }
+  };
+  walk(schema.components);
+  const ordered = [...fields.filter((c) => c.atlasAvailability), ...fields.filter((c) => !c.atlasAvailability)];
+  for (const c of ordered) {
+    const v = said(answers[c.key]);
+    if (!v) continue;
+    // A choice is named by the words the form shows for it, not by its stored value.
+    const option = (Array.isArray(c.values) ? c.values : []).find((o) => o && String(o.value) === v);
+    return cut(option && option.label ? String(option.label) : v);
+  }
+  return '';
+}
+
+// positionLabel is a position in words with its name: the product, its shape, and
+// what it was named on its order form.
+function positionLabel(line) {
+  const label = lineLabel(line);
+  const name = positionName(line);
+  // Replaced by functions: a name is what somebody typed, and a replacement string
+  // would read its "$&" as a pattern.
+  return name ? t('position.named').replace('{label}', () => label).replace('{name}', () => name) : label;
 }
 
 function deriveStatus(order) {
@@ -4300,8 +4456,9 @@ function personName(id) {
 // orderNote is one order behind an entry of "my services": its number, when it
 // was placed, how it stands as a whole, for whom where that is not the reader, and
 // what can be done to it as a whole — withdraw what has not happened yet, and, for
-// whoever may, follow its process.
-function orderNote(o) {
+// whoever may, follow the lifecycle instance of the position the entry e is about.
+function orderNote(o, e) {
+  const followed = followedLine(o, e);
   return el('div', { class: 'svc-order-head' },
     el('strong', {}, o.id),
     el('span', { class: 'muted' },
@@ -4316,12 +4473,12 @@ function orderNote(o) {
         class: 'linkish', disabled: state.busy, onclick: () => cancel(o),
       }, t('portal.cancel'))
       : null,
-    state.mayFollowProcess
+    state.mayFollowProcess && followed
       ? el('button', {
-        class: 'linkish', title: t('proc.open'), disabled: state.busy, onclick: () => followProcess(o),
+        class: 'linkish', title: t('proc.open'), disabled: state.busy, onclick: () => followProcess(o, followed),
       }, t('proc.open'))
       : null,
-    followNote(o));
+    followNote(o, followed));
 }
 
 // lineItem is one position of an order, as "my services" lists it under the
@@ -4333,7 +4490,7 @@ function orderNote(o) {
 function lineItem(o, l) {
   return el('li', {},
     el('span', { class: `dot ${l.status}` }),
-    ' ', lineLabel(l), ' \u2014 ', t(`status.${l.status}`),
+    ' ', positionLabel(l), ' \u2014 ', t(`status.${l.status}`),
     // "Already held" was true when the order was placed; said as it stands now
     // where the reader has given the part back since.
     l.status === 'skipped' && entryWho(o) === 'me' && !state.held.has(l.itemId)
@@ -5099,11 +5256,14 @@ function entryMatches(rel, e, st) {
   if (f.phase === 'task' ? !st.tasks : (f.phase && f.phase !== st.phase)) return false;
   const q = f.q.trim().toLowerCase();
   if (!q) return true;
+  // A position is found by the name its order form gave it too, which needs the
+  // form; read once per form, the first time somebody searches.
+  askPositionNames(e.refs);
   const by = itemsById(rel);
   const hay = [
     textOf((by[e.id] || {}).texts, e.id), e.id, st.label,
     e.mine ? '' : `${personName(e.who)} ${e.who}`,
-    ...e.refs.map((r) => `${r.order.id} ${lineLabel(r.line)}`),
+    ...e.refs.map((r) => `${r.order.id} ${lineLabel(r.line)} ${positionName(r.line)}`),
   ].join(' ').toLowerCase();
   return hay.includes(q);
 }
@@ -5111,16 +5271,20 @@ function entryMatches(rel, e, st) {
 // entryActions are the actions a held position of the entry offers — the
 // intermediate events its lifecycle process listens for, a larger mailbox, a
 // password reset — as buttons, each named after the part it acts on where that is
-// not the Marktleistung itself, with the open action's form beneath.
+// not the Marktleistung itself, or where there is more than one, and after the name
+// its order form gave it (positionName), so two Team Sites are told apart by their
+// own names; with the open action's form beneath.
 function entryActions(e) {
   askLineActions(e.refs);
+  askPositionNames(e.refs);
   const held = e.refs.filter((r) => !r.order.held
     && (state.lineActions.get(`${r.order.id}|${lineKey(r.line)}`) || []).length);
   if (!held.length) return null;
   return el('section', { class: 'svc-section svc-actions' },
     el('h4', {}, t('services.actions')),
     held.map((r) => el('div', { class: 'svc-action-row' },
-      r.line.itemId !== e.id || held.length > 1 ? el('span', { class: 'muted' }, `${lineLabel(r.line)}:`) : null,
+      r.line.itemId !== e.id || held.length > 1 || positionName(r.line)
+        ? el('span', { class: 'muted' }, `${positionLabel(r.line)}:`) : null,
       actionButtons(r.order, r.line),
       actionSentNote(r.order, r.line),
       actionPanel(r.order, r.line))));
@@ -5201,7 +5365,7 @@ function entryOrders(e) {
   const older = orders.filter((o) => !shown.includes(o));
   const all = state.svcHistory === e.key;
   const block = (o) => el('div', { class: 'svc-order-block' },
-    orderNote(o),
+    orderNote(o, e),
     el('ul', { class: 'lines' }, refsOf(o).map((r) => lineItem(o, r.line))));
   return el('section', { class: 'svc-section' },
     el('h4', {}, t('services.orders')),
