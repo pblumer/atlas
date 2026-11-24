@@ -446,6 +446,24 @@ unless you set them ([the record](adr/0560-https-redirect-and-hsts.md)):
   everything works (`31536000` is a year), and set `0` before taking TLS away, which
   tells browsers to forget it. It is never sent with `includeSubDomains` or `preload`.
 
+Three headers need no setting, because they bind nothing but atlas's own answers. Every
+answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and
+`Content-Security-Policy: frame-ancestors 'self'` with `X-Frame-Options: SAMEORIGIN`, so
+a page of another site cannot show the Console in a frame. The one thing meant to be
+framed elsewhere stays frameable: a public start form under `/public/forms/`
+([embedding](adr/0186-embed-public-forms-cross-origin.md)). A proxy in front may set
+stricter values of its own; it should not remove these.
+
+One rule goes with them ([the record](adr/draft-cross-origin-protection.md)): a
+browser's request that changes something is accepted only from atlas's own origin. A
+browser says where a request comes from (`Sec-Fetch-Site`, `Origin`), and anything but
+`GET`, `HEAD` and `OPTIONS` from another origin is answered `403` and logged as
+`auth.cross_origin_refused`. Clients that are not browsers send neither header and are
+not affected; the public forms and the OAuth client endpoints are exempt. The one way
+to meet this by accident is a proxy that does not pass `Host` on, in front of a Console
+used over plain HTTP or from an old browser: pass `Host` on, as the example below does,
+or set `--external-url`, whose origin is always accepted as atlas's own.
+
 Where TLS is on, the server also opens a second listener on `127.0.0.1` with an
 ephemeral port, in plaintext, for its own child processes — the MCP adapter's
 loopback calls and any worker this server supervises. It is not reachable from
@@ -1232,6 +1250,7 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.login_throttled` | WARN | An attempt refused before any password check, because the address or the account had spent its budget |
 | `auth.logout` | INFO | A session was ended by its owner |
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
+| `auth.cross_origin_refused` | WARN | A browser sent a state-changing request from another origin, and it was refused before it was authenticated, with the `path`, the `origin` the browser named and the `host` the request arrived for. Either a page elsewhere tried to act as a signed-in person, or a proxy in front rewrites `Host` — see below |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
 | `content.source_changed` | INFO | An administrator created, changed or removed a content source, by `source`, naming its `base_url` and `credentials_ref` — never the token |

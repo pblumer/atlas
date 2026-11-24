@@ -182,10 +182,10 @@ func TestTheFailedScopeWritesOnlyFailures(t *testing.T) {
 	e.offer(jobRun{JobKey: 1, Worker: "w", Outcome: jobRunCompleted})
 	e.offer(jobRun{JobKey: 2, Worker: "w", Outcome: jobRunFailed})
 
-	got := waitForWrites(t, c, 1)
+	waitForWrites(t, c, 1)
 	// Give a wrongly-written completion time to show up before concluding.
 	time.Sleep(50 * time.Millisecond)
-	if got = c.wrote(); len(got) != 1 || got[0].IdempotencyKey != "2:failed" {
+	if got := c.wrote(); len(got) != 1 || got[0].IdempotencyKey != "2:failed" {
 		t.Errorf("wrote %d events (%+v), want only the failure", len(got), got)
 	}
 }

@@ -251,7 +251,7 @@ func TestARefactoringRebindsAndAContractChangeDoesNot(t *testing.T) {
 		t.Fatalf("rebinding with the old element ids = %d %v", code, out)
 	}
 	moved := `{"definitionKey":8,"expectedRevision":1,"entryPoints":[{"name":"antrag","elementId":"start"},{"name":"unterlagen","elementId":"dokumente"}]}`
-	code, out, body = f.call("usr_editor", "PUT", path, moved)
+	code, _, body = f.call("usr_editor", "PUT", path, moved)
 	if code != http.StatusOK || !strings.Contains(body, `"definitionKey":8`) || !strings.Contains(body, `"elementIds":["dokumente"]`) {
 		t.Fatalf("rebind = %d %s", code, body)
 	}

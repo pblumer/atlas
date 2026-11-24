@@ -164,6 +164,12 @@ var (
 	// in. Only the authorization refusal is recorded; logging every 401 would bury
 	// it under every unauthenticated probe on the internet.
 	AuthDenied = newEvent("auth.denied")
+	// AuthCrossOriginRefused is a browser's state-changing request from another
+	// origin, refused before it was authenticated. It means one of two things, and
+	// the line carries what tells them apart (origin, host, path): a page somewhere
+	// tried to act as whoever was signed in, or a proxy in front rewrites the Host
+	// header and the Console's own requests no longer look like the Console's.
+	AuthCrossOriginRefused = newEvent("auth.cross_origin_refused")
 	// The account lifecycle, and the credentials that are not accounts.
 	AuthUserCreated = newEvent("auth.user_created")
 	AuthUserUpdated = newEvent("auth.user_updated")
