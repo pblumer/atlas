@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Test manifest validation and generator
         run: python3 -m unittest discover -s scripts -p 'test_programs.py' -v
       - name: Check generated index is current
