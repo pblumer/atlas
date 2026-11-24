@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Security
+- **A published vulnerability Atlas can reach opens an issue, and dependency updates arrive as pull requests.** A scheduled workflow runs `govulncheck` every morning with the toolchain `go.mod` declares and opens one issue, labelled `known-vulnerability`, when a report in the Go vulnerability database is reachable from Atlas's code; it closes that issue when the scan is clean again. It is not a gate on pull requests: a dependency becomes vulnerable on the day a report is published, not on the day somebody changes it. `.github/dependabot.yml` asks for weekly update pull requests for the Go modules, the GitHub Actions the workflows use and the npm manifests of the test tooling. The build inputs of the vendored browser bundles are left out on purpose, because raising a version there does not rebuild the bundle.
 - **Answering an approval writes the decision and nothing else.** The three approval models
   Atlas ships call Atlas's own API after their task, with an operator's token: at the address
   in `atlasApiBase`, for the order and position the instance names, reporting `approvalRef` as
