@@ -268,17 +268,20 @@ func (s *Server) handleAuthorizeContext(w http.ResponseWriter, r *http.Request) 
 	if isSystemResource(req.resource) && clientErr == "" {
 		// What the system asks for, and whether the person deciding may give it: only
 		// an administrator connects a system (ADR-0512 §2). The projects a reach may
-		// name are listed to that administrator alone.
+		// name are listed to that administrator alone, and so is the grant the system
+		// already holds: who approved it, when, and which projects it reaches. This
+		// route answers without a session, and that grant used to be added for every
+		// caller who knew a connected system's client id.
 		sys := map[string]any{"scopes": req.scopes, "scope": req.scopeParam, "mayApprove": false}
 		if p != nil && s.principalIsAdmin(p) {
 			sys["mayApprove"] = true
 			var projs map[string]project
 			s.do(func() { projs, _ = s.projectsByID() })
 			sys["projects"] = systemProjectsFor(projs)
-		}
-		if g, ok := s.oauthGrants.systemOf(req.client.ID); ok {
-			// Approving again replaces this one, which the screen says.
-			sys["current"] = s.systemView(g)
+			if g, ok := s.oauthGrants.systemOf(req.client.ID); ok {
+				// Approving again replaces this one, which the screen says.
+				sys["current"] = s.systemView(g)
+			}
 		}
 		out["system"] = sys
 	}

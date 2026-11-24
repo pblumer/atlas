@@ -27,6 +27,14 @@ _Changed_ / _Removed_ for each version.
   and is served with `frame-ancestors 'none'` like the other pages a link opens. Clients named
   by a metadata document were not affected. Until this release is installed, keep
   self-registration off.
+- **The grant a connected system holds is shown to an administrator alone.** The consent
+  screen of a system that is already connected says who approved it, when, and which projects
+  each of its reaches covers, because approving again replaces that grant.
+  `GET /api/v1/oauth/authorize-context`, which the screen reads, answers without a session, and
+  it added that grant for every caller: anybody who knew a connected system's client id could
+  read it. It is now part of the answer only for an administrator, the one account that can
+  approve a system; everybody else is still told what the system asks for and that they may not
+  approve it.
 
 ## [0.28.0] — 2026-11-24
 
