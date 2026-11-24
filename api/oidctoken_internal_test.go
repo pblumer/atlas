@@ -188,6 +188,15 @@ func TestAnIDTokenIsRefused(t *testing.T) {
 		{"alg HS256", func() string {
 			return key.tokenFor(t, want, func(h, _ map[string]any) { h["alg"] = "HS256" })
 		}, "algorithm"},
+		{"not valid yet", func() string {
+			return key.tokenFor(t, want, func(_, c map[string]any) { c["nbf"] = now.Add(time.Hour).Unix() })
+		}, "not valid yet"},
+		{"issued to another client that this one is merely an audience of", func() string {
+			return key.tokenFor(t, want, func(_, c map[string]any) {
+				c["aud"] = []any{"other", want.clientID}
+				c["azp"] = "other"
+			})
+		}, "authorized party"},
 		{"not a token at all", func() string { return "not.a.token" }, ""},
 		{"two segments", func() string { return "aGVhZGVy.Y2xhaW1z" }, "segments"},
 		{"empty", func() string { return "" }, "segments"},

@@ -13,6 +13,68 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Security
+- **Answering an approval writes the decision and nothing else.** The three approval models
+  Atlas ships call Atlas's own API after their task, with an operator's token: at the address
+  in `atlasApiBase`, for the order and position the instance names, reporting `approvalRef` as
+  the person who approved. Completing a task writes whatever variables the request carries, and
+  for a task without output mappings they land on the instance. So whoever held an approval
+  could send, beside their answer, another order, another approver, or another address for the
+  call that carries the token. The approval tasks now map out exactly what their form asks
+  for — `genehmigt` and `begruendung` — and a task with output mappings keeps everything else
+  in its own scope (ADR-0068). `POST /api/v1/orders/{id}/lines/{line}/start` also no longer
+  records an approval under a name other than the one a `fixed` or `role` product names. An
+  approval model of your own that builds a call from instance variables after a user task
+  needs the same output mappings; a task without them still writes to the instance, as before.
+- **Releasing a task addressed to one person no longer opens it to everybody.** A task that
+  names nobody is open work (ADR-0317), and releasing a task empties its assignee. For a task
+  its model addresses to a person and to no group, that left exactly such a task: an approval
+  routed to a product's approver became every account's to answer once that approver released
+  it — the person who had placed the order among them. Releasing gives a task back to the group
+  it came from; where the model names no group there is nobody to give it back to, so
+  `POST /api/v1/tasks/{key}/unclaim` now answers `409` for such a task and says to hand it to
+  somebody instead. A task with candidate groups, and one its model addresses to nobody, are
+  released as before.
+- **Nobody approves an order they placed themselves.** A `fixed` approval names a person at the
+  product and a `role` approval a group, and neither asked who had placed the order: the
+  person named, or a member of the group, could order the product and approve it. Action
+  approvals have always refused that; order approvals of these two kinds now do too, on both
+  ways an approval is decided — `POST /api/v1/approvals/decide` skips such a line and says why,
+  and `POST /api/v1/tasks/{key}/complete` answers `403`. The rule is about whose order it is,
+  so it holds for an operator and an administrator as well. Where the person a product names
+  is the one ordering, somebody else with the operator role decides. `superior`, which
+  resolves the approver from the orderer, and an installation's own approval process are not
+  affected.
+- **Why a client's metadata document could not be fetched is no longer told to a stranger.**
+  Naming a client by the URL of its metadata document makes Atlas fetch that URL, on a route
+  that answers without a session. What the fetch found was told to the caller word for word:
+  the address a name resolved to, the resolver's own error, the dial or TLS failure — which
+  made the server a way of asking what an internal name resolves to and what answers there. A
+  caller who is not an administrator is now told that the document could not be read; the
+  cause is in the log (`auth.oauth_denied`), and an administrator still reads it on the screen.
+  The budget for such reads is also counted per host as it resolves rather than as it was
+  spelt: another case, a trailing dot or an explicit `:443` used to be a new key each, with a
+  full budget.
+- **A federated login no longer takes an e-mail address it cannot vouch for.** The provider's
+  `email` claim was copied onto the account at every login, as it came. Directory
+  synchronisation, reconciliation and password recovery all read an address as the person, and
+  the administrator's own path refuses a second account the same address — this path saved it
+  without asking, so a person whose provider let them choose the claim could carry a
+  colleague's address. An address another account holds is now left alone, and so is one the
+  provider marks unverified (`email_verified` false); the account keeps the address it had, and
+  the log says why (`auth.user_updated`). A provider that sends an address and no
+  `email_verified` claim is treated as before.
+- **An ID token that is not valid yet, or was issued to another client, is refused.** The
+  check read `exp`, `iat`, `aud` and the nonce, and neither `nbf` nor `azp`: a token whose
+  `nbf` lies in the future was accepted, and so was one that lists this client among several
+  audiences while naming another client as the party it was issued to.
+
+### Fixed
+- **A provider whose issuer ends in a slash can sign people in.** The issuer an operator
+  configures is trimmed of its trailing slash, and discovery accepts a document that names the
+  issuer with one — but a token's issuer was compared with the trimmed spelling, exactly. A
+  provider that names itself with a slash, as several do, passed discovery and then failed
+  every login with nothing on the screen but "sign-in failed". A token's issuer is now
+  compared with the one the discovery document names, as the provider spells it.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other

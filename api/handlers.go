@@ -6213,6 +6213,10 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
+	// Nobody approves an order they placed themselves, whichever door they use.
+	if s.refuseOwnOrderApproval(w, r, key) {
+		return
+	}
 	// A directory field's value is the business decision, so it is checked before it
 	// becomes one: its shape, and by default the directory once more
 	// (ADR-0473). Off the run loop; a form without such a
@@ -6346,6 +6350,31 @@ func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 
 // handleUnclaimTask releases a user task (assignee cleared), making it available
 // again. 404 if the job doesn't exist or is already completed (ADR-0042).
+// addressedToOnePersonOnLoop reports whether the task's model names an assignee and
+// no candidate group, by literal or by expression. Such a task has exactly one
+// holder and no pool behind them. Called on the run loop.
+func (s *Server) addressedToOnePersonOnLoop(jv *model.JobValue) bool {
+	if jv.CandidateGroups != "" {
+		return false
+	}
+	ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey)
+	if err != nil || !ok {
+		return false
+	}
+	_, _, cp, dok := s.deploymentMeta(ei.ProcessDefKey)
+	if !dok || cp == nil {
+		return false
+	}
+	n := cp.Node(ei.ElementId)
+	if n.Type != compiler.TypeUserTask {
+		return false
+	}
+	d := cp.UserTask(n.Detail)
+	names := d.Assignee >= 0 || d.AssigneeExpr != nil
+	group := d.CandidateGroups >= 0 || d.CandidateGroupsExpr != nil
+	return names && !group
+}
+
 func (s *Server) handleUnclaimTask(w http.ResponseWriter, r *http.Request) {
 	s.assignTask(w, r, "")
 }
@@ -6368,16 +6397,30 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 		return
 	}
 	var (
-		found  bool
-		runErr error
+		found   bool
+		nowhere bool
+		runErr  error
 	)
 	s.do(func() {
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
+		// A release gives a task back to the group it came from. One the model
+		// addressed to a person and to no group has no group to go back to: emptied,
+		// it would be a task that names nobody, which is open work for every account
+		// (ADR-0317) — the opposite of what its model said.
+		if assignee == "" && s.addressedToOnePersonOnLoop(jv) {
+			nowhere = true
+			return
+		}
 		s.proc.AssignJob(key, assignee)
 	})
+	if nowhere {
+		httpapi.Error(w, http.StatusConflict, "this task is addressed to one person and to no group, so there is nobody to release it to; hand it to somebody instead")
+		return
+	}
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.

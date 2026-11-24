@@ -99,6 +99,18 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 			// An approval reached by the process that asked for it is recorded here,
 			// before anything reads whether the line is approved.
 			if req.ApprovedBy != "" && line.NeedsApproval() && line.ApprovedBy == "" {
+				// Where the product itself names who approves — a person for "fixed",
+				// a group for "role" — an approval under another name is not that
+				// approval. Atlas's own models report exactly that name, so this
+				// refuses nothing they send; it is what holds if a model, or whoever
+				// can write an approval instance's variables, reports somebody else.
+				// "superior" is resolved from the orderer when the approval is asked
+				// for and may have moved since, and an installation's own approval
+				// process answers for itself: neither is compared here.
+				if k := line.Approval.Kind; (k == "fixed" || k == "role") && line.Approval.Ref != "" && req.ApprovedBy != line.Approval.Ref {
+					refusal = "line " + position + " is approved by " + line.Approval.Ref + ", whom its product names, and not by " + req.ApprovedBy
+					return
+				}
 				next, err := order.Approve(line, req.ApprovedBy, at)
 				if err != nil {
 					refusal = err.Error()

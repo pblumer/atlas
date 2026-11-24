@@ -291,6 +291,15 @@ func TestTheStartActRefusesWhatIsNotItsToStart(t *testing.T) {
 		!strings.Contains(string(b), "atlas-genehmigung-fix") {
 		t.Errorf("gated start without the approval process: %d (%s), want 409 naming it", code, b)
 	}
+	// The product names who approves it. An approval reported under another name is
+	// not that approval, whoever reports it: the line stays unapproved and waiting.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+gated+"/lines/laptop/start", `{"approvedBy":"mallory"}`); code != http.StatusConflict ||
+		!strings.Contains(string(b), "root") {
+		t.Errorf("a start approved by somebody the product does not name: %d (%s), want 409 naming who does approve it", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "GET", "/api/v1/orders/"+gated, ""); code != http.StatusOK || strings.Contains(string(b), `"approvedBy":"mallory"`) {
+		t.Errorf("the order records an approval the product's approver did not give: %d (%s)", code, b)
+	}
 	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders/"+gated+"/lines/laptop/start", `{"approvedBy":"root"}`)
 	var got startAnswer
 	if code != http.StatusOK || json.Unmarshal(body, &got) != nil || got.Started != "provision" {

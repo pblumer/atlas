@@ -33,10 +33,16 @@ Kein Worker ist einzurichten, auch kein Verzeichnis-Worker. Die Service-Tasks si
     <bpmn:userTask id="Genehmigen" name="Genehmigen">
       <bpmn:documentation>Die Aufgabe geht an den Linienvorgesetzten der bestellenden Person, wie ihr Konto ihn nennt: an approvalRef, das Atlas beim Start gesetzt hat.
 
-Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begründung — die bestellende Person bekommt sie zu lesen, und „abgelehnt“ ohne weiteres ist die Nachricht, die einen Anruf erzeugt.</bpmn:documentation>
+Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begründung — die bestellende Person bekommt sie zu lesen, und „abgelehnt“ ohne weiteres ist die Nachricht, die einen Anruf erzeugt.
+
+Die Aufgabe gibt genau das weiter, was ihr Formular erfragt: genehmigt und begruendung. Eine Aufgabe mit Ausgabe-Zuordnung behält, was ihr beim Abschliessen mitgegeben wird, in ihrem eigenen Scope (ADR-0068); nur das Zugeordnete erreicht die Instanz. Das ist hier nötig, weil die Aufrufe nach der Aufgabe aus Variablen der Instanz gebaut werden — atlasApiBase, orderId, positionId, approvalRef — und das Token eines Operators tragen: ohne die Zuordnung könnte, wer die Aufgabe hält, neben seiner Antwort eine andere Bestellung, eine andere genehmigende Person oder eine andere Adresse mitschicken.</bpmn:documentation>
       <bpmn:extensionElements>
         <zeebe:formDefinition formId="genehmigung" />
         <zeebe:assignmentDefinition assignee="=vorgesetzter" />
+        <zeebe:ioMapping>
+          <zeebe:output source="=genehmigt" target="genehmigt" />
+          <zeebe:output source="=begruendung" target="begruendung" />
+        </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Split_Task</bpmn:incoming>
       <bpmn:outgoing>F_Task_Gw</bpmn:outgoing>
