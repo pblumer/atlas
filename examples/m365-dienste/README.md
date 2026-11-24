@@ -830,7 +830,8 @@ bestellt danach das **Eintrittspaket** `m365-eintritt` im Namen seiner Applikati
 (Shop-Aufgabe im Modus `order`, [ADR-0520](../../docs/adr/0520-process-places-an-order.md)).
 Meldet das HR-System den Austritt, sperrt derselbe Prozess das Konto und gibt das Paket zurück
 (Shop-Aufgabe im Modus `command`, ADR-0429 §10), daneben die AD-Adminkonten der Person aus dem
-Paket [`ad-dienste`](../ad-dienste/) (siehe [Kopplung an ad-dienste](#kopplung-an-ad-dienste-adminkonten)).
+Paket [`ad-dienste`](../ad-dienste/) (siehe [Kopplung an ad-dienste](#kopplung-an-ad-dienste-adminkonten))
+und ihre Orbithek-Konten (siehe [Kopplung an Orbithek](#kopplung-an-orbithek-benutzerkonten)).
 
 ### Ablauf
 
@@ -870,13 +871,15 @@ Paket [`ad-dienste`](../ad-dienste/) (siehe [Kopplung an ad-dienste](#kopplung-a
    (`SHOP_ORDER_REFUSED`), legt der Prozess sie `M365-Administration` vor (Aufgabe «Ablehnung
    prüfen»): erneut bestellen oder beenden.
 9. **Austritt gemeldet** (`hr.austritt` mit derselben Personalnummer) → **Entra-Konto sperren**
-   (`disable`) → nebeneinander **Eintrittspaket zurückgeben** und **AD-Adminkonto zurückgeben**
-   (je eine Shop-Aufgabe im Modus `command`, `deprovision`). Lehnt die Bestellung eine der beiden
-   Rückgaben ab (`SHOP_COMMAND_REFUSED`), legt der Prozess sie `M365-Administration` vor (Aufgabe
-   «Paket von Hand zurückgeben» bzw. «Admin-Konto von Hand zurückgeben»), und der Austritt endet,
-   wenn beide Zweige fertig sind. Gesperrt wird zuerst, damit keine abgelehnte oder hängende
-   Rückgabe den Zugang offen hält; die Rückgaben laufen nebeneinander, damit eine Ablehnung, die
-   auf eine Person wartet, die andere nicht aufhält.
+   (`disable`) → nebeneinander **Eintrittspaket zurückgeben**, **AD-Adminkonto zurückgeben** und
+   **Orbithek-Konten zurückgeben** (je eine Shop-Aufgabe im Modus `command`, `deprovision`; die
+   beiden Orbithek-Produkte nacheinander im selben Zweig). Lehnt die Bestellung eine Rückgabe ab
+   (`SHOP_COMMAND_REFUSED`), legt der Prozess sie vor: Paket und Admin-Konto `M365-Administration`
+   (Aufgabe «Paket von Hand zurückgeben» bzw. «Admin-Konto von Hand zurückgeben»), ein
+   Orbithek-Konto der Gruppe `Admin` (Aufgabe «Orbithek … von Hand zurückgeben»). Der
+   Austritt endet, wenn alle drei Zweige fertig sind. Gesperrt wird zuerst, damit keine abgelehnte
+   oder hängende Rückgabe den Zugang offen hält; die Rückgaben laufen nebeneinander, damit eine
+   Ablehnung, die auf eine Person wartet, die anderen nicht aufhält.
 
 ### Wie das HR-System meldet
 
@@ -997,6 +1000,26 @@ als Produkt `ad-admin-konto` mit der Aktion `deprovision`. Der Austritt gibt sie
   die Aufgabe «Admin-Konto von Hand zurückgeben» `M365-Administration` vor (Formular
   `m365-austritt-abgelehnt`). Ein Serverfehler bleibt eine Störung mit Wiederholungen und danach
   ein Incident. Die Rückgabe des Eintrittspakets fängt denselben Fehler auf dieselbe Weise.
+
+### Kopplung an Orbithek: Benutzerkonten
+
+Ein Benutzerkonto auf einer Orbithek-Instanz ist ein eigenes Produkt je Instanz im Katalog
+«Orbithek»: `orbithek-konto-wiki-dev-admin-ch` und `orbithek-konto-wiki-blumer-cloud`. Beide binden
+den Lebenszyklus `proc_orbithek_konto` (Applikation «Orbithek Zugriffsverwaltung»): Freigabe durch
+die Gruppe `Admin`, die das Konto in Orbithek anlegt, Mail mit Benutzername und Link an die Person,
+und bei der Rückgabe ein Löschtask im Space `ADMIN` der Instanz. Produkt und Prozess sind nicht Teil
+dieses Pakets; sie liegen nur auf dem Server, der sie einrichtet.
+
+Der Austritt gibt jedes dieser Produkte über die Person zurück (ADR-0521): `product` ist das
+Produkt, `action` `deprovision`, `recipient` `atlasKontoId`. Hält die Person kein solches Konto, oder
+gibt es das Produkt auf dem Server nicht, endet die Aufgabe ohne Wirkung. Damit die Rückgabe
+angenommen wird, nennt jedes Produkt `beispiel-m365-dienste` in `commandedBy`, und seine Aktion
+`deprovision` hat den Auslöser `operator`. Der Auslöser `system` ist für eine Rückgabe nicht
+zulässig (`api/catalog/action.go`).
+
+**Eine weitere Orbithek-Instanz** braucht hier eine weitere Shop-Aufgabe mit Grenzereignis und
+Aufgabe für die Gruppe `Admin` im Orbithek-Zweig: Die Shop-Aufgabe nennt das Produkt als Literal,
+das beim Deployment geprüft wird, und kann deshalb nicht über eine Liste von Produkten laufen.
 
 ### Personendaten
 

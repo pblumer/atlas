@@ -12,6 +12,13 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **The HR leaver returns Orbithek accounts.** `examples/m365-dienste/hr-eintritt.bpmn` gives back
+  the person's Orbithek accounts (`orbithek-konto-wiki-dev-admin-ch`, `orbithek-konto-wiki-blumer-cloud`)
+  in a third branch beside the joiner package and the AD admin account, each a shop command by
+  recipient (ADR-0521) with a manual fallback for the group `Admin` when the return is refused.
+
 ## [0.27.1] — 2026-11-18
 
 **atlas serves TLS for several names and can keep browsers on HTTPS.** A server that
