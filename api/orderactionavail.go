@@ -127,7 +127,7 @@ func (s *Server) messagesWaitedFor(instKey uint64) (map[string]bool, error) {
 			if !ok || d.cp == nil {
 				return nil
 			}
-			if name := messageOfElement(d.cp, ei.ElementId); name != "" {
+			if name := messageOfElement(d.cp, ei.ElementId, compiler.BpmnType(ei.BpmnElementType)); name != "" {
 				out[name] = true
 			}
 			return nil
@@ -136,11 +136,14 @@ func (s *Server) messagesWaitedFor(instKey uint64) (map[string]bool, error) {
 	return out, err
 }
 
-// messageOfElement is the message a live element of this type waits for, or "" when
-// it waits for none.
-func messageOfElement(cp *compiler.CompiledProcess, id int32) string {
+// messageOfElement is the message a live element waits for, or "" when it waits for
+// none. The type is the element instance's own, not the compiled node's: an armed
+// event-subprocess trigger is a runtime-only element (TypeEventSubProcessStart) whose
+// element id is its handler container, a TypeSubProcess node, so reading the node's
+// type alone never sees a trigger listening (ADR-0082).
+func messageOfElement(cp *compiler.CompiledProcess, id int32, live compiler.BpmnType) string {
 	n := cp.Node(id)
-	switch n.Type {
+	switch live {
 	case compiler.TypeMessageCatchEvent:
 		return cp.MessageCatch(n.Detail).MessageName
 	case compiler.TypeReceiveTask:

@@ -41,10 +41,11 @@ _Changed_ / _Removed_ for each version.
 - **A per-position action may be taken by a message event subprocess.** Publishing a
   per-position product checks that its strand waits for every change and service action. The
   check counted message catches, receive tasks and message boundaries, but not the start of a
-  message-triggered event subprocess (ADR-0082), although the shop already offers an action
-  whose armed event subprocess listens and the engine delivers it there. A product taking an
-  action beside the strand's wait was therefore refused at publish. The start of such an
-  event subprocess now counts, with its correlation key.
+  message-triggered event subprocess (ADR-0082), so a product taking an action beside the
+  strand's wait was refused at publish. The start of such an event subprocess now counts, with
+  its correlation key. The shop's availability meant to read an armed one as listening but
+  compared the compiled node's type, and an armed trigger is a runtime element on its handler
+  container, so it offered the action as not available; it now reads the element's own type.
 
 ## [0.27.1] — 2026-11-18
 
