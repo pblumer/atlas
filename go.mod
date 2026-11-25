@@ -7,7 +7,7 @@ toolchain go1.26.11
 require (
 	github.com/Azure/go-ntlmssp v0.1.1
 	github.com/PuerkitoBio/goquery v1.12.0
-	github.com/andybalholm/cascadia v1.3.3
+	github.com/andybalholm/cascadia v1.3.5
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/go-asn1-ber/asn1-ber v1.5.8
 	github.com/go-ldap/ldap/v3 v3.4.14
