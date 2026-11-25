@@ -39,8 +39,48 @@ func (s *Server) newFormDecisions() {
 		Evaluate: func(ctx context.Context, key uint64, id string, in map[string]any) (map[string]any, error) {
 			return s.dmnRegistry.Evaluate(ctx, key, id, in)
 		},
-		MaxBody: s.budgets().Request,
+		MaxBody:     s.budgets().Request,
+		Deployments: s.formDecisionDeployments,
 	})
+}
+
+// formDecisionDeployments names the decision deployment that answers each of ids now,
+// for the form editor's panel: the registry's newest key for the id, the version that
+// key holds of it, and the record's model and deployer. An id whose newest model is not
+// a decision deployment of it — none is, or a record that no longer reads — is left
+// out. The ids are the decisions the list names, so the work is bounded by what one
+// listing shows; the names are resolved after the writer's turn, as every listing
+// does.
+func (s *Server) formDecisionDeployments(ids []string) map[string]formdecision.Deployment {
+	out := make(map[string]formdecision.Deployment, len(ids))
+	by := map[string]string{}
+	s.do(func() {
+		for _, id := range ids {
+			_, key, ok := s.dmnRegistry.LatestDeployedDecision(id)
+			if !ok {
+				continue
+			}
+			version := s.decisionVersionOf(key, id)
+			if version == 0 {
+				continue
+			}
+			rec, found, err := s.decisionDeploys.load(key)
+			if err != nil || !found {
+				continue
+			}
+			out[id] = formdecision.Deployment{
+				Key: key, Version: version, ModelName: rec.ModelName,
+				ResourceName: rec.ResourceName, DeployedAt: rec.DeployedAt,
+			}
+			by[id] = rec.DeployedBy
+		}
+	})
+	name := s.principalNamer()
+	for id, d := range out {
+		d.DeployedByName = name(by[id])
+		out[id] = d
+	}
+	return out
 }
 
 // handleFormFieldOptions answers the options of one decision field of a stored form, for

@@ -33,6 +33,16 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </dmndi:DMNDI>
 </definitions>`;
 
+// publishedName is the name the server publishes a model's first decision under
+// (dmn/names.go decisionNames): the decision's name, else its variable's, else its id.
+function publishedName(xml) {
+  const dec = (xml.match(/<decision\b[^>]*>[\s\S]*?<\/decision>/) || [])[0] || "";
+  const open = (dec.match(/<decision\b[^>]*>/) || [])[0] || "";
+  const attr = (tag, a) => (tag.match(new RegExp(`\\s${a}="([^"]*)"`)) || [])[1] || "";
+  const variable = (dec.match(/<variable\b[^>]*>/) || [])[0] || "";
+  return attr(open, "name") || attr(variable, "name") || attr(open, "id");
+}
+
 // installMock stands in for the server: one application, one stored decision, the
 // decision drafts it is holding, and the writes a save makes. It records them so a
 // test can assert what the editor sent rather than only what it then showed.
@@ -158,10 +168,11 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
     if (path === "/api/v1/decision-deployments" && request.method() === "POST") {
       const body = request.postData() || "";
       deploys.push({ query: url.search, body });
-      // The record is versioned by the decision id in the XML that was posted, the
-      // way the server versions it — so the chip the editor then reads back is about
-      // the decision the author actually deployed.
-      const decisionId = (body.match(/<decision\s+id="([^"]+)"/) || [])[1] || "Decision";
+      // The record is versioned by the name the decision is published under, the
+      // way the server versions it (dmn/names.go): its label, else its variable, else
+      // its id. The chip the editor then reads back is about the decision the author
+      // actually deployed, and an editor that asks by the XML id finds nothing.
+      const decisionId = publishedName(body) || "Decision";
       const version = deployed.filter((d) => d.decisionId === decisionId).length + 1;
       for (const d of deployed) if (d.decisionId === decisionId) d.current = false;
       const row = { key: nextKey++, decisionId, version, current: true };
@@ -540,10 +551,10 @@ test("a deploy names the deployed processes that will not follow it", async ({ p
   // evaluating v1 whatever is deployed here. Billing follows latest and is not named.
   installMock(page, {
     refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
-    deployed: [{ key: 4, decisionId: "Decision_stored", version: 1, current: true }],
+    deployed: [{ key: 4, decisionId: "eligibility", version: 1, current: true }],
     processes: [
       { key: 20, processId: "orders", name: "Orders", version: 2,
-        frozenDecisions: [{ decisionId: "Decision_stored", key: 4, version: 1, latestKey: 7, latestVersion: 2, behind: true }] },
+        frozenDecisions: [{ decisionId: "eligibility", key: 4, version: 1, latestKey: 7, latestVersion: 2, behind: true }] },
       { key: 21, processId: "billing", name: "Billing", version: 1 },
     ],
   });
@@ -553,7 +564,7 @@ test("a deploy names the deployed processes that will not follow it", async ({ p
   await page.locator("#dmn-deploy").click();
   await expect(page.locator("#dmn-status")).toHaveText("Deployt v2 · Schlüssel 7");
   await expect(page.locator("#toast")).toContainText(
-    "Ein deployter Prozess folgt dieser Version nicht: Orders v2 (Decision_stored wertet v1 aus, das Neueste ist v2)");
+    "Ein deployter Prozess folgt dieser Version nicht: Orders v2 (eligibility wertet v1 aus, das Neueste ist v2)");
   await expect(page.locator("#toast")).not.toContainText("Billing");
   // And the chip no longer promises what ADR-0319 did: latest follows the version.
   await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /das wertet eine an latest gebundene Business Rule Task aus, wenn sie läuft/);
@@ -565,8 +576,8 @@ test("the bar says which version a decision is deployed at the moment it opens",
     // Two versions of the same decision: only the current one is what a process
     // deployed now would bind to, so only it belongs on the bar.
     deployed: [
-      { key: 4, decisionId: "Decision_stored", version: 1, current: false },
-      { key: 9, decisionId: "Decision_stored", version: 2, current: true },
+      { key: 4, decisionId: "eligibility", version: 1, current: false },
+      { key: 9, decisionId: "eligibility", version: 2, current: true },
     ],
   });
   await page.goto("/index.html#/modeler/dmn/e/ref-1");
@@ -583,6 +594,114 @@ test("a decision nothing has deployed yet says nothing, rather than saying zero"
 
   await expect(page.locator("#dmn-ref-chip")).toHaveText("eligibility.dmn");
   await expect(page.locator("#dmn-deployed-chip")).toBeHidden();
+});
+
+// A model with two decisions whose XML ids are not their names, as dmn-js writes them:
+// the version line of each is kept under its name.
+const TWO_DECISIONS_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" id="def_cars" name="Cars" namespace="http://atlas/dmn">
+  <decision id="dec_brand" name="Brand">
+    <literalExpression id="le_brand"><text>["ferrari", "audi"]</text></literalExpression>
+  </decision>
+  <decision id="dec_models" name="Models">
+    <decisionTable id="dt_models" hitPolicy="COLLECT">
+      <input id="in_models" label="brand"><inputExpression id="ie_models" typeRef="string"><text>brand</text></inputExpression></input>
+      <output id="out_models" name="value" typeRef="string" />
+      <rule id="r_models"><inputEntry id="ie_r"><text>"audi"</text></inputEntry><outputEntry id="oe_r"><text>"a4"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_cars">
+      <dmndi:DMNShape id="DMNShape_brand" dmnElementRef="dec_brand"><dc:Bounds height="80" width="180" x="100" y="100" /></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_models" dmnElementRef="dec_models"><dc:Bounds height="80" width="180" x="400" y="100" /></dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`;
+
+test("the version chip lists every deployed version, newest first, with when and who", async ({ page }) => {
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    deployed: [
+      { key: 4, decisionId: "eligibility", version: 1, current: false, modelRef: "eligibility",
+        modelName: "Eligibility", resourceName: "eligibility.dmn", deployedAt: 1790000000,
+        deployedBy: "usr_a", deployedByName: "Alice Adams",
+        pinnedBy: [{ key: 20, processId: "orders", name: "Orders", version: 2, decisionId: "eligibility", binding: "latest" }] },
+      { key: 9, decisionId: "eligibility", version: 2, current: true, modelRef: "eligibility",
+        modelName: "Eligibility", resourceName: "eligibility.dmn", deployedAt: 1790100000,
+        deployedBy: "usr_b", deployedByName: "Bob Brown" },
+    ],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const chip = page.locator("#dmn-deployed-chip");
+  await expect(chip).toHaveText("Deployt v2 · Schlüssel 9");
+  await expect(chip).toHaveClass(/\bok\b/);
+  await expect(page.locator("#dmnv-pop")).toBeHidden();
+
+  // The panel says what the chip says and who did it, and lists the whole line.
+  await chip.click();
+  const pop = page.locator("#dmnv-pop");
+  await expect(pop).toBeVisible();
+  await expect(pop.locator(".sv-rows")).toContainText("Neueste Version");
+  await expect(pop.locator(".sv-rows")).toContainText("Bob Brown");
+  await expect(pop.locator(".sv-rows")).toContainText("Eligibility · eligibility.dmn");
+  const items = pop.locator("#dmnv-list li");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0).locator(".sv-vl")).toHaveText("v2");
+  await expect(items.nth(0)).toContainText("Bob Brown");
+  await expect(items.nth(0)).toContainText("neueste");
+  await expect(items.nth(1).locator(".sv-vl")).toHaveText("v1");
+  await expect(items.nth(1)).toContainText("Alice Adams");
+  // The older version is still evaluated by a process that holds it.
+  await expect(items.nth(1)).toContainText("gebunden: 1");
+  await expect(items.nth(1).locator(".sv-tag", { hasText: "gebunden" })).toHaveAttribute("title", "Orders v2");
+  await expect(pop.locator("#dmnv-note")).toHaveCount(0);
+
+  // Escape closes it, and the chip takes the focus back.
+  await page.keyboard.press("Escape");
+  await expect(pop).toBeHidden();
+  await expect(chip).toHaveAttribute("aria-expanded", "false");
+});
+
+test("a newest version deployed from another model is said to be one", async ({ page }) => {
+  // Two models publish a decision under the same name, so they share its versions:
+  // the newest came from the other model, and that is what a form evaluates.
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    deployed: [
+      { key: 4, decisionId: "eligibility", version: 1, current: false, modelRef: "eligibility", resourceName: "eligibility.dmn" },
+      { key: 9, decisionId: "eligibility", version: 2, current: true, modelRef: "it-equipment", resourceName: "it-equipment.dmn" },
+    ],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const chip = page.locator("#dmn-deployed-chip");
+  await expect(chip).toHaveClass(/\bwarn\b/);
+  await chip.click();
+  await expect(page.locator("#dmnv-note")).toContainText("v2 wurde aus einem anderen Modell deployt (it-equipment.dmn)");
+  await expect(page.locator("#dmnv-list li").nth(0)).toContainText("anderes Modell");
+  await expect(page.locator("#dmnv-list li").nth(1)).not.toContainText("anderes Modell");
+});
+
+test("the version chip follows the decision whose logic is open", async ({ page }) => {
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Cars", modelRef: "cars", projectId: "app-1" }],
+    storedXml: TWO_DECISIONS_XML,
+    deployed: [
+      { key: 30, decisionId: "Brand", version: 12, current: true, modelRef: "cars" },
+      { key: 30, decisionId: "Models", version: 16, current: true, modelRef: "cars" },
+    ],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  // On the overview, the model's first decision.
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployt v12 · Schlüssel 30");
+  // With the table of the second open, that one — asked by its name, not its id.
+  await page.locator("#dmn-views button", { hasText: "Models" }).click();
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployt v16 · Schlüssel 30");
 });
 
 test("Test runs the decision on screen and shows which rule fired", async ({ page }) => {
@@ -748,7 +867,7 @@ test("a decision whose logic has no table says that, and one with no trace at al
   // table is a statement about the model; no trace is a statement about the run.
   installMock(page, {
     refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
-    trial: { decisionId: "Decision_stored", outputs: { eligibility: "approve" }, trace: { tables: null } },
+    trial: { decisionId: "eligibility", outputs: { eligibility: "approve" }, trace: { tables: null } },
   });
   await page.goto("/index.html#/modeler/dmn/e/ref-1");
   await editorReady(page);
@@ -762,7 +881,7 @@ test("a decision whose logic has no table says that, and one with no trace at al
   await page.unrouteAll({ behavior: "ignoreErrors" });
   installMock(page, {
     refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
-    trial: { decisionId: "Decision_stored", outputs: { eligibility: "approve" } },
+    trial: { decisionId: "eligibility", outputs: { eligibility: "approve" } },
   });
   await page.reload();
   await editorReady(page);
@@ -902,7 +1021,7 @@ test("Documentation publishes a version of the decision and lists its history", 
 test("a published version can be shared, and deleting one is confirmed first", async ({ page }) => {
   const state = installMock(page, {
     refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
-    docs: [{ id: "doc-1", decisionId: "Decision_stored", version: 1, createdAt: 1789000000, pdfUrl: "/api/v1/decision-docs/doc-1/pdf" }],
+    docs: [{ id: "doc-1", decisionId: "eligibility", version: 1, createdAt: 1789000000, pdfUrl: "/api/v1/decision-docs/doc-1/pdf" }],
   });
   await page.goto("/index.html#/modeler/dmn/e/ref-1");
   await editorReady(page);

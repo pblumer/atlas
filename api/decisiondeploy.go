@@ -226,6 +226,10 @@ type deployedDecisionResp struct {
 	Checksum      string `json:"checksum,omitempty"`
 	DeployedAt    int64  `json:"deployedAt"`
 	DeployedBy    string `json:"deployedBy,omitempty"`
+	// DeployedByName is the name a colleague knows the deployer by, resolved when the
+	// listing is read — as GET /api/v1/processes names a process version's deployer —
+	// so the decision editor's version panel can say who to ask.
+	DeployedByName string `json:"deployedByName,omitempty"`
 	// Current says this is the newest deployed version of its decision id — the one
 	// a process deployed now would pin its latest-bound reference to. A superseded
 	// version stays deployed and addressable: processes pinned to it keep running
@@ -324,8 +328,12 @@ func (s *Server) handleListDecisionDeployments(w http.ResponseWriter, r *http.Re
 		recs = kept
 	}
 	out := decisionResponses(recs)
+	// The people are named after the writer's turn, for the reason handleListDrafts
+	// gives.
+	name := s.principalNamer()
 	for i := range out {
 		out[i].PinnedBy = pinsFor[out[i].Key]
+		out[i].DeployedByName = name(out[i].DeployedBy)
 	}
 	if decisionID != "" {
 		kept := out[:0]

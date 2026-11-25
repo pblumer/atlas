@@ -52,6 +52,23 @@ type Config struct {
 	Evaluate func(ctx context.Context, key uint64, id string, in map[string]any) (map[string]any, error)
 	// MaxBody bounds a request's body: the server's Request budget.
 	MaxBody int64
+	// Deployments says, for each decision id it can place, which decision deployment
+	// answers it now. Optional: without it the list names no versions.
+	Deployments func(ids []string) map[string]Deployment
+}
+
+// Deployment is the decision deployment a field's options come from now: the newest
+// version of the decision, its key, the model it was deployed from, and when and by
+// whom. The form editor's panel shows it, because two models can publish a decision
+// under one name and share its versions — what a field shows is whichever was
+// deployed last.
+type Deployment struct {
+	Key            uint64 `json:"key"`
+	Version        int32  `json:"version"`
+	ModelName      string `json:"modelName,omitempty"`
+	ResourceName   string `json:"resourceName,omitempty"`
+	DeployedAt     int64  `json:"deployedAt,omitempty"`
+	DeployedByName string `json:"deployedByName,omitempty"`
 }
 
 // Service serves a form's decision-backed options. Build it with [New].
@@ -316,23 +333,37 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, maxBody int64, into a
 // listedDecision is one decision the form editor offers as an options source, with the
 // inputs a field has to give it.
 type listedDecision struct {
-	ID      string              `json:"id"`
-	Name    string              `json:"name"`
-	Model   string              `json:"model,omitempty"`
-	Service bool                `json:"service,omitempty"`
-	Inputs  []dmn.DecisionField `json:"inputs"`
+	ID         string              `json:"id"`
+	Name       string              `json:"name"`
+	Model      string              `json:"model,omitempty"`
+	Service    bool                `json:"service,omitempty"`
+	Inputs     []dmn.DecisionField `json:"inputs"`
+	Deployment *Deployment         `json:"deployment,omitempty"`
 }
 
 // HandleList is GET /api/v1/form-data/decisions: the decisions a field's options can come
 // from — every decision with a decision deployment — and the inputs each takes.
 func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	out := []listedDecision{}
-	for _, d := range s.cfg.Decisions() {
+	decisions := s.cfg.Decisions()
+	var deployed map[string]Deployment
+	if s.cfg.Deployments != nil && len(decisions) > 0 {
+		ids := make([]string, len(decisions))
+		for i, d := range decisions {
+			ids[i] = d.ID
+		}
+		deployed = s.cfg.Deployments(ids)
+	}
+	for _, d := range decisions {
 		inputs := d.Inputs
 		if inputs == nil {
 			inputs = []dmn.DecisionField{}
 		}
-		out = append(out, listedDecision{ID: d.ID, Name: d.Name, Model: d.Model, Service: d.Service, Inputs: inputs})
+		row := listedDecision{ID: d.ID, Name: d.Name, Model: d.Model, Service: d.Service, Inputs: inputs}
+		if dep, ok := deployed[d.ID]; ok {
+			row.Deployment = &dep
+		}
+		out = append(out, row)
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{"decisions": out})
 }

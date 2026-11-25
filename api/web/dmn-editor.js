@@ -43,6 +43,7 @@ import { informationRequirementFindings, knowledgeModelFindings } from "./dmn-wa
 // The decision as text, corrected in place — the BPMN editor's "XML source", shared.
 import { openXmlSource, closeXmlSource } from "./xml-source.js";
 import { fmtDateTime } from "./datefmt.js";
+import { attachDecisionVersions, decisionStanding } from "./decision-versions.js";
 import {
   addInputColumn, columnsFedBy, columnsNamed, columnTypeIn, nameOf, namesGivenTo,
   providedNames, removeInputColumn, renameInputColumn, tableOf,
@@ -283,15 +284,29 @@ function modelName(xml) {
   }
 }
 
-// firstDecisionId reads the decision *id* out of the DMN XML — the runtime
-// identity, which is what a business rule task binds to and what a deployment is
-// versioned by (ADR-0319). The name is what people read; the id is what the engine
-// keys on, and the two drift apart the moment somebody renames a decision.
-function firstDecisionId(xml) {
+// publishedDecisionName reads the name a decision is published under out of the DMN
+// XML: what a deployment is versioned by, what GET /api/v1/decision-deployments is
+// asked about, and what a business rule task and a form field name (ADR-0319).
+//
+// That is the decision's name — its label — and not its XML id. The server publishes
+// a decision under its name, falling back to its variable's name and then to its id
+// only where the label is missing (dmn/names.go decisionNames). The two coincide in a
+// model whose author typed the same word twice, and nowhere else: dmn-js gives a new
+// decision an id like Decision_1x7f, so asking by the id found no deployment for an
+// ordinary model, and the bar said nothing about a decision deployed sixteen times.
+//
+// elementId picks the decision when the editor has one open; otherwise, or when it
+// names no decision, the first decision of the model answers.
+function publishedDecisionName(xml, elementId) {
   try {
     const doc = new DOMParser().parseFromString(xml, "application/xml");
-    const dec = doc.querySelector("decision");
-    return (dec && dec.getAttribute("id")) || "";
+    const all = Array.from(doc.getElementsByTagNameNS("*", "decision"));
+    const dec = (elementId && all.find((d) => d.getAttribute("id") === elementId)) || all[0];
+    if (!dec) return "";
+    const variable = Array.from(dec.children).find((c) => c.localName === "variable");
+    return (dec.getAttribute("name") || "").trim()
+      || ((variable && variable.getAttribute("name")) || "").trim()
+      || dec.getAttribute("id") || "";
   } catch {
     return "";
   }
@@ -1036,12 +1051,16 @@ let onDmnMenuDismiss;
 // collab is this editor's live session, when the decision has a draft to hold one
 // on (ADR-0323). Torn down with the editor.
 let collab;
+// The version chip of the editor currently mounted (decision-versions.js), which
+// listens on the document for clicks outside its panel until it is destroyed.
+let decisionVersions = null;
 
 export function cleanup() {
   generation++;
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   closeXmlSource(); // the decision it was showing is going away with the editor
   if (onDmnMenuDismiss) { onDmnMenuDismiss(); onDmnMenuDismiss = null; }
+  if (decisionVersions) { decisionVersions.destroy(); decisionVersions = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 
@@ -1075,7 +1094,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         <div class="etabs" id="dmn-views"></div>
         <span class="chip" id="dmn-ref-chip" hidden></span>
         <span class="chip draft-chip" id="dmn-draft-chip" hidden title="${esc(tr("dmn.chip.draftTitle"))}">${esc(tr("dmn.chip.draft"))}</span>
-        <span class="chip deployed-chip" id="dmn-deployed-chip" hidden></span>
+        <div class="shown-version" id="dmn-versions" hidden></div>
         <div style="flex:1"></div>
         <span class="muted" id="dmn-status"></span>
         <button class="btn neutral" id="dmn-discard" hidden title="${esc(tr("dmn.discardTitle"))}">${esc(tr("dmn.discard"))}</button>
@@ -1130,7 +1149,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const statusEl = root.querySelector("#dmn-status");
   const chip = root.querySelector("#dmn-ref-chip");
   const draftChip = root.querySelector("#dmn-draft-chip");
-  const deployedChip = root.querySelector("#dmn-deployed-chip");
+  decisionVersions = attachDecisionVersions(root.querySelector("#dmn-versions"));
   const saveBtn = root.querySelector("#dmn-save");
   const modelBtn = root.querySelector("#dmn-save-model");
   const deployBtn = root.querySelector("#dmn-deploy");
@@ -1528,35 +1547,36 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // views does not re-ask the server the same question.
   let lastDeployedID = null;
 
-  // showDeployed puts the current deployment of this decision on the bar — the
-  // version and the key — the way a BPMN diagram opened from a deployment carries
-  // "Deployment <key>" in its crumbs. Nothing to show is the normal state of a
-  // decision that has never been deployed.
-  function showDeployed(id, row) {
-    if (!row) { deployedChip.hidden = true; deployedChip.textContent = ""; return; }
-    deployedChip.hidden = false;
-    deployedChip.textContent = tr("dmn.deployed", { version: row.version, key: row.key });
-    deployedChip.title = tr("dmn.deployedTitle", { id, version: row.version, key: row.key });
+  // showDeployed puts the deployments of this decision on the bar — the newest
+  // version and its key on the chip, every version in its panel — the way the BPMN
+  // editor says which version of a process is open (ADR-0452). Nothing to show is the
+  // normal state of a decision that has never been deployed.
+  function showDeployed(id, rows) {
+    if (!decisionVersions) return;
+    decisionVersions.show(id ? decisionStanding(rows, { name: id, modelRef }) : null);
   }
 
-  // refreshDeployed asks what the decision currently on screen is deployed at. It is
-  // keyed by the decision *id*, not by the reference or the handle, because that is
-  // what the runtime versions — renaming the decision genuinely changes which
+  // refreshDeployed asks what the decision currently on screen is deployed at: the one
+  // whose table or expression is open, else the model's first. It is keyed by the
+  // name the decision is published under, not by the reference or the handle, because
+  // that is what the runtime versions — renaming the decision genuinely changes which
   // deployment the answer is about, and the chip follows it.
   async function refreshDeployed(force) {
     if (!modeler) return;
     let id = "";
     try {
       const out = await modeler.saveXML({ format: false });
-      id = firstDecisionId(out.xml);
+      const view = modeler.getActiveView && modeler.getActiveView();
+      const open = view && view.type !== "drd" && view.element ? view.element.id : "";
+      id = publishedDecisionName(out.xml, open);
     } catch { /* the chip is not worth failing anything for */ }
     if (!force && id === lastDeployedID) return;
     lastDeployedID = id;
-    if (!id) { showDeployed("", null); return; }
+    if (!id) { showDeployed("", []); return; }
     try {
       const rows = (await api("GET", "/api/v1/decision-deployments?decisionId=" + encodeURIComponent(id))) || [];
       if (gen !== generation || lastDeployedID !== id) return; // superseded while asking
-      showDeployed(id, rows.find((r) => r.current) || null);
+      showDeployed(id, rows);
     } catch {
       // A caller who may not read the deployment listing still gets the editor; the
       // chip is the only thing that goes missing.
@@ -1581,7 +1601,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         const rows = (rep && rep.decisions) || [];
         // One model can provide several decisions, each versioned on its own. The one
         // reported is the one being edited, not whichever sorted first.
-        const editedID = firstDecisionId(xml);
+        const editedID = publishedDecisionName(xml);
         const primary = rows.find((r) => r.decisionId === editedID) || rows[0] || {};
         await refreshDeployed(true);
         statusEl.textContent = tr("dmn.deployed", { version: primary.version, key: rep.key });
@@ -1711,7 +1731,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       `<option value="${esc(d.id)}">${esc(d.name || d.id)}</option>`).join("");
     // Prefer the decision that was being tested, else the one being edited, else the
     // first — so reopening the panel lands where it was left.
-    const edited = firstDecisionId(xml);
+    const edited = publishedDecisionName(xml);
     testDecision.value = described.some((d) => d.id === previous) ? previous
       : described.some((d) => d.id === edited) ? edited : described[0].id;
     renderTestForm();

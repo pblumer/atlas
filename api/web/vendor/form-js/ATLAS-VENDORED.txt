@@ -46,8 +46,8 @@ is patched or copied:
     remote source on a select, and the source, the Worker, what is searched, filtered
     and shown are edited there. It adds the "Directory picker" palette preset and the
     "Convert to select" entry for a directory field saved as a textfield. It offers
-    the decision source on all four option fields, with the decision to pick and what
-    it answers now.
+    the decision source on all four option fields, with the decision to pick, the
+    version of it the field evaluates and what it answers now.
   - viewer.js and playground.js are the entries. Their Form and Playground are
     form-js's, constructed with the Atlas modules added.
 
@@ -94,4 +94,4 @@ SHA-256 form-viewer.js:
 83a884b8131167cee8c8d6421553ae1bbd8b51ae92d86db20c00ed538d756142
 
 SHA-256 form-playground.js:
-4a1f3101d1666955ccb9b41549e66a60efa6050b9d6038b6b084c34f8c4f559d
+d71f804b103d85041a3dc1dda5e92f34a86aa5e9d64e304272da151e0e8a136d

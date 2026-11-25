@@ -458,3 +458,48 @@ func TestErrorWrite(t *testing.T) {
 		t.Error("Error() is not the message")
 	}
 }
+
+// TestHandleListSaysWhichVersionAnswers: the form editor's panel names the version a
+// field's options come from — which deployment, from which model, deployed when and by
+// whom — because two models can publish a decision under one name and the newest is
+// what every form evaluates. A decision the server cannot place is listed without it.
+func TestHandleListSaysWhichVersionAnswers(t *testing.T) {
+	cfg := newFake().config()
+	var asked []string
+	cfg.Deployments = func(ids []string) map[string]Deployment {
+		asked = append(asked, ids...)
+		return map[string]Deployment{"Farben": {
+			Key: 963, Version: 16, ModelName: "AutoStammdaten", ResourceName: "autostammdaten.dmn",
+			DeployedAt: 1794413442, DeployedByName: "Patrick Blumer",
+		}}
+	}
+	s := New(cfg)
+	rec := httptest.NewRecorder()
+	s.HandleList(rec, httptest.NewRequest(http.MethodGet, "/api/v1/form-data/decisions", nil))
+	var body struct {
+		Decisions []struct {
+			ID         string      `json:"id"`
+			Deployment *Deployment `json:"deployment"`
+		} `json:"decisions"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(asked, ",") != "Farben,Gruppen,Mitglieder" {
+		t.Errorf("asked about %v; want every listed decision, once", asked)
+	}
+	want := Deployment{Key: 963, Version: 16, ModelName: "AutoStammdaten", ResourceName: "autostammdaten.dmn", DeployedAt: 1794413442, DeployedByName: "Patrick Blumer"}
+	if d := body.Decisions[0].Deployment; d == nil || *d != want {
+		t.Errorf("Farben's deployment = %+v; want %+v", d, want)
+	}
+	if d := body.Decisions[1].Deployment; d != nil {
+		t.Errorf("Gruppen's deployment = %+v; want none", d)
+	}
+
+	// Without the hook — a server that cannot say — the list is what it was.
+	plain := httptest.NewRecorder()
+	New(newFake().config()).HandleList(plain, httptest.NewRequest(http.MethodGet, "/api/v1/form-data/decisions", nil))
+	if strings.Contains(plain.Body.String(), `"deployment"`) {
+		t.Errorf("listed a deployment without the hook: %s", plain.Body)
+	}
+}

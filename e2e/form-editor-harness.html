@@ -108,7 +108,8 @@
       // Kostenstellen), the select already takes its options from that decision.
       window.__mountDecisions = ({ named } = {}) => {
         const decisions = { decisions: [
-          { id: "Kostenstellen", name: "Kostenstellen", model: "Stammdaten", inputs: [] },
+          { id: "Kostenstellen", name: "Kostenstellen", model: "Stammdaten", inputs: [],
+            deployment: { key: 963, version: 16, modelName: "Stammdaten", resourceName: "stammdaten.dmn", deployedAt: 1794413442, deployedByName: "Alice Adams" } },
           { id: "Länder", name: "Länder", model: "Stammdaten", inputs: [] },
           { id: "Regionen", name: "Regionen", model: "Geo", inputs: [{ name: "land", type: "string" }] },
         ] };

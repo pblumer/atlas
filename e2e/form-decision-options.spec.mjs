@@ -130,6 +130,23 @@ test.describe("in the form editor", () => {
     expect(land.atlasDecision).toEqual({ version: 1, decisionId: "Länder" });
   });
 
+  test("the panel names the version of the decision the field evaluates", async ({ page }) => {
+    await open(page, { named: true });
+    await selectField(page, "Field_ks");
+    await openGroup(page, "valuesSource");
+    // Which deployment answers, from which model, deployed by whom: two models can
+    // publish a decision under one name, and the field shows whichever came last.
+    const version = entry(page, "atlasDecision-version");
+    await expect(version).toContainText("Version evaluated");
+    await expect(version).toContainText("v16 (key 963) from Stammdaten · stammdaten.dmn, deployed");
+    await expect(version).toContainText("Alice Adams");
+    await expect(version).toContainText("always evaluates the newest version");
+
+    // A decision the server listed without a deployment says nothing rather than guess.
+    await entry(page, "atlasDecision-decision").locator("select").selectOption("Länder");
+    await expect(entry(page, "atlasDecision-version")).toHaveCount(0);
+  });
+
   test("a form that already names a decision opens on it and previews what it answers", async ({ page }) => {
     await open(page, { named: true });
     await selectField(page, "Field_ks");

@@ -1148,12 +1148,9 @@ textarea::placeholder {
    decision is meant to be — so it reads as an accent, not as an error. */
 .chip.draft-chip { border-style: dashed; border-color: var(--accent); color: var(--accent-text); }
 
-/* The version a decision is deployed at, on the decision editor's bar
-   (ADR-0322). It is the counterpart of the "Deployment
-   <key>" crumb a BPMN diagram opened from a deployment carries, and it states
-   something that is live in the engine — so it reads solid and settled, next to
-   the dashed draft chip which states the opposite. */
-.chip.deployed-chip { border-color: var(--ok); color: var(--ok); background: var(--ok-soft, transparent); }
+/* The decision editor's deployed version (ADR-0322) is now the version chip the BPMN
+   editor wears (decision-versions.js, shown-version.js): .shown-version, .sv-chip and
+   .sv-pop below. */
 
 /* Trying a decision against sample inputs, in the decision editor
    (ADR-0326). It is the .start-panel strip the

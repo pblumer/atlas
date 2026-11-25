@@ -671,6 +671,36 @@ function DecisionEntry(props) {
   );
 }
 
+// deploymentText says which deployment answers a decision: its version and key, the
+// model it came from, and when and by whom it was deployed — whatever of that the server
+// listed. Two models can publish a decision under one name and share its versions, so
+// "the newest" alone does not say which list the field shows.
+export function deploymentText(d) {
+  if (!d || !d.version) return '';
+  const model = [ d.modelName, d.resourceName ].filter(Boolean).join(' · ');
+  const when = d.deployedAt ? new Date(d.deployedAt * 1000).toLocaleString() : '';
+  const stamp = [ when, d.deployedByName ].filter(Boolean).join(' · ');
+  return `v${d.version} (key ${d.key})` + (model ? ` from ${model}` : '') + (stamp ? `, deployed ${stamp}` : '');
+}
+
+// DecisionVersionEntry names the version of the chosen decision the field evaluates,
+// as the server listed it when the editor opened. A deploy since then is picked up
+// when the form is opened again.
+function DecisionVersionEntry(props) {
+  const { id, field, list } = props;
+  const decision = decisionsOf(list).find((d) => d.id === decisionIdOf(field));
+  const text = deploymentText(decision && decision.deployment);
+  if (!text) return null;
+  return (
+    <Entry id={ id } extraClass="atlas-decision-version">
+      <span class="bio-properties-panel-label">Version evaluated</span>
+      <div class="bio-properties-panel-description">
+        { `${text}. The field always evaluates the newest version; a new deploy of this decision, from any model, changes the list it shows.` }
+      </div>
+    </Entry>
+  );
+}
+
 // fixedText is how a fixed value is shown for editing: a string as it is, anything else
 // as its JSON.
 function fixedText(v) {
@@ -1108,6 +1138,7 @@ class AtlasRemotePropertiesProvider {
     const source = groups.find((g) => g.id === 'valuesSource');
     const entries = [
       { id: 'atlasDecision-decision', component: DecisionEntry, field, editField, list: services.decisions, registry: services.registry, isEdited: isEditedValue },
+      { id: 'atlasDecision-version', component: DecisionVersionEntry, field, list: services.decisions },
       { id: 'atlasDecision-inputs', component: DecisionInputsEntry, field, editField, list: services.decisions, registry: services.registry },
       { id: 'atlasDecision-preview', component: DecisionPreviewEntry, field, service: services.decisionService }
     ];

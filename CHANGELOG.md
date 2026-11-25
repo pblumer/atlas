@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The decision editor lists every deployed version of a decision.** The chip on the decision
+  editor's bar ("Deployed vN · key K") now opens a panel, as the BPMN editor's version chip does:
+  the decision, its newest version with when and who deployed it, the model it was deployed from,
+  and every version newest first, each with its date, its deployer, its model file and how many
+  deployed processes still hold it. When the newest version was deployed from another model —
+  two models publishing a decision under the same name share its versions — the chip turns to a
+  warning and the panel says so. The chip follows the decision whose table or expression is
+  open. `GET /api/v1/decision-deployments` names the deployer (`deployedByName`) beside the id.
+- **The form editor says which version of a decision a field evaluates.** A field whose options
+  come from a decision shows, under *Options source*, the version that answers now, its key, the
+  model and file it came from, and when and by whom it was deployed. `GET
+  /api/v1/form-data/decisions` lists that deployment with each decision.
 - **A message flow says which message it carries, and the Modeler says what does not fit.** A
   message flow between two pools now has a *Message* field in its panel: it offers the names the
   sending pool sends and the receiving one waits for, and takes any other; a flow docked on a
@@ -39,6 +51,14 @@ _Changed_ / _Removed_ for each version.
 - **The Interactions link moved into the row's menu.** In the Operations list, the link to who a
   process talks to is no longer shown beside every process name; it is the second entry of the
   row's ⋯ menu, after *Open* (ADR-0559).
+
+### Fixed
+- **The decision editor shows the version of a decision whose id is not its name.** The chip on
+  the bar asked the deployment listing by the decision's XML id, but a decision is published and
+  versioned under its name. Every decision dmn-js creates has an id such as `Decision_1x7f`, so
+  the chip stayed empty for an ordinary model however often it was deployed; it now asks by the
+  name the server publishes it under (its label, else its variable, else its id). The Test panel
+  preselects the decision being edited by the same name.
 
 ## [0.29.0] — 2026-11-25
 
