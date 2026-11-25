@@ -3,9 +3,9 @@
 **Programme:** Local collaboration views (ID: LCV)
 **Milestone:** [Milestone 2 — Events and timers](../../ROADMAP.md#milestone-2--events-and-timers-).
 **Architecture authority:** [ADR-0559](../adr/0559-local-collaboration-views.md) (**Accepted / Partial**).
-**Programme owner:** pblumer (accepted 2026-11-11). **LCV1** and **LCV2:** active (owner pblumer),
-merged in #1710 and awaiting the owner's review. **LCV3:** active (owner pblumer), first part built.
-LCV4 is planned and has no implementation owner yet.
+**Programme owner:** pblumer (accepted 2026-11-11). **LCV1**, **LCV2** and **LCV3:** active (owner
+pblumer). Everything built so far is merged (#1710, #1739, #1740) and awaits the owner's review;
+no slice is complete. LCV4 is planned and has no implementation owner yet.
 
 ## User outcome
 
@@ -102,6 +102,40 @@ the kinds, the assignment and the export are driven through the real bpmn-js
 
 **Acceptance:** an end-to-end test that builds a collaboration of two processes from one
 process's ports, names a placeholder, and sees a drift finding after a redeploy.
+
+## Handoff of 2026-11-25
+
+- **Landed.**
+  - #1710 (2026-11-13): LCV1 and LCV2 — the interaction graph, the Operations page
+    *Interactions* as a BPMN collaboration, the message-only replay.
+  - #1739 (2026-11-25): the amendment of ADR-0559 (the kind is the pool's, not the file's), the
+    first part of LCV3 — reading a model's pools, the collaboration check, the Modeler's pool
+    panel, the participant count of a draft — and the Operations link moved into the row's menu.
+  - #1740 (2026-11-25): the second part of LCV3 — the message picker on a message flow and the
+    findings shown in the Modeler.
+  - No migration: nothing is stored that was not stored before, and no document carries the
+    attribute name the amendment replaced.
+- **Verified.** Each pull request was merged on a green CI run of its head: build, vet, format,
+  race, the statement floor, both Windows jobs and the browser suite. Locally, `go test -race
+  -timeout=45m ./...` was green for each change before it was pushed, and the browser specs
+  `operations-interactions` and `pool-kind` pass on the real bpmn-js. Not verified: any of it
+  against a real installation's data; the open question in ADR-0559's front matter, whether
+  aggregating the event log on request is cheap enough, is still unmeasured.
+- **Outstanding.**
+  - No human review took place on any of the three pull requests. Until the owner has reviewed
+    and accepted them, every slice stays `active`.
+  - LCV3: `flow-not-observed`; the three questions the amendment leaves open.
+  - LCV2: narrowing the replay to one correlation key (ADR-0559 §7).
+  - Follow-ups of ADR-0559 without an owner: Worker ports, a replay of the whole installation,
+    the view with many participants, aligning the "white box" wording with ADR-0374.
+- **Next executable slice.** The rest of LCV3, owner pblumer, blocked on the three open
+  questions being decided. Entry point: `api/interaction/document.go` for `flow-not-observed`,
+  which needs the event log the check does not read yet; `showPool` and the collaboration
+  check in `api/web/editor.js` for the Modeler. LCV4 should be re-scoped first: the
+  `undrawn-exchange` finding already names both pools and the message, so "draw this flow" from
+  a finding may replace most of composing from ports.
+- **Architectural divergence.** None beyond the amendment of 2026-11-25, which is recorded in
+  ADR-0559 itself.
 
 ## Handoff
 
