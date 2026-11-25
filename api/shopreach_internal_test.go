@@ -10,7 +10,7 @@ import (
 )
 
 // The reach of a person's grant for `…/shop`, and the writes a catalogue maintained in
-// another system holds (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// another system holds (ADR-0565).
 
 // TestTheShopReachIsTheTasksReachAndTheShop: everything a tasks grant reaches, a shop
 // grant reaches too — a system that shows the shop also shows the tasks it opens — and

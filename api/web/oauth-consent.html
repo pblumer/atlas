@@ -305,7 +305,7 @@ function consent(ctx) {
   const resource = String(ctx.resource || "");
   // What each resource reaches, in the order isCanonicalResource names them: the
   // transport, a person's tasks (ADR-0510 §3), a person's shop and tasks
-  // (ADR-draft-a-shop-and-its-catalogues-from-another-system), and the whole server.
+  // (ADR-0565), and the whole server.
   const reach = resource.endsWith("/mcp")
     ? ["Drive atlas through its Model Context Protocol tools, as you.",
        "Nothing else: this approval does not reach the rest of the API."]

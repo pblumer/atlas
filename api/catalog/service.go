@@ -121,7 +121,7 @@ type Service struct {
 
 	// Publisher answers the system a request comes through when it is a person's
 	// grant for that system's shop, and empty strings otherwise
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system). A function, as
+	// (ADR-0565). A function, as
 	// admin is, so this package carries neither the scope vocabulary nor a reading of
 	// a principal's scope: the server decides which grant that is. An import through
 	// it marks the catalogues it writes as maintained in that system, and a write

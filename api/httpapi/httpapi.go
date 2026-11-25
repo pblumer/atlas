@@ -124,7 +124,7 @@ type Principal struct {
 	// where such a grant becomes the principal and empty for every other credential.
 	// They say which system a request came through, which a catalogue maintained in
 	// another system asks of every write to it
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system); the name is the one
+	// (ADR-0565); the name is the one
 	// the grant shows, so a refusal can name the system as people know it.
 	ClientID   string
 	ClientName string

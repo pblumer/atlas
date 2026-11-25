@@ -184,7 +184,7 @@ const oauthTasksResource = "/tasks"
 // oauthShopResource names a person's shop and tasks as a resource of its own: a grant
 // for it reaches what `tasks` reaches, the shop's customer side and the catalogue
 // maintenance of a product manager, worked as the person and nothing else
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// (ADR-0565).
 const oauthShopResource = "/shop"
 
 // isCanonicalResource reports whether uri is one of the five this server publishes

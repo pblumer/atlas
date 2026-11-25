@@ -84,7 +84,7 @@ var wantPublicRoutes = []string{
 	// a client asks a tasks grant for (ADR-0510 §3).
 	"GET /.well-known/oauth-protected-resource/tasks",
 	// A person's shop and tasks, the document for the resource a client asks a shop
-	// grant for (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	// grant for (ADR-0565).
 	"GET /.well-known/oauth-protected-resource/shop",
 	// A connected system's own reading of this server, the document for the
 	// resource an administrator approves a system grant for (ADR-0512 §2).

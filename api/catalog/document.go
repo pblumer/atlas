@@ -84,7 +84,7 @@ type DocumentProblem struct {
 	Problem string `json:"problem"`
 	// MaintainedIn is the system the subject's catalogue is maintained in, when that
 	// is why the import may not write it
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system). Such a problem
+	// (ADR-0565). Such a problem
 	// answers the import 409, as the conflict it is.
 	MaintainedIn *Maintainer `json:"maintainedIn,omitempty"`
 }
@@ -476,7 +476,7 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 	// Through a system's grant for the shop, every catalogue the document writes is
 	// marked as maintained in that system, at the address the document gives; through
 	// anything else, none is, whatever the document says
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	// (ADR-0565).
 	client, clientName := s.publisher(p)
 	now := s.now()
 	for _, in := range doc.Catalogs {

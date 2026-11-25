@@ -652,6 +652,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0562](0562-tls-certificates-by-name.md) | Several certificates, chosen by the name a client asks for | Accepted | Landed |
 | [0563](0563-cross-origin-protection.md) | A browser's request that changes something comes from Atlas's own origin | Accepted | Landed |
 | [0564](0564-script-execution-defaults.md) | What a script task may reach when nobody said | Proposed | Not started |
+| [0565](0565-a-shop-and-its-catalogues-from-another-system.md) | A shop and its catalogues from another system — a person's grant for `…/shop`, and a catalogue maintained where it is published from | Proposed | Partial |
 
 ## The two states of a record
 

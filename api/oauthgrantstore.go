@@ -94,7 +94,7 @@ func (g oauthGrant) accessExpired(now int64) bool {
 // carries no confinement and reaches what its person reaches. A grant for the
 // person's tasks reaches the task routes, worked as the person, and nothing else
 // (ADR-0510 §3); one for the person's shop reaches those and the shop's
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// (ADR-0565).
 func (g oauthGrant) scope() string {
 	switch {
 	case strings.HasSuffix(g.Resource, "/mcp"):

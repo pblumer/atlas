@@ -11,7 +11,7 @@ import (
 )
 
 // A catalogue maintained in another system
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system): a wiki publishes it
+// (ADR-0565): a wiki publishes it
 // through the document import with a person's grant for its shop, the import marks
 // it, and every other write is refused with the wiki's name and address until an
 // administrator takes it back.

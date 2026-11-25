@@ -7,7 +7,7 @@ import (
 
 // The Console's half of a catalogue maintained in another system, and what the consent
 // page and the AI-access page say a shop grant reaches
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system). The server refuses each
+// (ADR-0565). The server refuses each
 // write on its own; the page is what keeps a person from meeting the refusal as the
 // first sign that the catalogue lives elsewhere.
 

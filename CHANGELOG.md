@@ -126,7 +126,7 @@ something that was accepted, so six changes can alter what worked against 0.28.0
   person in the shop and over MCP (ADR-0550); the three order routes kept off MCP are not
   reached. Its metadata is at `/.well-known/oauth-protected-resource/shop`, and an
   administrator's pre-consent for a connected system applies to it as to `…/tasks`
-  (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+  (ADR-0565).
 - **A catalogue can be maintained in another system.** A catalogue document imported through a
   person's `…/shop` grant marks every catalogue it writes `maintainedIn` that system — its
   client id, its name and, from the document's `catalogs[].maintainedIn.url`, an https address.
@@ -137,7 +137,7 @@ something that was accepted, so six changes can alter what worked against 0.28.0
   administrator's. The Console shows a banner with a link there and locks what the server would
   refuse; an administrator takes the catalogue back with `DELETE /api/v1/catalogs/{id}/maintainer`,
   recorded in the audit trail as `catalog.maintainer_cleared`. The export carries `maintainedIn`
-  (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+  (ADR-0565).
 
 ### Fixed
 - **A provider whose issuer ends in a slash can sign people in.** The issuer an operator

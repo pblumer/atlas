@@ -613,7 +613,7 @@ type Member struct {
 }
 
 // Maintainer is the system a catalogue is maintained in, when that is not Atlas
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system). It is a system, not a
+// (ADR-0565). It is a system, not a
 // person: who may maintain a catalogue here is its owner and Members.
 type Maintainer struct {
 	// Client is the OAuth client id of the system, as the grant it publishes through
@@ -682,7 +682,7 @@ type Catalog struct {
 	// there is nobody to ask. The owner may always read, write and share.
 	OwnerID string `json:"ownerId,omitempty"`
 	// MaintainedIn names the system this catalogue is maintained in, when it is not
-	// maintained here (ADR-draft-a-shop-and-its-catalogues-from-another-system): a
+	// maintained here (ADR-0565): a
 	// wiki that keeps the catalogue as its own pages and publishes it through the
 	// document import. Only such an import sets it — through the person's grant for
 	// `…/shop` of that system — and only an administrator clears it, with

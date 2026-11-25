@@ -527,7 +527,7 @@ func (s *Server) purge(w http.ResponseWriter, r *http.Request, kind purgeKind) {
 	}
 	// A catalogue maintained in another system is deleted there; deleted here, the
 	// next publish from there would bring it back
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	// (ADR-0565).
 	if subject, catID, held, err := s.heldPurge(sc, httpapi.PrincipalFrom(r.Context())); err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read the catalogue: "+err.Error())
 		return

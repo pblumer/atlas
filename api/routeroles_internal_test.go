@@ -213,7 +213,7 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/catalog-products/{id}/deletion",
 	"DELETE /api/v1/catalog-products/{id}",
 	// Taking a catalogue back from the system it is maintained in decides which of two
-	// systems wins (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	// systems wins (ADR-0565).
 	"DELETE /api/v1/catalogs/{id}/maintainer",
 	// Deleting a version's finished instances for good
 	// (ADR-0486): history is evidence, the

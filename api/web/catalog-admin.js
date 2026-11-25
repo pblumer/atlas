@@ -1403,7 +1403,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 //
 // A wiki that keeps a catalogue as its own pages publishes it through the document
 // import, and the next publish replaces what the import carries
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system). So the server refuses
+// (ADR-0565). So the server refuses
 // every change made here while the catalogue is maintained there, and the page says so
 // before anybody makes one: a banner naming the system with a link to where the
 // catalogue is maintained, and every control in the sections the server would refuse

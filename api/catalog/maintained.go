@@ -9,7 +9,7 @@ import (
 )
 
 // A catalogue maintained in another system
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// (ADR-0565).
 //
 // A wiki that keeps a catalogue as its own pages publishes it into Atlas through the
 // document import (ADR-0436). The import replaces records with the same id, so a

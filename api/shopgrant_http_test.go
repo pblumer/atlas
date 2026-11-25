@@ -8,7 +8,7 @@ import (
 )
 
 // A person's shop as an OAuth resource of its own, and a catalogue maintained in the
-// system that holds the grant (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// system that holds the grant (ADR-0565).
 //
 // The connected system of ADR-0512 is the one that asks: an administrator connects it
 // with pre-consent, a person's browser is sent through for `…/shop` and comes back

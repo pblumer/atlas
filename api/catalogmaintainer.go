@@ -9,7 +9,7 @@ import (
 )
 
 // A catalogue maintained in another system: the server's half
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// (ADR-0565).
 //
 // The catalogue service decides every write to such a catalogue (api/catalog,
 // maintained.go). What lives here is what only the server knows: which grant a request

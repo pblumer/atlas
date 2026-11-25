@@ -1395,7 +1395,7 @@ Adoption and polish.
   Still open: the draft the document follows may change (the record's open question), and
   the other direction — a credential for a process writing into the system (§6).
 - 🚧 **A shop and its catalogues from another system**
-  ([ADR draft](docs/adr/draft-a-shop-and-its-catalogues-from-another-system.md)): a person's
+  ([ADR draft](docs/adr/0565-a-shop-and-its-catalogues-from-another-system.md)): a person's
   grant for the resource `…/shop` lets a connected system show them the shop — order, follow
   and change orders, decide approvals, work tasks — as themselves, and lets a product manager
   publish catalogues kept as the system's pages through the document import. A catalogue so

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A shop and its catalogues from another system — a person's grant for `…/shop`, and a catalogue maintained where it is published from
+# ADR-0565: A shop and its catalogues from another system — a person's grant for `…/shop`, and a catalogue maintained where it is published from
 
 - **Status:** Proposed
 - **Implementation:** Partial

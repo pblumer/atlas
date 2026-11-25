@@ -144,7 +144,7 @@ A person's grant is ADR-0510's: the same flow with `resource=<atlas>/tasks` and 
 `scope`. It works that person's tasks as that person.
 
 A system that also shows the shop asks for `resource=<atlas>/shop` instead
-([ADR-draft-a-shop-and-its-catalogues-from-another-system](../adr/draft-a-shop-and-its-catalogues-from-another-system.md)).
+([ADR-0565](../adr/0565-a-shop-and-its-catalogues-from-another-system.md)).
 That grant carries the scope `shop`: everything `…/tasks` reaches, the shop's customer side
 (`GET /api/v1/shop/catalogs`, `GET /api/v1/shop/catalog`, ordering and following orders under
 `/api/v1/orders`, a customer's actions, `GET /api/v1/approvals` and

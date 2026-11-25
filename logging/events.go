@@ -255,7 +255,7 @@ var (
 	SystemDisconnect = newEvent("system.disconnect")
 	// CatalogMaintainerCleared is an administrator taking a catalogue back from the
 	// system it was maintained in
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system): from then on it is
+	// (ADR-0565): from then on it is
 	// maintained here, and that system's next publish of it is a question rather than
 	// an overwrite. It carries the system, so "since when does Atlas win" has an answer.
 	CatalogMaintainerCleared = newEvent("catalog.maintainer_cleared")

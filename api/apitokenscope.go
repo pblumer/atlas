@@ -172,7 +172,7 @@ const (
 	apiScopeTasks = "tasks"
 
 	// apiScopeShop is what a person's OAuth grant carries when they approved a client
-	// for the resource `…/shop` (ADR-draft-a-shop-and-its-catalogues-from-another-system):
+	// for the resource `…/shop` (ADR-0565):
 	// everything `tasks` reaches, and the person's shop beside it — the catalogues they
 	// may order from, ordering, following and changing their orders, deciding the
 	// approvals they hold — plus the catalogue maintenance a product manager does by
@@ -366,7 +366,7 @@ var apiTasksReach = []string{
 }
 
 // apiShopReach is the reach of `shop`: every route of `tasks`, then the shop's customer
-// side, then catalogue maintenance (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+// side, then catalogue maintenance (ADR-0565).
 var apiShopReach = append(append([]string(nil), apiTasksReach...),
 	// What a customer sees and orders from: the catalogues they reach, one of them
 	// with its products, a configuration form's lookups, their own tasks of the

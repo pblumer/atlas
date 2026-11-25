@@ -2325,7 +2325,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Deployer = catalogDeployer{s: s}
 	s.catalogs.Baselines = catalogBaselines{s: s}
 	// Which grant marks a catalogue as maintained in another system, and whose writes
-	// to it are that system's own (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	// to it are that system's own (ADR-0565).
 	s.catalogs.Publisher = catalogPublisher
 	s.catalogs.Personal = processLookup{s: s}
 	// And what a structured catalogue's headings name: the capability register.
@@ -3954,7 +3954,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
 	// A person's shop and tasks as a resource of their own, for a system that shows
 	// the shop to its people and publishes catalogues it maintains
-	// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	// (ADR-0565).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthShopResource, s.handleProtectedResourceMetadata)
 	// A connected system's own reading of this server, for the system grant an
 	// administrator approves (ADR-0512 §2).

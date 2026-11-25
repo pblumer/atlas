@@ -38,7 +38,7 @@ import (
 // page: a request for their tasks or their shop, from a client whose standing system
 // grant lets its people connect without being asked, by a person who has not declined
 // it. The shop is a person resource exactly as the tasks are
-// (ADR-draft-a-shop-and-its-catalogues-from-another-system): the grant is still the
+// (ADR-0565): the grant is still the
 // person's own, and Atlas decides every order and approval as it decides every claim.
 func (s *Server) preconsented(req oauthRequest, p *httpapi.Principal) bool {
 	if !strings.HasSuffix(req.resource, oauthTasksResource) && !strings.HasSuffix(req.resource, oauthShopResource) {
