@@ -1052,7 +1052,8 @@ Making processes wait, react, and time out.
   bundled, live — `GET /api/v1/process-interactions/replay` and
   `atlas_process_interaction_replay`. 🚧 LCV3, the kind of a pool — modelled here, a reference to a deployed process or an external
   party, read from its content — with `POST /api/v1/collaboration-check` and
-  `atlas_collaboration_check`; the findings are served and not yet drawn in the Modeler;
+  `atlas_collaboration_check`, a message picker on a message flow and the findings shown in the
+  Modeler as hints;
   🔲 LCV4, composing one step by step in the Modeler.
 
 **Still open in this milestone:**

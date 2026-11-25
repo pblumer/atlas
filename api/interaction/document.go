@@ -244,11 +244,18 @@ const (
 
 // Finding is one thing the drawing and the deployments disagree about, or that is
 // worth knowing: its rule, the sentence that says it, and the pool or flow it is on.
+//
+// Message is the sentence in English. Subject, Other and MessageName are its parts — the
+// pool it is about, the counterpart (a pool, a process id, or the processes outside),
+// and the message name — so a client can word the finding in its reader's language.
 type Finding struct {
-	Rule    string `json:"rule"`
-	Message string `json:"message"`
-	Pool    string `json:"pool,omitempty"`
-	Flow    string `json:"flow,omitempty"`
+	Rule        string `json:"rule"`
+	Message     string `json:"message"`
+	Pool        string `json:"pool,omitempty"`
+	Flow        string `json:"flow,omitempty"`
+	Subject     string `json:"subject,omitempty"`
+	Other       string `json:"other,omitempty"`
+	MessageName string `json:"messageName,omitempty"`
 }
 
 // Resolved is the deployed version a reference stands for: the newest.
@@ -259,10 +266,13 @@ type Resolved struct {
 	Inactive      bool   `json:"inactive,omitempty"`
 }
 
-// PoolView is a pool with what its reference resolves to.
+// PoolView is a pool with what its reference resolves to and, for a white box, the
+// message names it sends and waits for: what a message flow at this pool can carry.
 type PoolView struct {
 	Pool
 	Resolved *Resolved `json:"resolved,omitempty"`
+	Sends    []string  `json:"sends,omitempty"`
+	Receives []string  `json:"receives,omitempty"`
 }
 
 // Report is a file read as a collaboration and checked against the deployments.
@@ -310,13 +320,14 @@ func Check(d Document, defs []Definition) Report {
 		case PoolReference:
 			def, ok := newest[p.ProcessID]
 			if !ok {
-				add(Finding{Rule: FindingParticipantUnresolved, Pool: p.ID,
+				add(Finding{Rule: FindingParticipantUnresolved, Pool: p.ID, Subject: label[p.ID], Other: p.ProcessID,
 					Message: fmt.Sprintf("%s names the process %s, which is not deployed on this server.", label[p.ID], p.ProcessID)})
 				break
 			}
 			view.Resolved = &Resolved{DefinitionKey: def.Key, Version: def.Version, Name: def.Name, Inactive: def.Inactive}
 			white[p.ID], points[p.ID] = true, def.Points
 		}
+		view.Sends, view.Receives = names(points[p.ID], true), names(points[p.ID], false)
 		r.Pools = append(r.Pools, view)
 	}
 	has := func(pool, message string, sends bool) bool {
@@ -331,17 +342,17 @@ func Check(d Document, defs []Definition) Report {
 	drawn := map[exchangeKey]bool{}
 	for _, f := range d.Flows {
 		if f.Message == "" {
-			add(Finding{Rule: FindingFlowUnnamed, Flow: f.ID,
+			add(Finding{Rule: FindingFlowUnnamed, Flow: f.ID, Subject: label[f.From], Other: label[f.To],
 				Message: fmt.Sprintf("The flow from %s to %s names no message, so it is not checked.", label[f.From], label[f.To])})
 			continue
 		}
 		drawn[exchangeKey{f.From, f.To, f.Message}] = true
 		if white[f.From] && !has(f.From, f.Message, true) {
-			add(Finding{Rule: FindingFlowNotSent, Flow: f.ID,
+			add(Finding{Rule: FindingFlowNotSent, Flow: f.ID, Subject: label[f.From], MessageName: f.Message,
 				Message: fmt.Sprintf("%s sends no message %s.", label[f.From], f.Message)})
 		}
 		if white[f.To] && !has(f.To, f.Message, false) {
-			add(Finding{Rule: FindingFlowNotReceived, Flow: f.ID,
+			add(Finding{Rule: FindingFlowNotReceived, Flow: f.ID, Subject: label[f.To], MessageName: f.Message,
 				Message: fmt.Sprintf("%s waits for no message %s.", label[f.To], f.Message)})
 		}
 		var outside []string
@@ -362,7 +373,7 @@ func Check(d Document, defs []Definition) Report {
 		}
 		if len(outside) > 0 {
 			sort.Strings(outside)
-			add(Finding{Rule: FindingReachesOutside, Flow: f.ID,
+			add(Finding{Rule: FindingReachesOutside, Flow: f.ID, MessageName: f.Message, Other: strings.Join(outside, ", "),
 				Message: fmt.Sprintf("%s is also received outside this collaboration: %s.", f.Message, strings.Join(outside, ", "))})
 		}
 	}
@@ -383,10 +394,25 @@ func Check(d Document, defs []Definition) Report {
 			}
 			sort.Strings(names)
 			for _, m := range names {
-				add(Finding{Rule: FindingUndrawnExchange, Pool: a.ID,
+				add(Finding{Rule: FindingUndrawnExchange, Pool: a.ID, Subject: label[a.ID], Other: label[b.ID], MessageName: m,
 					Message: fmt.Sprintf("%s sends %s and %s waits for it, but no flow shows it.", label[a.ID], m, label[b.ID])})
 			}
 		}
 	}
 	return r
+}
+
+// names is the message names of the points that send, or of those that wait, each
+// once and in order.
+func names(points []Point, sends bool) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, pt := range points {
+		if pt.Sends() == sends && !seen[pt.Message] {
+			seen[pt.Message] = true
+			out = append(out, pt.Message)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A message flow says which message it carries, and the Modeler says what does not fit.** A
+  message flow between two pools now has a *Message* field in its panel: it offers the names the
+  sending pool sends and the receiving one waits for, and takes any other; a flow docked on a
+  message event carries that event's message. While a diagram holds pools, the Modeler compares
+  the drawing with what is deployed and shows hints on the elements they are about — a reference
+  to a process that is not deployed, a flow its source does not send or its target does not wait
+  for, a flow without a message, an exchange nobody drew, a message a process outside the
+  diagram also receives. They are hints, not problems: they are listed in the element's panel
+  and in the collaboration's, never in the Problems bar, and they never block a deploy
+  (ADR-0559).
 - **A pool can stand for a process that is already deployed.** In the Modeler, a pool's panel now
   says what the pool is: *modelled here*, a *reference* or an *external party*. That is read from
   its content, so a file can start as a process and become a collaboration later, and nothing has

@@ -278,3 +278,66 @@ func TestEveryMessageEventOfAModelledPoolIsRead(t *testing.T) {
 		t.Errorf("the report of nothing = %+v, want empty lists, not null", empty)
 	}
 }
+
+// TestAWhiteBoxSaysWhatItSendsAndWaitsFor: a pool modelled here answers the names
+// drawn in it, a reference those of its newest deployed version, each once and in
+// order; an external party and an unresolved reference answer none. A message flow's
+// name is picked from these.
+func TestAWhiteBoxSaysWhatItSendsAndWaitsFor(t *testing.T) {
+	d, err := ParseDocument([]byte(mixedBPMN))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][2][]string{}
+	for _, p := range Check(d, deployedForMixed()).Pools {
+		got[p.ID] = [2][]string{p.Sends, p.Receives}
+	}
+	want := map[string][2][]string{
+		"P_order":    {{"OrderReleased"}, {"Shipped"}},
+		"P_ship":     {{"Shipped", "Status"}, {"OrderReleased"}},
+		"P_customer": {nil, nil},
+		"P_new":      {nil, nil},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
+}
+
+// TestAFindingNamesItsPartsForTranslation: beside its English sentence, a finding
+// says whom it is about, the counterpart and the message name, so a client words it
+// in the reader's language instead of showing the server's.
+func TestAFindingNamesItsPartsForTranslation(t *testing.T) {
+	d, err := ParseDocument([]byte(strings.ReplaceAll(mixedBPMN, `<participant id="P_customer" name="Kunde"/>`,
+		`<participant id="P_customer" name="Kunde"/><participant id="P_gone" name="Weg" atlas:processId="nowhere"/>`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]Finding{}
+	for _, f := range Check(d, deployedForMixed()).Findings {
+		f.Message = ""
+		got[f.Rule+" "+f.Pool+f.Flow] = f
+	}
+	want := map[string]Finding{
+		"collaboration.participant-unresolved P_gone": {Rule: FindingParticipantUnresolved, Pool: "P_gone", Subject: "Weg", Other: "nowhere"},
+		"collaboration.flow-not-sent F_bill":          {Rule: FindingFlowNotSent, Flow: "F_bill", Subject: "Bestellung", MessageName: "Bill"},
+		"collaboration.flow-not-received F_bill":      {Rule: FindingFlowNotReceived, Flow: "F_bill", Subject: "Versand", MessageName: "Bill"},
+		"collaboration.flow-unnamed F_order":          {Rule: FindingFlowUnnamed, Flow: "F_order", Subject: "Kunde", Other: "Bestellung"},
+		"collaboration.reaches-outside F_release":     {Rule: FindingReachesOutside, Flow: "F_release", MessageName: "OrderReleased", Other: "Archiv"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("findings = %+v\nwant %+v", got, want)
+	}
+
+	// An exchange nobody drew names both sides and the message.
+	bare := strings.Replace(mixedBPMN, `<messageFlow id="F_shipped" sourceRef="P_ship" targetRef="wait" messageRef="Msg_shipped"/>`, "", 1)
+	d, _ = ParseDocument([]byte(bare))
+	var undrawn []Finding
+	for _, f := range Check(d, deployedForMixed()).Findings {
+		if f.Rule == FindingUndrawnExchange {
+			undrawn = append(undrawn, f)
+		}
+	}
+	if len(undrawn) != 1 || undrawn[0].Subject != "Versand" || undrawn[0].Other != "Bestellung" || undrawn[0].MessageName != "Shipped" || undrawn[0].Pool != "P_ship" {
+		t.Errorf("undrawn = %+v", undrawn)
+	}
+}

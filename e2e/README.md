@@ -950,7 +950,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   survives the export, and taking it away makes the pool an external party again; a pool with an
   empty process loses that process and takes the deployed process's name; a reference to a
   process the server does not hold says so. An application's artifact list calls a draft with
-  two or more pools a *Collaboration*. The replay reads its history
+  two or more pools a *Collaboration*. A message flow between two pools without content is given
+  its message in the panel — the names its source sends and its target waits for are offered, a
+  new name declares a message, an old one is reused, an empty field takes it away — while a
+  flow docked on a message event carries that event's and is not asked. The hints of the
+  collaboration check mark the elements they are about, are worded in the reader's language in
+  the element's panel and listed in the collaboration's, lead to their element, and never appear
+  in the Problems bar. The replay reads its history
   backwards page by page until it begins, says so, plays one message at a time or bundled per
   step, and Live appends what came `after` the newest event.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
