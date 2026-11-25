@@ -1692,6 +1692,31 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_collaboration_check",
+			Description: "Read a BPMN model as a collaboration and compare it with what is deployed (ADR-0559); " +
+				"nothing is stored or deployed. Each of 'pools' has a 'kind' read from its content: 'modelled' (its " +
+				"process is in the model and holds flow elements), 'reference' (it holds none and names a deployed " +
+				"process by the attribute atlas:processId on the participant; 'resolved' is that process's newest " +
+				"deployed version, absent when none is deployed) or 'external' (neither). 'flows' are the message " +
+				"flows between pools with the 'message' each carries. 'findings' are hints: " +
+				"collaboration.participant-unresolved, collaboration.flow-not-sent, collaboration.flow-not-received, " +
+				"collaboration.flow-unnamed, collaboration.undrawn-exchange and collaboration.reaches-outside. Use it " +
+				"before saving a draft that shows several processes together: reference the processes that are " +
+				"deployed from their own files instead of modelling them a second time.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"xml": stringProp("The BPMN 2.0 XML to read.")},
+				"required":   []any{"xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/collaboration-check", "application/xml", []byte(xml)))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +

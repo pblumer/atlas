@@ -2516,6 +2516,31 @@ function wireCallDrilldown(viewer, open) {
 // carries it — how the engine itself resolves a `latest` binding, and the only thing
 // the runtime surfaces need to open the callee. Null when nothing on this server
 // deploys that id (a caller can legitimately be deployed before its callee, ADR-0076).
+// deployedProcessList is the processes deployed on this server, one row each with the
+// name of its newest version, by name: what a pool can be made a reference to
+// (ADR-0559, amendment of 2026-11-25). Empty when the listing cannot be read.
+async function deployedProcessList(api) {
+  let procs;
+  try { procs = await api("GET", "/api/v1/processes"); } catch { return []; }
+  const newest = new Map();
+  for (const p of procs || []) {
+    const cur = newest.get(p.processId);
+    if (!cur || p.version > cur.version) newest.set(p.processId, p);
+  }
+  return [...newest.values()]
+    .map((p) => ({ processId: p.processId, name: p.name || p.processId }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.processId.localeCompare(b.processId));
+}
+
+// poolKind reads what a pool is from its content, never from a flag: modelled here when
+// its process holds flow elements, a reference when it holds none and names a deployed
+// process, an external party otherwise.
+export function poolKind(bo) {
+  const proc = bo.processRef;
+  if (proc && (proc.flowElements || []).length) return "modelled";
+  return bo.get("atlas:processId") ? "reference" : "external";
+}
+
 async function deployedCallee(api, pid) {
   if (!pid) return null; // a call activity that names no callee has nothing to resolve
   let procs;
@@ -9865,7 +9890,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   //
   // Only General starts open: a freshly selected element should show its identity,
   // not every section at once.
-  const groupCtl = groupController(body, ["General"]);
+  // General starts open, and so does a pool's kind: what a pool is decides what the
+  // rest of its panel means.
+  const groupCtl = groupController(body, ["General", "Kind"]);
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
@@ -9905,6 +9932,61 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     } catch { toast(tr("pnl.main.pool.addFailed"), "err"); }
   }
 
+  // poolKindHTML says what the pool is and, on a pool without content, offers the
+  // deployed process it may stand for.
+  function poolKindHTML(bo) {
+    const kind = poolKind(bo);
+    const ref = bo.get("atlas:processId") || "";
+    const head = `<h3 data-group="Kind">${esc(tr("pnl.pool.kind"))}</h3>
+      <p class="muted" id="f-poolkind" data-kind="${kind}" style="font-size:12px"><b>${esc(tr("pnl.pool.kind." + kind))}</b> — ${tr("pnl.pool.kindHint." + kind)}</p>`;
+    if (kind === "modelled") return head;
+    return `${head}
+      <label class="field"><span>${esc(tr("pnl.pool.ref"))}</span>
+        <select id="f-poolref"><option value="">${esc(tr("pnl.pool.refNone"))}</option>${ref ? `<option value="${esc(ref)}" selected>${esc(ref)}</option>` : ""}</select></label>
+      <p class="muted" id="f-poolref-note" style="font-size:12px">${tr("pnl.pool.refHint")}</p>`;
+  }
+
+  // wirePoolKind fills the picker with the deployed processes and assigns the chosen
+  // one. A reference to a process this server does not hold stays selectable and says so:
+  // on a server the application was exported to, that is the expected state.
+  function wirePoolKind(body, element, bo) {
+    const sel = body.querySelector("#f-poolref");
+    if (!sel) return;
+    const ref = bo.get("atlas:processId") || "";
+    deployedProcessList(api).then((procs) => {
+      if (!sel.isConnected) return;
+      const known = procs.some((p) => p.processId === ref);
+      sel.innerHTML = `<option value="">${esc(tr("pnl.pool.refNone"))}</option>` +
+        procs.map((p) => `<option value="${esc(p.processId)}">${esc(p.name === p.processId ? p.name : `${p.name} (${p.processId})`)}</option>`).join("") +
+        (ref && !known ? `<option value="${esc(ref)}">${esc(tr("pnl.pool.refNotDeployed", { process: ref }))}</option>` : "");
+      sel.value = ref;
+      if (ref && !known) body.querySelector("#f-poolref-note").textContent = tr("pnl.pool.refMissing", { process: ref });
+    });
+    sel.addEventListener("change", () => {
+      const opt = sel.selectedOptions[0];
+      assignPoolProcess(element, sel.value, opt ? opt.textContent.replace(/ \([^()]*\)$/, "") : "");
+    });
+  }
+
+  // assignPoolProcess makes a pool a reference to a deployed process, or takes the
+  // reference away. A reference has no process of its own in the file, so the empty one
+  // bpmn-js gave a pool dragged into the diagram goes: the pool is replaced by a collapsed
+  // one, through bpmn-js's own replace, which also removes the process from the
+  // definitions. A pool nobody named yet takes the process's name as a proposal.
+  function assignPoolProcess(element, processId, proposedName) {
+    try {
+      let target = element;
+      if (processId && element.businessObject.processRef) {
+        target = modeler.get("bpmnReplace").replaceElement(element, { type: "bpmn:Participant", isExpanded: false });
+      }
+      const props = { "atlas:processId": processId || undefined };
+      if (processId && !target.businessObject.name && proposedName) props.name = proposedName;
+      modeling.updateProperties(target, props);
+      selection.select(target);
+      show(target);
+    } catch { toast(tr("pnl.pool.refFailed"), "err"); show(element); }
+  }
+
   // showPool renders the Details panel for a collaboration pool (Participant).
   // The pool executes a process; this edits that process (its id — the deploy
   // identity — its name, and its start variables), or offers to create one when
@@ -9920,17 +10002,22 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       ${documentationField(bo, "f-doc", tr("pnl.main.pool.docPlaceholder"))}`;
 
     if (!proc) {
-      body.innerHTML = `${poolFields}
+      // A reference stands for a process deployed from its own file; offering to add one
+      // here as well would make it two things at once. The reference is taken away first.
+      const addProcess = poolKind(bo) === "reference" ? "" : `
         <p class="muted" style="font-size:12px">${tr("pnl.main.pool.noProcess")}</p>
         <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
         <p class="muted" style="font-size:12px">${tr("pnl.main.pool.addProcessHint")}</p>
         <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="${esc(tr("pnl.main.pool.addProcessTitle"))}">${esc(tr("pnl.main.pool.addProcess"))}</button>`;
+      body.innerHTML = `${poolFields}${poolKindHTML(bo)}${addProcess}`;
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
       wirePoolId(body, element);
+      wirePoolKind(body, element, bo);
       wireDocumentation(body, modeler, element, bo);
-      body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
+      const add = body.querySelector("#f-addproc");
+      if (add) add.addEventListener("click", () => addProcessToPool(element));
       return;
     }
 
@@ -9947,7 +10034,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addConstantTitle"))}">${esc(tr("pnl.main.addConstant"))}</button>
         <p class="muted" style="font-size:12px">${tr("pnl.main.constantsHint")}</p>`;
     }
-    body.innerHTML = `${poolFields}
+    body.innerHTML = `${poolFields}${poolKindHTML(bo)}
       <p class="muted" style="font-size:12px">${tr("pnl.main.pool.hint")}</p>
       <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
       <label class="field"><span>${esc(tr("pnl.main.pool.procName"))}</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
@@ -9960,6 +10047,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
     });
     wirePoolId(body, element);
+    wirePoolKind(body, element, bo);
     body.querySelector("#f-procname").addEventListener("change", (e) => {
       try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
     });

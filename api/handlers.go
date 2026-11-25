@@ -6462,6 +6462,12 @@ type draftResp struct {
 	OwnerName   string `json:"ownerName,omitempty"`
 	SavedBy     string `json:"savedBy,omitempty"`
 	SavedByName string `json:"savedByName,omitempty"`
+	// Participants is how many pools the draft's collaboration holds, absent for a
+	// model without one. It is read from the model each time, never stored: a file is
+	// a process until a second pool is dragged into it, and a process again when the
+	// pool is removed (ADR-0559, amendment of 2026-11-25). Two or more is what a
+	// listing calls a collaboration.
+	Participants int `json:"participants,omitempty"`
 	// LayoutGenerated marks a draft that arrived without any diagram interchange and
 	// was laid out on the way in (ADR-0124). Only a save that generated one sets it,
 	// so the importer can say where the diagram came from — the file the author picked
@@ -6702,6 +6708,7 @@ func draftRespOf(d draft, name func(string) string) draftResp {
 		ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt,
 		OwnerID: d.OwnerID, OwnerName: name(d.OwnerID),
 		SavedBy: d.SavedBy, SavedByName: name(d.SavedBy),
+		Participants: collaborationParticipants([]byte(d.XML)),
 	}
 }
 

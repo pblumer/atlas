@@ -12,6 +12,24 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+- **A pool can stand for a process that is already deployed.** In the Modeler, a pool's panel now
+  says what the pool is: *modelled here*, a *reference* or an *external party*. That is read from
+  its content, so a file can start as a process and become a collaboration later, and nothing has
+  to be chosen when it is created. A pool without content offers the deployed processes; choosing
+  one makes it a reference (`atlas:processId` on the participant), which is never deployed with
+  the file. A new pool stays an external party until a process is assigned to it or somebody
+  draws in it. An application lists a draft with two or more pools as a *Collaboration*.
+  `POST /api/v1/collaboration-check` and the MCP tool `atlas_collaboration_check` read a model's
+  pools and compare its message flows with what is deployed: a reference nothing deploys, a flow
+  its source does not send or its target does not wait for, an exchange nobody drew, a name a
+  process outside the model also receives (ADR-0559, amendment of 2026-11-25).
+
+### Changed
+- **The Interactions link moved into the row's menu.** In the Operations list, the link to who a
+  process talks to is no longer shown beside every process name; it is the second entry of the
+  row's ⋯ menu, after *Open* (ADR-0559).
+
 ## [0.29.0] — 2026-11-25
 
 **A connected system can show a person their shop, and keep a catalogue as its own.** Beside

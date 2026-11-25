@@ -38,4 +38,15 @@ func TestTheInteractionGraphAndItsReplayViaTools(t *testing.T) {
 	if !isErr || !strings.Contains(text, "before must be a cursor") {
 		t.Fatalf("atlas_process_interaction_replay with a bad cursor = (%q, isErr=%v), want the route's refusal", text, isErr)
 	}
+
+	const twoPools = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <collaboration id="C"><participant id="P_w" name="Wartend" atlas:processId="waiter"/><participant id="P_x" name="Fremd" atlas:processId="nowhere"/></collaboration>
+</definitions>`
+	text, isErr = toolText(t, result(t, run(t, ts, callTool(8, "atlas_collaboration_check", map[string]any{"xml": twoPools}))[0]))
+	if isErr || !strings.Contains(text, `"kind":"reference"`) || !strings.Contains(text, `"resolved"`) || !strings.Contains(text, "collaboration.participant-unresolved") {
+		t.Fatalf("atlas_collaboration_check = (%q, isErr=%v), want one reference resolved and one not", text, isErr)
+	}
+	if _, isErr = toolText(t, result(t, run(t, ts, callTool(9, "atlas_collaboration_check", map[string]any{}))[0])); !isErr {
+		t.Fatal("atlas_collaboration_check without a model was answered")
+	}
 }

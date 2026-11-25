@@ -4,8 +4,8 @@
 **Milestone:** [Milestone 2 — Events and timers](../../ROADMAP.md#milestone-2--events-and-timers-).
 **Architecture authority:** [ADR-0559](../adr/0559-local-collaboration-views.md) (**Accepted / Partial**).
 **Programme owner:** pblumer (accepted 2026-11-11). **LCV1** and **LCV2:** active (owner pblumer),
-built on one branch and not yet merged. LCV3 and LCV4 are planned and have no implementation owner
-yet.
+merged in #1710 and awaiting the owner's review. **LCV3:** active (owner pblumer), first part built.
+LCV4 is planned and has no implementation owner yet.
 
 ## User outcome
 
@@ -70,13 +70,27 @@ the same rules, in both directions (`api/interaction/replay_test.go`,
 with the process in the middle, and an expanded white box draws its deployed diagram
 (ADR-0559 *As built*); narrowing the replay to a correlation key is left for later.
 
-### LCV3 — Saved collaboration and its findings
+### LCV3 — The kind of a pool, saved collaborations and their findings
 
-**Delivers:** ADR-0559 §5. Starts with the storage decision (draft kind or own store),
-recorded in the ADR's *As built*.
+**Reshaped by the amendment of ADR-0559 (2026-11-25).** No file is a collaboration by
+declaration. Each pool is modelled here, a reference (`atlas:processId`) or an external party,
+read from its content, and a saved collaboration is an ordinary BPMN draft. The storage
+decision this slice was to start with is thereby made.
 
-**Acceptance:** each finding has a failing-then-passing test; export, adopt and delete of
-an application include the document (ADR-0544, ADR-0467, ADR-0468).
+**Built (first part):** reading a model's pools and checking its message flows against the
+deployments (`api/interaction`, `POST /api/v1/collaboration-check`,
+`atlas_collaboration_check`); the Modeler's pool panel says the kind and assigns a deployed
+process; drafts are listed with their participant count, and an application calls a draft with
+two or more pools a collaboration.
+
+**Remaining:** the findings drawn in the Modeler; `flow-not-observed`; a message picker on a
+message flow between two pools without content; the amendment's open questions (two files
+modelling one process id, moving a pool into a file of its own, the identity of a draft).
+
+**Acceptance:** each finding has a test that states it (`api/interaction/document_test.go`);
+the kinds, the assignment and the export are driven through the real bpmn-js
+(`e2e/pool-kind.spec.mjs`); a draft is listed by what it holds
+(`api/interactions_http_test.go`).
 
 ### LCV4 — Composing a collaboration step by step
 
