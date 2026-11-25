@@ -811,6 +811,13 @@
       ]
     },
     {
+      "name": "ParticipantMeta",
+      "extends": ["bpmn:Participant"],
+      "properties": [
+        { "name": "processId", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "SubProcessMeta",
       "extends": ["bpmn:SubProcess"],
       "properties": [

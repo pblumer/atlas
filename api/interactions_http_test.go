@@ -348,3 +348,125 @@ func TestTheReplayListsWhatTheGraphCounts(t *testing.T) {
 		}
 	}
 }
+
+// collaborationBPMN is a file with three pools (ADR-0559, amendment of 2026-11-25):
+// the order modelled here, shipping as a reference to the process deployed from its
+// own file, and a pool that names a process nobody deployed.
+const collaborationBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <collaboration id="C">
+    <participant id="P_order" name="Sekretariat" processRef="bestellung"/>
+    <participant id="P_ship" name="Versand" atlas:processId="versand"/>
+    <participant id="P_bill" name="Rechnung" atlas:processId="rechnung"/>
+    <messageFlow id="F_release" sourceRef="release" targetRef="P_ship"/>
+    <messageFlow id="F_wrong" sourceRef="P_ship" targetRef="P_order" messageRef="Msg_release"/>
+  </collaboration>
+  <message id="Msg_release" name="freigabe"/>
+  <process id="bestellung" isExecutable="true">
+    <startEvent id="start"/>
+    <intermediateThrowEvent id="release"><messageEventDefinition messageRef="Msg_release"/></intermediateThrowEvent>
+  </process>
+</definitions>`
+
+// TestACollaborationIsCheckedAgainstWhatIsDeployed: the route reads each pool's
+// kind from the file, resolves a reference to the newest deployed version, and says
+// what the drawing and the deployments disagree about; nothing is stored or deployed.
+func TestACollaborationIsCheckedAgainstWhatIsDeployed(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	shipping := deployIntoProject(t, admin, ts, shippingBPMN, "")
+
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/collaboration-check", collaborationBPMN)
+	var rep struct {
+		Collaboration bool `json:"collaboration"`
+		Pools         []struct {
+			ID        string `json:"id"`
+			Kind      string `json:"kind"`
+			ProcessID string `json:"processId"`
+			Resolved  *struct {
+				DefinitionKey uint64 `json:"definitionKey"`
+				Name          string `json:"name"`
+			} `json:"resolved"`
+		} `json:"pools"`
+		Flows    []struct{ ID, From, To, Message string } `json:"flows"`
+		Findings []struct{ Rule, Pool, Flow string }      `json:"findings"`
+	}
+	if code != http.StatusOK || json.Unmarshal(body, &rep) != nil {
+		t.Fatalf("collaboration check = %d %s", code, body)
+	}
+	if !rep.Collaboration || len(rep.Pools) != 3 || len(rep.Flows) != 2 {
+		t.Fatalf("report = %s", body)
+	}
+	kinds := map[string]string{}
+	for _, p := range rep.Pools {
+		kinds[p.ID] = p.Kind + ":" + p.ProcessID
+		if p.ID == "P_ship" && (p.Resolved == nil || p.Resolved.DefinitionKey != shipping || p.Resolved.Name != "Versand") {
+			t.Errorf("the reference to shipping resolves to %+v, want the deployed definition %d", p.Resolved, shipping)
+		}
+		if p.ID == "P_bill" && p.Resolved != nil {
+			t.Errorf("a process nobody deployed resolved to %+v", p.Resolved)
+		}
+	}
+	if fmt.Sprint(kinds) != "map[P_bill:reference:rechnung P_order:modelled:bestellung P_ship:reference:versand]" {
+		t.Errorf("kinds = %v", kinds)
+	}
+	var rules []string
+	for _, f := range rep.Findings {
+		rules = append(rules, f.Rule+" "+f.Pool+f.Flow)
+	}
+	want := "[collaboration.participant-unresolved P_bill collaboration.flow-not-sent F_wrong collaboration.flow-not-received F_wrong]"
+	if fmt.Sprint(rules) != want {
+		t.Errorf("findings = %v, want %s", rules, want)
+	}
+	// Nothing was deployed by asking.
+	if code, body := cReq(t, admin, ts, "GET", "/api/v1/process-interactions?processId=bestellung", ""); code != http.StatusNotFound {
+		t.Errorf("after the check, bestellung is deployed: %d %s", code, body)
+	}
+
+	for body, want := range map[string]int{"": http.StatusBadRequest, "<definitions><process": http.StatusBadRequest} {
+		if code, out := cReq(t, admin, ts, "POST", "/api/v1/collaboration-check", body); code != want {
+			t.Errorf("POST collaboration-check %q = %d %s, want %d", body, code, out, want)
+		}
+	}
+}
+
+// TestADraftIsListedByWhatItHolds: a draft with several pools says how many, a plain
+// process says none, and saving the same draft again as a plain process takes the
+// count away: nothing is flagged, the listing reads the file (ADR-0559, amendment of
+// 2026-11-25).
+func TestADraftIsListedByWhatItHolds(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	save := func(xml string) {
+		t.Helper()
+		if code, b := cReq(t, admin, ts, "POST", "/api/v1/drafts", xml); code != http.StatusOK {
+			t.Fatalf("save draft = %d %s", code, b)
+		}
+	}
+	participants := func() map[string]int {
+		t.Helper()
+		code, body := cReq(t, admin, ts, "GET", "/api/v1/drafts", "")
+		var list []struct {
+			ProcessID    string `json:"processId"`
+			Participants int    `json:"participants"`
+		}
+		if code != http.StatusOK || json.Unmarshal(body, &list) != nil {
+			t.Fatalf("list drafts = %d %s", code, body)
+		}
+		out := map[string]int{}
+		for _, d := range list {
+			out[d.ProcessID] = d.Participants
+		}
+		return out
+	}
+	save(collaborationBPMN)
+	save(projectDraftXML("plain", "Plain"))
+	if got := participants(); got["bestellung"] != 3 || got["plain"] != 0 {
+		t.Fatalf("participants = %v, want three for the collaboration and none for the plain process", got)
+	}
+	save(projectDraftXML("bestellung", "Bestellung"))
+	if got := participants(); got["bestellung"] != 0 {
+		t.Errorf("after saving it as a plain process, the draft still counts %d participants", got["bestellung"])
+	}
+}

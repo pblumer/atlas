@@ -941,7 +941,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   name, a black box no expander. A process expands to its deployed diagram, two models sharing
   an element id are both drawn, a flow then leaves the sending element, and a pool collapses
   again and opens as the center of its own graph. The Operations list offers the page from a
-  row's ⋯ menu, not beside the process name. The replay reads its history
+  row's ⋯ menu, not beside the process name.
+- **`pool-kind.spec.mjs`** ([ADR-0559](../docs/adr/0559-local-collaboration-views.md), amendment
+  of 2026-11-25): what the Modeler says a **pool** is, on the real vendored bpmn-js. The panel
+  reads the kind from the pool's content — modelled here, a reference, an external party, the
+  last also for the empty process bpmn-js gives a new pool; a pool without content offers one
+  entry per deployed process; choosing one writes `atlas:processId` on the participant, which
+  survives the export, and taking it away makes the pool an external party again; a pool with an
+  empty process loses that process and takes the deployed process's name; a reference to a
+  process the server does not hold says so. An application's artifact list calls a draft with
+  two or more pools a *Collaboration*. The replay reads its history
   backwards page by page until it begins, says so, plays one message at a time or bundled per
   step, and Live appends what came `after` the newest event.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):

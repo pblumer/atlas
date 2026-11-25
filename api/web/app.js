@@ -4254,7 +4254,7 @@ async function viewProjectDetail(id, pane = "artifacts") {
       );
       return `<tr>
         ${nameCell(d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
-        ${typeCell("BPMN", tr("application.type.diagram"))}
+        ${typeCell("BPMN", tr(d.participants >= 2 ? "application.type.collaboration" : "application.type.diagram"))}
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };

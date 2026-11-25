@@ -1,6 +1,6 @@
 # ADR-0559: A collaboration is a view over processes that already exist
 
-- **Status:** Accepted (2026-11-11)
+- **Status:** Accepted (2026-11-11; amended 2026-11-25 — the kind is the pool's, not the file's; see the amendment note below)
 - **Implementation:** Partial
 - **Date:** 2026-11-11
 - **Deciders:** Atlas maintainers
@@ -9,6 +9,56 @@
   it already needs a folded, per-edge table (§4). Nobody has measured how many `message.sent` rows
   a 30-day window holds on the maintainer's server.
 - **Question checked:** 2026-11
+
+> **Amendment (2026-11-25): the kind is the pool's, not the file's.** §5 described the saved
+> collaboration as a document of its own kind: one that holds "no executable process" and is
+> "never deployed". Building it met what a Modeler does every day: a file is created as a
+> process, and becomes a collaboration the moment a second pool is dragged into it. A kind chosen
+> when the file is created is therefore a kind that is wrong later, and a kind stored beside the
+> file is one more thing to drift from it. §5 is amended as follows; the rest of the record
+> stands.
+>
+> - **No file is a collaboration by declaration.** Any BPMN file may hold a `<collaboration>`,
+>   and what a file is follows from what it holds, read each time it is shown: it is listed as a
+>   collaboration while it holds two or more participants, the line ADR-0023's sibling pools
+>   already draw. Nothing is flagged, and nothing is chosen when a file is created.
+> - **Each pool is one of three kinds, derived from its content:**
+>   - **modelled here** — its process is in this file and holds flow elements. It deploys as
+>     ADR-0023 says, when it has a start event.
+>   - **a reference** — it has no process of its own in the file and names a process deployed
+>     elsewhere by `atlas:processId`. It is never deployed.
+>   - **an external party** — neither: no process, or an empty one. It is never deployed.
+>
+>   A pool that holds flow elements is modelled here whatever else it carries. The Modeler
+>   offers the reference only on a pool without content.
+> - **A mixed file is the ordinary case**, not an exception: one's own process modelled, the
+>   partners as references and external parties. A file whose pools are all references and
+>   external parties is the "saved collaboration" §5 meant, and it is the same kind of file.
+> - **Deploy is unchanged.** It deploys every executable process in the file (ADR-0023). A
+>   reference and an external party are not processes in the file, so there is nothing of them
+>   to deploy, and a file with no executable process is refused as it always was.
+> - **A new pool is an external party.** bpmn-js gives a pool dragged into a diagram an empty
+>   process, and nothing asks what the pool is. It becomes a reference when a deployed process
+>   is assigned to it, and modelled here when somebody draws in it; both can be undone.
+> - **The attribute is `atlas:processId`, not `atlas:processRef`.** The engine reads attributes
+>   by local name (ADR-0269), so `atlas:processRef` on a participant is read as BPMN's own
+>   `processRef` — measured: Go's decoder fills the `processRef` field from it. No document was
+>   ever written with the old name, since nothing wrote one before this amendment. Where the
+>   body below says `atlas:processRef`, read `atlas:processId`.
+> - **A message flow docks where BPMN draws it.** §5's "a message flow connects participants,
+>   never foreign elements" holds for a reference and an external party, whose elements are not
+>   in the file. On a pool modelled here, a flow docks on the element that sends or receives, as
+>   in every BPMN collaboration; the element is in the same file, so nothing foreign is named.
+>   A flow's message name is its `messageRef`'s, else the one its docked element sends or waits
+>   for.
+> - **The storage question of LCV3 is settled by this:** a saved collaboration is an ordinary
+>   BPMN draft (ADR-0021), with the editor, the co-editing and the version history every draft
+>   has. There is no draft kind and no store of its own.
+>
+> **Not decided by this amendment:** what happens when two files model the same process id here
+> (each deploy then cuts a version from another file, which is possible today); moving a pool
+> modelled here into a file of its own, leaving a reference behind; and the identity of a draft,
+> which is its first process's id and so changes when that pool is deleted.
 
 ## Context and problem statement
 
@@ -615,8 +665,40 @@ programme is [`docs/programs/lcv`](../programs/lcv/program.json), its plan
   just below it. *Live* follows with `after`, and redraws the graph first when
   an event names an exchange it does not have. Correlation keys are listed with the events;
   narrowing the replay to one key (§7) is not built.
-- **Not built yet:** narrowing to a correlation key (§7), the saved collaboration and its findings
-  (§5; LCV3), composing step by step in the Modeler (§6; LCV4).
+- **Not built yet:** narrowing to a correlation key (§7), and what the LCV3 note below leaves.
+
+**Slice LCV3, first part (2026-11): the kind of a pool, and checking a drawing.** Built on the
+amendment of 2026-11-25.
+
+- **The Operations link moved.** *Interactions* is the second entry of a process row's menu, no
+  longer a link beside every name.
+- **Reading a file as a collaboration** is `ParseDocument` and `Check` in `api/interaction`.
+  The reader is namespace-blind, like the engine. A pool's process "holds flow elements" when it
+  contains an event, a task, a gateway, a subprocess or a call activity; documentation, lanes
+  and extension elements do not count, so the empty process bpmn-js gives a new pool leaves it
+  an external party.
+- **The route** is `POST /api/v1/collaboration-check` (`modeler`), with the MCP tool
+  `atlas_collaboration_check`. It takes a model and stores nothing, so it answers for a draft
+  that was never saved. It reads a pool modelled here from the drawing itself — its message
+  events, receive and send tasks — and a reference from the newest deployed version.
+- **The findings built** are `participant-unresolved`, `flow-not-sent`, `flow-not-received`,
+  `undrawn-exchange` and `reaches-outside`, as §5 names them, and one §5 does not:
+  `collaboration.flow-unnamed`, for a flow that names no message and is therefore not checked.
+  Saying nothing about such a flow would read as "checked and fine".
+  `flow-not-observed` is not built: it needs the event log, which this route does not read.
+- **The Modeler's pool panel** says the kind and, on a pool without content, offers the deployed
+  processes, one entry per process under its newest version's name. Choosing one writes
+  `atlas:processId`; a pool that had only an empty process is replaced by a collapsed one through
+  bpmn-js's own replace, which removes that process from the file; a pool nobody named takes the
+  process's name as a proposal. A reference to a process this server does not hold stays
+  selected and says so. The attribute is declared in `atlas-moddle.json`, so it survives a save.
+- **The listing.** `GET /api/v1/drafts` answers `participants` for a draft whose model holds a
+  collaboration, counted from the model on each listing, and an application's artifact list
+  calls a draft with two or more a *Collaboration*.
+- **Not built yet:** showing the findings in the Modeler (they are served, not yet drawn);
+  `flow-not-observed`; a message picker on a message flow between two pools without content,
+  whose name can today only be set in the XML; composing step by step from a pool's ports
+  (§6; LCV4); and the three questions the amendment leaves open.
 
 ### Consequences
 

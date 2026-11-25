@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -198,6 +199,32 @@ func interactionAnswered(w http.ResponseWriter, processID string, err error) boo
 		return false
 	}
 	return true
+}
+
+// handleCollaborationCheck serves POST /api/v1/collaboration-check: a BPMN file read
+// as a collaboration (ADR-0559, amendment of 2026-11-25) — the kind of each of its
+// pools, what each reference resolves to, and the findings that compare its drawing
+// with the definitions the caller may read. It stores and deploys nothing, so it
+// answers for a draft that was never saved as well as for one that was.
+func (s *Server) handleCollaborationCheck(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+	doc, err := interaction.ParseDocument(body)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	pr := httpapi.PrincipalFrom(r.Context())
+	var defs []deployedDefinition
+	s.do(func() { defs = s.readableDefinitions(pr) })
+	httpapi.JSON(w, http.StatusOK, interaction.Check(doc, interactionDefinitions(defs)))
 }
 
 // interactionDefinitions is the definitions as the graph reads them, with their
