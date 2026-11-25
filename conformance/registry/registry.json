@@ -102,12 +102,15 @@
       ],
       "testRefs": [
         "conformance/normative_oracles_test.go:TestCON2ExecutionOracles",
-        "conformance/normative_joins_test.go:TestCON2InclusiveJoinWhoseUpstreamTokenEndsElsewhere"
+        "conformance/normative_joins_test.go:TestCON2InclusiveJoinFiresWhenItsUpstreamTokenEndsElsewhere",
+        "conformance/normative_joins_test.go:TestCON2InclusiveJoinFiresWhenItsUpstreamTokenIsInterrupted",
+        "conformance/normative_joins_test.go:TestCON2InclusiveJoinRecheckRaisesNoSecondIncident",
+        "conformance/normative_joins_test.go:TestCON3InclusiveJoinRecoversWithABranchParked"
       ],
       "scenarioIds": [
         "inclusive-gateway"
       ],
-      "limitations": "`inclusive-gateway`; ADR-0033 limits cycles. Known gap (CON2): a join re-checks only when a token arrives at it, so it hangs when an upstream token ends elsewhere (Table 13.3 states activation as a condition on the diagram's tokens); fix proposed in ADR-0551 part 1. Atlas also blocks on any ancestor token, stricter than the Table 13.3 path rule (to be classified).",
+      "limitations": "`inclusive-gateway`; ADR-0033 limits cycles. Since ADR-0551 part 1 a parked join is re-checked when a token leaves its instance (Table 13.3 states activation as a condition on the tokens), so a branch that ends elsewhere or is interrupted no longer hangs it; a hang that predates the upgrade with nothing else live is not released automatically. Atlas also blocks on any ancestor token, stricter than the Table 13.3 path rule (to be classified).",
       "reviewState": "provisional"
     },
     {

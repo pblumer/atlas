@@ -23,7 +23,7 @@ func TestEveryDefinedTagHasItsOwnName(t *testing.T) {
 	}
 
 	seenIntent := map[string]Intent{}
-	for in := IntentActivating; in <= IntentTaskAnswered; in++ {
+	for in := IntentActivating; in <= IntentJoinRecheck; in++ {
 		name := in.String()
 		if name == "Intent(?)" {
 			t.Errorf("Intent(%d) has no name", in)

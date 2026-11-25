@@ -37,6 +37,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTProcessInstance, model.IntentForking):               handleProcessInstanceForking,
 		handlerKey(model.VTVariableIndex, model.IntentVariableReindex):         handleVariableReindex,
 		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck):      handleConditionRecheck,
+		handlerKey(model.VTProcessInstance, model.IntentJoinRecheck):           handleJoinRecheck,
 		handlerKey(model.VTElementInstance, model.IntentActivating):            handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):            handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):                      handleJobCompleted,
@@ -4057,6 +4058,16 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 		c.AppendElementCommand(key, model.IntentCompleting, *ei) // split: fire now
 		return
 	}
+	fireInclusiveJoinIfReady(c, key, ei)
+}
+
+// fireInclusiveJoinIfReady is the inclusive join's firing rule, run when a token arrives
+// and again when a token leaves somewhere in the instance (ADR-0551): BPMN 2.0.2 Table
+// 13.3 states it as a condition on the instance's tokens, not as something only an
+// arrival triggers, so a branch that ends elsewhere can be what lets a parked join fire.
+// key and ei are any one of the arrivals parked on the join; the rule reads all of them.
+func fireInclusiveJoinIfReady(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
 	// Join: park until nothing more can arrive at this gateway.
 	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId, cp.InclusiveJoinReach(ei.ElementId)) {
 		return

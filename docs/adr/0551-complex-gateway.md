@@ -1,7 +1,7 @@
 # ADR-0551: Run the Complex Gateway, on an inclusive join that re-checks when a token leaves
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-11-10
 - **Deciders:** Patrick Blumer (programme owner, BPMN conformance)
 - **Open question:** OMG BPMN 2.0.2 contradicts itself on reset. §10.6.5 (p. 295) says "a token
@@ -217,6 +217,28 @@ phase, so the deployed model would run differently from the one drawn.
   - the ancestor-versus-path difference of the inclusive join still needs a decision.
 
 ### Delivery and acceptance
+
+> **Implementation status.** Accepted by the programme owner. **Part 1 has landed.**
+> - The command-only `IntentJoinRecheck` is appended after every existing intent.
+> - `AppendElementEvent` marks an instance when it records `Completed` or `Terminated` and its
+>   process has inclusive joins (`HasInclusiveJoins`).
+> - The processor schedules one re-check per marked instance at the end of the batch.
+> - `handleJoinRecheck` runs `fireInclusiveJoinIfReady`, the join's own rule now shared with an
+>   arrival, once per parked join.
+> - A join parked on a routing incident is skipped, so the incident is not raised again.
+>
+> Tests in `conformance/normative_joins_test.go` cover a branch that ends elsewhere, a branch
+> interrupted by a boundary timer, a re-check that must not raise a second incident, and a
+> restart from the WAL with one branch parked. Mutating the schedule or the incident guard makes
+> them fail. **Part 2 (the Complex Gateway) is not started**, which is why this record is
+> `Partial`.
+>
+> **Correction found while implementing.** The consequence below says an instance hung today
+> "will move on at the next event in its scope". That is true only if something still happens
+> in the instance. The re-check is triggered by a token leaving. An instance that hangs with
+> nothing else live has no such event, so it stays as it is after the upgrade. Releasing it
+> needs an operator action, or a sweep at startup, which this record did not decide. That is a
+> follow-up, not part 1.
 
 1. **PR 1 — join re-check (Part 1).**
    - Engine change, with `engine` unit tests for an end event, a termination and an interrupting

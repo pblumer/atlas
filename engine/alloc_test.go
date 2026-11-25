@@ -172,3 +172,49 @@ func TestJoinReachabilityNoAlloc(t *testing.T) {
 		t.Error("the set answered nothing, so the measurement above proves nothing")
 	}
 }
+
+// TestMarkJoinDirtyNoAlloc pins I1 for the re-check bookkeeping ADR-0551 adds to every
+// Completed and Terminated element event: once the slice is warm, marking an instance (or
+// finding it already marked) costs a map read and a short scan, never an allocation. A
+// process without inclusive joins is not marked at all.
+func TestMarkJoinDirtyNoAlloc(t *testing.T) {
+	b := compiler.NewBuilder(1, "join-dirty-alloc", 1)
+	start := b.AddStartEvent()
+	split := b.AddInclusiveGateway()
+	one, two := b.AddTask(), b.AddTask()
+	join := b.AddInclusiveGateway()
+	end := b.AddEndEvent()
+	b.Connect(start, split)
+	b.Connect(split, one)
+	b.Connect(split, two)
+	b.Connect(one, join)
+	b.Connect(two, join)
+	b.Connect(join, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	plain := compiler.NewBuilder(2, "no-join", 1)
+	plain.Connect(plain.AddStartEvent(), plain.AddEndEvent())
+	cpPlain, err := plain.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	p := &Processor{processes: map[uint64]*compiler.CompiledProcess{1: cp, 2: cpPlain}}
+	p.joinDirty = make([]uint64, 0, 8)
+	c := &ProcessingContext{p: p}
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		p.joinDirty = p.joinDirty[:0]
+		c.markJoinDirty(10, 1)
+		c.markJoinDirty(10, 1) // already marked
+		c.markJoinDirty(11, 1)
+		c.markJoinDirty(12, 2) // no inclusive join: not marked
+	})
+	if allocs != 0 {
+		t.Errorf("marking instances for a join re-check allocated %v times per run, want 0", allocs)
+	}
+	if len(p.joinDirty) != 2 || p.joinDirty[0] != 10 || p.joinDirty[1] != 11 {
+		t.Errorf("joinDirty = %v, want [10 11]: deduplicated, and nothing for the process without a join", p.joinDirty)
+	}
+}

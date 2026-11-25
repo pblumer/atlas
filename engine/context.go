@@ -491,6 +491,24 @@ func (c *ProcessingContext) AppendProcessInstanceCommand(key uint64, intent mode
 // AppendElementEvent records an element-instance lifecycle fact.
 func (c *ProcessingContext) AppendElementEvent(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendEvent(key, model.VTElementInstance, intent, inflightValue{element: v})
+	if intent == model.IntentCompleted || intent == model.IntentTerminated {
+		c.markJoinDirty(v.ProcessInstanceKey, v.ProcessDefKey)
+	}
+}
+
+// markJoinDirty notes that a token left an element in the given instance, so the batch
+// loop will schedule a re-check of its parked inclusive joins (ADR-0551). Deduplicated;
+// an instance whose process has no inclusive join records nothing.
+func (c *ProcessingContext) markJoinDirty(piKey, defKey uint64) {
+	if piKey == 0 || !c.process(defKey).HasInclusiveJoins() {
+		return
+	}
+	for _, k := range c.p.joinDirty {
+		if k == piKey {
+			return
+		}
+	}
+	c.p.joinDirty = append(c.p.joinDirty, piKey)
 }
 
 // AppendJobEvent records a job lifecycle fact.

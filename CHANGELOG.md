@@ -12,6 +12,17 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+- **An inclusive join no longer waits for a branch that ended elsewhere.** A join fires when no
+  token can still reach it (BPMN 2.0.2 Table 13.3). Atlas checked that only when a token arrived
+  at the join, so a join whose remaining branch ended at another end event, was interrupted by a
+  boundary event or left on a flow that does not lead to the join waited for an arrival that
+  never came, and the instance never completed. The join is now re-checked whenever a token
+  leaves in its instance, with the same rule an arrival uses. A join parked on a routing incident
+  stays parked until the incident is resolved. An instance that already hangs this way and has
+  nothing else running does not move by itself after the upgrade: nothing in it leaves, so
+  nothing re-checks it (ADR-0551).
+
 ## [0.29.0] — 2026-11-25
 
 **A connected system can show a person their shop, and keep a catalogue as its own.** Beside
