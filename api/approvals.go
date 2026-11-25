@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/api/taskfolder"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -58,6 +60,12 @@ func firstNonEmpty(a, b string) string {
 // catalogue it belongs to looks.
 type approvalResp struct {
 	Task taskResp `json:"task"`
+	// ordererID and approvalKind are the order's own record of who placed it and how
+	// the line is approved — not the process's variables, which a model passes on in
+	// whatever shape it likes. They answer one question and are not part of the
+	// answer a client reads: is the caller deciding their own order (ownOrder).
+	ordererID    string
+	approvalKind string
 	// OrderID and ItemID name the line this approval decides; Recipient and Orderer
 	// are principal ids, never names — see ADR-0314.
 	OrderID string `json:"orderId"`
@@ -196,6 +204,60 @@ func (s *Server) holdsApproval(pr *httpapi.Principal, tr taskResp) bool {
 	return s.holdsTask(pr, tr.Assignee, tr.CandidateGroups)
 }
 
+// ownOrderRefusal is what somebody is told who tries to decide their own order.
+const ownOrderRefusal = "nobody approves an order they placed themselves"
+
+// ownOrder reports whether the caller placed the order this approval decides, where
+// the product names who approves it. A `fixed` approval names a person and a `role`
+// approval a group, and neither asks who is ordering — so the person named, or a
+// member of the group, could order the product and approve it. That is the one case
+// an approval exists to rule out, and action approvals have always refused it.
+// `superior` resolves the approver from the orderer and cannot name them; an
+// installation's own approval process answers for itself.
+func (a approvalResp) ownOrder(pr *httpapi.Principal) bool {
+	return pr != nil && pr.UserID != "" && a.ordererID == pr.UserID && order.ApproverNamedByProduct(a.approvalKind)
+}
+
+// refuseOwnOrderApproval answers 403 when the task decides an order the caller
+// placed, and reports whether it did. It is asked on the task itself as well as on
+// the approvals page, because completing the task is how an approval is decided and
+// both doors lead to it. Only Atlas's own approval processes for a named approver
+// can be such a task, so every other task is told apart by its process id and costs
+// nothing more.
+func (s *Server) refuseOwnOrderApproval(w http.ResponseWriter, r *http.Request, key uint64) bool {
+	pr := httpapi.PrincipalFrom(r.Context())
+	if !s.authEnabled || pr == nil {
+		return false
+	}
+	var (
+		tr    taskResp
+		found bool
+	)
+	s.do(func() {
+		if jv, ok, err := s.store.GetJob(key); err == nil && ok {
+			tr, found = s.enrichTask(key, jv), true
+		}
+	})
+	if !found || !order.ProcessDecidesByNamedApprover(tr.ProcessID) {
+		return false
+	}
+	var own bool
+	if err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		a, isApproval, err := s.approvalOf(rv, tr)
+		own = isApproval && a.ownOrder(pr)
+		return err
+	}); err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read approval: "+err.Error())
+		return true
+	}
+	if !own {
+		return false
+	}
+	auditRefusal(r, logging.AuthDenied, "refused the approval of one's own order", slog.Uint64("task", key))
+	httpapi.Error(w, http.StatusForbidden, ownOrderRefusal)
+	return true
+}
+
 // approvalOf turns one held task into an approval, or reports that it is not one.
 //
 // What makes a task an approval is not its name or its process id but the order:
@@ -253,6 +315,7 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 	}
 
 	a := approvalResp{
+		ordererID: ord.Orderer, approvalKind: line.Approval.Kind,
 		Task: tr, OrderID: ord.ID, ItemID: line.ItemID, PositionID: line.Key(),
 		VariantID: firstNonEmpty(vars["variantId"], line.VariantID),
 		Recipient: vars["recipient"], Orderer: vars["orderer"], Price: line.Price,

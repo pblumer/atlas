@@ -120,6 +120,14 @@ type Principal struct {
 	// consenting to a Worker acting as them — and are refused to anything that is not
 	// their session (ADR-0475 §10).
 	Session bool
+	// ClientID and ClientName are the OAuth client a person's grant belongs to, set
+	// where such a grant becomes the principal and empty for every other credential.
+	// They say which system a request came through, which a catalogue maintained in
+	// another system asks of every write to it
+	// (ADR-draft-a-shop-and-its-catalogues-from-another-system); the name is the one
+	// the grant shows, so a refusal can name the system as people know it.
+	ClientID   string
+	ClientName string
 	// Instance binds a principal to one Worker Instance and the job types it serves.
 	// Only the credential an installed Worker Type's instance is launched with sets it
 	// (ADR-0545): the scope

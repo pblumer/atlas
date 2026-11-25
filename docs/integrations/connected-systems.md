@@ -143,6 +143,28 @@ which the system detaches its copy.
 A person's grant is ADR-0510's: the same flow with `resource=<atlas>/tasks` and no
 `scope`. It works that person's tasks as that person.
 
+A system that also shows the shop asks for `resource=<atlas>/shop` instead
+([ADR-draft-a-shop-and-its-catalogues-from-another-system](../adr/draft-a-shop-and-its-catalogues-from-another-system.md)).
+That grant carries the scope `shop`: everything `…/tasks` reaches, the shop's customer side
+(`GET /api/v1/shop/catalogs`, `GET /api/v1/shop/catalog`, ordering and following orders under
+`/api/v1/orders`, a customer's actions, `GET /api/v1/approvals` and
+`POST /api/v1/approvals/decide`) and catalogue maintenance (`GET /api/v1/catalogs`,
+`GET /api/v1/catalogs/{id}`, its `document` and `releases`, `POST /api/v1/catalogs/import`,
+`PUT /api/v1/catalog-products/{id}/picture`), each deciding as for the person in the shop. Its
+metadata is at `<atlas>/.well-known/oauth-protected-resource/shop`; pre-consent applies to it
+as to `…/tasks`.
+
+A catalogue document imported with such a grant marks each catalogue it writes as maintained in
+the system: `"maintainedIn": {"client": "<client_id>", "name": "<client_name>", "url": "<https
+address from the document>"}`. The document states only the address, under
+`catalogs[].maintainedIn.url` (https or left out; anything else is `422`); `client` and `name`
+come from the grant. From then on atlas refuses every other write to the catalogue and to the
+products whose home it is with `409 {"error": "…", "maintainedIn": {…}}` — a product manager's
+own import too, with the problem carrying `maintainedIn` — until an administrator takes it back
+with `DELETE /api/v1/catalogs/{id}/maintainer`. A grant of another system is refused likewise.
+After a take-back, the system's next publish is compared like any import and a change is asked
+about (`409`, `undecided`) rather than written.
+
 - With pre-consent standing, a person signed in to atlas (by password or single sign-on)
   who has not declined the system is approved without the consent page: the browser is
   redirected straight back with a code.

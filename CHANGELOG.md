@@ -29,7 +29,140 @@ _Changed_ / _Removed_ for each version.
   ordered before the order kept that record is found by a search scoped to its process; an instance
   only the exported log still holds is said rather than followed, as before.
 
+## [0.28.1] — 2026-11-24
+
+**A browser acts on Atlas only from Atlas's own pages.** A request that changes something is
+accepted from the server's own origin and answered `403` from any other, before it is
+authenticated (ADR-0563), and every answer carries the baseline browser headers. A page of
+another site can therefore neither act as the person signed in nor show the Console in a frame.
+
+**An approval is decided by somebody other than the person who ordered, and carries the
+decision alone.** A `fixed` or a `role` approval no longer lets the person a product names
+approve an order of their own, the three approval models Atlas ships pass on what their form
+asks for and nothing else, and releasing a task addressed to one person no longer opens it to
+every account.
+
+**Single sign-on and the OAuth server check what they took on trust.** An ID token's `nbf` and
+`azp` are read, an e-mail address the provider does not vouch for is not taken, a redirect URI
+is `https` or `http` to this machine and nothing else, and the grant a connected system holds
+and the reason a metadata document could not be fetched are told to an administrator alone.
+Nineteen handlers that read a request body without a ceiling now read it against a budget.
+
+Nothing in the log or the state changed; 0.28.1 replaces 0.28.0 in place. On its first start
+the server deploys one new version of each of the three approval models; an approval that is
+already waiting stays on the version it was started on (ADR-0162) and is still held to the
+rules the server itself asks. The release carries fixes only, and most of them refuse
+something that was accepted, so six changes can alter what worked against 0.28.0:
+
+- **A browser's state-changing request from another origin is answered `403`, and the Console
+  is not shown in a frame of another site.** Clients that are not browsers are not affected,
+  and a public start form stays frameable. Behind a proxy that does not pass `Host` on, with
+  the Console used over plain HTTP or from an old browser, the Console's own requests are
+  refused: pass `Host` on, or start the server with `--external-url`.
+- **Releasing a task addressed to one person and to no group answers `409`.**
+  `POST /api/v1/tasks/{key}/unclaim` says to hand the task to somebody instead.
+- **The person a `fixed` or `role` approval names cannot approve an order they placed.**
+  `POST /api/v1/tasks/{key}/complete` answers `403` and `POST /api/v1/approvals/decide` skips
+  the line; somebody else with the operator role decides.
+- **Variables sent beside an approval's answer no longer reach the instance.** The shipped
+  approval tasks map out `genehmigt` and `begruendung` only. An approval model of your own
+  that builds a call from instance variables after a user task needs the same output mappings.
+- **Single sign-on and OAuth refuse what they let through.** An ID token whose `nbf` lies more
+  than a minute ahead, or whose `azp` names another client, fails the login. A redirect URI
+  of another scheme than `http` or `https` is refused at registration and for a client that
+  already holds one.
+- **A request body past its budget is answered `413`** on the nineteen routes that read theirs
+  without a ceiling.
+
 ### Security
+- **A browser's request that changes something is accepted only from Atlas's own origin.** What kept a page elsewhere from acting as the signed-in person was `SameSite=Lax` on the session cookie, and a site is wider than an origin: a service under a sibling host name or on another port of the same host is the same site, and its pages' requests arrived signed in. The server now reads what a browser says about a request's source (`Sec-Fetch-Site`, and `Origin` where that is missing) and answers anything but `GET`, `HEAD` and `OPTIONS` from another origin with `403`, before it is authenticated; the refusal is logged as `auth.cross_origin_refused`. Clients that are not browsers send neither header and are unaffected. The public start forms and their wizard (`/public/forms/`, `/public/wizard/`) and the OAuth token, revocation and registration endpoints are exempt, because they are called from other origins on purpose and act on no session. **If the Console sits behind a proxy that does not pass the `Host` header on** and is used over plain HTTP or from an old browser, its own requests are refused until the proxy passes `Host` on or the server is started with `--external-url`, whose origin is always accepted (ADR-0563).
+- **Every answer says how a browser may treat it.** `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `Content-Security-Policy: frame-ancestors 'self'` with `X-Frame-Options: SAMEORIGIN` used to be set by the handlers that had thought of them. They are now the default of every answer, written before the handler runs, so a new route has them without its author knowing and a handler that says more — the pages a link opens keep out of every frame, a stored document is sandboxed — is still the one that is heard. A page of another site can therefore no longer show the Console in a frame. A public start form under `/public/forms/` stays frameable, because embedding it that way is supported (ADR-0186). `Strict-Transport-Security` remains the operator's to switch on (`--hsts-max-age`). Because a browser told not to sniff loads a script or a stylesheet only when it is declared as one, the server now states the type of its own embedded scripts and stylesheets instead of asking the host: on Windows that answer came from the registry and differed from machine to machine.
+- **A published vulnerability Atlas can reach opens an issue, and dependency updates arrive as pull requests.** A scheduled workflow runs `govulncheck` every morning with the toolchain `go.mod` declares and opens one issue, labelled `known-vulnerability`, when a report in the Go vulnerability database is reachable from Atlas's code; it closes that issue when the scan is clean again. It is not a gate on pull requests: a dependency becomes vulnerable on the day a report is published, not on the day somebody changes it. `.github/dependabot.yml` asks for weekly update pull requests for the Go modules, the GitHub Actions the workflows use and the npm manifests of the test tooling. The build inputs of the vendored browser bundles are left out on purpose, because raising a version there does not rebuild the bundle.
+- **Answering an approval writes the decision and nothing else.** The three approval models
+  Atlas ships call Atlas's own API after their task, with an operator's token: at the address
+  in `atlasApiBase`, for the order and position the instance names, reporting `approvalRef` as
+  the person who approved. Completing a task writes whatever variables the request carries, and
+  for a task without output mappings they land on the instance. So whoever held an approval
+  could send, beside their answer, another order, another approver, or another address for the
+  call that carries the token. The approval tasks now map out exactly what their form asks
+  for — `genehmigt` and `begruendung` — and a task with output mappings keeps everything else
+  in its own scope (ADR-0068). `POST /api/v1/orders/{id}/lines/{line}/start` also no longer
+  records an approval under a name other than the one a `fixed` or `role` product names. An
+  approval model of your own that builds a call from instance variables after a user task
+  needs the same output mappings; a task without them still writes to the instance, as before.
+- **Releasing a task addressed to one person no longer opens it to everybody.** A task that
+  names nobody is open work (ADR-0317), and releasing a task empties its assignee. For a task
+  its model addresses to a person and to no group, that left exactly such a task: an approval
+  routed to a product's approver became every account's to answer once that approver released
+  it — the person who had placed the order among them. Releasing gives a task back to the group
+  it came from; where the model names no group there is nobody to give it back to, so
+  `POST /api/v1/tasks/{key}/unclaim` now answers `409` for such a task and says to hand it to
+  somebody instead. A task with candidate groups, and one its model addresses to nobody, are
+  released as before.
+- **Nobody approves an order they placed themselves.** A `fixed` approval names a person at the
+  product and a `role` approval a group, and neither asked who had placed the order: the
+  person named, or a member of the group, could order the product and approve it. Action
+  approvals have always refused that; order approvals of these two kinds now do too, on both
+  ways an approval is decided — `POST /api/v1/approvals/decide` skips such a line and says why,
+  and `POST /api/v1/tasks/{key}/complete` answers `403`. The rule is about whose order it is,
+  so it holds for an operator and an administrator as well. Where the person a product names
+  is the one ordering, somebody else with the operator role decides. `superior`, which
+  resolves the approver from the orderer, and an installation's own approval process are not
+  affected.
+- **Why a client's metadata document could not be fetched is no longer told to a stranger.**
+  Naming a client by the URL of its metadata document makes Atlas fetch that URL, on a route
+  that answers without a session. What the fetch found was told to the caller word for word:
+  the address a name resolved to, the resolver's own error, the dial or TLS failure — which
+  made the server a way of asking what an internal name resolves to and what answers there. A
+  caller who is not an administrator is now told that the document could not be read; the
+  cause is in the log (`auth.oauth_denied`), and an administrator still reads it on the screen.
+  The budget for such reads is also counted per host as it resolves rather than as it was
+  spelt: another case, a trailing dot or an explicit `:443` used to be a new key each, with a
+  full budget.
+- **A federated login no longer takes an e-mail address it cannot vouch for.** The provider's
+  `email` claim was copied onto the account at every login, as it came. Directory
+  synchronisation, reconciliation and password recovery all read an address as the person, and
+  the administrator's own path refuses a second account the same address — this path saved it
+  without asking, so a person whose provider let them choose the claim could carry a
+  colleague's address. An address another account holds is now left alone, and so is one the
+  provider marks unverified (`email_verified` false); the account keeps the address it had, and
+  the log says why (`auth.user_updated`). A provider that sends an address and no
+  `email_verified` claim is treated as before.
+- **An ID token that is not valid yet, or was issued to another client, is refused.** The
+  check read `exp`, `iat`, `aud` and the nonce, and neither `nbf` nor `azp`: a token whose
+  `nbf` lies in the future was accepted, and so was one that lists this client among several
+  audiences while naming another client as the party it was issued to.
+
+### Added
+- **A connected system shops as the person: the OAuth resource `…/shop`.** Beside `…/tasks`,
+  a person can approve a system — a wiki, an intranet — for their shop and tasks. The grant
+  carries the scope `shop` (not mintable): everything `tasks` reaches, the catalogues the person
+  may order from, ordering, following and changing their orders, a customer's actions, deciding
+  the approvals they hold, and, for a product manager, reading their catalogues, importing a
+  catalogue document and setting a product's picture. Every route decides as it does for the
+  person in the shop and over MCP (ADR-0550); the three order routes kept off MCP are not
+  reached. Its metadata is at `/.well-known/oauth-protected-resource/shop`, and an
+  administrator's pre-consent for a connected system applies to it as to `…/tasks`
+  (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+- **A catalogue can be maintained in another system.** A catalogue document imported through a
+  person's `…/shop` grant marks every catalogue it writes `maintainedIn` that system — its
+  client id, its name and, from the document's `catalogs[].maintainedIn.url`, an https address.
+  From then on every other write to the catalogue and to the products whose home it is — the
+  Console's editor, a product manager's own import, publishing, pictures, content links, the
+  ArchiMate import, deleting for good — is refused with 409, the system's name and its address,
+  because the next publish would overwrite it without a trace. Its theme and logo stay an
+  administrator's. The Console shows a banner with a link there and locks what the server would
+  refuse; an administrator takes the catalogue back with `DELETE /api/v1/catalogs/{id}/maintainer`,
+  recorded in the audit trail as `catalog.maintainer_cleared`. The export carries `maintainedIn`
+  (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+
+### Fixed
+- **A provider whose issuer ends in a slash can sign people in.** The issuer an operator
+  configures is trimmed of its trailing slash, and discovery accepts a document that names the
+  issuer with one — but a token's issuer was compared with the trimmed spelling, exactly. A
+  provider that names itself with a slash, as several do, passed discovery and then failed
+  every login with nothing on the screen but "sign-in failed". A token's issuer is now
+  compared with the one the discovery document names, as the provider spells it.
 - **An OAuth redirect URI is https, or http to this machine, and nothing else.** The refusal has
   always said so — "must be https, or http on loopback" — but the check behind it only asked
   that a URI off this machine be https, so on `localhost`, `127.0.0.1` and `[::1]` every other
@@ -19355,7 +19488,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/pblumer/atlas/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/pblumer/atlas/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.1
 [0.27.0]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.0

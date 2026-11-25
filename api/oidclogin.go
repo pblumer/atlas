@@ -457,8 +457,16 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 // A rotation at the provider is otherwise an outage here until the cache expires,
 // and rotating keys is a thing providers are supposed to do.
 func (s *Server) verifyOIDCToken(r *http.Request, idToken, nonce string, now time.Time) (oidcClaims, error) {
+	// The issuer a token must name is the one the discovery document names, as the
+	// provider spells it. The configured value is trimmed of a trailing slash and
+	// discovery accepts a document that has one; comparing a token with the trimmed
+	// spelling refused every login of a provider that names itself with a slash.
+	issuer := s.oidc.cfg.Issuer
+	if d, err := s.oidc.endpoints(r.Context(), now); err == nil && d.Issuer != "" {
+		issuer = d.Issuer
+	}
 	want := oidcExpect{
-		issuer:   s.oidc.cfg.Issuer,
+		issuer:   issuer,
 		clientID: s.oidc.cfg.ClientID,
 		nonce:    nonce,
 		now:      now,
@@ -533,7 +541,30 @@ func (s *Server) oidcAccount(claims oidcClaims, now int64) (User, []groupChange,
 		// Keep the display material current: the provider is the source of truth for
 		// it, and a stale name in a task list is a small lie that accumulates. The
 		// username is left alone — it identifies sessions, assignments and audit lines.
-		changed := applyOIDCProfile(&out, claims) || !found
+		// The address is the exception to "the provider is the source of truth".
+		// One account holds it — directory synchronisation, reconciliation and
+		// password recovery all read an address as the person — and the provider
+		// may say it has not verified it. Either way the account keeps what it had.
+		takeEmail, why := true, ""
+		if mail := strings.TrimSpace(claims.Email); mail != "" {
+			var holder User
+			var held bool
+			if holder, held, err = s.users.byEmail(mail); err != nil {
+				return
+			}
+			switch {
+			case claims.EmailUnverified:
+				takeEmail, why = false, "the provider marks the address unverified"
+			case held && holder.ID != out.ID:
+				takeEmail, why = false, "another account holds the address"
+			}
+		}
+		if why != "" && !strings.EqualFold(strings.TrimSpace(claims.Email), out.Email) {
+			logging.Info(logging.AuthUserUpdated, "a federated login did not take the provider's e-mail address",
+				slog.String("username", out.Username), slog.String("user_id", out.ID),
+				slog.String("source", SourceOIDC), slog.String("reason", why))
+		}
+		changed := applyOIDCProfile(&out, claims, takeEmail) || !found
 		if mapping.Enabled {
 			roles, groups := mapping.apply(claimValues(claims.Raw, mapping.Claim))
 			next := withUserFloor(roles)
@@ -631,13 +662,14 @@ func sameRoles(a, b []string) bool {
 }
 
 // applyOIDCProfile copies the display material a token carries onto a record,
-// reporting whether anything changed.
-func applyOIDCProfile(u *User, claims oidcClaims) bool {
+// reporting whether anything changed. The address is copied only when the caller
+// established that this account may have it (takeEmail).
+func applyOIDCProfile(u *User, claims oidcClaims, takeEmail bool) bool {
 	changed := false
 	if name := strings.TrimSpace(claims.Name); name != "" && name != u.DisplayName {
 		u.DisplayName, changed = name, true
 	}
-	if mail := strings.TrimSpace(claims.Email); mail != "" && mail != u.Email {
+	if mail := strings.TrimSpace(claims.Email); takeEmail && mail != "" && mail != u.Email {
 		u.Email, changed = mail, true
 	}
 	return changed

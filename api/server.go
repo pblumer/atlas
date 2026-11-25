@@ -39,6 +39,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -162,11 +163,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.28.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.28.1"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.28.0-dev"
+var Version = "0.28.1-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -2323,6 +2324,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Models = processLookup{s: s}
 	s.catalogs.Deployer = catalogDeployer{s: s}
 	s.catalogs.Baselines = catalogBaselines{s: s}
+	// Which grant marks a catalogue as maintained in another system, and whose writes
+	// to it are that system's own (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	s.catalogs.Publisher = catalogPublisher
 	s.catalogs.Personal = processLookup{s: s}
 	// And what a structured catalogue's headings name: the capability register.
 	s.catalogs.Capabilities = catalog.Register{Loop: s.runLoop, Store: s.capabilityRecords}
@@ -3893,7 +3897,7 @@ func (s *Server) Close() {
 // /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux, policy := s.mountRoutes()
-	return s.withHSTS(s.withAuth(policy, s.withStorageAdmission(mux)))
+	return withSecurityHeaders(s.withHSTS(s.withCrossOriginProtection(s.withAuth(policy, s.withStorageAdmission(mux)))))
 }
 
 // mountRoutes registers every route this server serves and, in the same pass,
@@ -3948,6 +3952,10 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A person's tasks as a resource of their own, for a client that works them and
 	// nothing else (ADR-0510 §3).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
+	// A person's shop and tasks as a resource of their own, for a system that shows
+	// the shop to its people and publishes catalogues it maintains
+	// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthShopResource, s.handleProtectedResourceMetadata)
 	// A connected system's own reading of this server, for the system grant an
 	// administrator approves (ADR-0512 §2).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthSystemResource, s.handleProtectedResourceMetadata)
@@ -4241,7 +4249,31 @@ func revalidated(root fs.FS, next http.Handler) http.Handler {
 		if tag, ok := tags[p]; ok {
 			w.Header().Set("ETag", tag)
 			w.Header().Set("Cache-Control", "no-cache")
+			if ct := ownStaticType(p); ct != "" {
+				w.Header().Set("Content-Type", ct)
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ownStaticType is the content type of an embedded script or stylesheet, said by this
+// server rather than looked up.
+//
+// The file server would ask package mime, and mime asks the host: on Windows the
+// registry, where any installed program may have written what ".js" is. Machines
+// answer "application/javascript" and machines answer "text/plain". Every answer
+// carries nosniff (withSecurityHeaders), so a browser loads a script or a stylesheet
+// only when it is declared as one — which made the host's opinion decide whether the
+// Console starts. These files are compiled into the binary; what they are is not a
+// question for the machine it runs on. The file server keeps a type that is already
+// set. Other extensions are left to it: nothing a browser refuses hangs on them.
+func ownStaticType(p string) string {
+	switch path.Ext(p) {
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	}
+	return ""
 }

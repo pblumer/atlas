@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -133,7 +134,7 @@ func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values, fresh bool
 	clientID := strings.TrimSpace(q.Get("client_id"))
 	client, err := s.lookupClient(r.Context(), clientID, fresh)
 	if err != nil {
-		return oauthRequest{}, "", err.Error()
+		return oauthRequest{}, "", s.publicLookupError(r, clientID, err)
 	}
 	redirectURI := strings.TrimSpace(q.Get("redirect_uri"))
 	if redirectURI == "" || !client.allowsRedirect(redirectURI) {
@@ -180,9 +181,16 @@ func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values, fresh bool
 // else (ADR-0510 §3).
 const oauthTasksResource = "/tasks"
 
-// isCanonicalResource reports whether uri is one of the four this server publishes
+// oauthShopResource names a person's shop and tasks as a resource of its own: a grant
+// for it reaches what `tasks` reaches, the shop's customer side and the catalogue
+// maintenance of a product manager, worked as the person and nothing else
+// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+const oauthShopResource = "/shop"
+
+// isCanonicalResource reports whether uri is one of the five this server publishes
 // protected-resource metadata for: the server itself, the MCP transport, a person's
-// tasks, and a connected system's own reading of this server (ADR-0512 §2).
+// tasks, a person's shop, and a connected system's own reading of this server
+// (ADR-0512 §2).
 //
 // The origin comes from externalBase, so it is the configured one when an operator
 // stated it and the request's otherwise — the same answer the discovery documents
@@ -193,7 +201,7 @@ func (s *Server) isCanonicalResource(r *http.Request, uri string) bool {
 	if uri == "" || base == "" {
 		return false
 	}
-	if uri == base || uri == base+oauthTasksResource || uri == base+oauthSystemResource {
+	if uri == base || uri == base+oauthTasksResource || uri == base+oauthShopResource || uri == base+oauthSystemResource {
 		return true
 	}
 	return s.mcpHandler != nil && uri == base+"/mcp"
@@ -415,6 +423,25 @@ func (s *Server) issueCode(req oauthRequest, p *httpapi.Principal, system *oauth
 	}
 	target.RawQuery = rq.Encode()
 	return target.String(), nil
+}
+
+// publicLookupError is what the caller is told when a client could not be found.
+// Every reason but one is the client's own business and is said as it is. A document
+// that could not be fetched is the exception: why it could not is what this server
+// saw on its own network, and this route answers anybody. So the cause is written to
+// the log, an administrator reads it on the screen, and everybody else is told that
+// the document could not be read.
+func (s *Server) publicLookupError(r *http.Request, clientID string, err error) string {
+	var unreachable *metadataUnreachable
+	if !errors.As(err, &unreachable) {
+		return err.Error()
+	}
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil && s.principalIsAdmin(p) {
+		return err.Error()
+	}
+	auditRefusal(r, logging.AuthOAuthDenied, "oauth: a client's metadata document could not be read",
+		slog.String("client_id", clientID), slog.String("reason", unreachable.cause.Error()))
+	return metadataUnreachableSaid
 }
 
 // oauthCodePrefix marks an authorization code, so one in a log or a bug report is

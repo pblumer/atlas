@@ -35,6 +35,11 @@ type fakeIdP struct {
 	gotForm  url.Values        // the last token-endpoint request
 	tokenErr int               // when non-zero, the token endpoint answers this status
 
+	// issuerSuffix is appended to the issuer the provider names itself by, in its
+	// discovery document and in its tokens: "/" for a provider whose issuer ends in
+	// a slash, as several do.
+	issuerSuffix string
+
 	// mutate bends the next id token in exactly one way, for the tests that need a
 	// provider to say something Atlas must refuse.
 	mutate func(header, claims map[string]any)
@@ -51,7 +56,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"issuer":                 idp.URL,
+			"issuer":                 idp.URL + idp.issuerSuffix,
 			"authorization_endpoint": idp.URL + "/authorize",
 			"token_endpoint":         idp.URL + "/token",
 			"jwks_uri":               idp.URL + "/jwks",
@@ -85,7 +90,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"pkce"}`))
 			return
 		}
-		want := oidcExpect{issuer: idp.URL, clientID: "atlas-test", nonce: nonce, now: time.Now()}
+		want := oidcExpect{issuer: idp.URL + idp.issuerSuffix, clientID: "atlas-test", nonce: nonce, now: time.Now()}
 		idp.mu.Lock()
 		token, body := idp.key.tokenFor(t, want, idp.mutate), idp.tokenBody
 		idp.mu.Unlock()
@@ -726,5 +731,24 @@ func TestAFederatedAccountHasNoPasswordToGuess(t *testing.T) {
 		if resp.StatusCode == http.StatusOK {
 			t.Errorf("a federated account signed in with password %q", password)
 		}
+	}
+}
+
+// TestAProviderWhoseIssuerEndsInASlashCanSignPeopleIn: the issuer an operator
+// configures is trimmed of its trailing slash, and discovery accepts a document that
+// names the issuer with one. The token check then compared the token's issuer with
+// the trimmed spelling, exactly — so a provider that names itself with a slash, as
+// several do, passed discovery and failed every single login. A token's issuer has to
+// equal the one the discovery document names, as the provider spells it.
+func TestAProviderWhoseIssuerEndsInASlashCanSignPeopleIn(t *testing.T) {
+	idp := newFakeIdP(t)
+	idp.issuerSuffix = "/"
+	ts, srv := oidcServer(t, idp)
+
+	resp := federate(t, ts, idp, noRedirects(t))
+	resp.Body.Close()
+	if _, ok := accountBySubject(t, srv, "subject-1"); !ok {
+		t.Fatalf("a provider whose issuer ends in a slash signed nobody in (callback answered %d, Location %q)",
+			resp.StatusCode, resp.Header.Get("Location"))
 	}
 }

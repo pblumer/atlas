@@ -1,0 +1,57 @@
+# Dependency updates as pull requests, so that a new release of something Atlas
+# builds on arrives as a diff CI has already read rather than as a task somebody has
+# to remember. .github/workflows/vulncheck.yml is the other half: it says when a
+# published vulnerability is reachable today; this keeps the distance to the fixed
+# version short before that day comes.
+#
+# Not listed, on purpose: api/web/vendor/form-js/src and api/web/vendor/dmn/src. They
+# are the build inputs of bundles that are committed next to them (ATLAS-VENDORED.txt).
+# A pull request that raised a version there would change the manifest and leave the
+# bundle the browser actually loads as it was, and so would describe a state the
+# product is not in. Those two are raised by rebuilding the bundle.
+
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # golang.org/x modules are released together and require each other; raised one
+      # at a time they produce pull requests that each move three lines of go.sum the
+      # next one moves again.
+      golang-x:
+        patterns:
+          - 'golang.org/x/*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns:
+          - '*'
+
+  # Test and tooling manifests only; none of them ships in the binary. The reference
+  # engine under conformance/differential is the oracle of the differential job, so a
+  # raise there is judged by that job, not by its version number.
+  - package-ecosystem: npm
+    directories:
+      - /e2e
+      - /conformance/catalog/render
+      - /conformance/differential/reference
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      # e2e and the catalogue renderer drive the same browser; scripts/nuggets borrows
+      # the e2e copy. One version between them.
+      playwright:
+        patterns:
+          - 'playwright'
+          - '@playwright/*'

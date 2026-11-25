@@ -1394,6 +1394,14 @@ Adoption and polish.
   system implements is in [`docs/integrations/connected-systems.md`](docs/integrations/connected-systems.md).
   Still open: the draft the document follows may change (the record's open question), and
   the other direction — a credential for a process writing into the system (§6).
+- 🚧 **A shop and its catalogues from another system**
+  ([ADR draft](docs/adr/draft-a-shop-and-its-catalogues-from-another-system.md)): a person's
+  grant for the resource `…/shop` lets a connected system show them the shop — order, follow
+  and change orders, decide approvals, work tasks — as themselves, and lets a product manager
+  publish catalogues kept as the system's pages through the document import. A catalogue so
+  published is maintained there: every other write is refused with 409 until an administrator
+  takes it back. Built; the record awaits acceptance, and what Atlas holds that the system does
+  not map is lost on its next publish (the record's open question).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Model independence and third-party provenance (MIP):** verify licence/origin of vendored BPMN/DMN assets and implementation references; propose native `atlas:` authoring while preserving existing Zeebe BPMN import, stored-definition reload and deterministic recovery. Current stage MIP0 is **documentation/provenance and architecture review only**; native authoring and Camunda-specific DMN removal are not implemented. [Programme](docs/planning/model-independence-and-provenance-program.md) · [Proposed ADR](docs/adr/0513-native-model-dialect-and-vendor-compatibility.md) · [Initial audit](docs/legal/PROVENANCE_AUDIT.md). Milestone A owns the Modeler slice; Milestone 1 owns compiler compatibility; Milestone 6 owns interoperability and release evidence.

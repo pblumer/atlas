@@ -86,6 +86,9 @@ func TestDeployCollaborationRunsBothPools(t *testing.T) {
 	// Seller first: it subscribes and waits at its message catch event.
 	start(keyByProc["seller"])
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/stats", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("stats after the seller started: status=%d body=%s", code, body)
+	}
 	var st struct {
 		ActiveProcessInstances int `json:"activeProcessInstances"`
 	}
@@ -98,6 +101,9 @@ func TestDeployCollaborationRunsBothPools(t *testing.T) {
 	// instances run to completion.
 	start(keyByProc["buyer"])
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/stats", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("stats after the buyer started: status=%d body=%s", code, body)
+	}
 	_ = json.Unmarshal(body, &st)
 	if st.ActiveProcessInstances != 0 {
 		t.Fatalf("after buyer start: active=%d, want 0 (message flow correlated both pools)", st.ActiveProcessInstances)

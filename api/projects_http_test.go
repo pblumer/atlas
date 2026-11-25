@@ -73,6 +73,9 @@ func TestProjectLifecycle(t *testing.T) {
 	// The project list now reports one artifact. The protected system project
 	// (ADR-0119) is always present and carries no artifacts, so ignore it.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/projects", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list projects: status=%d body=%s", code, body)
+	}
 	var projs []struct {
 		ID        string `json:"id"`
 		Artifacts int    `json:"artifacts"`

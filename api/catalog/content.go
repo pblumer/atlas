@@ -172,6 +172,19 @@ func (s *Service) gateOnly(w http.ResponseWriter, r *http.Request, id string) (I
 	return it, home, gateAnswer(w, id, found, allowed, err)
 }
 
+// refuseHeldHome answers 409 and reports true when the product's home is maintained
+// in another system: linking a product to its pages, or unlinking it, changes the
+// binding the next publish from there carries. A refresh is not refused — it fetches
+// what the binding names, as the recheck does on its own.
+func (s *Service) refuseHeldHome(w http.ResponseWriter, r *http.Request, id string, home Catalog) bool {
+	held := s.heldElsewhere(home, httpapi.PrincipalFrom(r.Context()))
+	if held == nil {
+		return false
+	}
+	RefuseHeld(w, "product "+id+" of catalogue "+home.ID, home.ID, held)
+	return true
+}
+
 // openSource opens a source and answers its failure.
 func (s *Service) openSource(w http.ResponseWriter, id string) (contentsource.Source, contentsource.Adapter, bool) {
 	if strings.TrimSpace(id) == "" {
@@ -373,7 +386,7 @@ type contentWrite struct {
 func (s *Service) HandleContentLink(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	_, home, ok := s.gateOnly(w, r, id)
-	if !ok || s.noSources(w) {
+	if !ok || s.refuseHeldHome(w, r, id, home) || s.noSources(w) {
 		return
 	}
 	var in contentRequest
@@ -812,7 +825,8 @@ func (s *Service) catalogRefreshTargets(w http.ResponseWriter, r *http.Request) 
 func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p := httpapi.PrincipalFrom(r.Context())
-	if _, _, ok := s.gateOnly(w, r, id); !ok {
+	_, home, ok := s.gateOnly(w, r, id)
+	if !ok || s.refuseHeldHome(w, r, id, home) {
 		return
 	}
 	var in contentRequest

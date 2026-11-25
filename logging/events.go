@@ -164,6 +164,12 @@ var (
 	// in. Only the authorization refusal is recorded; logging every 401 would bury
 	// it under every unauthenticated probe on the internet.
 	AuthDenied = newEvent("auth.denied")
+	// AuthCrossOriginRefused is a browser's state-changing request from another
+	// origin, refused before it was authenticated. It means one of two things, and
+	// the line carries what tells them apart (origin, host, path): a page somewhere
+	// tried to act as whoever was signed in, or a proxy in front rewrites the Host
+	// header and the Console's own requests no longer look like the Console's.
+	AuthCrossOriginRefused = newEvent("auth.cross_origin_refused")
 	// The account lifecycle, and the credentials that are not accounts.
 	AuthUserCreated = newEvent("auth.user_created")
 	AuthUserUpdated = newEvent("auth.user_updated")
@@ -247,6 +253,12 @@ var (
 	SystemConnect    = newEvent("system.connect")
 	SystemChange     = newEvent("system.change")
 	SystemDisconnect = newEvent("system.disconnect")
+	// CatalogMaintainerCleared is an administrator taking a catalogue back from the
+	// system it was maintained in
+	// (ADR-draft-a-shop-and-its-catalogues-from-another-system): from then on it is
+	// maintained here, and that system's next publish of it is a question rather than
+	// an overwrite. It carries the system, so "since when does Atlas win" has an answer.
+	CatalogMaintainerCleared = newEvent("catalog.maintainer_cleared")
 	// Worker ownership (ADR-0205). Who may reach a worker's configuration —
 	// its endpoint, its credential reference and its inbound subscriptions — is now
 	// somebody's decision rather than everybody's, so the decision is recorded.

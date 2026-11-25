@@ -93,13 +93,16 @@ func (g oauthGrant) accessExpired(now int64) bool {
 // /mcp has no business driving /api/v1 directly. A grant for the server as a whole
 // carries no confinement and reaches what its person reaches. A grant for the
 // person's tasks reaches the task routes, worked as the person, and nothing else
-// (ADR-0510 §3).
+// (ADR-0510 §3); one for the person's shop reaches those and the shop's
+// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
 func (g oauthGrant) scope() string {
 	switch {
 	case strings.HasSuffix(g.Resource, "/mcp"):
 		return apiScopeMCP
 	case strings.HasSuffix(g.Resource, oauthTasksResource):
 		return apiScopeTasks
+	case strings.HasSuffix(g.Resource, oauthShopResource):
+		return apiScopeShop
 	case g.System != nil:
 		// What it reaches is decided per request (systemPrincipal); this names the
 		// part it reaches whatever it was given.

@@ -650,6 +650,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0560](0560-https-redirect-and-hsts.md) | A redirect from plain HTTP and a transport policy, on request | Accepted | Landed |
 | [0561](0561-tls-ca-reaches-the-wiki.md) | The operator's CA bundle also counts for the wiki | Accepted | Landed |
 | [0562](0562-tls-certificates-by-name.md) | Several certificates, chosen by the name a client asks for | Accepted | Landed |
+| [0563](0563-cross-origin-protection.md) | A browser's request that changes something comes from Atlas's own origin | Accepted | Landed |
+| [0564](0564-script-execution-defaults.md) | What a script task may reach when nobody said | Proposed | Not started |
 
 ## The two states of a record
 
