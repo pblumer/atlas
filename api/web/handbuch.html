@@ -13264,7 +13264,8 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
             <code>resource=&lt;atlas&gt;/system</code> und <code>scope</code> aus <code>diagrams</code>,
             <code>tasklist</code>, <code>events</code> (leer heisst alle drei; alles andere wird mit
             <code>invalid_scope</code> abgelehnt).</li>
-          <li><b>Die Freigabe einer Person.</b> Derselbe Flow mit <code>resource=&lt;atlas&gt;/tasks</code> und ohne
+          <li><b>Die Freigabe einer Person.</b> Derselbe Flow mit <code>resource=&lt;atlas&gt;/tasks</code> (nur die
+            Aufgaben) oder <code>resource=&lt;atlas&gt;/shop</code> (Shop und Aufgaben, siehe unten) und ohne
             <code>scope</code>. Mit <code>prompt=none</code> zeigt atlas nie eine Seite, sondern antwortet
             <code>login_required</code> (nicht angemeldet) oder <code>consent_required</code> (keine
             Vorab-Zustimmung oder abgelehnt).</li>
@@ -13291,8 +13292,8 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
             <code>resource=&lt;atlas&gt;/system</code> and a <code>scope</code> of <code>diagrams</code>,
             <code>tasklist</code>, <code>events</code> (empty means all three; anything else is refused with
             <code>invalid_scope</code>).</li>
-          <li><b>A person's grant.</b> The same flow with <code>resource=&lt;atlas&gt;/tasks</code> and no
-            <code>scope</code>. With <code>prompt=none</code> atlas never shows a page and answers
+          <li><b>A person's grant.</b> The same flow with <code>resource=&lt;atlas&gt;/tasks</code> (the tasks only)
+            or <code>resource=&lt;atlas&gt;/shop</code> (shop and tasks, see below) and no <code>scope</code>. With <code>prompt=none</code> atlas never shows a page and answers
             <code>login_required</code> (not signed in) or <code>consent_required</code> (no pre-consent, or
             declined).</li>
           <li><b>The token endpoint.</b> <code>/oauth/token</code> with <code>client_assertion_type</code>
@@ -13307,6 +13308,64 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           <li><b>Giving it back.</b> <code>POST /oauth/revoke</code> with the same client authentication ends the
             whole grant.</li>
         </ol>
+      </div>
+
+      <h3 id="shop-im-anderen-system" data-l="de">Den Shop in einem anderen System zeigen</h3><h3 data-l="en">Showing the shop in another system</h3>
+      <p data-l="de">Ein verbundenes System kann den Leuten auch den <b>Shop</b> zeigen: Sie sehen dort die Kataloge,
+        aus denen sie bestellen dürfen, bestellen, verfolgen und ändern ihre Bestellungen, entscheiden die
+        Genehmigungen, die bei ihnen liegen, und arbeiten ihre Aufgaben. Dazu fragt das System bei der Freigabe einer
+        Person nach <code>resource=&lt;atlas&gt;/shop</code> statt nach <code>…/tasks</code>. Der Zustimmungsdialog
+        sagt, was die Person damit erlaubt; die Vorab-Zustimmung gilt dafür genau wie für die Aufgaben. Bestellen
+        kann nur, wer ein Konto in atlas hat. Jede Anfrage läuft als diese Person, und atlas entscheidet wie im Shop
+        und über MCP: Was die Person im Shop nicht darf, darf auch das System für sie nicht. Mehr erreicht die
+        Freigabe nicht &ndash; keine Prozesse, keine Instanzen, keine Benutzerverwaltung, auch dann nicht, wenn
+        die Person Administratorin oder Administrator ist.</p>
+      <p data-l="en">A connected system can also show people the <b>shop</b>: there they see the catalogues they may
+        order from, order, follow and change their orders, decide the approvals waiting for them and work their
+        tasks. For that the system asks for <code>resource=&lt;atlas&gt;/shop</code> instead of <code>…/tasks</code>
+        when a person connects. The consent screen says what the person allows; pre-consent applies to it exactly as
+        to the tasks. Only people with an account in atlas can order. Every request runs as that person, and atlas
+        decides as it does in the shop and over MCP: what the person may not do in the shop, the system may not do
+        for them either. The grant reaches nothing more &ndash; no processes, no instances, no user administration,
+        not even for an administrator.</p>
+      <p data-l="de">Wer Kataloge pflegt (Rolle <code>productmanager</code>), kann sie im anderen System als Seiten
+        führen und über dieselbe Freigabe mit dem Katalogdokument nach atlas veröffentlichen
+        (<code>POST /api/v1/catalogs/import</code>). Jeder Katalog, den ein solcher Import schreibt, gilt danach als
+        <b>im anderen System gepflegt</b>: atlas merkt sich das System und die Adresse, die das Dokument unter
+        <code>catalogs[].maintainedIn.url</code> angibt (nur https). Ab dann lehnt atlas jede andere Änderung an
+        diesem Katalog und an den Produkten, deren Heimatkatalog er ist, mit <code>409</code> ab und nennt das
+        System und die Adresse &ndash; im Katalog-Editor der Console, beim eigenen Import, beim Veröffentlichen, bei
+        Bildern, bei Inhaltsverknüpfungen und beim endgültigen Löschen. Der Grund: Die nächste Veröffentlichung aus
+        dem anderen System würde eine Änderung in atlas ohne Spur überschreiben. Der Editor zeigt deshalb einen
+        Hinweis mit Link und sperrt, was atlas ablehnen würde. Aussehen und Logo legen Administratoren weiterhin in
+        atlas fest, und exportieren lässt sich der Katalog wie jeder andere.</p>
+      <p data-l="en">Whoever maintains catalogues (the <code>productmanager</code> role) can keep them as pages in
+        the other system and publish them into atlas through the same grant with the catalogue document
+        (<code>POST /api/v1/catalogs/import</code>). Every catalogue such an import writes is then <b>maintained in
+        the other system</b>: atlas records the system and the address the document gives under
+        <code>catalogs[].maintainedIn.url</code> (https only). From then on atlas refuses every other change to that
+        catalogue and to the products whose home it is with <code>409</code>, naming the system and the address
+        &ndash; in the Console's catalogue editor, in an import of your own, when publishing, for pictures, for
+        content links and when deleting for good. The reason: the next publish from the other system would
+        overwrite a change made in atlas without a trace. So the editor shows a notice with a link and locks what
+        atlas would refuse. Administrators still set the appearance and logo in atlas, and the catalogue can be
+        exported like any other.</p>
+      <div class="note">
+        <div class="lbl" data-l="de">Einen Katalog zurückholen</div><div class="lbl" data-l="en">Taking a catalogue back</div>
+        <p data-l="de">Soll ein Katalog wieder in atlas gepflegt werden, holt ihn eine Administratorin oder ein Administrator im Katalog-Editor
+          mit <b>Katalog zurückholen</b> zurück (<code>DELETE /api/v1/catalogs/{id}/maintainer</code>). Das steht im
+          Revisionsprotokoll als <code>catalog.maintainer_cleared</code>, mit dem System, aus dem er zurückgeholt
+          wurde. Die nächste Veröffentlichung aus dem anderen System überschreibt ihn danach nicht mehr: Der Import
+          vergleicht sie wie jeden anderen und fragt nach, bevor er eine Änderung ersetzt. Beachte auch: Was atlas
+          kennt und das andere System nicht abbildet &ndash; etwa Aktionen, Zielsysteme oder Servicestufen &ndash;,
+          geht bei der nächsten Veröffentlichung verloren, wenn das andere System es nicht mitliefert.</p>
+        <p data-l="en">If a catalogue is to be maintained in atlas again, an administrator takes it back in the
+          catalogue editor with <b>Take the catalogue back</b> (<code>DELETE /api/v1/catalogs/{id}/maintainer</code>).
+          The audit log records it as <code>catalog.maintainer_cleared</code>, with the system it was taken from. The
+          next publish from the other system then no longer overwrites it: the import compares it like any other and
+          asks before it replaces a change. Note too: what atlas holds and the other system does not map &ndash; such
+          as actions, target systems or service levels &ndash; is lost with the next publish unless the other system
+          carries it.</p>
       </div>
 
       <h3 data-l="de">Zugang für Maschinen: API-Tokens</h3><h3 data-l="en">Access for machines: API tokens</h3>

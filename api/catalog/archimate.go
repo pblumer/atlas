@@ -369,6 +369,7 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 	var (
 		found   bool
 		allowed bool
+		held    *Maintainer
 		opErr   error
 	)
 	s.loop.Do(func() {
@@ -379,7 +380,7 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(cat, p); !found {
 			return
 		}
-		if allowed = s.mayEdit(cat, p); !allowed {
+		if allowed, held = s.mayWrite(cat, p); !allowed || held != nil {
 			return
 		}
 
@@ -439,6 +440,8 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+id)
+	case held != nil:
+		RefuseHeld(w, "catalogue "+id, id, held)
 	default:
 		httpapi.JSON(w, http.StatusOK, imported)
 	}

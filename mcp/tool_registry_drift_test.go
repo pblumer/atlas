@@ -344,7 +344,9 @@ var mcpOmittedRoutes = map[string]string{
 	// see mcpToolRoutes and ADR-0376. What stays
 	// out of the tool surface is what a product manager does not do: the instance's
 	// appearance, and the ordering side, which is somebody's own.
-	"PUT /api/v1/catalogs/{id}/theme":                                   "an instance's appearance is an operator's choice, not an agent's",
+	"PUT /api/v1/catalogs/{id}/theme": "an instance's appearance is an operator's choice, not an agent's",
+	// ADR-draft-a-shop-and-its-catalogues-from-another-system.
+	"DELETE /api/v1/catalogs/{id}/maintainer":                           "taking a catalogue back from the system it is maintained in decides between two systems which one wins from now on; it is an administrator's decision made knowing what that system will do next, and the refusal it lifts exists to stop an edit an agent was asked to make from being overwritten by the next publish",
 	"POST /api/v1/instances":                                            "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
 	"GET /api/v1/approvals/stalled":                                     "an operations list still settling with the portal around it; a tool is a public contract",
 	"POST /api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome": "states how an action ended in a target system, which the process that carried it out reports, as a provisioning outcome is; an agent must not be able to assert it on that system's behalf",

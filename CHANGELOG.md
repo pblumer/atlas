@@ -116,6 +116,29 @@ something that was accepted, so six changes can alter what worked against 0.28.0
   `nbf` lies in the future was accepted, and so was one that lists this client among several
   audiences while naming another client as the party it was issued to.
 
+### Added
+- **A connected system shops as the person: the OAuth resource `…/shop`.** Beside `…/tasks`,
+  a person can approve a system — a wiki, an intranet — for their shop and tasks. The grant
+  carries the scope `shop` (not mintable): everything `tasks` reaches, the catalogues the person
+  may order from, ordering, following and changing their orders, a customer's actions, deciding
+  the approvals they hold, and, for a product manager, reading their catalogues, importing a
+  catalogue document and setting a product's picture. Every route decides as it does for the
+  person in the shop and over MCP (ADR-0550); the three order routes kept off MCP are not
+  reached. Its metadata is at `/.well-known/oauth-protected-resource/shop`, and an
+  administrator's pre-consent for a connected system applies to it as to `…/tasks`
+  (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+- **A catalogue can be maintained in another system.** A catalogue document imported through a
+  person's `…/shop` grant marks every catalogue it writes `maintainedIn` that system — its
+  client id, its name and, from the document's `catalogs[].maintainedIn.url`, an https address.
+  From then on every other write to the catalogue and to the products whose home it is — the
+  Console's editor, a product manager's own import, publishing, pictures, content links, the
+  ArchiMate import, deleting for good — is refused with 409, the system's name and its address,
+  because the next publish would overwrite it without a trace. Its theme and logo stay an
+  administrator's. The Console shows a banner with a link there and locks what the server would
+  refuse; an administrator takes the catalogue back with `DELETE /api/v1/catalogs/{id}/maintainer`,
+  recorded in the audit trail as `catalog.maintainer_cleared`. The export carries `maintainedIn`
+  (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+
 ### Fixed
 - **A provider whose issuer ends in a slash can sign people in.** The issuer an operator
   configures is trimmed of its trailing slash, and discovery accepts a document that names the

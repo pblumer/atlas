@@ -525,6 +525,16 @@ func (s *Server) purge(w http.ResponseWriter, r *http.Request, kind purgeKind) {
 		httpapi.Error(w, http.StatusNotFound, fmt.Sprintf("no %s %s", kind, id))
 		return
 	}
+	// A catalogue maintained in another system is deleted there; deleted here, the
+	// next publish from there would bring it back
+	// (ADR-draft-a-shop-and-its-catalogues-from-another-system).
+	if subject, catID, held, err := s.heldPurge(sc, httpapi.PrincipalFrom(r.Context())); err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read the catalogue: "+err.Error())
+		return
+	} else if held != nil {
+		catalog.RefuseHeld(w, subject, catID, held)
+		return
+	}
 	work, err := s.workOf(sc)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read what is running and held: "+err.Error())
@@ -838,4 +848,50 @@ func (s *Server) handlePruneReleases(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpapi.JSON(w, http.StatusOK, plan)
 	}
+}
+
+// heldPurge answers the first catalogue a purge would write that is maintained in
+// another system, with what is refused: the catalogue deleted, a catalogue a deleted
+// product is stripped from, or the home of a deleted product. Nil when the purge may
+// go ahead. Deleting such a catalogue here would only last until the next publish
+// from there recreated it.
+func (s *Server) heldPurge(sc purgeScope, p *httpapi.Principal) (subject, catalogID string, held *catalog.Maintainer, err error) {
+	s.do(func() {
+		check := func(what, id string) bool {
+			c, ok, e := s.catalogStore.Catalog(id)
+			if e != nil {
+				err = e
+				return true
+			}
+			if !ok {
+				return false
+			}
+			if m := s.catalogs.HeldElsewhere(c, p); m != nil {
+				subject, catalogID, held = what, id, m
+				return true
+			}
+			return false
+		}
+		for _, id := range sc.plan.Catalogs {
+			if check("catalogue "+id, id) {
+				return
+			}
+		}
+		for _, st := range sc.plan.StrippedFrom {
+			if check("catalogue "+st.Catalog, st.Catalog) {
+				return
+			}
+		}
+		for _, id := range sc.plan.Products {
+			it, ok, e := s.catalogStore.Item(id)
+			if e != nil {
+				err = e
+				return
+			}
+			if ok && check("product "+id+" of catalogue "+it.HomeCatalog, it.HomeCatalog) {
+				return
+			}
+		}
+	})
+	return subject, catalogID, held, err
 }
