@@ -12,6 +12,31 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-11-25
+
+**A connected system can show a person their shop, and keep a catalogue as its own.** Beside
+`…/tasks`, a person can approve a system — a wiki, an intranet — for the OAuth resource `…/shop`:
+the catalogues they may order from, their orders and the approvals they hold, worked as the person
+and decided as the shop decides them. A catalogue such a system publishes through that grant is
+marked as maintained there, and every other write to it is answered `409` with the system's name
+and address until an administrator takes it back (ADR-0565).
+
+**Under "My services", a position is named by what was ordered and its link shows the service.**
+Two positions of one product are told apart by the first answer on their order form, and "View the
+process" opens the lifecycle instance of the position instead of the order's fulfilment
+orchestration.
+
+Nothing in the log or the state changed; 0.29.0 replaces 0.28.1 in place. No request that 0.28.1
+accepted is refused by Atlas itself: the `409` of a catalogue maintained in another system is
+answered only for a catalogue published through a `…/shop` grant, which no earlier version
+issues, and the scope `tasks` reaches what it reached. One thing differs for whoever runs it:
+
+- **The SQL Worker's PostgreSQL driver no longer repeats a statement whose connection closed
+  while the answer was awaited.** So say the release notes of pgx, which goes to v5.13.0:
+  `database/sql` used to send such a statement a second time, and now gets its error. The
+  drivers for PostgreSQL and SQL Server, `golang.org/x/net` and the selector library of the
+  web-scraping Worker are on newer releases; the entry under _Changed_ names the versions.
+
 ### Added
 - **A connected system shops as the person: the OAuth resource `…/shop`.** Beside `…/tasks`,
   a person can approve a system — a wiki, an intranet — for their shop and tasks. The grant
@@ -51,6 +76,19 @@ _Changed_ / _Removed_ for each version.
   `per-position` lifecycle, else the newest instance of the position's own process. A position
   ordered before the order kept that record is found by a search scoped to its process; an instance
   only the exported log still holds is said rather than followed, as before.
+- **The SQL Worker's database drivers, `golang.org/x/net` and the web-scraping Worker's selector
+  library are on newer releases.** `github.com/jackc/pgx/v5` goes from v5.10.0 to v5.13.0,
+  `github.com/microsoft/go-mssqldb` from v1.10.0 to v1.12.0, `golang.org/x/net` from v0.62.0 to
+  v0.63.0 and `github.com/andybalholm/cascadia` from v1.3.3 to v1.3.5. What follows is what the
+  modules' own release notes say; Atlas's tests pass on the new versions and measure none of it.
+  pgx no longer reports a connection that closed while an answer was being received as safe to
+  retry, so `database/sql` does not repeat a PostgreSQL statement that may already have run. Its
+  notes also name a panic on a malformed server answer in `Rows.Values` (GHSA-w9rp-vfrh-q8vv),
+  a call the SQL Worker's path through `database/sql` does not make, and stricter reading of
+  `date` and timestamp values. go-mssqldb's notes name three panics on a malformed answer while
+  connecting (the NTLM challenge, PRELOGIN, the SQL Browser); cascadia limits how deep a selector
+  may nest. The updates arrived as Dependabot's weekly pull requests
+  (#1726, #1727, #1728, #1732).
 
 ## [0.28.1] — 2026-11-24
 
@@ -19488,7 +19526,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/pblumer/atlas/compare/v0.28.1...v0.29.0
 [0.28.1]: https://github.com/pblumer/atlas/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/pblumer/atlas/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.1
