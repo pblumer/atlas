@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-25",
   "plan": "../../planning/local-collaboration-views-program.md",
   "milestone": "../../../ROADMAP.md#milestone-2--events-and-timers-",
-  "next_action": "Merge #1739, then review and merge the second part of LCV3 (the message picker on a message flow and the findings in the Modeler). An owner's review of LCV1 and LCV2, merged in #1710 without one, is still owed. Then decide the amendment's three open questions and whether LCV4 (composing from a pool's ports) is still wanted as planned.",
+  "next_action": "Review and merge the second part of LCV3 (the message picker on a message flow and the findings in the Modeler), which is on the branch. An owner's review of LCV1, LCV2 and the first part of LCV3, merged in #1710 and #1739 without one, is still owed. Then decide the amendment's three open questions and whether LCV4 (composing from a pool's ports) is still wanted as planned.",
   "slices": [
     {
       "id": "LCV1",
@@ -59,7 +59,7 @@
       "prs": [
         1739
       ],
-      "note": "Reshaped by the amendment of ADR-0559 (2026-11-25): no file is a collaboration by declaration; each pool is modelled here, a reference (atlas:processId) or an external party, read from its content; a saved collaboration is an ordinary draft, so the storage question is settled. First part in review in #1739: ParseDocument and Check in api/interaction, POST /api/v1/collaboration-check and atlas_collaboration_check with the findings participant-unresolved, flow-not-sent, flow-not-received, flow-unnamed, undrawn-exchange and reaches-outside; the Modeler's pool panel says the kind and assigns a deployed process; drafts are listed with their participant count. Second part built on the branch, not yet merged: a message flow's name is picked in its panel from what its source sends and its target waits for, and the Modeler shows the findings on the elements they are about and in the collaboration's panel, worded from the catalogue. Remaining: flow-not-observed and the amendment's three open questions.",
+      "note": "Reshaped by the amendment of ADR-0559 (2026-11-25): no file is a collaboration by declaration; each pool is modelled here, a reference (atlas:processId) or an external party, read from its content; a saved collaboration is an ordinary draft, so the storage question is settled. First part merged in #1739 on 2026-11-25: ParseDocument and Check in api/interaction, POST /api/v1/collaboration-check and atlas_collaboration_check with the findings participant-unresolved, flow-not-sent, flow-not-received, flow-unnamed, undrawn-exchange and reaches-outside; the Modeler's pool panel says the kind and assigns a deployed process; drafts are listed with their participant count. Second part built on the branch, not yet merged: a message flow's name is picked in its panel from what its source sends and its target waits for, and the Modeler shows the findings on the elements they are about and in the collaboration's panel, worded from the catalogue. Remaining: flow-not-observed and the amendment's three open questions.",
       "evidence": [
         "../../../api/interaction/document_test.go",
         "../../../api/interactions_http_test.go",
