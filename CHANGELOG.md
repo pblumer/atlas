@@ -12,6 +12,23 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+- **A held position is named by its order form, so two of one product can be told apart.** Under
+  "My services", the actions of a position and the position under its order were labelled with the
+  product's name alone, so somebody holding two SharePoint team sites saw two identical rows of
+  buttons and could not tell which site one would act on. A position ordered with a form is now
+  named after the first answer given on it, in the form's own order and with a field the form checks
+  for availability first; a checkbox names nothing and a choice is named by the words the form shows
+  for it. The name follows corrections made through "Change the details", and the services filter finds
+  a position by it. A position whose form no longer resolves is named by its answers in key order.
+- **"View the process" opens the lifecycle instance of the position.** The link on an order under
+  "My services" opened the order's fulfilment orchestration (`atlas-auftrag-erfuellung`), which
+  says how the order was worked, not how the service stands. It now opens the instance carrying the
+  lifecycle of the position the entry is about, as the order recorded it: the strand of a
+  `per-position` lifecycle, else the newest instance of the position's own process. A position
+  ordered before the order kept that record is found by a search scoped to its process; an instance
+  only the exported log still holds is said rather than followed, as before.
+
 ## [0.28.1] — 2026-11-24
 
 **A browser acts on Atlas only from Atlas's own pages.** A request that changes something is
