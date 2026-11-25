@@ -46,10 +46,9 @@ func handleJoinRecheck(c *ProcessingContext) {
 		joins = append(joins, parkedJoin{scope: ei.FlowScopeKey, node: ei.ElementId, key: elKey})
 	})
 	for _, j := range joins {
+		// The key was read from the store in this handler, and firing one join removes
+		// only that join's own arrivals, so the instance is still there.
 		ei := c.GetElementInstance(j.key)
-		if ei == nil {
-			continue
-		}
 		// A join that could not route is parked on an incident and waits for an operator;
 		// resolving the incident resumes it. A re-check must not raise the incident again.
 		if joinHasIncident(c, piKey, j.scope, j.node) {
