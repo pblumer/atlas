@@ -163,11 +163,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.28.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.28.1"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.28.0-dev"
+var Version = "0.28.1-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -2324,6 +2324,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Models = processLookup{s: s}
 	s.catalogs.Deployer = catalogDeployer{s: s}
 	s.catalogs.Baselines = catalogBaselines{s: s}
+	// Which grant marks a catalogue as maintained in another system, and whose writes
+	// to it are that system's own (ADR-0565).
+	s.catalogs.Publisher = catalogPublisher
 	s.catalogs.Personal = processLookup{s: s}
 	// And what a structured catalogue's headings name: the capability register.
 	s.catalogs.Capabilities = catalog.Register{Loop: s.runLoop, Store: s.capabilityRecords}
@@ -3949,6 +3952,10 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A person's tasks as a resource of their own, for a client that works them and
 	// nothing else (ADR-0510 §3).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
+	// A person's shop and tasks as a resource of their own, for a system that shows
+	// the shop to its people and publishes catalogues it maintains
+	// (ADR-0565).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthShopResource, s.handleProtectedResourceMetadata)
 	// A connected system's own reading of this server, for the system grant an
 	// administrator approves (ADR-0512 §2).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthSystemResource, s.handleProtectedResourceMetadata)

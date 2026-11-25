@@ -4490,6 +4490,43 @@ function installLiveMock(page, first, drafted = null) {
   return state;
 }
 
+// settled resolves once everything the page asked for before the call has reached the
+// mock.
+//
+// A count the mock keeps is only worth reading after the request it counts has
+// arrived, and advancing the clock waits for no such thing: page.clock.runFor returns
+// when the timers have fired, not when what they started has been answered. A request
+// of the page's own, made after theirs and answered by the same handler in the order
+// the browser raised them, is the one thing that cannot come back first.
+async function settled(page) {
+  await page.evaluate(() => fetch("/api/v1/settled").then((r) => r.text()));
+}
+
+// TICK is the freshness line's own interval in panorama-mesh.js.
+const TICK = 10_000;
+
+// tickFor advances the clock the way an open tab lives through it: one tick of the
+// freshness line at a time, with whatever that tick asked for answered before the next.
+//
+// runFor alone does not say that, and what it does say changed under this suite.
+// Measured on a page that fetches on every ten-second tick unless its last fetch is
+// still out: over ten minutes Playwright 1.56 let 51 to 54 of the sixty ticks fetch,
+// because it yielded between timers and most answers landed in the gaps; Playwright
+// 1.65 fires all sixty in one turn, so the first fetch is still out for the other
+// fifty-nine and the page asks once. A view that re-read on every tick and one that
+// kept to its ceiling then make the same single request, and whether the mock has
+// counted it by the time runFor returns is a race — it had not, in CI, twice running.
+//
+// So the pacing is said here rather than left to the clock's implementation. It costs
+// a round trip per tick, which is why only a test that counts across many ticks uses
+// it; a test that waits for one re-read to show on screen needs nothing of the kind.
+async function tickFor(page, ms) {
+  for (let left = ms; left > 0; left -= TICK) {
+    await page.clock.runFor(Math.min(TICK, left));
+    await settled(page);
+  }
+}
+
 // observedMesh is a landscape that states when it was read, which is the fact the
 // freshness line is about. Minted at call time: the age is measured against the clock
 // at render, and a value fixed at module load drifts behind a long suite.
@@ -4648,7 +4685,9 @@ test("a server that stays down is asked at the ceiling, not on every tick", asyn
 
   // Ten minutes of outage. The ceiling is five, so this is two more attempts at most —
   // where measuring from the last success would have produced one per ten-second tick.
-  await page.clock.runFor(10 * 60_000);
+  // Tick by tick, each answered before the next: in one burst every tick after the
+  // first finds a re-read still in flight, and both cadences ask exactly once.
+  await tickFor(page, 10 * 60_000);
   const attempts = server.reads - afterFirstFailure;
   expect(attempts).toBeGreaterThan(0);
   expect(attempts, "a down server must not be polled once per tick").toBeLessThanOrEqual(3);

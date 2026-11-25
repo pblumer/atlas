@@ -14,8 +14,9 @@ import (
 // own record and without an operations surface.
 //
 // What is left is the order's link, and it was reported as not working. It does
-// work while the instance is there: pressing it searches for the fulfilment
-// orchestration by orderId and opens it. What it did not survive is the two states
+// work while the instance is there: pressing it searches by orderId and opens the
+// instance — since 2026-11-24 the lifecycle instance of the position the entry is
+// about, where it opened the fulfilment orchestration before. What it did not survive is the two states
 // where there is nothing to open — and in both of those it said so at the top of
 // the page, above the table, where somebody who pressed a button in a row further
 // down never sees it. A button whose answer is off-screen has not answered.
@@ -38,7 +39,7 @@ func TestTheAnswerAppearsWhereTheButtonWasPressed(t *testing.T) {
 			"from, so there is nothing a row could render")
 	}
 	rows := webRegion(t, src, "function orderNote(", "\n}")
-	if !strings.Contains(rows, "followNote(o)") {
+	if !strings.Contains(rows, "followNote(o, ") {
 		t.Error("the order row draws no answer beside its own button, so pressing it " +
 			"changes nothing the reader can see")
 	}
@@ -101,9 +102,9 @@ func TestThePositionRowsOfferNoProcessLinks(t *testing.T) {
 	if strings.Contains(body, "positionId=") {
 		t.Error("followProcess still looks a position up, which nothing asks it for")
 	}
-	// The order's own link is what remains, and it is still found by the order and
-	// narrowed to the orchestration.
-	if !strings.Contains(rows, "followProcess(o)") {
+	// The order's own link is what remains, and it is found by the order and opens
+	// the lifecycle instance of the position the entry is about.
+	if !strings.Contains(rows, "followProcess(o, ") {
 		t.Error("the order row no longer offers the one link this page kept")
 	}
 }

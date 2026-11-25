@@ -12,8 +12,93 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+- **A connected system shops as the person: the OAuth resource `…/shop`.** Beside `…/tasks`,
+  a person can approve a system — a wiki, an intranet — for their shop and tasks. The grant
+  carries the scope `shop` (not mintable): everything `tasks` reaches, the catalogues the person
+  may order from, ordering, following and changing their orders, a customer's actions, deciding
+  the approvals they hold, and, for a product manager, reading their catalogues, importing a
+  catalogue document and setting a product's picture. Every route decides as it does for the
+  person in the shop and over MCP (ADR-0550); the three order routes kept off MCP are not
+  reached. Its metadata is at `/.well-known/oauth-protected-resource/shop`, and an
+  administrator's pre-consent for a connected system applies to it as to `…/tasks`
+  (ADR-0565).
+- **A catalogue can be maintained in another system.** A catalogue document imported through a
+  person's `…/shop` grant marks every catalogue it writes `maintainedIn` that system — its
+  client id, its name and, from the document's `catalogs[].maintainedIn.url`, an https address.
+  From then on every other write to the catalogue and to the products whose home it is — the
+  Console's editor, a product manager's own import, publishing, pictures, content links, the
+  ArchiMate import, deleting for good — is refused with 409, the system's name and its address,
+  because the next publish would overwrite it without a trace. Its theme and logo stay an
+  administrator's. The Console shows a banner with a link there and locks what the server would
+  refuse; an administrator takes the catalogue back with `DELETE /api/v1/catalogs/{id}/maintainer`,
+  recorded in the audit trail as `catalog.maintainer_cleared`. The export carries `maintainedIn`
+  (ADR-0565).
+
+### Changed
+- **A held position is named by its order form, so two of one product can be told apart.** Under
+  "My services", the actions of a position and the position under its order were labelled with the
+  product's name alone, so somebody holding two SharePoint team sites saw two identical rows of
+  buttons and could not tell which site one would act on. A position ordered with a form is now
+  named after the first answer given on it, in the form's own order and with a field the form checks
+  for availability first; a checkbox names nothing and a choice is named by the words the form shows
+  for it. The name follows corrections made through "Change the details", and the services filter finds
+  a position by it. A position whose form no longer resolves is named by its answers in key order.
+- **"View the process" opens the lifecycle instance of the position.** The link on an order under
+  "My services" opened the order's fulfilment orchestration (`atlas-auftrag-erfuellung`), which
+  says how the order was worked, not how the service stands. It now opens the instance carrying the
+  lifecycle of the position the entry is about, as the order recorded it: the strand of a
+  `per-position` lifecycle, else the newest instance of the position's own process. A position
+  ordered before the order kept that record is found by a search scoped to its process; an instance
+  only the exported log still holds is said rather than followed, as before.
+
+## [0.28.1] — 2026-11-24
+
+**A browser acts on Atlas only from Atlas's own pages.** A request that changes something is
+accepted from the server's own origin and answered `403` from any other, before it is
+authenticated (ADR-0563), and every answer carries the baseline browser headers. A page of
+another site can therefore neither act as the person signed in nor show the Console in a frame.
+
+**An approval is decided by somebody other than the person who ordered, and carries the
+decision alone.** A `fixed` or a `role` approval no longer lets the person a product names
+approve an order of their own, the three approval models Atlas ships pass on what their form
+asks for and nothing else, and releasing a task addressed to one person no longer opens it to
+every account.
+
+**Single sign-on and the OAuth server check what they took on trust.** An ID token's `nbf` and
+`azp` are read, an e-mail address the provider does not vouch for is not taken, a redirect URI
+is `https` or `http` to this machine and nothing else, and the grant a connected system holds
+and the reason a metadata document could not be fetched are told to an administrator alone.
+Nineteen handlers that read a request body without a ceiling now read it against a budget.
+
+Nothing in the log or the state changed; 0.28.1 replaces 0.28.0 in place. On its first start
+the server deploys one new version of each of the three approval models; an approval that is
+already waiting stays on the version it was started on (ADR-0162) and is still held to the
+rules the server itself asks. The release carries fixes only, and most of them refuse
+something that was accepted, so six changes can alter what worked against 0.28.0:
+
+- **A browser's state-changing request from another origin is answered `403`, and the Console
+  is not shown in a frame of another site.** Clients that are not browsers are not affected,
+  and a public start form stays frameable. Behind a proxy that does not pass `Host` on, with
+  the Console used over plain HTTP or from an old browser, the Console's own requests are
+  refused: pass `Host` on, or start the server with `--external-url`.
+- **Releasing a task addressed to one person and to no group answers `409`.**
+  `POST /api/v1/tasks/{key}/unclaim` says to hand the task to somebody instead.
+- **The person a `fixed` or `role` approval names cannot approve an order they placed.**
+  `POST /api/v1/tasks/{key}/complete` answers `403` and `POST /api/v1/approvals/decide` skips
+  the line; somebody else with the operator role decides.
+- **Variables sent beside an approval's answer no longer reach the instance.** The shipped
+  approval tasks map out `genehmigt` and `begruendung` only. An approval model of your own
+  that builds a call from instance variables after a user task needs the same output mappings.
+- **Single sign-on and OAuth refuse what they let through.** An ID token whose `nbf` lies more
+  than a minute ahead, or whose `azp` names another client, fails the login. A redirect URI
+  of another scheme than `http` or `https` is refused at registration and for a client that
+  already holds one.
+- **A request body past its budget is answered `413`** on the nineteen routes that read theirs
+  without a ceiling.
+
 ### Security
-- **A browser's request that changes something is accepted only from Atlas's own origin.** What kept a page elsewhere from acting as the signed-in person was `SameSite=Lax` on the session cookie, and a site is wider than an origin: a service under a sibling host name or on another port of the same host is the same site, and its pages' requests arrived signed in. The server now reads what a browser says about a request's source (`Sec-Fetch-Site`, and `Origin` where that is missing) and answers anything but `GET`, `HEAD` and `OPTIONS` from another origin with `403`, before it is authenticated; the refusal is logged as `auth.cross_origin_refused`. Clients that are not browsers send neither header and are unaffected. The public start forms and their wizard (`/public/forms/`, `/public/wizard/`) and the OAuth token, revocation and registration endpoints are exempt, because they are called from other origins on purpose and act on no session. **If the Console sits behind a proxy that does not pass the `Host` header on** and is used over plain HTTP or from an old browser, its own requests are refused until the proxy passes `Host` on or the server is started with `--external-url`, whose origin is always accepted (ADR-draft-cross-origin-protection).
+- **A browser's request that changes something is accepted only from Atlas's own origin.** What kept a page elsewhere from acting as the signed-in person was `SameSite=Lax` on the session cookie, and a site is wider than an origin: a service under a sibling host name or on another port of the same host is the same site, and its pages' requests arrived signed in. The server now reads what a browser says about a request's source (`Sec-Fetch-Site`, and `Origin` where that is missing) and answers anything but `GET`, `HEAD` and `OPTIONS` from another origin with `403`, before it is authenticated; the refusal is logged as `auth.cross_origin_refused`. Clients that are not browsers send neither header and are unaffected. The public start forms and their wizard (`/public/forms/`, `/public/wizard/`) and the OAuth token, revocation and registration endpoints are exempt, because they are called from other origins on purpose and act on no session. **If the Console sits behind a proxy that does not pass the `Host` header on** and is used over plain HTTP or from an old browser, its own requests are refused until the proxy passes `Host` on or the server is started with `--external-url`, whose origin is always accepted (ADR-0563).
 - **Every answer says how a browser may treat it.** `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `Content-Security-Policy: frame-ancestors 'self'` with `X-Frame-Options: SAMEORIGIN` used to be set by the handlers that had thought of them. They are now the default of every answer, written before the handler runs, so a new route has them without its author knowing and a handler that says more — the pages a link opens keep out of every frame, a stored document is sandboxed — is still the one that is heard. A page of another site can therefore no longer show the Console in a frame. A public start form under `/public/forms/` stays frameable, because embedding it that way is supported (ADR-0186). `Strict-Transport-Security` remains the operator's to switch on (`--hsts-max-age`). Because a browser told not to sniff loads a script or a stylesheet only when it is declared as one, the server now states the type of its own embedded scripts and stylesheets instead of asking the host: on Windows that answer came from the registry and differed from machine to machine.
 - **A published vulnerability Atlas can reach opens an issue, and dependency updates arrive as pull requests.** A scheduled workflow runs `govulncheck` every morning with the toolchain `go.mod` declares and opens one issue, labelled `known-vulnerability`, when a report in the Go vulnerability database is reachable from Atlas's code; it closes that issue when the scan is clean again. It is not a gate on pull requests: a dependency becomes vulnerable on the day a report is published, not on the day somebody changes it. `.github/dependabot.yml` asks for weekly update pull requests for the Go modules, the GitHub Actions the workflows use and the npm manifests of the test tooling. The build inputs of the vendored browser bundles are left out on purpose, because raising a version there does not rebuild the bundle.
 - **Answering an approval writes the decision and nothing else.** The three approval models
@@ -19403,7 +19488,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/pblumer/atlas/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/pblumer/atlas/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.1
 [0.27.0]: https://github.com/pblumer/atlas/compare/v0.26.0...v0.27.0

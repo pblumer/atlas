@@ -35,10 +35,13 @@ import (
 // what a system reaches is approving it again, started from the system.
 
 // preconsented reports whether a person's request may be approved without the consent
-// page: a request for their tasks, from a client whose standing system grant lets its
-// people connect without being asked, by a person who has not declined it.
+// page: a request for their tasks or their shop, from a client whose standing system
+// grant lets its people connect without being asked, by a person who has not declined
+// it. The shop is a person resource exactly as the tasks are
+// (ADR-0565): the grant is still the
+// person's own, and Atlas decides every order and approval as it decides every claim.
 func (s *Server) preconsented(req oauthRequest, p *httpapi.Principal) bool {
-	if !strings.HasSuffix(req.resource, oauthTasksResource) {
+	if !strings.HasSuffix(req.resource, oauthTasksResource) && !strings.HasSuffix(req.resource, oauthShopResource) {
 		return false
 	}
 	g, ok := s.oauthGrants.systemOf(req.client.ID)

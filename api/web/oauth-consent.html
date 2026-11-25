@@ -251,8 +251,8 @@ function systemConsent(ctx) {
     <fieldset class="caps"><legend>What it may read</legend>${caps}</fieldset>
     <label class="check"><input type="checkbox" id="preconsent" checked />
       <span>Let people connect their accounts without asking each of them. Each person
-      still gets a grant of their own, works their own tasks as themselves, and can
-      withdraw it under Connected accounts.</span></label>
+      still gets a grant of their own, works their own tasks and orders in the shop as
+      themselves, and can withdraw it under Connected accounts.</span></label>
     <p class="muted" style="margin-top:14px">It will be able to do this until it is
     disconnected under Console → Administration → Connected systems. Access is limited to
     <code>${esc(ctx.resource)}</code>.</p>
@@ -304,13 +304,19 @@ function consent(ctx) {
   if (ctx.system) return systemConsent(ctx);
   const resource = String(ctx.resource || "");
   // What each resource reaches, in the order isCanonicalResource names them: the
-  // transport, a person's tasks (ADR-0510 §3), and
-  // the whole server.
+  // transport, a person's tasks (ADR-0510 §3), a person's shop and tasks
+  // (ADR-0565), and the whole server.
   const reach = resource.endsWith("/mcp")
     ? ["Drive atlas through its Model Context Protocol tools, as you.",
        "Nothing else: this approval does not reach the rest of the API."]
     : resource.endsWith("/tasks")
     ? ["See your tasks in atlas, take them on, give them back and complete them with their forms, as you.",
+       "Nothing else: this approval does not reach the rest of the API."]
+    : resource.endsWith("/shop")
+    ? ["See the catalogues you may order from and order from them, as you.",
+       "Follow and change your orders, and decide the approvals you hold.",
+       "See your tasks, take them on, give them back and complete them with their forms.",
+       "If you maintain catalogues: import and publish them, and set their products' pictures. A catalogue published this way is then maintained in this application, and atlas refuses changes made to it anywhere else until an administrator takes it back.",
        "Nothing else: this approval does not reach the rest of the API."]
     : ["Use the atlas API as you — everything your account can do."];
   // Who vouched for this application. Where self-registration is open, the name

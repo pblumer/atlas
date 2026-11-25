@@ -171,6 +171,18 @@ const (
 	// it reaches exactly as it decides for the person in the Tasks app.
 	apiScopeTasks = "tasks"
 
+	// apiScopeShop is what a person's OAuth grant carries when they approved a client
+	// for the resource `…/shop` (ADR-0565):
+	// everything `tasks` reaches, and the person's shop beside it — the catalogues they
+	// may order from, ordering, following and changing their orders, deciding the
+	// approvals they hold — plus the catalogue maintenance a product manager does by
+	// importing a document. Every route decides for the person exactly as it decides
+	// for them in the shop and over MCP (ADR-0550), and each keeps its own role
+	// check: a grant of somebody who is not a product manager reaches the import and
+	// is refused by it. Not mintable: it follows from the resource the person
+	// approved, as `tasks` does.
+	apiScopeShop = "shop"
+
 	// apiScopeSystem is what a connected system's grant carries on a request none of
 	// its capabilities serves (ADR-0512 §2): who-am-I, which answers what was
 	// approved, and nothing else. On every other request the grant resolves to the
@@ -280,22 +292,15 @@ var apiScopeAllowed = map[string][]string{
 		"GET /api/v1/tasks",
 		"GET /api/v1/tasks/{key}",
 	},
-	// A person's own tasks, worked as the person: who they are (with their groups,
-	// which a task may be offered to), the tasks Atlas shows them, the three commands
-	// on a task, a directory field's lookups while the form is filled, the form a task
-	// names, and the values it opens with — each route deciding for the person as it
-	// does in the Tasks app (ADR-0317, ADR-0421, ADR-0275).
-	apiScopeTasks: {
-		"GET /api/v1/auth/me",
-		"GET /api/v1/tasks",
-		"GET /api/v1/tasks/{key}",
-		"POST /api/v1/tasks/{key}/claim",
-		"POST /api/v1/tasks/{key}/unclaim",
-		"POST /api/v1/tasks/{key}/complete",
-		"POST /api/v1/tasks/{key}/form-data/{field}/query",
-		"GET /api/v1/forms/{id}",
-		"GET /api/v1/instances/{key}/variables",
-	},
+	// A person's own tasks, worked as the person (apiTasksReach).
+	apiScopeTasks: apiTasksReach,
+	// The person's shop and their tasks: everything `tasks` reaches, the shop's customer side as
+	// the portal and MCP drive it (ADR-0550), and the catalogue maintenance a system
+	// that keeps catalogues as its own pages publishes through. Not the three order
+	// routes ADR-0550 keeps off MCP — reporting a line's outcome, starting a line, an
+	// approver's decision on one line — which are the fulfilment's and the approval
+	// process's, not a customer's.
+	apiScopeShop: apiShopReach,
 	// Who-am-I, which for a system grant also says what was approved.
 	apiScopeSystem: {
 		"GET /api/v1/auth/me",
@@ -341,6 +346,68 @@ var apiScopeAllowed = map[string][]string{
 		"/mcp/",
 	},
 }
+
+// apiTasksReach is the reach of `tasks`, and the first part of `shop`'s: a person's
+// own tasks, worked as the person — who they are (with their groups, which a task may
+// be offered to), the tasks Atlas shows them, the three commands on a task, a
+// directory field's lookups while the form is filled, the form a task names, and the
+// values it opens with — each route deciding for the person as it does in the Tasks
+// app (ADR-0317, ADR-0421, ADR-0275).
+var apiTasksReach = []string{
+	"GET /api/v1/auth/me",
+	"GET /api/v1/tasks",
+	"GET /api/v1/tasks/{key}",
+	"POST /api/v1/tasks/{key}/claim",
+	"POST /api/v1/tasks/{key}/unclaim",
+	"POST /api/v1/tasks/{key}/complete",
+	"POST /api/v1/tasks/{key}/form-data/{field}/query",
+	"GET /api/v1/forms/{id}",
+	"GET /api/v1/instances/{key}/variables",
+}
+
+// apiShopReach is the reach of `shop`: every route of `tasks`, then the shop's customer
+// side, then catalogue maintenance (ADR-0565).
+var apiShopReach = append(append([]string(nil), apiTasksReach...),
+	// What a customer sees and orders from: the catalogues they reach, one of them
+	// with its products, a configuration form's lookups, their own tasks of the
+	// shop, how a line of theirs is getting on, and a product's picture, content,
+	// content images and a catalogue's logo as the shop draws them.
+	"GET /api/v1/shop/catalogs",
+	"GET /api/v1/shop/catalog",
+	"POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query",
+	"GET /api/v1/shop/tasks",
+	"GET /api/v1/shop/orders/{id}/lines/{position}/progress",
+	"GET /api/v1/catalog-products/{id}/picture",
+	"GET /api/v1/catalog-products/{id}/content",
+	"GET /api/v1/catalog-products/{id}/content-images/{image}",
+	"GET /api/v1/catalogs/{id}/logo",
+	// Ordering, following and changing their orders, and a customer's actions on a
+	// position they hold.
+	"POST /api/v1/orders",
+	"GET /api/v1/orders",
+	"GET /api/v1/orders/{id}",
+	"POST /api/v1/orders/{id}/cancel",
+	"POST /api/v1/orders/{id}/lines/{item}/cancel",
+	"POST /api/v1/orders/{id}/lines/{item}/details",
+	"POST /api/v1/orders/{id}/lines/{item}/return",
+	"POST /api/v1/orders/{id}/lines/{item}/change",
+	"GET /api/v1/orders/{id}/lines/{item}/actions",
+	"POST /api/v1/orders/{id}/lines/{item}/actions/{action}",
+	// The approvals the person holds, and their decisions on them.
+	"GET /api/v1/approvals",
+	"POST /api/v1/approvals/decide",
+	// Catalogue maintenance, each route under its own role and object check: the
+	// catalogues the person maintains, one of them, its document and its releases,
+	// importing a document — which marks every catalogue it writes as maintained in
+	// the system the grant belongs to — and a product's picture, which a document does
+	// not carry.
+	"GET /api/v1/catalogs",
+	"GET /api/v1/catalogs/{id}",
+	"GET /api/v1/catalogs/{id}/document",
+	"GET /api/v1/catalogs/{id}/releases",
+	"POST /api/v1/catalogs/import",
+	"PUT /api/v1/catalog-products/{id}/picture",
+)
 
 // mcpTransportHeader is how an API request says it is a *tool call* — one the MCP
 // adapter made while serving /mcp — rather than a client driving /api/v1 directly

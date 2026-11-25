@@ -259,13 +259,13 @@ func (s *Service) HandleSetPicture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, allowed, opErr := s.withItemHome(id, p, func(it Item) error {
+	g := s.withItemHome(id, p, func(it Item) error {
 		if it.ContentSource != nil {
 			return errSuppliedPicture
 		}
 		return s.store.SavePicture(it.ID, data, ct)
 	})
-	s.answerPictureWrite(w, id, found, allowed, opErr, "save picture: ")
+	s.answerPictureWrite(w, id, g, "save picture: ")
 }
 
 // HandleDeletePicture removes a product's picture. Same gate as setting one: taking
@@ -274,48 +274,59 @@ func (s *Service) HandleDeletePicture(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p := httpapi.PrincipalFrom(r.Context())
 
-	found, allowed, opErr := s.withItemHome(id, p, func(it Item) error {
+	g := s.withItemHome(id, p, func(it Item) error {
 		if it.ContentSource != nil {
 			return errSuppliedPicture
 		}
 		return s.store.ClearPicture(it.ID)
 	})
-	s.answerPictureWrite(w, id, found, allowed, opErr, "remove picture: ")
+	s.answerPictureWrite(w, id, g, "remove picture: ")
+}
+
+// itemGate is what the gate on a product's write found: whether the product is there
+// for the caller, whether they may change it, the system its home is maintained in
+// when the change belongs there, and the home's id.
+type itemGate struct {
+	found, allowed bool
+	held           *Maintainer
+	home           string
+	opErr          error
 }
 
 // withItemHome runs a write against one product, under the gate that changing the
 // product runs under: its home catalogue must exist, be readable and be editable by
-// the caller.
+// the caller, and be maintained here or by the system the request comes through.
 //
 // A home the caller cannot see reads as absent, as everywhere else — a refusal
 // saying "it exists, just not for you" answers the question the gate withholds.
-func (s *Service) withItemHome(id string, p *httpapi.Principal, write func(Item) error) (
-	found, allowed bool, opErr error) {
+func (s *Service) withItemHome(id string, p *httpapi.Principal, write func(Item) error) itemGate {
+	var g itemGate
 	s.loop.Do(func() {
 		var it Item
-		if it, found, opErr = s.store.Item(id); opErr != nil || !found {
+		if it, g.found, g.opErr = s.store.Item(id); g.opErr != nil || !g.found {
 			return
 		}
 		var home Catalog
 		var homeOK bool
-		if home, homeOK, opErr = s.store.Catalog(it.HomeCatalog); opErr != nil || !homeOK {
-			found = false
+		if home, homeOK, g.opErr = s.store.Catalog(it.HomeCatalog); g.opErr != nil || !homeOK {
+			g.found = false
 			return
 		}
-		if found = s.mayRead(home, p); !found {
+		if g.found = s.mayRead(home, p); !g.found {
 			return
 		}
-		if allowed = s.mayEdit(home, p); !allowed {
+		g.home = home.ID
+		if g.allowed, g.held = s.mayWrite(home, p); !g.allowed || g.held != nil {
 			return
 		}
-		opErr = write(it)
+		g.opErr = write(it)
 	})
-	return found, allowed, opErr
+	return g
 }
 
 // answerPictureWrite writes the one response shape both writes share.
-func (s *Service) answerPictureWrite(w http.ResponseWriter, id string,
-	found, allowed bool, opErr error, what string) {
+func (s *Service) answerPictureWrite(w http.ResponseWriter, id string, g itemGate, what string) {
+	found, allowed, opErr := g.found, g.allowed, g.opErr
 	switch {
 	case errors.Is(opErr, errSuppliedPicture):
 		httpapi.Error(w, http.StatusConflict, "product "+id+" takes its picture from its content source; "+
@@ -327,6 +338,8 @@ func (s *Service) answerPictureWrite(w http.ResponseWriter, id string,
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden,
 			"a product's picture is set by whoever maintains its catalogue")
+	case g.held != nil:
+		RefuseHeld(w, "product "+id+" of catalogue "+g.home, g.home, g.held)
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}

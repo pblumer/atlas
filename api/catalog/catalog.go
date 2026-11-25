@@ -612,6 +612,20 @@ type Member struct {
 	Role MemberRole   `json:"role"`
 }
 
+// Maintainer is the system a catalogue is maintained in, when that is not Atlas
+// (ADR-0565). It is a system, not a
+// person: who may maintain a catalogue here is its owner and Members.
+type Maintainer struct {
+	// Client is the OAuth client id of the system, as the grant it publishes through
+	// carries it; a write through a grant of this client is the system's own.
+	Client string `json:"client"`
+	// Name is the client's name as the grant shows it, for a person reading a refusal.
+	Name string `json:"name"`
+	// URL is where the catalogue is maintained, an https address the document gave;
+	// empty when it gave none.
+	URL string `json:"url,omitempty"`
+}
+
 // Catalog is a named set of items, with the appearance, audience and precedence
 // that decide who sees it and how.
 type Catalog struct {
@@ -667,6 +681,16 @@ type Catalog struct {
 	// OwnerID is whoever created it, because creation is the one moment where
 	// there is nobody to ask. The owner may always read, write and share.
 	OwnerID string `json:"ownerId,omitempty"`
+	// MaintainedIn names the system this catalogue is maintained in, when it is not
+	// maintained here (ADR-0565): a
+	// wiki that keeps the catalogue as its own pages and publishes it through the
+	// document import. Only such an import sets it — through the person's grant for
+	// `…/shop` of that system — and only an administrator clears it, with
+	// DELETE /api/v1/catalogs/{id}/maintainer. While it is set, every other write to
+	// the catalogue and to the products whose home it is is refused with the system's
+	// name and address, because the next publish would overwrite it without a trace.
+	// Nil is the ordinary state: maintained here.
+	MaintainedIn *Maintainer `json:"maintainedIn,omitempty"`
 	// Revision is optimistic concurrency, the same field and the same rule
 	// [Item.Revision] and the capability map carry.
 	//

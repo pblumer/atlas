@@ -82,6 +82,11 @@ type DocumentProblem struct {
 	// Subject is "catalog:<id>" or "product:<id>", or "document" for the whole.
 	Subject string `json:"subject"`
 	Problem string `json:"problem"`
+	// MaintainedIn is the system the subject's catalogue is maintained in, when that
+	// is why the import may not write it
+	// (ADR-0565). Such a problem
+	// answers the import 409, as the conflict it is.
+	MaintainedIn *Maintainer `json:"maintainedIn,omitempty"`
 }
 
 // documentID is what an id in a document may be: a word a URL carries without
@@ -338,10 +343,16 @@ func (s *Service) decideProcesses(procs []Process, d importplan.Decisions, bases
 }
 
 // refuseImport answers a refused document: 403 when any problem is one of
-// authority, 422 otherwise. deployed names processes an earlier step of the same
-// import already deployed, which a refusal must not hide.
+// authority, else 409 when any is a catalogue maintained in another system, 422
+// otherwise. deployed names processes an earlier step of the same import already
+// deployed, which a refusal must not hide.
 func refuseImport(w http.ResponseWriter, problems []DocumentProblem, deployed ...string) {
 	code := http.StatusUnprocessableEntity
+	for _, pr := range problems {
+		if pr.MaintainedIn != nil && code == http.StatusUnprocessableEntity {
+			code = http.StatusConflict
+		}
+	}
 	for _, pr := range problems {
 		if pr.Problem == problemNotYours || pr.Problem == ProblemMayNotDeploy {
 			code = http.StatusForbidden
@@ -457,6 +468,16 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 	add := func(subject, problem string) {
 		problems = append(problems, DocumentProblem{Subject: subject, Problem: problem})
 	}
+	// held is a subject the import may not write because the catalogue named is
+	// maintained in another system.
+	held := func(subject, what, catalogID string, m *Maintainer) {
+		problems = append(problems, DocumentProblem{Subject: subject, Problem: HeldMessage(what, catalogID, m), MaintainedIn: m})
+	}
+	// Through a system's grant for the shop, every catalogue the document writes is
+	// marked as maintained in that system, at the address the document gives; through
+	// anything else, none is, whatever the document says
+	// (ADR-0565).
+	client, clientName := s.publisher(p)
 	now := s.now()
 	for _, in := range doc.Catalogs {
 		subject := "catalog:" + in.ID
@@ -468,10 +489,28 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 		// Reporting groups are this installation's access grant to names: a document
 		// neither carries nor sets them (ADR-0515).
 		next.Theme, next.OwnerID, next.ReportingGroups = Theme{}, "", nil
+		next.MaintainedIn = nil
+		if client != "" {
+			where := ""
+			if in.MaintainedIn != nil {
+				where = strings.TrimSpace(in.MaintainedIn.URL)
+			}
+			if !maintainerURL(where) {
+				add(subject, problemMaintainerURL)
+				continue
+			}
+			next.MaintainedIn = &Maintainer{Client: client, Name: clientName, URL: where}
+		}
 		if found {
 			// The same authority a PATCH needs, and sharing stays the owner's.
 			if !s.mayRead(prev, p) || !s.mayEdit(prev, p) {
 				add(subject, problemNotYours)
+				continue
+			}
+			// And the same place: a catalogue maintained in another system is changed
+			// there, or through that system's own grant.
+			if m := s.heldElsewhere(prev, p); m != nil {
+				held(subject, "catalogue "+in.ID, in.ID, m)
 				continue
 			}
 			if !sameMembers(prev.Members, in.Members) && !s.mayShare(prev, p) {
@@ -498,20 +537,26 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 	// the document carries is being written by this caller; one on the server must be
 	// seen and maintained by them. A catalogue they cannot see is reported as one they
 	// may not write — never as absent, which would let a product be taken from it.
-	homeOf := func(id string) (exists, visible, allowed bool, err error) {
+	//
+	// The home's place of maintenance is asked too: a product whose home is maintained
+	// in another system is changed there, as its catalogue is.
+	homeOf := func(id string) (exists, visible, allowed bool, m *Maintainer, err error) {
 		if _, inDoc := plan.catalogs[id]; inDoc {
-			return true, true, true, nil
+			return true, true, true, nil, nil
 		}
 		c, found, err := s.store.Catalog(id)
 		if err != nil || !found {
-			return false, false, false, err
+			return false, false, false, nil, err
 		}
 		visible = s.mayRead(c, p)
-		return true, visible, visible && s.mayEdit(c, p), nil
+		if allowed = visible && s.mayEdit(c, p); allowed {
+			m = s.heldElsewhere(c, p)
+		}
+		return true, visible, allowed, m, nil
 	}
 	for _, in := range doc.Products {
 		subject := "product:" + in.ID
-		exists, visible, allowed, err := homeOf(in.HomeCatalog)
+		exists, visible, allowed, m, err := homeOf(in.HomeCatalog)
 		if err != nil {
 			return plan, nil, err
 		}
@@ -522,6 +567,10 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 		}
 		if !allowed {
 			add(subject, problemNotYours)
+			continue
+		}
+		if m != nil {
+			held(subject, "product "+in.ID+" of catalogue "+in.HomeCatalog, in.HomeCatalog, m)
 			continue
 		}
 		prev, found, err := s.store.Item(in.ID)
@@ -539,10 +588,13 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 			// Moving a product takes it from the catalogue responsible for it now,
 			// so that side must agree too, as it must for a single save.
 			if prev.HomeCatalog != in.HomeCatalog {
-				if exists, _, allowed, err := homeOf(prev.HomeCatalog); err != nil {
+				if exists, _, allowed, m, err := homeOf(prev.HomeCatalog); err != nil {
 					return plan, nil, err
 				} else if exists && !allowed {
 					add(subject, problemNotYours)
+					continue
+				} else if exists && m != nil {
+					held(subject, "product "+in.ID+" of catalogue "+prev.HomeCatalog, prev.HomeCatalog, m)
 					continue
 				}
 			}

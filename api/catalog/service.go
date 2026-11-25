@@ -118,6 +118,16 @@ type Service struct {
 	// watching the ones nothing holds any more — at once rather than at its next
 	// sweep. Nil does nothing.
 	BindingChanged func(source string)
+
+	// Publisher answers the system a request comes through when it is a person's
+	// grant for that system's shop, and empty strings otherwise
+	// (ADR-0565). A function, as
+	// admin is, so this package carries neither the scope vocabulary nor a reading of
+	// a principal's scope: the server decides which grant that is. An import through
+	// it marks the catalogues it writes as maintained in that system, and a write
+	// through it to such a catalogue is that system's own. Nil is no such request
+	// ever, so nothing is marked and every marked catalogue is held.
+	Publisher func(p *httpapi.Principal) (client, name string)
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).
@@ -382,6 +392,7 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		got         Catalog
 		found       bool
 		allowed     bool
+		held        *Maintainer
 		mayNotShare bool
 		stale       bool
 		unknownItem string
@@ -398,7 +409,7 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(got, p); !found {
 			return
 		}
-		if allowed = s.mayEdit(got, p); !allowed {
+		if allowed, held = s.mayWrite(got, p); !allowed || held != nil {
 			return
 		}
 		// The precondition, checked after the authority and before anything is
@@ -498,6 +509,8 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+id)
+	case held != nil:
+		RefuseHeld(w, "catalogue "+id, id, held)
 	case stale:
 		httpapi.Error(w, http.StatusConflict,
 			"catalogue "+id+" changed since it was read; read it again, reapply the change "+
@@ -611,6 +624,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		home    Catalog
 		homeOK  bool
 		allowed bool
+		held    *Maintainer
+		heldIn  string
 		stale   string
 		bound   string
 		opErr   error
@@ -626,7 +641,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		if homeOK = s.mayRead(home, p); !homeOK {
 			return
 		}
-		if allowed = s.mayEdit(home, p); !allowed {
+		if allowed, held = s.mayWrite(home, p); !allowed || held != nil {
+			heldIn = home.ID
 			return
 		}
 
@@ -655,7 +671,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 				if homeOK = s.mayRead(was, p); !homeOK {
 					return
 				}
-				if allowed = s.mayEdit(was, p); !allowed {
+				if allowed, held = s.mayWrite(was, p); !allowed || held != nil {
+					heldIn = was.ID
 					return
 				}
 			}
@@ -696,6 +713,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no home catalogue "+in.HomeCatalog)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+in.HomeCatalog)
+	case held != nil:
+		RefuseHeld(w, "product "+in.ID+" of catalogue "+heldIn, heldIn, held)
 	case stale != "":
 		httpapi.Error(w, http.StatusConflict, stale)
 	case bound != "":
@@ -725,6 +744,7 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		problems  []Problem
 		found     bool
 		allowed   bool
+		held      *Maintainer
 		opErr     error
 		languages []string
 	)
@@ -738,7 +758,7 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		}
 		// Publishing is what makes a catalogue orderable, so it is a write on it
 		// and needs the same authority as changing it.
-		if allowed = s.mayEdit(cat, p); !allowed {
+		if allowed, held = s.mayWrite(cat, p); !allowed || held != nil {
 			return
 		}
 		languages = cat.Languages
@@ -760,14 +780,14 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 	// is asked between computing the release and saving it (ADR-0425). The release
 	// saved is the one computed above: a catalogue edited in between is published by
 	// its next publish, not folded into this one.
-	if opErr == nil && found && allowed && len(problems) == 0 {
+	if opErr == nil && found && allowed && held == nil && len(problems) == 0 {
 		problems = append(LifecycleProblems(rel.Items, s.EntryPoints), OrderFormProblems(rel.Items, s.Forms)...)
 		// The register is the server's too, read the same way: after the release is
 		// computed and before it is saved. Its words are frozen in only once every
 		// heading resolved.
 		problems = append(problems, HeadingProblems(rel, s.Capabilities)...)
 	}
-	if opErr == nil && found && allowed && len(problems) == 0 {
+	if opErr == nil && found && allowed && held == nil && len(problems) == 0 {
 		if rel.Structured {
 			WordHeadings(rel.Items, languages, s.Capabilities)
 		}
@@ -782,6 +802,8 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+id)
+	case held != nil:
+		RefuseHeld(w, "catalogue "+id, id, held)
 	case len(problems) > 0:
 		httpapi.JSON(w, http.StatusUnprocessableEntity, map[string]any{"problems": problems})
 	default:
