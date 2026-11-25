@@ -13,7 +13,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.13.0
-	github.com/microsoft/go-mssqldb v1.10.0
+	github.com/microsoft/go-mssqldb v1.12.0
 	github.com/pblumer/feel v0.0.0-20261103162457-c95ea3714cc4
 	github.com/pblumer/temis v0.0.0-20260928134659-8cb3c88b5356
 	github.com/prometheus/client_golang v1.15.0
