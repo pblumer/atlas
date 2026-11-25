@@ -112,3 +112,93 @@ test("an application lists a draft with several pools as a collaboration", async
   await expect(row("Im Pool").locator(".artifact-type")).toHaveText("BPMNProzess");
   expect(page.__errors).toEqual([]);
 });
+
+// ---------- the message a flow carries, and the hints ----------
+
+const selectFlow = async (page, id) => {
+  await page.evaluate((el) => window.__select(el), id);
+  await expect(page.locator("#f-name")).toBeVisible();
+};
+// The check runs after a pause; wait until the Modeler has asked.
+const checked = (page, atLeast = 1) =>
+  expect.poll(() => page.evaluate(() => window.__checks.length), { timeout: 10000 }).toBeGreaterThanOrEqual(atLeast);
+
+test("a flow between two pools without content is given its message in the panel", async ({ page }) => {
+  await checked(page);
+  await selectFlow(page, "Flow_open");
+  await expect(page.locator("#f-flowmsg")).toHaveValue("");
+  // Offered: what the source sends and the target waits for, the name both sides know first.
+  await expect.poll(() => page.locator("#f-flowmsg-list option").evaluateAll((os) => os.map((o) => `${o.value}: ${o.label}`))).toEqual([
+    "Zahlung: gesendet und erwartet", "Mahnung: wird gesendet, aber nicht erwartet", "Ablage: wird erwartet, aber nicht gesendet"]);
+
+  await page.locator("#f-flowmsg").fill("Zahlung");
+  await page.locator("#f-flowmsg").blur();
+  let out = await xml(page);
+  const id = /<bpmn:message id="([^"]+)" name="Zahlung"/.exec(out);
+  expect(id, "a message named Zahlung is declared").toBeTruthy();
+  // The flow references it, and shows the name on the canvas, since nobody captioned it.
+  expect(out).toMatch(new RegExp(`<bpmn:messageFlow id="Flow_open" name="Zahlung" sourceRef="Pool_bank" targetRef="Pool_ref" messageRef="${id[1]}"`));
+
+  // A second name declares a second message; going back reuses the first.
+  await selectFlow(page, "Flow_open");
+  await page.locator("#f-flowmsg").fill("Mahnung");
+  await page.locator("#f-flowmsg").blur();
+  await selectFlow(page, "Flow_open");
+  await page.locator("#f-flowmsg").fill("Zahlung");
+  await page.locator("#f-flowmsg").blur();
+  out = await xml(page);
+  expect(out.match(/<bpmn:message id="[^"]+" name="Zahlung"/g)).toHaveLength(1);
+  expect(out).toMatch(new RegExp(`<bpmn:messageFlow id="Flow_open" name="Zahlung"[^>]*messageRef="${id[1]}"`));
+
+  // Emptying the field takes the name away again.
+  await selectFlow(page, "Flow_open");
+  await page.locator("#f-flowmsg").fill("");
+  await page.locator("#f-flowmsg").blur();
+  expect(await xml(page)).toMatch(/<bpmn:messageFlow id="Flow_open" sourceRef="Pool_bank" targetRef="Pool_ref"\s*\/>/);
+  // Every change was checked again.
+  await checked(page, 2);
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a flow docked on a message event carries that event's message and is not asked", async ({ page }) => {
+  await selectFlow(page, "Flow_docked");
+  await expect(page.locator("#f-flowmsg-docked")).toContainText("Freigabe");
+  await expect(page.locator("#f-flowmsg-docked")).toContainText("Freigeben");
+  await expect(page.locator("#f-flowmsg")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the hints stand on the element they are about, and all of them on the collaboration", async ({ page }) => {
+  await checked(page);
+  // On the canvas, the elements the check has something to say about are marked.
+  await expect(page.locator('.djs-element.collab-hint[data-element-id="Flow_open"]')).toHaveCount(1);
+  await expect(page.locator('.djs-element.collab-hint[data-element-id="Pool_ref"]')).toHaveCount(1);
+  await expect(page.locator('.djs-element.collab-hint[data-element-id="Pool_order"]')).toHaveCount(0);
+
+  // The flow's panel says its own hint, the pool's its own.
+  await selectFlow(page, "Flow_open");
+  await expect(page.locator(".collab-hints li")).toHaveCount(1);
+  // Worded from the finding's parts, in the reader's language, with the rule under it.
+  await expect(page.locator(".collab-hint-msg")).toHaveText("Der Flow von Bank zu Archiv nennt keine Nachricht und wird deshalb nicht geprüft.");
+  await expect(page.locator(".collab-hint-rule")).toHaveText("collaboration.flow-unnamed");
+  await select(page, "Pool_ref");
+  await expect(page.locator(".collab-hints li")).toHaveCount(1);
+  await expect(page.locator(".collab-hint-msg")).toHaveText("Archiv verweist auf den Prozess nowhere, der auf diesem Server nicht deployt ist.");
+  // A rule the catalogue does not know yet is said in the server's own sentence.
+  await select(page, "Pool_new");
+  await expect(page.locator(".collab-hint-msg")).toHaveText("Something a newer server found.");
+  // A pool nothing is said about shows no box at all.
+  await select(page, "Pool_order");
+  await expect(page.locator(".collab-hints")).toBeHidden();
+
+  // The collaboration's own panel lists them all, and a hint leads to its element.
+  await page.evaluate(() => window.__atlasModeler.get("selection").select(null));
+  await expect(page.locator(".collab-hints li")).toHaveCount(3);
+  await expect(page.locator(".collab-hints-head")).toHaveText("Hinweise zum Zusammenspiel (3)");
+  await page.locator('.collab-hints li[data-el="Pool_ref"]').click();
+  await expect(kind(page)).toHaveAttribute("data-kind", "reference");
+  // Hints are not problems: the Problems bar does not list them.
+  await expect(page.locator(".prob-row", { hasText: "collaboration." })).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});

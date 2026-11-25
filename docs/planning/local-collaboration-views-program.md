@@ -83,8 +83,12 @@ deployments (`api/interaction`, `POST /api/v1/collaboration-check`,
 process; drafts are listed with their participant count, and an application calls a draft with
 two or more pools a collaboration.
 
-**Remaining:** the findings drawn in the Modeler; `flow-not-observed`; a message picker on a
-message flow between two pools without content; the amendment's open questions (two files
+**Built (second part):** a message flow's name is picked in its panel, from the names its
+source sends and its target waits for; the Modeler runs the check while a diagram holds pools
+and shows the findings on the elements they are about and in the collaboration's panel, worded
+from the catalogue and kept out of the Problems bar.
+
+**Remaining:** `flow-not-observed`; the amendment's open questions (two files
 modelling one process id, moving a pool into a file of its own, the identity of a draft).
 
 **Acceptance:** each finding has a test that states it (`api/interaction/document_test.go`);

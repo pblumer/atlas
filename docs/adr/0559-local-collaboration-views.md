@@ -695,10 +695,27 @@ amendment of 2026-11-25.
 - **The listing.** `GET /api/v1/drafts` answers `participants` for a draft whose model holds a
   collaboration, counted from the model on each listing, and an application's artifact list
   calls a draft with two or more a *Collaboration*.
-- **Not built yet:** showing the findings in the Modeler (they are served, not yet drawn);
-  `flow-not-observed`; a message picker on a message flow between two pools without content,
-  whose name can today only be set in the XML; composing step by step from a pool's ports
-  (§6; LCV4); and the three questions the amendment leaves open.
+
+**Slice LCV3, second part (2026-11): a flow's message, and the findings in the Modeler.**
+
+- **A message flow's name is picked in its panel.** A flow that docks on a message event, a
+  receive task or a send task carries that element's message, says so, and is not asked. A flow
+  between two pools without such an element has a field that offers the names its source sends
+  and its target waits for — the name both know first — and takes any other name. The choice is
+  written as the flow's `messageRef`, reusing the model's message of that name or declaring one,
+  and a flow nobody captioned shows the name on the canvas. Deleting a message in the messages
+  manager clears it from the flows that named it.
+- **The check answers what a white box sends and waits for** (`sends`, `receives` on a pool),
+  which is where the offered names come from, and each finding's parts (`subject`, `other`,
+  `messageName`) beside its English sentence, so the Modeler words a finding in the reader's
+  language from the catalogue. A rule the catalogue does not know is said in the server's words.
+- **Where the findings are shown.** While the diagram's root is a collaboration, the Modeler
+  sends the model to the check after each burst of changes. An element a finding is about is
+  drawn in the attention colour; its panel lists its findings above everything else; the
+  collaboration's own panel lists all of them, and each leads to its element. They are not in
+  the Problems bar, as §5 says, and nothing about them stands in the way of a deploy.
+- **Not built yet:** `flow-not-observed`; composing step by step from a pool's ports (§6; LCV4);
+  and the three questions the amendment leaves open.
 
 ### Consequences
 

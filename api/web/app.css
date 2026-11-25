@@ -3537,6 +3537,21 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .flow-log .empty { padding: 14px 16px; color: var(--muted); }
 .replay-link { margin-left: 8px; font-size: 12px; }
 
+/* The Modeler's collaboration hints (ADR-0559): an element the check has something to
+   say about is drawn in the attention colour, and its panel lists what. Hints, not
+   problems: they never appear in the Problems bar. */
+.djs-shape.collab-hint > .djs-visual > rect,
+.djs-connection.collab-hint > .djs-visual > path { stroke: var(--mesh-attention) !important; }
+.collab-hints:empty { display: none; }
+.collab-hints { border: 1px solid var(--mesh-attention); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; background: var(--warn-soft); }
+.collab-hints-head { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.collab-hints ul { list-style: none; margin: 0 0 4px; padding: 0; font-size: 13px; }
+.collab-hints li { padding: 4px 0; }
+.collab-hint-msg { display: block; }
+.collab-hint-rule { display: block; font-size: 11px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.collab-hints li[data-el] { cursor: pointer; }
+.collab-hints li[data-el]:hover .collab-hint-msg { text-decoration: underline; }
+
 /* Who a process talks to (ADR-0559): a generated BPMN collaboration on bpmn-js. A
    message flow is always dashed in BPMN, so the layers are told apart by colour:
    observed flows dark, possible-only ones light, an observed flow the newest

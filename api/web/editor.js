@@ -8633,6 +8633,12 @@ function deleteMessage(modeler, msgId) {
     if (med && med.messageRef && med.messageRef.id === msgId) {
       try { modeling.updateModdleProperties(el, med, { messageRef: undefined }); } catch { /* stale */ }
     }
+    // A message flow names its message the same way (ADR-0559), and is left
+    // unnamed rather than dangling.
+    const bo = el.businessObject;
+    if (bo && bo.$type === "bpmn:MessageFlow" && bo.messageRef && bo.messageRef.id === msgId) {
+      try { modeling.updateProperties(el, { messageRef: undefined }); } catch { /* stale */ }
+    }
   });
 }
 
@@ -9892,7 +9898,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   // not every section at once.
   // General starts open, and so does a pool's kind: what a pool is decides what the
   // rest of its panel means.
-  const groupCtl = groupController(body, ["General", "Kind"]);
+  const groupCtl = groupController(body, ["General", "Kind", "Flow message"]);
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
@@ -9930,6 +9936,155 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       selection.select(replaced);
       show(replaced); // now an executable pool: elements can be dropped in
     } catch { toast(tr("pnl.main.pool.addFailed"), "err"); }
+  }
+
+  // The collaboration check (ADR-0559, amendment of 2026-11-25). While the diagram's
+  // root is a collaboration, the model is sent to POST /api/v1/collaboration-check after
+  // each burst of changes, and what comes back is kept here: what each white box sends
+  // and waits for, which a message flow's name is picked from, and the findings that
+  // compare the drawing with what is deployed. The findings are hints, not problems —
+  // each depends on other deployments, and the order of deploys is free — so they are
+  // shown on the element they are about and in the collaboration's own panel, never in
+  // the Problems bar, and they never stand in the way of a deploy.
+  let collab = null;
+  let collabSeq = 0, collabTimer = null;
+  let shownFlowBo = null;        // the message flow the panel shows, if it shows one
+  const collabMarked = new Set();
+  const collabFindings = (id) => (!collab ? [] : id ? collab.findings.filter((f) => f.flow === id || f.pool === id) : collab.findings);
+
+  async function runCollabCheck() {
+    const canvas = modeler.get("canvas"), registry = modeler.get("elementRegistry");
+    let report = null;
+    if (isCollaborationRoot(modeler)) {
+      let xml;
+      try { ({ xml } = await modeler.saveXML()); } catch { return; }
+      const mine = ++collabSeq;
+      let res;
+      try { res = await api("POST", "/api/v1/collaboration-check", xml, true); } catch { return; }
+      if (mine !== collabSeq) return; // a newer check has superseded this one
+      if (res && Array.isArray(res.findings) && Array.isArray(res.pools)) report = res;
+    }
+    collab = report;
+    for (const id of collabMarked) { try { canvas.removeMarker(id, "collab-hint"); } catch { /* gone */ } }
+    collabMarked.clear();
+    for (const f of collabFindings()) {
+      const id = f.flow || f.pool;
+      if (id && registry.get(id)) { canvas.addMarker(id, "collab-hint"); collabMarked.add(id); }
+    }
+    refreshCollabHints();
+  }
+  const scheduleCollabCheck = () => {
+    if (collabTimer) clearTimeout(collabTimer);
+    collabTimer = setTimeout(() => { runCollabCheck().catch(() => {}); }, 600);
+  };
+  modeler.on("elements.changed", scheduleCollabCheck);
+  modeler.on("import.done", scheduleCollabCheck);
+  scheduleCollabCheck();
+
+  // collabHintsHTML is where a panel shows the findings about its element, or all of
+  // them for the collaboration itself. It stands before the first group, so the folding
+  // of the groups leaves it alone, and it is filled by refreshCollabHints.
+  const collabHintsHTML = (id) => `<div class="collab-hints" data-for="${esc(id || "")}"></div>`;
+
+  // findingText words a finding from its parts, in the reader's language. A rule the
+  // catalogue does not know yet is said in the server's own sentence.
+  function findingText(f) {
+    const key = "collab.finding." + String(f.rule || "").replace(/^collaboration\./, "");
+    const text = tr(key, { subject: f.subject || "", other: f.other || "", message: f.messageName || "" });
+    return text === key ? (f.message || f.rule) : text;
+  }
+
+  function refreshCollabHints() {
+    const box = body.querySelector(".collab-hints");
+    if (box) {
+      const own = box.dataset.for;
+      const list = collabFindings(own);
+      box.innerHTML = !list.length ? "" : `
+        <div class="collab-hints-head">${esc(tr("collab.hints.title", { n: list.length }))}</div>
+        <ul>${list.map((f) => `<li${own ? "" : ` data-el="${esc(f.flow || f.pool || "")}" tabindex="0"`}>
+          <span class="collab-hint-msg">${esc(findingText(f))}</span>
+          <span class="collab-hint-rule">${esc(f.rule)}</span></li>`).join("")}</ul>
+        <p class="muted" style="font-size:12px">${esc(tr("collab.hints.note"))}</p>`;
+    }
+    if (shownFlowBo) fillFlowMessageList(shownFlowBo);
+  }
+  // In the collaboration's own list, a finding leads to the element it is about.
+  body.addEventListener("click", (e) => {
+    const li = e.target.closest(".collab-hints li[data-el]");
+    const el = li && modeler.get("elementRegistry").get(li.dataset.el);
+    if (el) selection.select(el);
+  });
+
+  // flowDockedMessage is the message a flow carries because of the element it docks
+  // on: what its source sends, else what its target waits for.
+  function flowDockedMessage(bo) {
+    for (const end of [bo.sourceRef, bo.targetRef]) {
+      if (!end || /:Participant$/.test(end.$type || "")) continue;
+      const holder = messageRefHolder(end);
+      const name = holder && holder.messageRef && holder.messageRef.name;
+      if (name) return { name, element: end.name || end.id };
+    }
+    return null;
+  }
+
+  // poolIdOfEnd is the pool an end of a message flow lies in.
+  function poolIdOfEnd(end) {
+    if (!end) return "";
+    if (/:Participant$/.test(end.$type || "")) return end.id;
+    let p = end.$parent;
+    while (p && !/:Process$/.test(p.$type || "")) p = p.$parent;
+    const root = modeler.get("canvas").getRootElement().businessObject;
+    const part = p && (root.participants || []).find((x) => x.processRef === p);
+    return part ? part.id : "";
+  }
+
+  // messageFlowHTML offers the name a message flow carries. A flow that docks on a
+  // message event has that event's message and is not asked; one between two pools
+  // without such an element is, and what it is offered are the names its source sends
+  // and its target waits for.
+  function messageFlowHTML(bo) {
+    const head = `<h3 data-group="Flow message">${esc(tr("pnl.flow.message"))}</h3>`;
+    const docked = flowDockedMessage(bo);
+    if (docked) {
+      return `${head}<p class="muted" id="f-flowmsg-docked" style="font-size:12px">${tr("pnl.flow.docked", {
+        message: `<code>${esc(docked.name)}</code>`, element: `<b>${esc(docked.element)}</b>` })}</p>`;
+    }
+    return `${head}
+      <label class="field"><span>${esc(tr("pnl.flow.name"))}</span><input type="text" id="f-flowmsg" list="f-flowmsg-list" value="${esc((bo.messageRef && bo.messageRef.name) || "")}" placeholder="OrderReleased" autocomplete="off" spellcheck="false"/></label>
+      <datalist id="f-flowmsg-list"></datalist>
+      <p class="muted" style="font-size:12px">${tr("pnl.flow.hint")}</p>`;
+  }
+
+  function fillFlowMessageList(bo) {
+    const list = body.querySelector("#f-flowmsg-list");
+    if (!list || !collab) return;
+    const pool = (id) => collab.pools.find((p) => p.id === id) || {};
+    const sends = pool(poolIdOfEnd(bo.sourceRef)).sends || [];
+    const receives = pool(poolIdOfEnd(bo.targetRef)).receives || [];
+    const both = sends.filter((m) => receives.includes(m));
+    const opt = (m, key) => `<option value="${esc(m)}" label="${esc(tr(key))}"></option>`;
+    list.innerHTML = both.map((m) => opt(m, "pnl.flow.both")).join("") +
+      sends.filter((m) => !both.includes(m)).map((m) => opt(m, "pnl.flow.sentOnly")).join("") +
+      receives.filter((m) => !both.includes(m)).map((m) => opt(m, "pnl.flow.receivedOnly")).join("");
+  }
+
+  // wireMessageFlow writes the chosen name as the flow's messageRef, reusing the
+  // model's message of that name or declaring one. A flow nobody captioned shows the
+  // name on the canvas too.
+  function wireMessageFlow(element, bo) {
+    const input = body.querySelector("#f-flowmsg");
+    if (!input) return;
+    fillFlowMessageList(bo);
+    input.addEventListener("change", () => {
+      const name = input.value.trim();
+      const prev = (bo.messageRef && bo.messageRef.name) || "";
+      try {
+        const msg = name ? (listMessages(modeler).find((m) => m.name === name) || createMessage(modeler, name)) : undefined;
+        const props = { messageRef: msg };
+        if (!bo.name || bo.name === prev) props.name = name || undefined;
+        modeling.updateProperties(element, props);
+      } catch { toast(tr("pnl.flow.failed"), "err"); }
+    });
   }
 
   // poolKindHTML says what the pool is and, on a pool without content, offers the
@@ -10009,7 +10164,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
         <p class="muted" style="font-size:12px">${tr("pnl.main.pool.addProcessHint")}</p>
         <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="${esc(tr("pnl.main.pool.addProcessTitle"))}">${esc(tr("pnl.main.pool.addProcess"))}</button>`;
-      body.innerHTML = `${poolFields}${poolKindHTML(bo)}${addProcess}`;
+      body.innerHTML = `${collabHintsHTML(bo.id)}${poolFields}${poolKindHTML(bo)}${addProcess}`;
+      refreshCollabHints();
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
@@ -10034,7 +10190,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addConstantTitle"))}">${esc(tr("pnl.main.addConstant"))}</button>
         <p class="muted" style="font-size:12px">${tr("pnl.main.constantsHint")}</p>`;
     }
-    body.innerHTML = `${poolFields}${poolKindHTML(bo)}
+    body.innerHTML = `${collabHintsHTML(bo.id)}${poolFields}${poolKindHTML(bo)}
       <p class="muted" style="font-size:12px">${tr("pnl.main.pool.hint")}</p>
       <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
       <label class="field"><span>${esc(tr("pnl.main.pool.procName"))}</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
@@ -10048,6 +10204,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     });
     wirePoolId(body, element);
     wirePoolKind(body, element, bo);
+    refreshCollabHints();
     body.querySelector("#f-procname").addEventListener("change", (e) => {
       try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
     });
@@ -10086,6 +10243,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   }
 
   function show(element) {
+    shownFlowBo = null;
     if (!element) {
       // Nothing selected → show the process itself, so its id/name can be edited
       // (this is how you rename a diagram; the id is the deployed process id).
@@ -10222,7 +10380,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (isCollaborationRoot(modeler)) {
         icon.textContent = "CO"; typename.textContent = tr("pnl.main.head.collaboration"); nameEl.textContent = tr("pnl.main.head.collaborationUnnamed");
         const collabEl = modeler.get("canvas").getRootElement();
-        body.innerHTML = `
+        body.innerHTML = `${collabHintsHTML("")}
           <h3 data-group="Collaboration">${esc(tr("bpmn.group.collaboration"))}</h3>
           <p class="muted" style="font-size:12px">${tr("pnl.main.collab.hint")}</p>
           ${documentationField(collabEl.businessObject, "f-doc", tr("pnl.main.collab.docPlaceholder"))}
@@ -10232,6 +10390,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           ${errorsManagerHTML(modeler)}
           ${escalationsManagerHTML(modeler)}`;
         wireDocumentation(body, modeler, collabEl, collabEl.businessObject);
+        refreshCollabHints();
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
@@ -10905,7 +11064,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       html += `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
         <p class="muted" style="font-size:12px">${tr("pnl.main.loop.hint")}</p>`;
     }
+    // A message flow says which message it carries, and what the check found about it.
+    const isMsgFlow = bo.$type === "bpmn:MessageFlow";
+    if (isMsgFlow) html = collabHintsHTML(bo.id) + html + messageFlowHTML(bo);
     body.innerHTML = html;
+    if (isMsgFlow) {
+      shownFlowBo = bo;
+      wireMessageFlow(element, bo);
+      refreshCollabHints();
+    }
 
     body.querySelector("#f-name").addEventListener("change", (e) => {
       try {

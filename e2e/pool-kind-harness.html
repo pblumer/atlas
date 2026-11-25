@@ -7,7 +7,9 @@
          what the panel says a pool is and how a deployed process is assigned to one
          (ADR-0559, amendment of 2026-11-25). Four pools: one modelled here, one black
          box, one with the empty process bpmn-js gives a pool dragged into a diagram, and
-         one that already references a process this server does not hold. -->
+         one that already references a process this server does not hold. Two message
+         flows: one docked on a message throw event, one between two pools without
+         content, whose message is picked in the panel. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -27,18 +29,27 @@
     <bpmn:participant id="Pool_bank" name="Bank"/>
     <bpmn:participant id="Pool_new" processRef="leer"/>
     <bpmn:participant id="Pool_ref" name="Archiv" atlas:processId="nowhere"/>
+    <bpmn:messageFlow id="Flow_docked" sourceRef="Throw_b" targetRef="Pool_bank"/>
+    <bpmn:messageFlow id="Flow_open" sourceRef="Pool_bank" targetRef="Pool_ref"/>
   </bpmn:collaboration>
+  <bpmn:message id="Message_release" name="Freigabe"/>
   <bpmn:process id="bestellung" name="Bestellung" isExecutable="true">
     <bpmn:startEvent id="Start_b"><bpmn:outgoing>fb</bpmn:outgoing></bpmn:startEvent>
-    <bpmn:endEvent id="End_b"><bpmn:incoming>fb</bpmn:incoming></bpmn:endEvent>
-    <bpmn:sequenceFlow id="fb" sourceRef="Start_b" targetRef="End_b"/>
+    <bpmn:intermediateThrowEvent id="Throw_b" name="Freigeben"><bpmn:incoming>fb</bpmn:incoming><bpmn:outgoing>fc</bpmn:outgoing><bpmn:messageEventDefinition id="Med_b" messageRef="Message_release"/></bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_b"><bpmn:incoming>fc</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="fb" sourceRef="Start_b" targetRef="Throw_b"/>
+    <bpmn:sequenceFlow id="fc" sourceRef="Throw_b" targetRef="End_b"/>
   </bpmn:process>
   <bpmn:process id="leer" isExecutable="true"/>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="Collab_1">
     <bpmndi:BPMNShape id="Pool_order_s" bpmnElement="Pool_order" isHorizontal="true"><dc:Bounds x="130" y="40" width="600" height="140"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Start_b_s" bpmnElement="Start_b"><dc:Bounds x="220" y="92" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="End_b_s" bpmnElement="End_b"><dc:Bounds x="380" y="92" width="36" height="36"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNEdge id="fb_e" bpmnElement="fb"><di:waypoint x="256" y="110"/><di:waypoint x="380" y="110"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNShape id="Throw_b_s" bpmnElement="Throw_b"><dc:Bounds x="300" y="92" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="fb_e" bpmnElement="fb"><di:waypoint x="256" y="110"/><di:waypoint x="300" y="110"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fc_e" bpmnElement="fc"><di:waypoint x="336" y="110"/><di:waypoint x="380" y="110"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Flow_docked_e" bpmnElement="Flow_docked"><di:waypoint x="318" y="128"/><di:waypoint x="318" y="210"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Flow_open_e" bpmnElement="Flow_open"><di:waypoint x="600" y="270"/><di:waypoint x="600" y="470"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNShape id="Pool_bank_s" bpmnElement="Pool_bank" isHorizontal="true"><dc:Bounds x="130" y="210" width="600" height="60"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Pool_new_s" bpmnElement="Pool_new" isHorizontal="true"><dc:Bounds x="130" y="300" width="600" height="140"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Pool_ref_s" bpmnElement="Pool_ref" isHorizontal="true"><dc:Bounds x="130" y="470" width="600" height="60"/></bpmndi:BPMNShape>
@@ -52,7 +63,28 @@
         { key: 11, processId: "versand", name: "Versand", version: 2 },
         { key: 20, processId: "rechnung", name: "", version: 1 },
       ];
-      const api = async (method, url) => {
+      // What the collaboration check answers: the names the bank sends and the archive
+      // waits for, and two findings. The route's own answers are the Go suite's; this is
+      // about what the Modeler does with one. Every model sent is kept for the tests.
+      window.__checks = [];
+      const REPORT = {
+        collaboration: true,
+        pools: [
+          { id: "Pool_order", kind: "modelled", processId: "bestellung", sends: ["Freigabe"] },
+          { id: "Pool_bank", kind: "external", sends: ["Mahnung", "Zahlung"] },
+          { id: "Pool_new", kind: "external" },
+          { id: "Pool_ref", kind: "reference", processId: "nowhere", receives: ["Ablage", "Zahlung"] },
+        ],
+        flows: [],
+        findings: [
+          { rule: "collaboration.participant-unresolved", pool: "Pool_ref", subject: "Archiv", other: "nowhere", message: "Archiv names the process nowhere, which is not deployed on this server." },
+          { rule: "collaboration.flow-unnamed", flow: "Flow_open", subject: "Bank", other: "Archiv", message: "The flow from Bank to Archiv names no message, so it is not checked." },
+          // A rule this Modeler's catalogue does not know is said in the server's words.
+          { rule: "collaboration.from-a-newer-server", pool: "Pool_new", message: "Something a newer server found." },
+        ],
+      };
+      const api = async (method, url, body) => {
+        if (method === "POST" && /\/collaboration-check$/.test(url)) { window.__checks.push(body); return REPORT; }
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "GET" && /\/processes$/.test(url)) return PROCESSES;
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
