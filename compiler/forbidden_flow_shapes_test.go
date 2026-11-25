@@ -147,3 +147,35 @@ func TestReloadKeepsForbiddenShapesAsCompiled(t *testing.T) {
 		t.Fatalf("flow leak must stay marked default on reload, as an older build compiled it")
 	}
 }
+
+// TestHasInclusiveJoins: only an inclusive gateway with more than one incoming flow is a
+// join the engine re-checks when a token leaves (ADR-0551); an inclusive split is not.
+func TestHasInclusiveJoins(t *testing.T) {
+	join := NewBuilder(1, "join", 1)
+	s, split, a, b, j, e := join.AddStartEvent(), join.AddInclusiveGateway(), join.AddTask(), join.AddTask(), join.AddInclusiveGateway(), join.AddEndEvent()
+	join.Connect(s, split)
+	join.Connect(split, a)
+	join.Connect(split, b)
+	join.Connect(a, j)
+	join.Connect(b, j)
+	join.Connect(j, e)
+	cp, err := join.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cp.HasInclusiveJoins() {
+		t.Error("a process with an inclusive join reports none")
+	}
+	split2 := NewBuilder(2, "split-only", 1)
+	s2, g2, e1, e2 := split2.AddStartEvent(), split2.AddInclusiveGateway(), split2.AddEndEvent(), split2.AddEndEvent()
+	split2.Connect(s2, g2)
+	split2.Connect(g2, e1)
+	split2.Connect(g2, e2)
+	cp2, err := split2.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cp2.HasInclusiveJoins() {
+		t.Error("a process with only an inclusive split reports a join")
+	}
+}

@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-10",
   "plan": "../../planning/bpmn-conformance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-1--core-bpmn-",
-  "next_action": "Owner review of ADR-0551: accept, amend or reject; on acceptance PR 1 (inclusive-join re-check, fixes the CON2 hang) then PR 2 (Complex Gateway). Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
+  "next_action": "Merge ADR-0551 part 1 (inclusive-join re-check), then part 2 (Complex Gateway). Decide whether instances hung before the upgrade need an operator action or a startup sweep. Open gates unchanged: CON0 per-SHALL denominator sign-off (#1615), CON1 acceptance (#1617), per-clause owner review of CON2/CON3 oracles.",
   "slices": [
     {
       "id": "CON0",
@@ -143,7 +143,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First slice ADR-0547 (Accepted, Landed): part 1 refuses start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow, with stored definitions reloading and routing unchanged; part 2 gives element-local compile diagnostics their element. Second slice proposed: ADR-0551 (Proposed, not accepted), clause-13 Complex Gateway on reset markers in the element-instance lifecycle, preceded by an inclusive-join re-check when an upstream token leaves (fixes a hang found in CON2). Further candidates need their own ADRs: parallel/instantiating event gateways, cyclic inclusive joins, sequential ad-hoc, process-level conditional start, repeatable conditional triggers.",
+      "note": "Prioritize Complex Gateway, parallel/instantiating event gateways, cyclic joins and conditional/ad-hoc limits; each approved engine change needs its own ADR and recovery tests. First slice ADR-0547 (Accepted, Landed): part 1 refuses start events with incoming flows, end events with outgoing flows and gateway defaults that are not the gateway's own outgoing flow, with stored definitions reloading and routing unchanged; part 2 gives element-local compile diagnostics their element. Second slice ADR-0551 (Accepted, Partial): part 1 landed, a parked inclusive join is re-checked when a token leaves its instance (fixes the CON2 hang; a hang predating the upgrade with nothing else live is not released automatically); part 2, the clause-13 Complex Gateway on reset markers, is next. Further candidates need their own ADRs: parallel/instantiating event gateways, cyclic inclusive joins, sequential ad-hoc, process-level conditional start, repeatable conditional triggers.",
       "evidence": [
         "../../adr/0547-refuse-forbidden-sequence-flow-shapes.md",
         "../../../compiler/forbidden_flow_shapes_test.go",

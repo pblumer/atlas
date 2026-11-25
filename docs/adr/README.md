@@ -638,7 +638,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0548](0548-bulk-validation-evaluates-a-decision-per-row-in-one-job.md) | Bulk validation evaluates a decision per row inside one job, not one token per row | Proposed | Partial |
 | [0549](0549-collection-by-round.md) | A loop's collection is retained one element per round | Accepted | Landed |
 | [0550](0550-mcp-shop-customer-side.md) | The shop's customer side is offered over MCP, as the connected person, unless the server switches it off | Accepted | Landed |
-| [0551](0551-complex-gateway.md) | Run the Complex Gateway, on an inclusive join that re-checks when a token leaves | Proposed | Not started |
+| [0551](0551-complex-gateway.md) | Run the Complex Gateway, on an inclusive join that re-checks when a token leaves | Accepted | Partial |
 | [0552](0552-calendar-worker-type.md) | A calendar Worker Type finds free slots and books them on Microsoft 365, Google, CalDAV and Exchange Server | Accepted | Partial |
 | [0553](0553-entra-delta-keep.md) | A delta query's keep is applied by the Entra Worker, before it answers | Accepted | Landed |
 | [0554](0554-completed-tasks-stay-readable.md) | A completed task stays readable to the person who completed it, in the form they answered | Accepted | Partial |

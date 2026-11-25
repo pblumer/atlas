@@ -2049,6 +2049,11 @@ func (s *NodeSet) add(id int32) {
 // (invariants I1 and I5, ADR-0279).
 func (p *CompiledProcess) InclusiveJoinReach(node int32) NodeSet { return p.joinReach[node] }
 
+// HasInclusiveJoins reports whether the process has an inclusive gateway with more than
+// one incoming flow, so the engine knows whether a token leaving can matter to a parked
+// join at all (ADR-0551). A process without one pays nothing for the re-check.
+func (p *CompiledProcess) HasInclusiveJoins() bool { return len(p.joinReach) > 0 }
+
 // computeJoinReach builds the ancestor set of each inclusive join in nodes, given
 // the flow graph. It is the compile-time half of InclusiveJoinReach and runs once
 // per process, so the reverse adjacency it needs is built once rather than per

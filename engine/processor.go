@@ -173,6 +173,12 @@ type Processor struct {
 	// reallocated; drained and cleared at the end of Phase 1.
 	condDirty []uint64
 
+	// joinDirty collects the process instances in which an element instance completed
+	// or was terminated this batch and whose process has inclusive joins, so the batch
+	// loop can schedule a join re-check for each (ADR-0551). Reused, not reallocated;
+	// drained and cleared like condDirty.
+	joinDirty []uint64
+
 	// startsThisBatch remembers the (defKey, correlationKey) pairs a singleton message
 	// start has already scheduled a create for in the current batch (ADR-0094). The
 	// durable ActiveStartKey counter only reflects an instance once its Activated
@@ -1092,6 +1098,21 @@ func (p *Processor) scheduleConditionRechecks() {
 	}
 }
 
+// scheduleJoinRechecks enqueues a transient JoinRecheck follow-up for each instance in which
+// a token left this batch and whose process has inclusive joins (ADR-0551). It is appended
+// after the batch's other follow-ups, so a token that left by taking a flow is already
+// activated, or still queued, when the re-check looks for it — either way it still counts
+// as able to reach the join.
+func (p *Processor) scheduleJoinRechecks() {
+	for _, piKey := range p.joinDirty {
+		p.followups = append(p.followups, Command{
+			Key:       piKey,
+			ValueType: model.VTProcessInstance,
+			Intent:    model.IntentJoinRecheck,
+		})
+	}
+}
+
 func (p *Processor) processBatch() error {
 	if h := p.halted.Load(); h != nil {
 		return h
@@ -1100,6 +1121,7 @@ func (p *Processor) processBatch() error {
 	p.followups = p.followups[:0]
 	p.sideEffects = p.sideEffects[:0]
 	p.condDirty = p.condDirty[:0]
+	p.joinDirty = p.joinDirty[:0]
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
 		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
@@ -1127,6 +1149,7 @@ func (p *Processor) processBatch() error {
 	// instance's armed conditionals as a follow-up (ADR-0137). It runs in the next batch, on
 	// the live command path only (never replay, I6); firing is the persisted Completing chain.
 	p.scheduleConditionRechecks()
+	p.scheduleJoinRechecks()
 
 	if len(p.batchRecords) == 0 {
 		// Nothing durable to write (e.g. a command with no handler). Advance

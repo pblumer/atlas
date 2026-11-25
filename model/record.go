@@ -596,6 +596,15 @@ const (
 	// ADR-0554). It is appended by the job completion's handler, never submitted as a
 	// command. Appended at the end so every prior intent keeps its value.
 	IntentTaskAnswered
+	// IntentJoinRecheck is a command-only intent (never persisted as an event), like
+	// IntentConditionRecheck: after a batch completes or terminates an element instance
+	// in an instance with inclusive joins, the processor schedules a re-check of the
+	// joins parked there (ADR-0551 part 1). A join's firing condition is a state of the
+	// instance's tokens, not something an arrival triggers, so a token that ends
+	// elsewhere can be what lets a parked join fire. Its handler runs the same check an
+	// arrival runs; the fire is the persisted Completed/Activating chain, so the intent
+	// never reaches the log. Appended at the end so every prior intent keeps its value.
+	IntentJoinRecheck
 )
 
 func (i Intent) String() string {
@@ -740,6 +749,8 @@ func (i Intent) String() string {
 		return "ApprovalRecorded"
 	case IntentTaskAnswered:
 		return "TaskAnswered"
+	case IntentJoinRecheck:
+		return "JoinRecheck"
 	default:
 		return "Intent(?)"
 	}
