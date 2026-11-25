@@ -37,23 +37,38 @@ func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
 
 // TestTheInstanceIsFoundByTheOrderItIsFor.
 //
-// And by the fulfilment process, not by whatever else carries the same variable:
-// every provisioning sub-process is started with the order id too, so a search
-// that took the first hit would open one position's process and call it the order.
+// And it is the lifecycle instance of the position the entry is about, not the
+// order's fulfilment orchestration (asked for so, 2026-11-24): somebody following a
+// service they hold wants the instance their actions are sent to. It is the
+// instance the order recorded on the position, checked against a search scoped to
+// that position's own process.
 func TestTheInstanceIsFoundByTheOrderItIsFor(t *testing.T) {
-	body := webRegion(t, readWeb(t, "shop.js"), "async function followProcess(", "\n}")
+	src := readWeb(t, "shop.js")
+	body := webRegion(t, src, "async function followProcess(", "\n}")
 	if !strings.Contains(body, "/api/v1/instances/search") {
 		t.Error("nothing looks the instance up, so the link cannot know where to go")
 	}
 	if !strings.Contains(body, "orderId=") {
 		t.Error("the lookup does not name the order it is for")
 	}
-	if !strings.Contains(body, "atlas-auftrag-erfuellung") {
-		t.Error("the lookup does not say which process it wants, so it may open a " +
-			"provisioning sub-process and call it the order")
+	if strings.Contains(body, "atlas-auftrag-erfuellung") {
+		t.Error("the lookup still opens the order's fulfilment process rather than " +
+			"the lifecycle instance of the position")
+	}
+	if !strings.Contains(body, "lifecycleOf(line)") {
+		t.Error("the lookup does not ask which lifecycle instance carries the position")
 	}
 	if !strings.Contains(body, "#/operations/i/") {
 		t.Error("the link does not lead to the instance view")
+	}
+	// The instance is the one the order recorded (ADR-0416): a per-position
+	// lifecycle's strand, else the newest instance of the position's own process.
+	of := webRegion(t, src, "function lifecycleOf(", "\n}")
+	for _, frag := range []string{"line.lifecycleProcess", "line.instances", "'per-position'", "'provision'"} {
+		if !strings.Contains(of, frag) {
+			t.Errorf("lifecycleOf does not read %s, so it cannot tell which instance "+
+				"carries the position", frag)
+		}
 	}
 }
 
