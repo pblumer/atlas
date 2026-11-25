@@ -172,21 +172,45 @@ async function frames(host) {
 test("full screen keeps the highlight on the picture, at every screen shape", async ({ page }) => {
   await page.goto("/handbuch.html");
   const nug = page.locator('[data-nugget="user"]');
+  const full = nug.locator('[data-act="full"]');
+  const isFull = () => page.evaluate(() => !!document.fullscreenElement);
   await nug.scrollIntoViewIfNeeded();
   // The button is only offered where the browser allows it, so its absence
   // here would mean the capability check itself is broken.
-  await expect(nug.locator('[data-act="full"]')).toHaveCount(1);
-  await nug.locator('[data-act="full"]').click();
-  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
-  // Somebody who went full screen is presenting: the first scene runs without
-  // a second click.
-  await expect(nug.locator('[data-act="toggle"]')).toHaveText("⏸");
+  await expect(full).toHaveCount(1);
 
-  for (const size of [{ width: 1280, height: 720 }, { width: 1024, height: 768 }]) {
-    await page.setViewportSize(size);
-    await nug.locator('.nug-steps i[data-i="0"]').click();
-    const { img, hi, natural } = await frames(nug);
+  // Each shape is entered afresh rather than resized into. A screen has its
+  // shape before anything fills it, and that is also the only order the
+  // browser still takes: Chromium refuses to resize a window that is in full
+  // screen ("restore it to normal state first"), which is what setting the
+  // viewport under a full-screen nugget asks of it.
+  const shapes = [{ width: 1280, height: 720 }, { width: 1024, height: 768 }];
+  for (const [n, size] of shapes.entries()) {
     const where = `${size.width}x${size.height}`;
+    await page.setViewportSize(size);
+    await full.click();
+    await expect.poll(isFull).toBe(true);
+    // What is measured below is this shape and not the last one: the two are
+    // chosen so that one is bounded by its height and the other by its width,
+    // and a full screen that ignored the viewport would measure one of them twice.
+    expect(await nug.evaluate((h) => ({ width: h.clientWidth, height: h.clientHeight })),
+      `${where}: full screen is not the shape asked for`).toEqual(size);
+    // Somebody who went full screen is presenting: the first scene runs without
+    // a second click. Only the first time — leaving full screen pauses the run,
+    // and coming back to a nugget that has already been played starts nothing.
+    if (n === 0) await expect(nug.locator('[data-act="toggle"]')).toHaveText("⏸");
+
+    await nug.locator('.nug-steps i[data-i="0"]').click();
+    // A scene is switched on two frames after it is asked for, and its picture
+    // is fetched then rather than with the page — so for a moment after the
+    // click there is no scene to measure, and for a moment longer no ratio to
+    // measure it against. Under a busy runner that moment is long enough to
+    // read: the measurement found no picture at all.
+    await expect.poll(() => nug.evaluate((h) => {
+      const shown = h.querySelector(".nug-scene.on img");
+      return !!shown && shown.complete && shown.naturalWidth > 0;
+    })).toBe(true);
+    const { img, hi, natural } = await frames(nug);
     expect(hi, `${where}: scene 0 lost its highlight`).toBeTruthy();
     expect(img.w, `${where}: no picture`).toBeGreaterThan(200);
     // This assertion has to come first, and it carries more than it looks like.
@@ -204,6 +228,9 @@ test("full screen keeps the highlight on the picture, at every screen shape", as
     expect(hi.y, `${where}: ring starts above the picture`).toBeGreaterThanOrEqual(img.y - 0.5);
     expect(hi.x + hi.w, `${where}: ring runs off the right edge`).toBeLessThanOrEqual(img.x + img.w + 0.5);
     expect(hi.y + hi.h, `${where}: ring runs off the bottom`).toBeLessThanOrEqual(img.y + img.h + 0.5);
+
+    await full.click();
+    await expect.poll(isFull).toBe(false);
   }
 });
 
