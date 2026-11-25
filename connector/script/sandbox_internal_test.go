@@ -428,10 +428,18 @@ var timeoutScript = `sleep 2 && : > "$2" & echo $! > "$1.tmp" && mv "$1.tmp" "$1
 // that falls first kills a script still running, and the call rightly reports that
 // kill instead — on a Windows runner, where `sh` is Git Bash and a loaded machine
 // took longer than 200ms to start it, that was "exit status 1" from the Job
-// Object, and the test failed having tested nothing. So the script marks the
-// moment it has left its process behind, and a run whose deadline fell before the
-// mark is repeated with a longer one, as TestTimeoutKillsTheInterpretersWholeProcessGroup
-// does for its descendant.
+// Object, and the test failed having tested nothing. So a run whose deadline fell
+// before the script had exited is repeated with a longer one.
+//
+// Which run that is, is read from how the script ended, not from the mark it leaves.
+// The mark is written after the fork and before the exit, so it says the process was
+// left behind but not that the script was gone, and a deadline that fell between the
+// two killed a script the test then took for one that had exited: on a Linux runner
+// on 2026-11-25 the 200ms deadline landed exactly there, and the test failed with
+// "signal: killed, want exec.ErrWaitDelay" having again tested nothing. The script
+// always exits 0 by itself, so an exit error can only be the kill, on every platform,
+// and that is the sign the deadline fell first. The mark is kept as the proof that a
+// script which did exit by itself had left its process behind.
 func TestAProcessHoldingTheOutputDoesNotOutlastTheTimeout(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
@@ -439,6 +447,7 @@ func TestAProcessHoldingTheOutputDoesNotOutlastTheTimeout(t *testing.T) {
 	// The process left behind works for five seconds, and every bound on the call
 	// stays well short of that, so a call that waited for it cannot pass.
 	const held = 5 * time.Second
+	var killed error
 	for _, timeout := range []time.Duration{200 * time.Millisecond, 600 * time.Millisecond, 1200 * time.Millisecond} {
 		marked := filepath.Join(t.TempDir(), "left-behind")
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -449,10 +458,18 @@ func TestAProcessHoldingTheOutputDoesNotOutlastTheTimeout(t *testing.T) {
 			t.Fatalf("execCommand returned after %s with a %s timeout; it waited for the process "+
 				"the script left behind, which holds the output for %s", elapsed, timeout, held)
 		}
-		if _, statErr := os.Stat(marked); errors.Is(statErr, os.ErrNotExist) {
-			t.Logf("the %s deadline fell before the script had left its process behind (%v); "+
+		// The script ended by the kill and not by its own exit: the deadline fell
+		// while it was still running, whether or not it had left its process behind.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			killed = err
+			t.Logf("the %s deadline fell before the script had exited (%v); "+
 				"repeating with a longer one", timeout, err)
 			continue
+		}
+		if _, statErr := os.Stat(marked); statErr != nil {
+			t.Fatalf("the script ended by itself (%v) without marking that it had left its "+
+				"process behind: %v", err, statErr)
 		}
 		// An output cut off is not a clean run: the process that held it may have had
 		// more to write.
@@ -461,13 +478,14 @@ func TestAProcessHoldingTheOutputDoesNotOutlastTheTimeout(t *testing.T) {
 		}
 		return
 	}
-	t.Fatal("no deadline landed after the script had left its process behind, so the wait " +
-		"for it was never tested")
+	t.Fatalf("no deadline landed after the script had exited (the last run ended with %v), "+
+		"so the wait for the process it left behind was never tested", killed)
 }
 
 // heldOutputScript leaves a process holding stdout for five seconds, marks $1 once
 // it has, and exits. The mark comes after the fork and before the exit, so its
-// presence says the script got as far as leaving the process behind.
+// presence says the script got as far as leaving the process behind — and nothing
+// about whether the script itself had exited when a deadline fell.
 var heldOutputScript = `sleep 5 & : > "$1"; exit 0`
 
 // procSummary is what /proc knows about a pid, for a message that would otherwise be
