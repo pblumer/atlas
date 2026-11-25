@@ -7314,17 +7314,20 @@ async function viewInstances() {
     const running = s.running
       ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
       : '<span class="muted">0</span>';
-    const collab = (g.latest.collaborationKey
+    const collab = g.latest.collaborationKey
       ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
-      : "") +
-      // Who the process talks to, whichever files its partners were deployed from
-      // (ADR-0559): offered for every process, since the answer is derived.
-      `<a class="replay-link ix-link" href="#/operations/interactions/${encodeURIComponent(g.processId)}" title="${esc(tr("ix.linkTitle"))}">⇆ ${esc(tr("ix.link"))}</a>`;
+      : "";
     // Row actions: one primary Open plus an overflow menu, so every row is the same
     // height and the destructive bulk-terminate doesn't shout from each row (it is
     // one click deeper, the same ⋯ pattern the Modeler's rows use).
     const openHref = `#/operations/p/${g.latest.key}`;
-    const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+    const menuItems = [
+      { label: "Open", icon: "→", href: openHref },
+      // Who the process talks to, whichever files its partners were deployed from
+      // (ADR-0559). In the menu, not beside the name: it is offered for every process,
+      // since the answer is derived, and a link on every row crowded the column.
+      { label: tr("ix.link"), icon: "⇆", href: `#/operations/interactions/${encodeURIComponent(g.processId)}` },
+    ];
     // Reading what changed between two versions needs no role beyond seeing them
     // (ADR-0530).
     if (g.versions.length > 1) {

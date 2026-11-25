@@ -6151,5 +6151,4 @@ export default {
   "ix.box.collapse": "Collapse",
   "ix.self": "Not drawn, because a message flow joins two pools: the process sends itself {messages}.",
   "ix.link": "Interactions",
-  "ix.linkTitle": "Who this process exchanges messages with",
 };

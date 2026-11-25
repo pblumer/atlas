@@ -940,7 +940,8 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   no-longer-possible flows carry their own colour; the pool outside the reader's view has no
   name, a black box no expander. A process expands to its deployed diagram, two models sharing
   an element id are both drawn, a flow then leaves the sending element, and a pool collapses
-  again and opens as the center of its own graph. The replay reads its history
+  again and opens as the center of its own graph. The Operations list offers the page from a
+  row's ⋯ menu, not beside the process name. The replay reads its history
   backwards page by page until it begins, says so, plays one message at a time or bundled per
   step, and Live appends what came `after` the newest event.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):

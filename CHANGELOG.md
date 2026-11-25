@@ -12,6 +12,11 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+- **The Interactions link moved into the row's menu.** In the Operations list, the link to who a
+  process talks to is no longer shown beside every process name; it is the second entry of the
+  row's ⋯ menu, after *Open* (ADR-0559).
+
 ## [0.29.0] — 2026-11-25
 
 **A connected system can show a person their shop, and keep a catalogue as its own.** Beside

@@ -283,3 +283,25 @@ test("Live appends what came after the newest event", async ({ page }) => {
   expect(calls.some((c) => c.startsWith("replay") && c.includes("after=90"))).toBe(true);
   expect(page.__errors).toEqual([]);
 });
+
+test("the Operations list offers the page from a row's menu, not beside the name", async ({ page }) => {
+  installMock(page);
+  // Registered after the mock, so these answer first: one process in the list.
+  await page.route("**/api/v1/processes", (route) =>
+    route.fulfill({ json: [{ key: 2, processId: "bestellung", name: "Sekretariat", version: 2 }] }));
+  await page.route("**/api/v1/instances/summary", (route) =>
+    route.fulfill({ json: [{ processDefKey: 2, processId: "bestellung", version: 2, active: 1, completed: 0, latestCompletedAt: 0 }] }));
+  await page.route("**/api/v1/incidents/summary", (route) => route.fulfill({ json: { total: 0, groups: [] } }));
+  await page.goto("/index.html#/operations");
+  const row = page.locator("#rows tr", { has: page.locator("td", { hasText: "Sekretariat" }) }).first();
+  await expect(row).toBeVisible({ timeout: 15000 });
+  // The name's cell carries no link to the page.
+  await expect(row.locator("td").first().locator('a[href*="/operations/interactions/"]')).toHaveCount(0);
+  await row.locator(".dropdown-toggle").click();
+  const item = row.locator('.dropdown-menu a[href="#/operations/interactions/bestellung"]');
+  await expect(item).toContainText("Zusammenspiel");
+  await item.click();
+  await expect(page).toHaveURL(/#\/operations\/interactions\/bestellung$/);
+  await expect(page.locator("#ix-title")).toHaveText("Zusammenspiel: Sekretariat", { timeout: 15000 });
+  expect(page.__errors).toEqual([]);
+});

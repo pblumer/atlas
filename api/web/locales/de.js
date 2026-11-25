@@ -6212,5 +6212,4 @@ export default {
   "ix.box.collapse": "Einklappen",
   "ix.self": "Nicht gezeichnet, weil ein Message Flow zwei Pools verbindet: der Prozess sendet sich selbst {messages}.",
   "ix.link": "Zusammenspiel",
-  "ix.linkTitle": "Mit wem dieser Prozess Nachrichten austauscht",
 };
