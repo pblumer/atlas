@@ -2903,6 +2903,9 @@ type AgentTaskConfig struct {
 	Prompt    RestExpr
 	ResultVar string
 	Retries   int32
+	// Limits carries the call's authored timeout, and what was wrong with any bound
+	// the task states (ADR-draft-agent-run-record).
+	Limits AgentLimits
 }
 
 // AddAgentConnectorTask adds an AI task and returns its element id. Like every other
@@ -2934,6 +2937,7 @@ func (b *Builder) AddAgentConnectorTask(cfg AgentTaskConfig) int32 {
 		ResultVar:   b.intern(cfg.ResultVar),
 		AgentModel:  b.intern(cfg.Model),
 		AgentPrompt: cfg.Prompt,
+		AgentLimits: cfg.Limits,
 		Retries:     cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)

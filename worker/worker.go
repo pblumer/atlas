@@ -42,6 +42,8 @@ type (
 	DecisionReport = workersdk.DecisionReport
 	// ToolCallReport is a worker's account of one tool an agent chose.
 	ToolCallReport = workersdk.ToolCallReport
+	// AgentRunReport is a worker's account of one call to a language model.
+	AgentRunReport = workersdk.AgentRunReport
 	// BPMNError ends a job in a BPMN error instead of a result (ADR-0089).
 	BPMNError = workersdk.BPMNError
 	// Options configures a [Worker].

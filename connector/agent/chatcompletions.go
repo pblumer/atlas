@@ -63,13 +63,19 @@ func (m *ChatCompletionsModel) Decide(ctx context.Context, req Request) (Decisio
 	if auth == "" {
 		auth = AuthBearer
 	}
-	payload, err := postJSON(ctx, m.Client, m.Timeout, endpoint, func(h http.Header) error {
+	body := m.request(req)
+	payload, err := postJSON(ctx, m.Client, callTimeout(m.Timeout, req), endpoint, func(h http.Header) error {
 		return applyAuth(h, auth, m.APIKey)
-	}, m.request(req))
+	}, body)
 	if err != nil {
 		return Decision{}, err
 	}
-	return m.decode(payload)
+	d, err := m.decode(payload)
+	if err != nil {
+		return Decision{}, err
+	}
+	d.Call.System, d.Call.Prompt = systemFor(req), promptFor(req)
+	return d, nil
 }
 
 // --- request ---------------------------------------------------------------
@@ -134,6 +140,15 @@ func chatToolSchemas(tools []Tool) []chatTool {
 // --- response --------------------------------------------------------------
 
 type chatResponse struct {
+	Model string `json:"model"`
+	// Usage as this format reports it: prompt_tokens already includes the cached part.
+	Usage struct {
+		PromptTokens        uint64 `json:"prompt_tokens"`
+		CompletionTokens    uint64 `json:"completion_tokens"`
+		PromptTokensDetails struct {
+			CachedTokens uint64 `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
+	} `json:"usage"`
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
@@ -169,12 +184,25 @@ func (m *ChatCompletionsModel) decode(payload []byte) (Decision, error) {
 		}
 		calls = append(calls, model.ToolCall{Tool: c.Function.Name, CallId: c.ID, Arguments: args})
 	}
+	call := Call{
+		Model:      resp.Model,
+		StopReason: choice.FinishReason,
+		Usage: Usage{
+			InputTokens:     resp.Usage.PromptTokens,
+			OutputTokens:    resp.Usage.CompletionTokens,
+			CacheReadTokens: resp.Usage.PromptTokensDetails.CachedTokens,
+		},
+		Answer: strings.TrimSpace(choice.Message.Content),
+	}
 	if len(calls) > 0 {
 		// Tool calls are the answer for this round; any text alongside them is the
-		// model thinking out loud on its way there, and the process has no use for it.
-		return Decision{ToolCalls: calls}, nil
+		// model thinking out loud on its way there. The process has no use for it as a
+		// variable, but it is part of what the model said, so it stays on the record.
+		return Decision{ToolCalls: calls, Call: call}, nil
 	}
-	return answerDecision(m.AnswerVariable, choice.Message.Content, choice.FinishReason)
+	d, err := answerDecision(m.AnswerVariable, choice.Message.Content, choice.FinishReason)
+	d.Call = call
+	return d, err
 }
 
 // unwrapJSONString takes the arguments as they actually arrive. The format says a JSON

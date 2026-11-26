@@ -109,15 +109,21 @@ func (m *HTTPModel) Decide(ctx context.Context, req Request) (Decision, error) {
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
 	}
-	payload, err := postJSON(ctx, m.Client, m.Timeout, endpoint, func(h http.Header) error {
+	body := m.request(req)
+	payload, err := postJSON(ctx, m.Client, callTimeout(m.Timeout, req), endpoint, func(h http.Header) error {
 		// Pinned rather than tracked, for the reason apiVersion gives.
 		h.Set("anthropic-version", apiVersion)
 		return applyAuth(h, m.Auth, m.APIKey)
-	}, m.request(req))
+	}, body)
 	if err != nil {
 		return Decision{}, err
 	}
-	return m.decode(payload)
+	d, err := m.decode(payload)
+	if err != nil {
+		return Decision{}, err
+	}
+	d.Call.System, d.Call.Prompt = body.System, promptFor(req)
+	return d, nil
 }
 
 // --- request ---------------------------------------------------------------
@@ -260,8 +266,17 @@ func roundPrompt(req Request) string {
 // --- response --------------------------------------------------------------
 
 type messagesResponse struct {
+	Model      string `json:"model"`
 	StopReason string `json:"stop_reason"`
-	Content    []struct {
+	// Usage as this format reports it: input_tokens is only the part that was neither
+	// read from nor written to the cache, so the three are summed into one figure.
+	Usage struct {
+		InputTokens              uint64 `json:"input_tokens"`
+		OutputTokens             uint64 `json:"output_tokens"`
+		CacheCreationInputTokens uint64 `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     uint64 `json:"cache_read_input_tokens"`
+	} `json:"usage"`
+	Content []struct {
 		Type  string          `json:"type"`
 		Text  string          `json:"text"`
 		ID    string          `json:"id"`
@@ -291,12 +306,26 @@ func (m *HTTPModel) decode(payload []byte) (Decision, error) {
 			calls = append(calls, model.ToolCall{Tool: block.Name, CallId: block.ID, Arguments: args})
 		}
 	}
+	call := Call{
+		Model:      resp.Model,
+		StopReason: resp.StopReason,
+		Usage: Usage{
+			InputTokens:      resp.Usage.InputTokens + resp.Usage.CacheCreationInputTokens + resp.Usage.CacheReadInputTokens,
+			OutputTokens:     resp.Usage.OutputTokens,
+			CacheReadTokens:  resp.Usage.CacheReadInputTokens,
+			CacheWriteTokens: resp.Usage.CacheCreationInputTokens,
+		},
+		Answer: strings.TrimSpace(text.String()),
+	}
 	if len(calls) > 0 {
 		// Tool calls are the answer for this round; any text alongside them is the
-		// model thinking out loud on its way there, and the process has no use for it.
-		return Decision{ToolCalls: calls}, nil
+		// model thinking out loud on its way there. The process has no use for it as a
+		// variable, but it is part of what the model said, so it stays on the record.
+		return Decision{ToolCalls: calls, Call: call}, nil
 	}
-	return answerDecision(m.AnswerVariable, text.String(), resp.StopReason)
+	d, err := answerDecision(m.AnswerVariable, text.String(), resp.StopReason)
+	d.Call = call
+	return d, err
 }
 
 // arguments turns a tool call's JSON input object into the variables the activated

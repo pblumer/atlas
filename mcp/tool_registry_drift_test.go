@@ -240,6 +240,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_finished_instances_deletion": "GET /api/v1/processes/{key}/history-purge",
 	"atlas_delete_finished_instances":   "POST /api/v1/processes/{key}/history-purge",
 	"atlas_instance_decisions":          "GET /api/v1/instances/{key}/decisions",
+	"atlas_instance_agent_runs":         "GET /api/v1/instances/{key}/agent-runs",
 	"atlas_deployed_decisions":          "GET /api/v1/decisions/deployed",
 	"atlas_decision_deployments":        "GET /api/v1/decision-deployments",
 	"atlas_deployed_decision_model":     "GET /api/v1/decision-deployments/{key}/xml",

@@ -1517,6 +1517,11 @@ const (
 	// job, and the next lease is decided afresh — under whatever the policies, the
 	// account and the connection say by then.
 	IncidentAuthorizationDenied IncidentReason = 8
+	// IncidentAgentLimit marks an agent-driven container that reached a bound its model
+	// states — its rounds or its token budget — before the agent said it was done
+	// (ADR-draft-agent-run-record). The container is parked, not failed: resolving the
+	// incident grants the same allowance once more and asks for the next round.
+	IncidentAgentLimit IncidentReason = 9
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }
@@ -1657,6 +1662,8 @@ func newValue(vt ValueType) Value {
 		return &ActionApprovalValue{}
 	case VTTaskAnswer:
 		return &TaskAnswerValue{}
+	case VTAgentRun:
+		return &AgentRunValue{}
 	default:
 		return nil
 	}

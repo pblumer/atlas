@@ -719,6 +719,7 @@ func registerScope(
 			}
 			d.AgentDriven = true
 			d.AgentWorker = b.intern(worker)
+			d.AgentLimits = parseAgentLimits(ag, true)
 			// A model name is authored, a provider is configured: naming none interns to -1
 			// and leaves the Worker's own model to run, so a container and the ai tasks
 			// beside it can ask different models through one endpoint and one credential.

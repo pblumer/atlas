@@ -76,6 +76,10 @@ type inflightValue struct {
 	// four strings wide, and the completion handler in the API allocates it off the run
 	// loop, so the processor copies sixteen bytes and allocates nothing.
 	taskAnswer *model.TaskAnswerValue
+	// agentRun rides only on the AgentRun event a model call or a tool's result emits
+	// (ADR-draft-agent-run-record), behind a pointer for the same reason: it is a dozen
+	// strings wide and is allocated off the hot path.
+	agentRun *model.AgentRunValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -142,6 +146,10 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 	case model.VTTaskAnswer:
 		if v.taskAnswer != nil {
 			return v.taskAnswer
+		}
+	case model.VTAgentRun:
+		if v.agentRun != nil {
+			return v.agentRun
 		}
 	}
 	return nil
@@ -267,6 +275,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTTaskAnswer:
 		if v, ok := rec.Value.(*model.TaskAnswerValue); ok {
 			iv.taskAnswer = v
+		}
+	case model.VTAgentRun:
+		if v, ok := rec.Value.(*model.AgentRunValue); ok {
+			iv.agentRun = v
 		}
 	}
 	return iv

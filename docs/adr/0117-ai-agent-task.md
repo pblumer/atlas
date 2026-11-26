@@ -14,6 +14,13 @@
 > `GET /api/v1/instances/{key}/agent-runs`, and its Operations view. The only limits today are
 > a Worker's `ATLAS_AGENT_<NAME>_MAX_TOKENS` (a per-response cap) and a fixed two-minute HTTP
 > timeout. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
+>
+> **Implementation status (2026-11-26).** Still partial, by less. Built since, by
+> [ADR-draft-agent-run-record](draft-agent-run-record.md): the `VTAgentRun` record with its
+> token usage, `GET /api/v1/instances/{key}/agent-runs`, and the limits `maxIterations`,
+> `timeout` and `tokenBudget` — the two run bounds enforced by the engine on an agent-driven
+> container rather than by a worker, since [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md)
+> moved the loop into the process. Not built: the output schema and the Operations view.
 
 ## Context and problem statement
 

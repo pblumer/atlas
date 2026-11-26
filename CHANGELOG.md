@@ -13,6 +13,23 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **An agent's run is on the record.** Every call a process makes to a language model — an ai
+  task's one call, or a round of an agent-driven ad-hoc subprocess — now leaves a fact with the
+  instance: which element and which round, the model that answered, why it stopped, how many
+  tokens it read and wrote, and what the element's calls add up to so far. The worker reports
+  what only it can know; the engine numbers the rounds and keeps the sums itself, also for a
+  worker that reports nothing. Read it with `GET /api/v1/instances/{key}/agent-runs` or the MCP
+  tool `atlas_instance_agent_runs`, while the instance runs and after it finished. In a process
+  that declares personal data the prompt and the answer are stored under the data subject's
+  key, so erasing the subject reaches them
+  ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md)).
+- **An agent can be given bounds.** `<atlas:agentConnector>` reads `maxIterations` (rounds),
+  `tokenBudget` (input plus output tokens of the run) and `timeout` (an ISO-8601 duration for
+  one call to the model, also on an ai task). At a bound the container stops asking, stays
+  active and raises an incident that says which bound it reached; resolving the incident grants
+  the same allowance once more. A value that cannot be honoured refuses the deploy on the
+  element that states it. The Modeler has no fields for the three yet: they are written in the
+  XML.
 - **A reference pool shows the process it stands for.** In the Modeler, a pool that references a
   deployed process can now show that process: *Show the process in the pool* in the pool's panel
   draws the deployed version inside the pool, grows the pool to hold it and moves what stands
@@ -46,6 +63,13 @@ _Changed_ / _Removed_ for each version.
   process outside the model also receives (ADR-0559, amendment of 2026-11-25).
 
 ### Changed
+- **An agent that states no bound now stops after 25 rounds.** An agent-driven ad-hoc
+  subprocess without `maxIterations` used to run for as long as its model kept choosing tools,
+  bounded only by a completion condition if its model had one. It now parks on an incident
+  after 25 rounds, and after every further 25 once resolved. A model that needs more states
+  `maxIterations`. An ai task's worker now completes with the account of its call as well as
+  its variable, so a custom worker built on `worker.RunAiTask` gets an `Outcome` back instead of
+  a map.
 - **The Interactions link moved into the row's menu.** In the Operations list, the link to who a
   process talks to is no longer shown beside every process name; it is the second entry of the
   row's ⋯ menu, after *Open* (ADR-0559).

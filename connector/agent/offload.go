@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -62,10 +63,32 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.Element
 			Tools:   tools,
 			Results: results,
 			Round:   len(results) + 1,
+			Timeout: roundTimeout(d),
 		},
 		Connector: cp.Intern(d.AgentWorker),
 		Model:     cp.Intern(d.AgentModel),
 	}, nil
+}
+
+// roundTimeout is the container's authored bound on one call, as the request carries it.
+func roundTimeout(d *compiler.AdHocDetail) time.Duration {
+	return time.Duration(d.AgentLimits.TimeoutNanos)
+}
+
+// timeoutMs and timeoutFromPayload are the two ends of how a call's bound travels: in
+// whole milliseconds, zero for "none stated".
+func timeoutMs(d time.Duration) int64 { return d.Milliseconds() }
+
+func timeoutFromPayload(v any) time.Duration {
+	switch ms := v.(type) {
+	case int64:
+		return time.Duration(ms) * time.Millisecond
+	case int:
+		return time.Duration(ms) * time.Millisecond
+	case float64: // a payload that came back over JSON
+		return time.Duration(ms) * time.Millisecond
+	}
+	return 0
 }
 
 // contextNotSet is what a named variable that is not there travels as. It is sent rather
@@ -152,6 +175,7 @@ func ResolveJobPayload(r Round) map[string]any {
 		"tools":     r.Tools,
 		"results":   r.Results,
 		"round":     r.Round,
+		"timeoutMs": timeoutMs(r.Timeout),
 	}
 }
 
@@ -175,6 +199,7 @@ func RoundFromPayload(fields map[string]any) (Round, error) {
 	if r.Round < 1 {
 		return Round{}, fmt.Errorf("agent: payload names no round")
 	}
+	r.Timeout = timeoutFromPayload(fields["timeoutMs"])
 	r.Context = stringMap(fields["context"])
 	r.Results = stringSlice(fields["results"])
 	tools, err := toolsFromPayload(fields["tools"])

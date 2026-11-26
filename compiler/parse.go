@@ -1855,6 +1855,11 @@ type xmlAgentConnector struct {
 	// separated (ADR-0257). It is the container's alone: an ai
 	// task's prompt is FEEL over the variables it sees, so it carries its own data.
 	Context string `xml:"context,attr"`
+	// The bounds of ADR-0117, read by parseAgentLimits: maxIterations and tokenBudget
+	// bound a container's run, timeout (an ISO-8601 duration) one call to the model.
+	MaxIterations string `xml:"maxIterations,attr"`
+	TokenBudget   string `xml:"tokenBudget,attr"`
+	Timeout       string `xml:"timeout,attr"`
 }
 
 // One <atlas:agentParam> on a contained activity: a value the model must supply when it calls

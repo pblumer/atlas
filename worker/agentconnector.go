@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/connector/agent"
 )
@@ -148,11 +149,11 @@ func RunAgentRound(ctx context.Context, j Job, models map[string]agent.Model) (O
 	if err != nil {
 		return Outcome{}, err
 	}
-	decision, err := m.Decide(ctx, round.Request)
+	decision, took, err := decideWithin(ctx, m, round.Request)
 	if err != nil {
 		return Outcome{}, err
 	}
-	out := Outcome{}
+	out := Outcome{AgentRun: agentRunReport(decision.Call, took)}
 	for _, call := range decision.ToolCalls {
 		rep := ToolCallReport{Tool: call.Tool, CallId: call.CallId}
 		if len(call.Arguments) > 0 {
@@ -245,33 +246,71 @@ func agentProviderName(name string) string {
 // named, which is the point of the task. So the single output is renamed here, and a
 // decision that came back as a tool call is refused: an ai task offered no tools, and a
 // model that called one anyway has answered a question nobody asked.
-func RunAiTask(ctx context.Context, j Job, models map[string]agent.Model) (map[string]any, error) {
+func RunAiTask(ctx context.Context, j Job, models map[string]agent.Model) (Outcome, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("agent: the job carried no resolved ai task; is this server resolving ai tasks?")
+		return Outcome{}, fmt.Errorf("agent: the job carried no resolved ai task; is this server resolving ai tasks?")
 	}
 	task, err := agent.TaskFromPayload(j.Connector.Fields)
 	if err != nil {
-		return nil, err
+		return Outcome{}, err
 	}
 	m, err := agentModelFor(task.Connector, task.Model, models)
 	if err != nil {
-		return nil, err
+		return Outcome{}, err
 	}
-	decision, err := m.Decide(ctx, agent.TaskRequest(task))
+	decision, took, err := decideWithin(ctx, m, agent.TaskRequest(task))
 	if err != nil {
-		return nil, err
+		return Outcome{}, err
 	}
 	if len(decision.ToolCalls) > 0 {
-		return nil, fmt.Errorf("agent: the model called %d tool(s) for an ai task, which offers none",
+		return Outcome{}, fmt.Errorf("agent: the model called %d tool(s) for an ai task, which offers none",
 			len(decision.ToolCalls))
 	}
 	if len(decision.Outputs) != 1 {
 		// The adapters answer with exactly one output or fail (answerDecision), so this
 		// is a broken adapter rather than a bad answer — and renaming the wrong one of
 		// several would put text under a name that promises something else.
-		return nil, fmt.Errorf("agent: the model answered with %d values, want exactly one", len(decision.Outputs))
+		return Outcome{}, fmt.Errorf("agent: the model answered with %d values, want exactly one", len(decision.Outputs))
 	}
-	return map[string]any{task.ResultVariable: variableValue(decision.Outputs[0])}, nil
+	return Outcome{
+		Variables: map[string]any{task.ResultVariable: variableValue(decision.Outputs[0])},
+		AgentRun:  agentRunReport(decision.Call, took),
+	}, nil
+}
+
+// decideWithin puts one request to the model inside the bound its element states, and
+// says how long the call took (ADR-draft-agent-run-record).
+//
+// The bound is applied twice on purpose. The adapter gives it to its HTTP client, which
+// is what ends a call that has stopped sending; the context carries it too, so an
+// adapter that was handed a client of its own — or one that is not HTTP at all — is
+// bounded just the same. A call that runs out fails the job like any unreachable model:
+// retried while retries remain, then an incident.
+func decideWithin(ctx context.Context, m agent.Model, req agent.Request) (agent.Decision, time.Duration, error) {
+	if req.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
+		defer cancel()
+	}
+	started := time.Now()
+	decision, err := m.Decide(ctx, req)
+	return decision, time.Since(started), err
+}
+
+// agentRunReport is the adapter's account of a call in the shape a completion carries.
+func agentRunReport(call agent.Call, took time.Duration) *AgentRunReport {
+	return &AgentRunReport{
+		Model:            call.Model,
+		StopReason:       call.StopReason,
+		InputTokens:      call.Usage.InputTokens,
+		OutputTokens:     call.Usage.OutputTokens,
+		CacheReadTokens:  call.Usage.CacheReadTokens,
+		CacheWriteTokens: call.Usage.CacheWriteTokens,
+		DurationMs:       uint64(took.Milliseconds()),
+		System:           call.System,
+		Prompt:           call.Prompt,
+		Answer:           call.Answer,
+	}
 }
 
 func agentModelNames(models map[string]agent.Model) string {

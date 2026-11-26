@@ -1016,6 +1016,19 @@ Making processes wait, react, and time out.
   ([ADR-0098](docs/adr/0098-external-variable-modification-audit.md)), read via
   `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
   timeline so a corrected value carries its actor.
+- 🚧 **An agent's run on the record, and bounded** ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md),
+  completing [ADR-0117](docs/adr/0117-ai-agent-task.md)): every call to a language model — an ai
+  task's one call, a round of an agent-driven container — leaves an `AgentRun` fact beside its
+  job's completion: element, round, the model that answered, the tokens it read and wrote, the
+  element's running sums. The worker accounts for the call, the **engine** numbers the round and
+  keeps the sums, so a worker cannot hide a round. `<atlas:agentConnector>` reads
+  `maxIterations`, `tokenBudget` and `timeout`; a container that states no bound gets 25 rounds.
+  At a bound the container **parks on an incident** and resolving it grants the same allowance
+  again — the standard loop's runaway rule (ADR-0133) applied to a loop whose every turn is paid
+  for. A process that declares personal data keeps a call's texts under the data subject's key
+  (ADR-0314). Read over `GET /api/v1/instances/{key}/agent-runs` and MCP
+  `atlas_instance_agent_runs`. 🔲 Not built: the Operations view on the agent's element, and
+  Modeler fields for the three bounds.
 
 - ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
   published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered

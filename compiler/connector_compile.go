@@ -3086,6 +3086,7 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		Prompt:    prompt,
 		ResultVar: result,
 		Retries:   retries,
+		Limits:    parseAgentLimits(cn, false),
 	}), nil
 }
 

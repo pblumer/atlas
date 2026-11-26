@@ -5828,6 +5828,15 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The account of the model call behind this completion rides beside them
+	// (ADR-draft-agent-run-record). Built here, off the run loop, because sealing its
+	// texts for a process that declares personal data reads the vault (ADR-0314).
+	callReport, err := parseAgentRunReport(body)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	agentRun := s.agentRunFromReport(key, callReport)
 	// Forcing a step the engine would not have taken on its own is an intervention, so
 	// it must say why (ADR-0159). The reason is required — not merely recorded when
 	// offered — because the audit trail is the whole point of this route: without it a
@@ -5949,8 +5958,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case decision != nil:
 				s.proc.CompleteJobWithDecision(key, decision, vars...)
-			case len(calls) > 0:
-				s.proc.CompleteJobWithToolCalls(key, calls, vars...)
+			case jv.JobType == compiler.AgentJobTypeIndex || jv.JobType == compiler.AiTaskJobTypeIndex:
+				// A call to a language model: the round's choice, when it made one, and
+				// the worker's account of the call. Both may be absent — no calls is the
+				// agent's ending, and a worker that reports nothing has still asked a
+				// model, which the engine records from what it knows itself.
+				s.proc.CompleteJobWithAgentRun(key, agentRun, calls, vars...)
 			default:
 				// No calls is the agent's ending, and the ordinary completion is
 				// exactly what it means: the container drains and finishes.

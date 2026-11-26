@@ -117,6 +117,32 @@ type Outcome struct {
 	// Empty is an answer, not an omission — the agent saying the run is finished —
 	// so a round that ends completes with variables like any other job.
 	ToolCalls []ToolCallReport
+	// AgentRun is a worker's account of the call it made to a language model for this
+	// job (ADR-draft-agent-run-record): the model that answered, what it read and
+	// wrote, and the texts. The engine keeps it as the durable record of the call; nil
+	// for every kind that asks no model.
+	AgentRun *AgentRunReport
+}
+
+// AgentRunReport is a worker's account of one call to a language model.
+//
+// Like the two reports above it is an account, not a record: the engine reads which
+// element and which round this is from the leased job and counts the rounds itself, so
+// nothing here can move a call to another element or hide one. What it cannot check —
+// the token counts, the model's name, the texts — it records as reported.
+type AgentRunReport struct {
+	Model      string `json:"model,omitempty"`
+	StopReason string `json:"stopReason,omitempty"`
+	// InputTokens is everything the model read, cached or not; the two cache figures
+	// are parts of it.
+	InputTokens      uint64 `json:"inputTokens"`
+	OutputTokens     uint64 `json:"outputTokens"`
+	CacheReadTokens  uint64 `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens uint64 `json:"cacheWriteTokens,omitempty"`
+	DurationMs       uint64 `json:"durationMs,omitempty"`
+	System           string `json:"system,omitempty"`
+	Prompt           string `json:"prompt,omitempty"`
+	Answer           string `json:"answer,omitempty"`
 }
 
 // DecisionReport is a worker's account of a decision it evaluated: which decision, the
@@ -548,6 +574,11 @@ func (w *Worker) complete(ctx context.Context, j Job, out Outcome) error {
 	// done, which is the same meaning an empty list has in the engine (ADR-0254).
 	if len(out.ToolCalls) > 0 {
 		body["toolCalls"] = out.ToolCalls
+	}
+	// Only a call to a language model has one, and the engine ignores it on any other
+	// job type.
+	if out.AgentRun != nil {
+		body["agentRun"] = out.AgentRun
 	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/complete", body, nil)
 }

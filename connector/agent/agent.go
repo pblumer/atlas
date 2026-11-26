@@ -17,6 +17,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
@@ -68,6 +69,11 @@ type Request struct {
 	// It is not serialized into a job payload: a round's framing is this package's to
 	// state, and a request that travelled from the engine never carries one.
 	System string `json:"-"`
+	// Timeout bounds this one call when the model states one on the element
+	// (ADR-draft-agent-run-record). Zero leaves the adapter's own default. It is not
+	// serialized as part of the request: it travels beside it, in milliseconds, because
+	// it is a property of the call and not something the model is told.
+	Timeout time.Duration `json:"-"`
 }
 
 // Decision is what the model answered. Exactly one of the two is the answer: tool calls
@@ -76,6 +82,33 @@ type Request struct {
 type Decision struct {
 	ToolCalls []model.ToolCall
 	Outputs   []model.VariableValue
+	// Call is the adapter's account of the call that produced this decision: which
+	// model answered, what it read and wrote, and the texts that went each way. It is
+	// what becomes the durable record of the round (ADR-draft-agent-run-record).
+	Call Call
+}
+
+// Usage is what one call read and wrote, in tokens, in one shape for every provider.
+// InputTokens is everything the model read, cached or not — providers disagree about
+// whether their own input figure includes the cached part, and a budget summed over
+// figures that mean different things would mean nothing. CacheReadTokens and
+// CacheWriteTokens are the parts of it served from and written to the provider's cache.
+type Usage struct {
+	InputTokens      uint64
+	OutputTokens     uint64
+	CacheReadTokens  uint64
+	CacheWriteTokens uint64
+}
+
+// Call is one call to a model as the adapter that made it saw it. Everything in it is
+// an account: the engine records it and cannot check it.
+type Call struct {
+	Model      string // the model that answered, as the provider named it
+	StopReason string // why it stopped, in the provider's own word
+	Usage      Usage
+	System     string // the standing instruction it was given
+	Prompt     string // what this call added to the conversation
+	Answer     string // the words it wrote, beside or instead of tool calls
 }
 
 // Model is the whole of this package's dependency on inference: one round in, one
