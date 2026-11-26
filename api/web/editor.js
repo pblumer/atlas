@@ -3257,9 +3257,10 @@ function collectDiagramVariables(modeler, opts = {}) {
   };
   try {
     // The process, also while the canvas shows a collapsed subprocess's own plane:
-    // its start variables and constants are in reach in there as much as outside.
-    const rootBo = owningProcess(modeler);
-    if (rootBo) {
+    // its start variables and constants are in reach in there as much as outside. A
+    // file with pools holds one process per pool, each with its own; they are listed
+    // together, as everything else the diagram's pools write is.
+    for (const rootBo of diagramProcesses(modeler)) {
       // The declared type used to ride along inside the source text ("start variable ·
       // string"); it is a badge of its own now, like every other type the panel knows.
       for (const v of readStartVariables(rootBo)) {
@@ -9202,6 +9203,26 @@ function owningProcess(modeler) {
     while (bo && /SubProcess$|:Transaction$/.test(bo.$type || "")) bo = bo.$parent;
     return bo && /:Process$/.test(bo.$type || "") ? bo : null;
   } catch { return null; }
+}
+
+// diagramProcesses is every process the diagram holds: the one a plain diagram is —
+// also while the canvas shows a collapsed subprocess's plane — or, for a file with
+// pools, the process of each pool that has one. A reference pool and an external party
+// have none. What a process declares for its start — start variables, constants — is
+// declared on it, so a reader of the whole diagram asks each of them.
+function diagramProcesses(modeler) {
+  const own = owningProcess(modeler);
+  if (own) return [own];
+  try {
+    const registry = modeler.get("elementRegistry"), seen = new Set(), out = [];
+    registry.forEach((el) => {
+      const bo = el.businessObject;
+      if (el.labelTarget || !bo || !/:Participant$/.test(bo.$type || "")) return;
+      const proc = bo.processRef;
+      if (proc && !seen.has(proc)) { seen.add(proc); out.push(proc); }
+    });
+    return out;
+  } catch { return []; }
 }
 
 // processBusinessObject returns the <bpmn:process> business object a rendered diagram

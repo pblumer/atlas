@@ -2275,7 +2275,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // painted again onto the new shapes, and the hint is given when what is on the
   // canvas is no longer what the sandbox runs — which a diagram put back is not.
   let shown = false; // the Playground tab is the active one (setActive)
-  const onImport = async (e) => {
+  const afterImport = async (e) => {
     if (e && e.error) return; // a refused import; the one that follows puts it back
     if (shown) drawCanvas();
     const session = state.session;
@@ -2285,6 +2285,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (state.session !== session) return; // the sandbox went away while asking
     if (!now || now !== session.xml) onEdit();
   };
+  // The listener itself answers nothing. diagram-js stops an event at the first
+  // listener that answers anything at all, and an async function answers a promise:
+  // registered as the listener, afterImport kept import.done from everyone registered
+  // after it — the Problems bar, the Variables panel, the call activity's cue — so a
+  // diagram replaced by an import kept the findings of the one before it.
+  const onImport = (e) => { afterImport(e).catch(() => { /* best-effort repaint */ }); };
   modeler.on("import.done", onImport);
 
   function setActive(on) {
