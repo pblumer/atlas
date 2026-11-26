@@ -785,7 +785,10 @@
         { "name": "prompt", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
-        { "name": "context", "type": "String", "isAttr": true }
+        { "name": "context", "type": "String", "isAttr": true },
+        { "name": "maxIterations", "type": "String", "isAttr": true },
+        { "name": "tokenBudget", "type": "String", "isAttr": true },
+        { "name": "timeout", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -796,6 +799,17 @@
         { "name": "type", "type": "String", "isAttr": true },
         { "name": "description", "type": "String", "isAttr": true },
         { "name": "required", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "AgentOutput",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "type", "type": "String", "isAttr": true },
+        { "name": "description", "type": "String", "isAttr": true },
+        { "name": "required", "type": "String", "isAttr": true },
+        { "name": "values", "type": "String", "isAttr": true }
       ]
     },
     {
