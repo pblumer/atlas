@@ -961,7 +961,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   file, with the pool grown and the pool below moved, the sending and waiting elements named,
   and the flows at the pool's edge led on to them; showing is one step to undo, hiding gives
   the room back, a saved drawing opens the way it was left, a pool made smaller shows the
-  picture smaller, and a reference nothing deploys is not offered it. The replay reads its history
+  picture smaller, and a reference nothing deploys is not offered it. The pool's wrench menu
+  shows and hides the process as the panel's button does, never gives a reference a process of
+  its own, and leaves the other pools bpmn-js's own entries. A double click on a resolved
+  reference shows the process, one on the shown process opens that process's model in the
+  Modeler after asking about unsaved changes, one on the name's band edits the name, and every
+  other pool keeps the label editor; the panel's button opens the model too and says when the
+  server holds none. The replay reads its history
   backwards page by page until it begins, says so, plays one message at a time or bundled per
   step, and Live appends what came `after` the newest event.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):

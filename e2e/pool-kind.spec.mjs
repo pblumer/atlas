@@ -362,3 +362,155 @@ test("a reference nothing deploys has nothing to show, and a pool that stands fo
   expect(await pool(page, "Pool_ship")).toMatchObject({ shown: 0, ownLabelHidden: false });
   expect(page.__errors).toEqual([]);
 });
+
+// ---------- the wrench menu of a reference pool ----------
+
+// bpmn-js's own replace menu offers a pool without a process "Expanded pool", which
+// gives it an empty process. For a reference that is the wrong thing twice: the pool
+// would be a reference and a process of its own, and what the modeller means by
+// expanding it is to see the process it stands for. The menu therefore does what the
+// panel's button does.
+const openMenu = (page, id) => page.evaluate((el) => {
+  const m = window.__atlasModeler, e = m.get("elementRegistry").get(el);
+  m.get("selection").select(e);
+  m.get("popupMenu").open(e, "bpmn-replace", { x: 400, y: 300 });
+}, id);
+// The entries of the menu itself; its header holds bpmn-js's own toggles.
+const menuEntries = (page) => page.locator(".djs-popup-results .entry");
+
+test("the wrench menu of a reference pool shows and hides its process", async ({ page }) => {
+  await checked(page);
+  const processes = (await xml(page)).match(/<bpmn:process /g).length;
+  const before = await pool(page, "Pool_ship");
+
+  await openMenu(page, "Pool_ship");
+  await expect(menuEntries(page)).toHaveCount(1);
+  await expect(menuEntries(page)).toHaveText("Aufgeklappter Pool (zeigt den Prozess)");
+  await menuEntries(page).click();
+  await expect(page.locator(".djs-popup")).toHaveCount(0);
+  await expect(picture(page)).toHaveCount(1);
+  // The same as the panel's button: no process of its own, the attribute on the shape.
+  let out = await xml(page);
+  expect(out.match(/<bpmn:process /g)).toHaveLength(processes);
+  expect(out).toMatch(/<bpmn:participant id="Pool_ship" name="Versand" atlas:processId="versand"\s*\/>/);
+  expect(out).toContain('bpmnElement="Pool_ship" isHorizontal="true" atlas:showProcess="true"');
+  await expect(page.locator("#f-poolshow")).toHaveText("Prozess ausblenden");
+
+  // Shown, the menu offers the way back.
+  await openMenu(page, "Pool_ship");
+  await expect(menuEntries(page)).toHaveCount(1);
+  await expect(menuEntries(page)).toHaveText("Zugeklappter Pool (blendet den Prozess aus)");
+  await menuEntries(page).click();
+  await expect(picture(page)).toHaveCount(0);
+  expect(await pool(page, "Pool_ship")).toEqual(before);
+  out = await xml(page);
+  expect(out).not.toContain("atlas:showProcess");
+  expect(out.match(/<bpmn:process /g)).toHaveLength(processes);
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the wrench menu does not give a reference a process of its own, and leaves other pools alone", async ({ page }) => {
+  await checked(page);
+  const before = await xml(page);
+  // A reference nothing deploys has nothing to show: the entry says so and does nothing.
+  await openMenu(page, "Pool_ref");
+  await expect(menuEntries(page)).toHaveCount(1);
+  await expect(menuEntries(page)).toHaveText("Aufgeklappter Pool (Prozess nicht deployt)");
+  await expect(menuEntries(page)).toHaveClass(/disabled/);
+  await menuEntries(page).click({ force: true });
+  expect(await xml(page)).toBe(before);
+  await page.evaluate(() => window.__atlasModeler.get("popupMenu").close());
+
+  // An external party keeps bpmn-js's own entry, which gives it a process to draw in.
+  await openMenu(page, "Pool_bank");
+  await expect(menuEntries(page)).toHaveText(["Aufgeklappter Pool"]);
+  // So does a pool modelled here, which may be emptied.
+  await page.evaluate(() => window.__atlasModeler.get("popupMenu").close());
+  await openMenu(page, "Pool_order");
+  await expect(menuEntries(page)).toHaveText(["Leerer Pool (entfernt den Inhalt)"]);
+  expect(page.__errors).toEqual([]);
+});
+
+// ---------- a double click on a reference pool ----------
+
+// Where on the page a point of a pool lies: dx from its left edge, in the middle of its
+// height. The whole diagram is brought into view first.
+const poolPoint = (page, id, dx) => page.evaluate(([el, x]) => {
+  const m = window.__atlasModeler;
+  const r = m.get("elementRegistry").getGraphics(el).querySelector(".djs-visual rect").getBoundingClientRect();
+  return { x: r.left + (x == null ? r.width / 2 : x * (r.width / m.get("elementRegistry").get(el).width)), y: r.top + r.height / 2 };
+}, [id, dx]);
+const dblclick = async (page, id, dx) => {
+  await page.evaluate(() => window.__atlasModeler.get("canvas").zoom("fit-viewport"));
+  const at = await poolPoint(page, id, dx);
+  await page.mouse.dblclick(at.x, at.y);
+};
+const editingLabel = (page) => page.locator(".djs-direct-editing-parent");
+
+test("a double click on a reference pool shows its process, and one on the process opens its model", async ({ page }) => {
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); d.accept(); });
+  await checked(page);
+  // A double click means "open this": first the pool shows the process it stands for,
+  // and the name is not opened for editing.
+  await dblclick(page, "Pool_ship");
+  await expect(picture(page)).toHaveCount(1);
+  await expect(editingLabel(page)).toHaveCount(0);
+  expect(await xml(page)).toContain('bpmnElement="Pool_ship" isHorizontal="true" atlas:showProcess="true"');
+
+  // On the band that holds the name, a double click edits the name, as on any pool
+  // with content; the process stays shown.
+  await dblclick(page, "Pool_ship", 12);
+  await expect(editingLabel(page)).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(editingLabel(page)).toHaveCount(0);
+  await expect(picture(page)).toHaveCount(1);
+
+  // On the shown process, it goes one step further in: the model of the referenced
+  // process opens in the Modeler, the way a call activity's "+" opens the called one.
+  // This diagram was changed and is not a draft, so leaving it asks first.
+  await dblclick(page, "Pool_ship");
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/d/11");
+  expect(asked).toHaveLength(1);
+  // It did not close the pool: hiding is the panel's button and the wrench menu.
+  await expect(picture(page)).toHaveCount(1);
+  await expect(editingLabel(page)).toHaveCount(0);
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the panel opens the model of the process a pool references", async ({ page }) => {
+  await checked(page);
+  // The same door for a keyboard, and for a pool that does not show its process.
+  await select(page, "Pool_ship");
+  await expect(page.locator("#f-pool-open")).toHaveText("Prozess im Modeler öffnen");
+  await page.locator("#f-pool-open").click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/d/11");
+
+  // A reference to a process this server holds neither as a draft nor deployed says so.
+  await page.evaluate(() => { location.hash = ""; });
+  await select(page, "Pool_ref");
+  await page.locator("#f-pool-open").click();
+  await expect.poll(() => page.evaluate(() => window.__toasts)).toEqual(["Den Prozess «nowhere» gibt es auf diesem Server weder als Entwurf noch deployt."]);
+  expect(await page.evaluate(() => location.hash)).toBe("");
+  // Only a reference is offered it.
+  await select(page, "Pool_bank");
+  await expect(page.locator("#f-pool-open")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a double click on any other pool edits its name, as before", async ({ page }) => {
+  await checked(page);
+  const before = await xml(page);
+  // A reference nothing deploys has nothing to show, and an external party is no
+  // reference: both keep bpmn-js's own double click.
+  for (const id of ["Pool_ref", "Pool_bank"]) {
+    await dblclick(page, id);
+    await expect(editingLabel(page)).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(editingLabel(page)).toHaveCount(0);
+  }
+  expect(await xml(page)).toBe(before);
+  expect(page.__errors).toEqual([]);
+});

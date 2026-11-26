@@ -2542,6 +2542,30 @@ export function poolKind(bo) {
   return bo.get("atlas:processId") ? "reference" : "external";
 }
 
+// A pool that shows the process it references says so on its shape in the diagram
+// interchange (atlas:showProcess; see wireProperties). The attribute is not declared in
+// atlas-moddle.json: a type of that package that extends bpmndi:BPMNShape makes moddle
+// write the shape under the package's lower-case tag alias (<bpmndi:bPMNShape>), which
+// no reader of BPMN accepts — measured, not assumed. An undeclared attribute of a
+// declared namespace is kept as it is written.
+const REF_POOL_BAND = 30; // the band at the pool's left that holds its name
+function poolShowsProcess(el) {
+  const bo = el && !el.labelTarget && el.businessObject;
+  if (!bo || !/:Participant$/.test(bo.$type || "")) return false;
+  return poolKind(bo) === "reference" && !!el.di && String(el.di.get("atlas:showProcess")) === "true";
+}
+
+// onPoolNameBand reports whether a pointer event lies on the band that holds a pool's
+// name. False when the place cannot be told.
+function onPoolNameBand(modeler, el, ev) {
+  if (!ev || typeof ev.clientX !== "number") return false;
+  try {
+    const canvas = modeler.get("canvas"), vb = canvas.viewbox();
+    const x = vb.x + (ev.clientX - canvas.getContainer().getBoundingClientRect().left) / vb.scale;
+    return x - el.x <= REF_POOL_BAND;
+  } catch { return false; } // canvas torn down mid-gesture
+}
+
 // processPicture draws one process of a deployed model with a bpmn-js of its own,
 // away from the page, and answers the drawing as an SVG element together with the
 // place of every shape in it. It is what a reference pool shows of the process it
@@ -10037,16 +10061,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   // the edge, because a reference never names an element of another file.
   // Above and below the picture there is room for the names written over its elements
   // and for the lane a continued flow runs in before it turns to its element.
-  const REF_BAND = 30, REF_PAD = 24, REF_PAD_Y = 44, REF_LANE = 12, REF_COLLAPSED = 60;
+  const REF_BAND = REF_POOL_BAND, REF_PAD = 24, REF_PAD_Y = 44, REF_LANE = 12, REF_COLLAPSED = 60;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const refPics = new Map();     // definition key → the picture, or null when there is none
   const refLoading = new Map();  // definition key → the promise of it
   const refView = (bo) => (collab ? collab.pools.find((p) => p.id === bo.id) : null) || null;
-  // The attribute is not declared in atlas-moddle.json: a type of that package that
-  // extends bpmndi:BPMNShape makes moddle write the shape under the package's lower-case
-  // tag alias (<bpmndi:bPMNShape>), which no reader of BPMN accepts — measured, not
-  // assumed. An undeclared attribute of a declared namespace is kept as it is written.
-  const showsProcess = (el) => poolKind(el.businessObject) === "reference" && !!el.di && String(el.di.get("atlas:showProcess")) === "true";
+  const showsProcess = poolShowsProcess;
   const setShowsProcess = (el, on) => modeling.updateModdleProperties(el, el.di, { "atlas:showProcess": on ? "true" : undefined });
   const isPool = (el) => !!el && !el.labelTarget && /:Participant$/.test((el.businessObject && el.businessObject.$type) || "");
 
@@ -10229,6 +10249,56 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     } catch { toast(tr("pnl.pool.showFailed"), "err"); }
   }
 
+  // The wrench menu of a reference pool. bpmn-js offers every pool without a process
+  // "Expanded pool", which gives it an empty process of its own. On a reference that
+  // would make the pool two things at once, and it is not what expanding it means to the
+  // modeller, who wants to see the process the pool stands for. So the menu's entry does
+  // what the panel's button does, and offers the way back while the process is shown. A
+  // reference nothing deploys keeps the entry, disabled and saying why, rather than
+  // losing it without a word. Other pools keep bpmn-js's own entries. The provider is
+  // registered below bpmn-js's own, so it is handed that one's entries to change.
+  modeler.get("popupMenu").registerProvider("bpmn-replace", 500, {
+    getPopupMenuEntries(element) {
+      return (entries) => {
+        if (!isPool(element) || poolKind(element.businessObject) !== "reference") return entries;
+        const out = { ...entries };
+        delete out["replace-with-expanded-pool"];
+        delete out["replace-with-collapsed-pool"];
+        const view = refView(element.businessObject);
+        if (showsProcess(element)) {
+          out["replace-with-collapsed-pool"] = { label: tr("pnl.pool.menu.hide"), className: "bpmn-icon-lane",
+            action: () => hideRefProcess(element) };
+        } else if (collab && !(view && view.resolved)) {
+          out["replace-with-expanded-pool"] = { label: tr("pnl.pool.menu.none"), className: "bpmn-icon-participant",
+            disabled: true, action: () => {} };
+        } else {
+          // Opened before the first check answered: ask, then show.
+          out["replace-with-expanded-pool"] = { label: tr("pnl.pool.menu.show"), className: "bpmn-icon-participant",
+            action: () => { (view ? Promise.resolve() : runCollabCheck()).then(() => showRefProcess(element)).catch(() => {}); } };
+        }
+        return out;
+      };
+    },
+  });
+
+  // A double click on a reference pool. On a thing that can be opened, a double click
+  // means "open it", and that is what a modeller tries first; bpmn-js's own answer, the
+  // label editor, opens the pool's name instead. So on a reference the check resolved,
+  // a double click shows the process. One on a pool that already shows it goes a step
+  // further in and opens the process's own model, which wireCalleeNavigation answers,
+  // where leaving this diagram is taken care of. Every pool that has no process to show
+  // keeps the label editor: an external party, a pool modelled here, a reference nothing
+  // deploys. The name is also edited in the panel. Registered above bpmn-js's listener,
+  // which a false answer keeps from running.
+  modeler.on("element.dblclick", 1500, (e) => {
+    const el = e.element;
+    if (!isPool(el) || poolKind(el.businessObject) !== "reference" || showsProcess(el)) return;
+    const view = refView(el.businessObject);
+    if (!view || !view.resolved) return;
+    showRefProcess(el);
+    return false;
+  });
+
   // refreshPoolShow sets the panel's button to what the pool shows and to whether there
   // is a deployed process to show: the check answers after the panel is drawn.
   function refreshPoolShow() {
@@ -10369,7 +10439,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <select id="f-poolref"><option value="">${esc(tr("pnl.pool.refNone"))}</option>${ref ? `<option value="${esc(ref)}" selected>${esc(ref)}</option>` : ""}</select></label>
       <p class="muted" id="f-poolref-note" style="font-size:12px">${tr("pnl.pool.refHint")}</p>${kind !== "reference" ? "" : `
       <button type="button" class="btn neutral" id="f-poolshow" data-pool="${esc(bo.id)}" aria-pressed="false" style="margin-top:6px">${esc(tr("pnl.pool.show"))}</button>
-      <p class="muted" id="f-poolshow-note" style="font-size:12px"></p>`}`;
+      <p class="muted" id="f-poolshow-note" style="font-size:12px"></p>
+      <button type="button" class="btn neutral" id="f-pool-open" data-process="${esc(ref)}" style="margin-top:6px" title="${esc(tr("pnl.pool.openTitle"))}">${esc(tr("pnl.pool.open"))}</button>`}`;
   }
 
   // wirePoolKind fills the picker with the deployed processes and assigns the chosen
@@ -13995,7 +14066,9 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
 function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
   const keepEdits = makeKeepEdits(modeler, identity, saveDraft, tr("bpmn.keep.openingCallee"));
 
-  const openCallee = async (pid) => {
+  // `missing` words the case that neither a draft nor a deployment holds the process:
+  // a call activity is told how to create it, a reference pool only that it is not here.
+  const openCallee = async (pid, missing = "bpmn.callee.missing") => {
     pid = (pid || "").trim();
     if (!pid) {
       toast(tr("bpmn.callee.noId"), "err");
@@ -14009,7 +14082,7 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
     ]);
     const draft = (drafts || []).find((d) => (d.processId || "") === pid) || null;
     if (!draft && !deployed) {
-      toast(tr("bpmn.callee.missing", { id: pid }), "err");
+      toast(tr(missing, { id: pid }), "err");
       return;
     }
     if (!(await keepEdits())) return;
@@ -14020,6 +14093,19 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
 
   wireCallDrilldown(modeler, (_element, pid) => openCallee(pid));
 
+  // A reference pool is the same kind of door (ADR-0559): it stands for a process that
+  // has a model of its own. A double click on the process it shows opens that model —
+  // the draft where there is one, else the newest deployed version — exactly as the "+"
+  // of a call activity does. The band that holds the pool's name is left to the label
+  // editor, and a pool that does not show its process yet is shown it first
+  // (wireProperties). Hiding the process is the panel's button and the wrench menu.
+  modeler.on("element.dblclick", 1500, (e) => {
+    if (!poolShowsProcess(e.element) || onPoolNameBand(modeler, e.element, e.originalEvent)) return;
+    Promise.resolve(openCallee(e.element.businessObject.get("atlas:processId"), "pnl.pool.openMissing"))
+      .catch(() => { /* the surface reports its own failures */ });
+    return false; // and never the label editor underneath
+  });
+
   // The panel's button is the same door for a pointer nowhere near the shape — and the
   // one a keyboard reaches, which a double-click on a 14px marker never is. It lives in
   // the properties panel, which is rebuilt on every selection, so it is wired by
@@ -14028,6 +14114,12 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
   // field's change event has written it back. cleanup() takes it off again: the root
   // outlives this mount (see onCalleeClick).
   const onClick = (ev) => {
+    const pool = ev.target.closest("#f-pool-open");
+    if (pool && root.contains(pool)) {
+      ev.preventDefault();
+      openCallee(pool.dataset.process, "pnl.pool.openMissing");
+      return;
+    }
     const btn = ev.target.closest("#f-call-open");
     if (!btn || !root.contains(btn)) return;
     ev.preventDefault();
