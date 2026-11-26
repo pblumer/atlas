@@ -25,6 +25,7 @@ import { wikiOperationOptions, wikiUses, wikiResultType, wikiResultShape, wikiMa
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
+import { processOnly } from "./interactions-bpmn.js";
 // The decision editor is a page of its own (ADR-0320),
 // so this module navigates to it rather than opening it. Nothing of dmn-js is loaded
 // here any more.
@@ -2539,6 +2540,47 @@ export function poolKind(bo) {
   const proc = bo.processRef;
   if (proc && (proc.flowElements || []).length) return "modelled";
   return bo.get("atlas:processId") ? "reference" : "external";
+}
+
+// processPicture draws one process of a deployed model with a bpmn-js of its own,
+// away from the page, and answers the drawing as an SVG element together with the
+// place of every shape in it. It is what a reference pool shows of the process it
+// stands for (ADR-0559): a picture, so nothing of it can be edited or selected and
+// nothing of it enters the model the pool belongs to. The picture's elements carry
+// data-ref-element instead of diagram-js's own attribute and classes, so nothing that
+// looks an element up on the page finds one of these. Null when the model holds no
+// drawing of the process.
+export async function processPicture(xml, processId) {
+  const one = processOnly(xml, processId);
+  if (!one) return null;
+  const lib = await loadBpmn();
+  const host = document.createElement("div");
+  host.style.cssText = "position:absolute;left:-20000px;top:0;width:1200px;height:800px;visibility:hidden";
+  document.body.appendChild(host);
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, host);
+  try {
+    await viewer.importXML(one);
+    const shapes = new Map();
+    viewer.get("elementRegistry").forEach((el) => {
+      if (el.waypoints || el.labelTarget || el.width == null || el === viewer.get("canvas").getRootElement()) return;
+      shapes.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height });
+    });
+    if (!shapes.size) return null;
+    const { svg } = await viewer.saveSVG();
+    const node = document.importNode(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement, true);
+    const [x, y, width, height] = (node.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+    if (!(width > 0 && height > 0)) return null;
+    for (const el of node.querySelectorAll(".djs-hit, .djs-outline, .djs-dragger")) el.remove();
+    for (const el of node.querySelectorAll("[data-element-id]")) {
+      el.setAttribute("data-ref-element", el.getAttribute("data-element-id"));
+      el.removeAttribute("data-element-id");
+      el.classList.remove("djs-element", "djs-shape", "djs-connection", "selected", "hover");
+    }
+    return { node, box: { x, y, width, height }, shapes };
+  } finally {
+    try { viewer.destroy(); } catch { /* already gone */ }
+    host.remove();
+  }
 }
 
 async function deployedCallee(api, pid) {
@@ -9981,6 +10023,231 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   modeler.on("import.done", scheduleCollabCheck);
   scheduleCollabCheck();
 
+  // The process a reference pool shows (ADR-0559). A reference has no process of its
+  // own in the file, so bpmn-js cannot expand it, and copying the process in would
+  // deploy it a second time. What the pool shows instead is a picture of the deployed
+  // version the collaboration check resolved it to, hung into the pool's own graphics:
+  // it moves, zooms and exports with the pool, cannot be selected or edited, and is not
+  // in the model. That the pool shows it is said where BPMN says how a thing is drawn,
+  // on the pool's shape in the diagram interchange (atlas:showProcess, beside its
+  // bounds), not on the participant: it is a fact about this drawing, and the drawing
+  // opens the way it was left. The size the pool needs is its ordinary bounds. The elements that send or wait for a message are
+  // marked and say the name, and a message flow drawn to the pool's edge is continued,
+  // dashed, to the element that carries its message — the flow itself still ends at
+  // the edge, because a reference never names an element of another file.
+  // Above and below the picture there is room for the names written over its elements
+  // and for the lane a continued flow runs in before it turns to its element.
+  const REF_BAND = 30, REF_PAD = 24, REF_PAD_Y = 44, REF_LANE = 12, REF_COLLAPSED = 60;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const refPics = new Map();     // definition key → the picture, or null when there is none
+  const refLoading = new Map();  // definition key → the promise of it
+  const refView = (bo) => (collab ? collab.pools.find((p) => p.id === bo.id) : null) || null;
+  // The attribute is not declared in atlas-moddle.json: a type of that package that
+  // extends bpmndi:BPMNShape makes moddle write the shape under the package's lower-case
+  // tag alias (<bpmndi:bPMNShape>), which no reader of BPMN accepts — measured, not
+  // assumed. An undeclared attribute of a declared namespace is kept as it is written.
+  const showsProcess = (el) => poolKind(el.businessObject) === "reference" && !!el.di && String(el.di.get("atlas:showProcess")) === "true";
+  const setShowsProcess = (el, on) => modeling.updateModdleProperties(el, el.di, { "atlas:showProcess": on ? "true" : undefined });
+  const isPool = (el) => !!el && !el.labelTarget && /:Participant$/.test((el.businessObject && el.businessObject.$type) || "");
+
+  function refPicture(view) {
+    const key = view.resolved.definitionKey;
+    if (refPics.has(key)) return Promise.resolve(refPics.get(key));
+    if (!refLoading.has(key)) {
+      refLoading.set(key, (async () => {
+        let pic = null;
+        try { pic = await processPicture(String(await api("GET", `/api/v1/processes/${key}/xml`)), view.processId); }
+        catch { pic = null; }
+        refPics.set(key, pic);
+        refLoading.delete(key);
+        return pic;
+      })());
+    }
+    return refLoading.get(key);
+  }
+
+  const svgEl = (name, attrs, text) => {
+    const el = document.createElementNS(SVG_NS, name);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+    if (text != null) el.textContent = text;
+    return el;
+  };
+
+  // decorateRefPool draws what a pool shows of its process, or takes it away. It is
+  // called whenever the pool was drawn again, the check answered, or a picture arrived.
+  function decorateRefPool(el) {
+    const gfx = modeler.get("elementRegistry").getGraphics(el);
+    if (!gfx) return;
+    for (const old of gfx.querySelectorAll(":scope > .ref-process")) old.remove();
+    const label = gfx.querySelector(":scope > .djs-visual text");
+    if (label) label.style.display = "";
+    const bo = el.businessObject;
+    if (!showsProcess(el)) return;
+    const view = refView(bo);
+    if (!view || !view.resolved) return;
+    const key = view.resolved.definitionKey;
+    if (!refPics.has(key)) {
+      refPicture(view).then(() => {
+        const now = modeler.get("elementRegistry").get(bo.id);
+        if (now) decorateRefPool(now);
+      });
+      return;
+    }
+    const pic = refPics.get(key);
+    if (!pic) return;
+
+    const g = svgEl("g", { class: "ref-process", "data-process": view.processId, "data-version": view.resolved.version });
+    g.style.pointerEvents = "none";
+    // The pool's own name moves into a band at the left, as on a pool with content.
+    const frame = gfx.querySelector(":scope > .djs-visual rect");
+    const stroke = (frame && frame.style.stroke) || "currentColor";
+    const band = svgEl("line", { class: "ref-band", x1: REF_BAND, y1: 0, x2: REF_BAND, y2: el.height });
+    band.style.cssText = `stroke:${stroke};stroke-width:1.5px`;
+    g.appendChild(band);
+    if (label) {
+      const name = svgEl("text", { class: "ref-name", "text-anchor": "middle",
+        transform: `translate(${REF_BAND / 2 + 4} ${el.height / 2}) rotate(-90)` }, bo.name || "");
+      name.style.cssText = label.style.cssText;
+      g.appendChild(name);
+      label.style.display = "none";
+    }
+
+    // The picture, at its own size where the pool has the room and smaller where not.
+    const room = { width: el.width - REF_BAND - 2 * REF_PAD, height: el.height - 2 * REF_PAD_Y };
+    const scale = Math.max(0.05, Math.min(1, room.width / pic.box.width, room.height / pic.box.height));
+    const at = { x: REF_BAND + REF_PAD, y: REF_PAD_Y + Math.max(0, (room.height - pic.box.height * scale) / 2) };
+    const svg = pic.node.cloneNode(true);
+    svg.setAttribute("class", "ref-picture");
+    svg.setAttribute("x", at.x); svg.setAttribute("y", at.y);
+    svg.setAttribute("width", pic.box.width * scale); svg.setAttribute("height", pic.box.height * scale);
+    svg.setAttribute("overflow", "visible");
+    g.appendChild(svg);
+
+    // Where a message leaves or arrives: the element is marked and says the name.
+    const inPool = (s) => ({ x: at.x + (s.x - pic.box.x) * scale, y: at.y + (s.y - pic.box.y) * scale, width: s.width * scale, height: s.height * scale });
+    const said = new Map(); // element → lines already written above it
+    for (const pt of view.points || []) {
+      const shape = pic.shapes.get(pt.element);
+      if (!shape) continue;
+      const out = pt.direction === "out";
+      const colour = out ? "var(--accent, #0b5cff)" : "var(--ok, #2d8a4e)";
+      let node = null;
+      for (const cand of svg.querySelectorAll("[data-ref-element]")) {
+        if (cand.getAttribute("data-ref-element") === pt.element) { node = cand; break; }
+      }
+      const outline = node && node.querySelector(".djs-visual > *");
+      if (outline) { outline.style.stroke = colour; outline.style.strokeWidth = "3px"; }
+      const line = said.get(pt.element) || 0;
+      said.set(pt.element, line + 1);
+      const caption = svgEl("text", { class: `ref-point ref-point-${out ? "out" : "in"}`, "data-element": pt.element, "data-message": pt.message,
+        "text-anchor": "middle", x: shape.x + shape.width / 2, y: shape.y - 7 - line * 13 },
+        tr(out ? "pnl.pool.point.out" : "pnl.pool.point.in", { message: pt.message }));
+      // A halo in the canvas's colour keeps the name readable where a line passes.
+      caption.style.cssText = `font-family:Arial,sans-serif;font-size:11px;font-weight:600;fill:${colour};` +
+        "paint-order:stroke;stroke:var(--diagram-shape-fill, #fff);stroke-width:4px;stroke-linejoin:round";
+      svg.appendChild(caption);
+    }
+
+    // A message flow drawn to this pool's edge is led on to the element that carries
+    // its message. This is the reader's aid, not the model: nothing of it is saved.
+    for (const f of (collab && collab.flows) || []) {
+      if (!f.message || (f.from !== bo.id && f.to !== bo.id)) continue;
+      const out = f.from === bo.id;
+      const conn = modeler.get("elementRegistry").get(f.id);
+      const wps = conn && conn.waypoints;
+      if (!wps || wps.length < 2) continue;
+      const end = out ? wps[0] : wps[wps.length - 1];
+      const from = { x: end.x - el.x, y: end.y - el.y };
+      for (const pt of view.points || []) {
+        if (pt.message !== f.message || (pt.direction === "out") !== out || !pic.shapes.has(pt.element)) continue;
+        const b = inPool(pic.shapes.get(pt.element));
+        const above = from.y <= b.y + b.height / 2;
+        const to = { x: b.x + b.width / 2, y: above ? b.y : b.y + b.height };
+        // In from the edge, along a lane just inside it, then to the element.
+        const lane = above ? Math.min(from.y + REF_LANE, to.y) : Math.max(from.y - REF_LANE, to.y);
+        const lead = svgEl("path", { class: "ref-lead", "data-flow": f.id, "data-element": pt.element,
+          d: `M ${from.x} ${from.y} L ${from.x} ${lane} L ${to.x} ${lane} L ${to.x} ${to.y}` });
+        const colour = out ? "var(--accent, #0b5cff)" : "var(--ok, #2d8a4e)";
+        lead.style.cssText = `fill:none;stroke:${colour};stroke-width:1.5px;stroke-dasharray:4 4`;
+        g.insertBefore(lead, svg); // under the picture, so its names stay on top
+        const dot = svgEl("circle", { class: "ref-lead-end", cx: to.x, cy: to.y, r: 3 });
+        dot.style.cssText = `fill:${colour}`;
+        g.appendChild(dot);
+      }
+    }
+    gfx.appendChild(g);
+  }
+
+  const decorateRefPools = () => {
+    try { modeler.get("elementRegistry").forEach((el) => { if (isPool(el)) decorateRefPool(el); }); }
+    catch { /* modeler torn down mid-flight */ }
+  };
+  // A pool drawn again has lost nothing but its label's place; this runs after bpmn-js
+  // has redrawn it. A flow that moved takes its continuation along.
+  modeler.on("shape.changed", 400, (e) => { if (isPool(e.element)) decorateRefPool(e.element); });
+  modeler.on("connection.changed", 400, (e) => {
+    for (const end of [e.element.source, e.element.target]) if (isPool(end)) decorateRefPool(end);
+  });
+
+  // Showing the process and making room for it are one step to undo: the attribute,
+  // the pool's size, and everything below the pool moved by what it grew.
+  try {
+    modeler.get("commandStack").registerHandler("atlas.steps", class { preExecute(ctx) { ctx.steps(); } });
+  } catch { /* registered by an earlier panel of this modeler */ }
+  const inOneStep = (steps) => modeler.get("commandStack").execute("atlas.steps", { steps });
+  const belowPool = (el) => (modeler.get("canvas").getRootElement().children || [])
+    .filter((c) => c !== el && !c.waypoints && !c.labelTarget && c.y >= el.y + el.height - 1);
+
+  async function showRefProcess(element) {
+    const view = refView(element.businessObject);
+    if (!view || !view.resolved) return;
+    const pic = await refPicture(view);
+    const el = modeler.get("elementRegistry").get(element.id);
+    if (!el) return;
+    if (!pic) { toast(tr("pnl.pool.showFailed"), "err"); return; }
+    const width = Math.max(el.width, Math.ceil(REF_BAND + pic.box.width + 2 * REF_PAD));
+    const height = Math.max(el.height, Math.ceil(pic.box.height + 2 * REF_PAD_Y));
+    const grow = height - el.height, below = grow > 0 ? belowPool(el) : [];
+    try {
+      inOneStep(() => {
+        setShowsProcess(el, true);
+        if (below.length) modeling.moveElements(below, { x: 0, y: grow });
+        if (width !== el.width || grow) modeling.resizeShape(el, { x: el.x, y: el.y, width, height });
+      });
+    } catch { toast(tr("pnl.pool.showFailed"), "err"); }
+  }
+
+  function hideRefProcess(element) {
+    const el = element;
+    const shrink = el.height - REF_COLLAPSED, below = shrink > 0 ? belowPool(el) : [];
+    try {
+      inOneStep(() => {
+        setShowsProcess(el, false);
+        if (shrink > 0) modeling.resizeShape(el, { x: el.x, y: el.y, width: el.width, height: REF_COLLAPSED });
+        if (below.length) modeling.moveElements(below, { x: 0, y: -shrink });
+      });
+    } catch { toast(tr("pnl.pool.showFailed"), "err"); }
+  }
+
+  // refreshPoolShow sets the panel's button to what the pool shows and to whether there
+  // is a deployed process to show: the check answers after the panel is drawn.
+  function refreshPoolShow() {
+    const btn = body.querySelector("#f-poolshow");
+    if (!btn) return;
+    const el = modeler.get("elementRegistry").get(btn.dataset.pool);
+    const bo = el && el.businessObject;
+    if (!bo) return;
+    const view = refView(bo), shown = showsProcess(el), can = !!(view && view.resolved);
+    btn.disabled = !shown && !can;
+    btn.setAttribute("aria-pressed", String(shown));
+    btn.textContent = tr(shown ? "pnl.pool.hide" : "pnl.pool.show");
+    const note = body.querySelector("#f-poolshow-note");
+    if (note) {
+      note.innerHTML = !collab ? "" : !can ? tr("pnl.pool.showNone") :
+        tr("pnl.pool.showHint", { process: `<b>${esc(view.resolved.name || view.processId)}</b>`, version: esc(String(view.resolved.version)) });
+    }
+  }
+
   // collabHintsHTML is where a panel shows the findings about its element, or all of
   // them for the collaboration itself. It stands before the first group, so the folding
   // of the groups leaves it alone, and it is filled by refreshCollabHints.
@@ -10007,6 +10274,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <p class="muted" style="font-size:12px">${esc(tr("collab.hints.note"))}</p>`;
     }
     if (shownFlowBo) fillFlowMessageList(shownFlowBo);
+    decorateRefPools();
+    refreshPoolShow();
   }
   // In the collaboration's own list, a finding leads to the element it is about.
   body.addEventListener("click", (e) => {
@@ -10098,7 +10367,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     return `${head}
       <label class="field"><span>${esc(tr("pnl.pool.ref"))}</span>
         <select id="f-poolref"><option value="">${esc(tr("pnl.pool.refNone"))}</option>${ref ? `<option value="${esc(ref)}" selected>${esc(ref)}</option>` : ""}</select></label>
-      <p class="muted" id="f-poolref-note" style="font-size:12px">${tr("pnl.pool.refHint")}</p>`;
+      <p class="muted" id="f-poolref-note" style="font-size:12px">${tr("pnl.pool.refHint")}</p>${kind !== "reference" ? "" : `
+      <button type="button" class="btn neutral" id="f-poolshow" data-pool="${esc(bo.id)}" aria-pressed="false" style="margin-top:6px">${esc(tr("pnl.pool.show"))}</button>
+      <p class="muted" id="f-poolshow-note" style="font-size:12px"></p>`}`;
   }
 
   // wirePoolKind fills the picker with the deployed processes and assigns the chosen
@@ -10121,6 +10392,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const opt = sel.selectedOptions[0];
       assignPoolProcess(element, sel.value, opt ? opt.textContent.replace(/ \([^()]*\)$/, "") : "");
     });
+    const showBtn = body.querySelector("#f-poolshow");
+    if (showBtn) {
+      showBtn.addEventListener("click", () => {
+        if (showsProcess(element)) hideRefProcess(element);
+        else showRefProcess(element);
+      });
+      refreshPoolShow();
+    }
   }
 
   // assignPoolProcess makes a pool a reference to a deployed process, or takes the
@@ -10136,7 +10415,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       }
       const props = { "atlas:processId": processId || undefined };
       if (processId && !target.businessObject.name && proposedName) props.name = proposedName;
-      modeling.updateProperties(target, props);
+      // A pool that stands for nothing has nothing to show: the reference and the
+      // picture go in one step.
+      if (!processId && showsProcess(target)) {
+        inOneStep(() => { setShowsProcess(target, false); modeling.updateProperties(target, props); });
+      } else {
+        modeling.updateProperties(target, props);
+      }
       selection.select(target);
       show(target);
     } catch { toast(tr("pnl.pool.refFailed"), "err"); show(element); }

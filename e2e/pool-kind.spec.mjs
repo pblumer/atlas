@@ -65,7 +65,7 @@ test("a black-box pool becomes a reference, and an external party again", async 
   await expect(kind(page)).toHaveAttribute("data-kind", "external");
   const after = await xml(page);
   expect(after).toMatch(/<bpmn:participant id="Pool_bank" name="Bank"\s*\/>/);
-  expect(after).not.toContain('atlas:processId="versand"');
+  expect(after).not.toMatch(/id="Pool_bank"[^>]*atlas:processId/);
   expect(page.__errors).toEqual([]);
 });
 
@@ -200,5 +200,165 @@ test("the hints stand on the element they are about, and all of them on the coll
   await expect(kind(page)).toHaveAttribute("data-kind", "reference");
   // Hints are not problems: the Problems bar does not list them.
   await expect(page.locator(".prob-row", { hasText: "collaboration." })).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+// ---------- the process a reference pool shows ----------
+
+// What the modeler holds about a pool: its bounds, and what hangs in its graphics.
+const pool = (page, id) => page.evaluate((el) => {
+  const r = window.__atlasModeler.get("elementRegistry");
+  const s = r.get(el), g = r.getGraphics(el);
+  const label = g.querySelector(":scope > .djs-visual text");
+  return { x: s.x, y: s.y, width: s.width, height: s.height,
+    shown: g.querySelectorAll(":scope > .ref-process").length,
+    ownLabelHidden: !!label && label.style.display === "none" };
+}, id);
+const picture = (page) => page.locator('.djs-element[data-element-id="Pool_ship"] > .ref-process');
+
+test("a reference pool shows the deployed process, as a picture that is not in the model", async ({ page }) => {
+  await checked(page);
+  await select(page, "Pool_ship");
+  const before = await pool(page, "Pool_ship"), tail = await pool(page, "Pool_tail");
+  expect(before).toMatchObject({ height: 60, shown: 0, ownLabelHidden: false });
+  await expect(page.locator("#f-poolshow")).toBeEnabled();
+  await expect(page.locator("#f-poolshow")).toHaveText("Prozess im Pool anzeigen");
+  // The panel says which version would be shown, and that it is a picture.
+  await expect(page.locator("#f-poolshow-note")).toContainText("Zeigt Versand in Version 2");
+
+  await page.locator("#f-poolshow").click();
+  await expect(picture(page)).toHaveCount(1);
+  await expect(picture(page)).toHaveAttribute("data-process", "versand");
+  await expect(picture(page)).toHaveAttribute("data-version", "2");
+  // The deployed drawing: its four elements, and not the pool it was deployed under.
+  for (const id of ["Start_v", "Task_v", "Throw_v", "End_v", "v1", "v2", "v3"]) {
+    await expect(picture(page).locator(`[data-ref-element="${id}"]`)).toHaveCount(1);
+  }
+  await expect(picture(page).locator('[data-ref-element="Task_v"]')).toContainText("Packen");
+  await expect(picture(page).locator('[data-ref-element="Pool_v"]')).toHaveCount(0);
+  // Nothing of it answers as an element of this diagram: no lookup finds it, and it
+  // cannot be clicked.
+  await expect(page.locator('[data-element-id="Task_v"]')).toHaveCount(0);
+  expect(await picture(page).evaluate((g) => getComputedStyle(g).pointerEvents)).toBe("none");
+  expect(await page.evaluate(() => !!window.__atlasModeler.get("elementRegistry").get("Task_v"))).toBe(false);
+
+  // The pool grew to hold it, and what stood below moved by as much.
+  const after = await pool(page, "Pool_ship"), tailAfter = await pool(page, "Pool_tail");
+  expect(after.height).toBeGreaterThan(150);
+  expect(after.y).toBe(before.y);
+  expect(tailAfter.y - tail.y).toBe(after.height - before.height);
+  // The pool's name stands in a band at the left, as on a pool with content.
+  expect(after.ownLabelHidden).toBe(true);
+  await expect(picture(page).locator(".ref-name")).toHaveText("Versand");
+
+  // Where a message arrives and where one leaves is said on the element.
+  await expect(picture(page).locator('.ref-point-in[data-element="Start_v"]')).toHaveText("erwartet Auftrag");
+  await expect(picture(page).locator('.ref-point-out[data-element="Throw_v"]')).toHaveText("sendet Versandt");
+  // A flow at the pool's edge is led on to the element that carries its message; the
+  // flow itself still ends at the pool.
+  await expect(picture(page).locator('.ref-lead[data-flow="Flow_ship"][data-element="Start_v"]')).toHaveCount(1);
+  await expect(picture(page).locator('.ref-lead[data-flow="Flow_back"][data-element="Throw_v"]')).toHaveCount(1);
+  await expect(picture(page).locator(".ref-lead")).toHaveCount(2);
+
+  // The file says that the pool is drawn with its process, where BPMN says how a thing
+  // is drawn — on the shape, not on the participant — and holds nothing of the process.
+  const out = await xml(page);
+  expect(out).toMatch(/<bpmn:participant id="Pool_ship" name="Versand" atlas:processId="versand"\s*\/>/);
+  expect(out).toMatch(/<bpmndi:BPMNShape id="Pool_ship_s" bpmnElement="Pool_ship" isHorizontal="true" atlas:showProcess="true">/);
+  expect(out).not.toContain("Task_v");
+  expect(out).not.toContain('<bpmn:process id="versand"');
+  expect(out).toMatch(/<bpmn:messageFlow id="Flow_ship" sourceRef="Pool_bank" targetRef="Pool_ship"\s*\/>/);
+  // The button now hides it.
+  await select(page, "Pool_ship");
+  await expect(page.locator("#f-poolshow")).toHaveText("Prozess ausblenden");
+  await expect(page.locator("#f-poolshow")).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("showing the process is one step to undo, and hiding it gives the room back", async ({ page }) => {
+  await checked(page);
+  await select(page, "Pool_ship");
+  const before = await pool(page, "Pool_ship"), tail = await pool(page, "Pool_tail");
+  await page.locator("#f-poolshow").click();
+  await expect(picture(page)).toHaveCount(1);
+
+  // One undo: the attribute, the size and the pool below are back together.
+  await page.evaluate(() => window.__atlasModeler.get("commandStack").undo());
+  await expect(picture(page)).toHaveCount(0);
+  expect(await pool(page, "Pool_ship")).toEqual(before);
+  expect((await pool(page, "Pool_tail")).y).toBe(tail.y);
+  expect(await xml(page)).not.toContain("atlas:showProcess");
+
+  // Redo, then hide it through the panel.
+  await page.evaluate(() => window.__atlasModeler.get("commandStack").redo());
+  await expect(picture(page)).toHaveCount(1);
+  await select(page, "Pool_ship");
+  await page.locator("#f-poolshow").click();
+  await expect(picture(page)).toHaveCount(0);
+  expect(await pool(page, "Pool_ship")).toEqual(before);
+  expect((await pool(page, "Pool_tail")).y).toBe(tail.y);
+  expect(await xml(page)).not.toContain("atlas:showProcess");
+  // The deployed model was fetched once and drawn from what was kept.
+  expect(await page.evaluate(() => window.__pictures)).toBe(1);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a drawing opens the way it was left, and the picture follows the pool", async ({ page }) => {
+  await checked(page);
+  await select(page, "Pool_ship");
+  await page.locator("#f-poolshow").click();
+  await expect(picture(page)).toHaveCount(1);
+  const saved = await xml(page);
+
+  // Opened again, the pool shows its process once the check has answered.
+  const checks = await page.evaluate(() => window.__checks.length);
+  await page.evaluate((x) => window.__atlasModeler.importXML(x), saved);
+  await checked(page, checks + 1);
+  await expect(picture(page)).toHaveCount(1);
+  await expect(picture(page).locator('[data-ref-element="Throw_v"]')).toHaveCount(1);
+
+  // A pool smaller than the picture shows it smaller instead of letting it out.
+  const natural = await picture(page).locator(".ref-picture").evaluate((s) => +s.getAttribute("width"));
+  await page.evaluate(() => {
+    const m = window.__atlasModeler, el = m.get("elementRegistry").get("Pool_ship");
+    m.get("modeling").resizeShape(el, { x: el.x, y: el.y, width: 300, height: el.height });
+  });
+  await expect.poll(() => picture(page).locator(".ref-picture").evaluate((s) => +s.getAttribute("width"))).toBeLessThan(natural);
+  expect(await picture(page).locator(".ref-picture").evaluate((s) => +s.getAttribute("width"))).toBeLessThan(300 - 30 - 2 * 24 + 0.01);
+  // Renamed, the band says the new name.
+  await page.evaluate(() => {
+    const m = window.__atlasModeler;
+    m.get("modeling").updateProperties(m.get("elementRegistry").get("Pool_ship"), { name: "Logistik" });
+  });
+  await expect(picture(page).locator(".ref-name")).toHaveText("Logistik");
+  await expect(picture(page)).toHaveCount(1);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a reference nothing deploys has nothing to show, and a pool that stands for nothing shows nothing", async ({ page }) => {
+  await checked(page);
+  // The archive names a process this server does not hold.
+  await select(page, "Pool_ref");
+  await expect(page.locator("#f-poolshow")).toBeDisabled();
+  await expect(page.locator("#f-poolshow-note")).toContainText("nicht deployt");
+  // Neither a pool modelled here nor an external party is offered it.
+  await select(page, "Pool_order");
+  await expect(page.locator("#f-poolshow")).toHaveCount(0);
+  await select(page, "Pool_bank");
+  await expect(page.locator("#f-poolshow")).toHaveCount(0);
+
+  // Taking the reference away takes the picture and its attribute along.
+  await select(page, "Pool_ship");
+  await page.locator("#f-poolshow").click();
+  await expect(picture(page)).toHaveCount(1);
+  await select(page, "Pool_ship");
+  await page.locator("#f-poolref").selectOption("");
+  await expect(kind(page)).toHaveAttribute("data-kind", "external");
+  await expect(picture(page)).toHaveCount(0);
+  const out = await xml(page);
+  expect(out).toMatch(/<bpmn:participant id="Pool_ship" name="Versand"\s*\/>/);
+  expect(out).not.toContain("atlas:showProcess");
+  expect(await pool(page, "Pool_ship")).toMatchObject({ shown: 0, ownLabelHidden: false });
   expect(page.__errors).toEqual([]);
 });

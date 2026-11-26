@@ -387,6 +387,7 @@ func TestACollaborationIsCheckedAgainstWhatIsDeployed(t *testing.T) {
 				DefinitionKey uint64 `json:"definitionKey"`
 				Name          string `json:"name"`
 			} `json:"resolved"`
+			Points []struct{ Element, Message, Direction, Role string } `json:"points"`
 		} `json:"pools"`
 		Flows    []struct{ ID, From, To, Message string } `json:"flows"`
 		Findings []struct{ Rule, Pool, Flow string }      `json:"findings"`
@@ -402,6 +403,14 @@ func TestACollaborationIsCheckedAgainstWhatIsDeployed(t *testing.T) {
 		kinds[p.ID] = p.Kind + ":" + p.ProcessID
 		if p.ID == "P_ship" && (p.Resolved == nil || p.Resolved.DefinitionKey != shipping || p.Resolved.Name != "Versand") {
 			t.Errorf("the reference to shipping resolves to %+v, want the deployed definition %d", p.Resolved, shipping)
+		}
+		// A resolved reference names the elements that carry its messages; a pool
+		// modelled here does not, its drawing being the caller's own.
+		if p.ID == "P_ship" && fmt.Sprint(p.Points) != "[{report versandt out throw} {s freigabe in start}]" {
+			t.Errorf("the reference's points = %v", p.Points)
+		}
+		if p.ID != "P_ship" && len(p.Points) != 0 {
+			t.Errorf("%s lists points %v, want none", p.ID, p.Points)
 		}
 		if p.ID == "P_bill" && p.Resolved != nil {
 			t.Errorf("a process nobody deployed resolved to %+v", p.Resolved)

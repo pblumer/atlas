@@ -266,13 +266,26 @@ type Resolved struct {
 	Inactive      bool   `json:"inactive,omitempty"`
 }
 
+// PointView is one element of a referenced process that sends ("out") or waits for
+// ("in") a message, with the role the compiler reports for it.
+type PointView struct {
+	Element   string `json:"element"`
+	Message   string `json:"message"`
+	Direction string `json:"direction"`
+	Role      string `json:"role"`
+}
+
 // PoolView is a pool with what its reference resolves to and, for a white box, the
 // message names it sends and waits for: what a message flow at this pool can carry.
+// A resolved reference also lists the elements that carry them: its inside is not in
+// the file, and a reader shown the deployed drawing is told where a message leaves or
+// arrives. A pool modelled here lists none, because the caller holds its drawing.
 type PoolView struct {
 	Pool
-	Resolved *Resolved `json:"resolved,omitempty"`
-	Sends    []string  `json:"sends,omitempty"`
-	Receives []string  `json:"receives,omitempty"`
+	Resolved *Resolved   `json:"resolved,omitempty"`
+	Sends    []string    `json:"sends,omitempty"`
+	Receives []string    `json:"receives,omitempty"`
+	Points   []PointView `json:"points,omitempty"`
 }
 
 // Report is a file read as a collaboration and checked against the deployments.
@@ -326,6 +339,7 @@ func Check(d Document, defs []Definition) Report {
 			}
 			view.Resolved = &Resolved{DefinitionKey: def.Key, Version: def.Version, Name: def.Name, Inactive: def.Inactive}
 			white[p.ID], points[p.ID] = true, def.Points
+			view.Points = pointViews(def.Points)
 		}
 		view.Sends, view.Receives = names(points[p.ID], true), names(points[p.ID], false)
 		r.Pools = append(r.Pools, view)
@@ -400,6 +414,21 @@ func Check(d Document, defs []Definition) Report {
 		}
 	}
 	return r
+}
+
+// pointViews answers a definition's points by element, then message, then direction.
+func pointViews(points []Point) []PointView {
+	var out []PointView
+	for _, pt := range points {
+		dir := "in"
+		if pt.Sends() {
+			dir = "out"
+		}
+		out = append(out, PointView{Element: pt.Element, Message: pt.Message, Direction: dir, Role: pt.Role})
+	}
+	key := func(v PointView) string { return v.Element + "\x00" + v.Message + "\x00" + v.Direction }
+	sort.Slice(out, func(i, j int) bool { return key(out[i]) < key(out[j]) })
+	return out
 }
 
 // names is the message names of the points that send, or of those that wait, each
