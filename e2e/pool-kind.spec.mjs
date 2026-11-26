@@ -448,11 +448,12 @@ const dblclick = async (page, id, dx) => {
 };
 const editingLabel = (page) => page.locator(".djs-direct-editing-parent");
 
-test("a double click on a reference pool shows its process, and hides it again", async ({ page }) => {
+test("a double click on a reference pool shows its process, and one on the process opens its model", async ({ page }) => {
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); d.accept(); });
   await checked(page);
-  const before = await pool(page, "Pool_ship");
-  // A double click means "open this": the pool shows the process it stands for, and
-  // the name is not opened for editing.
+  // A double click means "open this": first the pool shows the process it stands for,
+  // and the name is not opened for editing.
   await dblclick(page, "Pool_ship");
   await expect(picture(page)).toHaveCount(1);
   await expect(editingLabel(page)).toHaveCount(0);
@@ -466,13 +467,36 @@ test("a double click on a reference pool shows its process, and hides it again",
   await expect(editingLabel(page)).toHaveCount(0);
   await expect(picture(page)).toHaveCount(1);
 
-  // On the picture, it closes the pool again.
+  // On the shown process, it goes one step further in: the model of the referenced
+  // process opens in the Modeler, the way a call activity's "+" opens the called one.
+  // This diagram was changed and is not a draft, so leaving it asks first.
   await dblclick(page, "Pool_ship");
-  await expect(picture(page)).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/d/11");
+  expect(asked).toHaveLength(1);
+  // It did not close the pool: hiding is the panel's button and the wrench menu.
+  await expect(picture(page)).toHaveCount(1);
   await expect(editingLabel(page)).toHaveCount(0);
-  expect(await pool(page, "Pool_ship")).toEqual(before);
-  expect(await xml(page)).not.toContain("atlas:showProcess");
   expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the panel opens the model of the process a pool references", async ({ page }) => {
+  await checked(page);
+  // The same door for a keyboard, and for a pool that does not show its process.
+  await select(page, "Pool_ship");
+  await expect(page.locator("#f-pool-open")).toHaveText("Prozess im Modeler öffnen");
+  await page.locator("#f-pool-open").click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/d/11");
+
+  // A reference to a process this server holds neither as a draft nor deployed says so.
+  await page.evaluate(() => { location.hash = ""; });
+  await select(page, "Pool_ref");
+  await page.locator("#f-pool-open").click();
+  await expect.poll(() => page.evaluate(() => window.__toasts)).toEqual(["Den Prozess «nowhere» gibt es auf diesem Server weder als Entwurf noch deployt."]);
+  expect(await page.evaluate(() => location.hash)).toBe("");
+  // Only a reference is offered it.
+  await select(page, "Pool_bank");
+  await expect(page.locator("#f-pool-open")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 
