@@ -114,9 +114,23 @@ func TestEveryAgentRoundIsRecordedByTheEngineNotByTheWorker(t *testing.T) {
 		&model.AgentRunValue{InputTokens: 300, OutputTokens: 40, Answer: "tragbar"}, nil)
 	idle(t, p)
 
-	got := agentHistory(t, h.store)
+	all := agentHistory(t, h.store)
+	var got, results []model.AgentRunValue
+	for _, f := range all {
+		if f.Kind == model.AgentRunToolResult {
+			results = append(results, f)
+		} else {
+			got = append(got, f)
+		}
+	}
 	if len(got) != 3 {
-		t.Fatalf("history has %d facts, want one per model call (3): %+v", len(got), got)
+		t.Fatalf("history has %d model calls, want 3: %+v", len(got), all)
+	}
+	// What each tool returned is on the record too, paired with its call and its round,
+	// under the container and naming the tool — and it moves no total.
+	if len(results) != 2 || results[0].CallId != "call-1" || results[0].Round != 1 || results[1].CallId != "call-2" || results[1].Round != 2 ||
+		results[0].ElementInstanceKey != got[0].ElementInstanceKey || results[0].ElementId != tool || results[0].JobKey != 0 {
+		t.Errorf("tool results = %+v, want one per call, under the container", results)
 	}
 	first := got[0]
 	if first.Round != 1 || first.Kind != model.AgentRunModelCall || first.JobKey != round ||
@@ -253,7 +267,7 @@ func TestAgentRunsAndAParkedAgentSurviveReplay(t *testing.T) {
 	agentRound(t, h, p, cp, tool, 200, 20)
 	live := agentHistory(t, h.store)
 	_, liveInc, parked := agentIncident(t, h.store)
-	if !parked || len(live) != 2 {
+	if !parked || len(live) != 4 { // two model calls, two tool results
 		t.Fatalf("live: parked=%v, %d facts", parked, len(live))
 	}
 	h.close(t)
@@ -274,8 +288,13 @@ func TestAgentRunsAndAParkedAgentSurviveReplay(t *testing.T) {
 	}
 
 	replayed := agentHistory(t, store2)
-	if len(replayed) != 2 || replayed[0] != live[0] || replayed[1] != live[1] {
-		t.Errorf("replayed history = %+v, want %+v", replayed, live)
+	if len(replayed) != len(live) {
+		t.Fatalf("replayed history = %+v, want %+v", replayed, live)
+	}
+	for i := range live {
+		if replayed[i] != live[i] {
+			t.Errorf("replayed fact %d = %+v, want %+v", i, replayed[i], live[i])
+		}
 	}
 	key, inc, parked := agentIncident(t, store2)
 	if !parked || inc.Message != liveInc.Message {

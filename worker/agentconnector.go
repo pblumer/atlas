@@ -154,6 +154,9 @@ func RunAgentRound(ctx context.Context, j Job, models map[string]agent.Model) (O
 		return Outcome{}, err
 	}
 	out := Outcome{AgentRun: agentRunReport(decision.Call, took)}
+	// What this round was told of the process, said back so the next one is told only
+	// what has changed since.
+	out.AgentRun.Context = round.Context
 	for _, call := range decision.ToolCalls {
 		rep := ToolCallReport{Tool: call.Tool, CallId: call.CallId}
 		if len(call.Arguments) > 0 {
@@ -310,6 +313,8 @@ func agentRunReport(call agent.Call, took time.Duration) *AgentRunReport {
 		System:           call.System,
 		Prompt:           call.Prompt,
 		Answer:           call.Answer,
+		Wire:             call.Wire,
+		Turn:             call.Turn,
 	}
 }
 

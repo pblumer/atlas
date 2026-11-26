@@ -74,21 +74,30 @@ func (m *ChatCompletionsModel) Decide(ctx context.Context, req Request) (Decisio
 	if err != nil {
 		return Decision{}, err
 	}
-	d.Call.System, d.Call.Prompt = systemFor(req), promptFor(req)
+	d.Call.System, d.Call.Prompt = systemFor(req), chatSaid(req)
+	d.Call.Wire, d.Call.Turn = WireChatCompletions, chatStoredTurn(payload)
+	if err := applyOutputs(req, &d); err != nil {
+		return Decision{}, err
+	}
 	return d, nil
 }
 
 // --- request ---------------------------------------------------------------
 
 type chatRequest struct {
-	Model    string     `json:"model"`
-	Messages []chatTurn `json:"messages"`
+	Model string `json:"model"`
+	// Messages are chatTurns for plain text, and the stored assistant and tool
+	// messages of a replayed run.
+	Messages []any      `json:"messages"`
 	Tools    []chatTool `json:"tools,omitempty"`
 	// MaxCompletionTokens is the current name for the cap; "max_tokens" is the older
 	// one and newer models refuse it. Omitted entirely when no cap is configured,
 	// which is the portable answer: an agent round's answer is short, and every
 	// endpoint has a default of its own.
 	MaxCompletionTokens int `json:"max_completion_tokens,omitempty"`
+	// ResponseFormat asks for the answer as an object of the declared fields; omitted
+	// when the element declares none.
+	ResponseFormat map[string]any `json:"response_format,omitempty"`
 }
 
 type chatTurn struct {
@@ -109,13 +118,114 @@ type chatFunction struct {
 
 func (m *ChatCompletionsModel) request(req Request) chatRequest {
 	return chatRequest{
-		Model: m.Model,
-		Messages: []chatTurn{
-			{Role: "system", Content: systemFor(req)},
-			{Role: "user", Content: promptFor(req)},
-		},
+		Model:               m.Model,
+		Messages:            chatTurns(req),
 		Tools:               chatToolSchemas(req.Tools),
 		MaxCompletionTokens: m.MaxTokens,
+		ResponseFormat:      chatResponseFormat(req.Outputs),
+	}
+}
+
+// chatTurns is the conversation this round is put as: the run as it happened when its
+// earlier rounds are on the record in this format, one message stating the results in
+// words otherwise. See [HTTPModel.turns]; the reasoning is the same and only the shape
+// differs — here every tool result is a message of its own, named by the call's id.
+func chatTurns(req Request) []any {
+	plain := []any{
+		chatTurn{Role: "system", Content: systemFor(req)},
+		chatTurn{Role: "user", Content: promptFor(req)},
+	}
+	if !replayable(req.History, WireChatCompletions) {
+		return plain
+	}
+	turns := []any{
+		chatTurn{Role: "system", Content: systemFor(req)},
+		chatTurn{Role: "user", Content: req.History[0].Said},
+	}
+	for i, past := range req.History {
+		ids, ok := chatCallIds(past.Turn)
+		if !ok {
+			return plain
+		}
+		turns = append(turns, json.RawMessage(past.Turn))
+		for _, id := range ids {
+			text, _ := resultOf(past, id)
+			turns = append(turns, map[string]any{"role": "tool", "tool_call_id": id, "content": text})
+		}
+		if said := saidAfter(req, i); said != "" {
+			turns = append(turns, chatTurn{Role: "user", Content: said})
+		}
+	}
+	return turns
+}
+
+// chatCallIds reads the ids of the calls a stored assistant message made.
+func chatCallIds(turn string) ([]string, bool) {
+	var msg struct {
+		ToolCalls []struct {
+			ID string `json:"id"`
+		} `json:"tool_calls"`
+	}
+	if err := json.Unmarshal([]byte(turn), &msg); err != nil || len(msg.ToolCalls) == 0 {
+		return nil, false
+	}
+	ids := make([]string, 0, len(msg.ToolCalls))
+	for _, c := range msg.ToolCalls {
+		ids = append(ids, c.ID)
+	}
+	return ids, true
+}
+
+// chatSaid is what this call adds to the conversation, which is what its record keeps.
+func chatSaid(req Request) string {
+	if replayable(req.History, WireChatCompletions) {
+		if _, ok := chatCallIds(req.History[len(req.History)-1].Turn); ok {
+			return changedText(req.Changed)
+		}
+	}
+	return promptFor(req)
+}
+
+// chatStoredTurn is the assistant message as the next round hands it back: its role, its
+// words and its calls, and nothing else an endpoint may have decorated it with — a
+// field one gateway adds is a field another refuses.
+func chatStoredTurn(payload []byte) string {
+	var resp struct {
+		Choices []struct {
+			Message struct {
+				Content   json.RawMessage `json:"content"`
+				ToolCalls json.RawMessage `json:"tool_calls"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if json.Unmarshal(payload, &resp) != nil || len(resp.Choices) == 0 {
+		return ""
+	}
+	msg := map[string]any{"role": "assistant"}
+	if c := resp.Choices[0].Message.Content; len(c) > 0 {
+		msg["content"] = c
+	}
+	if tc := resp.Choices[0].Message.ToolCalls; len(tc) > 0 && string(tc) != "null" {
+		msg["tool_calls"] = tc
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// chatResponseFormat asks for the answer as an object of the declared fields. This
+// format enforces a schema exactly only when every field is required; with an optional
+// one the schema is sent as guidance, and the answer is checked here either way.
+func chatResponseFormat(outputs []Output) map[string]any {
+	if len(outputs) == 0 {
+		return nil
+	}
+	schema, strict := answerSchema(outputs)
+	return map[string]any{
+		"type":        "json_schema",
+		"json_schema": map[string]any{"name": "answer", "strict": strict, "schema": schema},
 	}
 }
 

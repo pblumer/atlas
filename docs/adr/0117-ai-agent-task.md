@@ -20,7 +20,9 @@
 > token usage, `GET /api/v1/instances/{key}/agent-runs`, and the limits `maxIterations`,
 > `timeout` and `tokenBudget` — the two run bounds enforced by the engine on an agent-driven
 > container rather than by a worker, since [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md)
-> moved the loop into the process. Not built: the output schema and the Operations view.
+> moved the loop into the process. The output schema is built by
+> [ADR-draft-agent-transcript-and-answer](draft-agent-transcript-and-answer.md) as declared
+> answer fields (`<atlas:agentOutput>`), checked by the worker. Not built: the Operations view.
 
 ## Context and problem statement
 

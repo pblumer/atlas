@@ -1029,6 +1029,18 @@ Making processes wait, react, and time out.
   (ADR-0314). Read over `GET /api/v1/instances/{key}/agent-runs` and MCP
   `atlas_instance_agent_runs`. 🔲 Not built: the Operations view on the agent's element, and
   Modeler fields for the three bounds.
+- 🚧 **An agent is shown its own run again, and its answer has a shape**
+  ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)): from
+  its second round on, a round is put to the model as the run happened — the first prompt, each
+  of the model's own turns unchanged, and the result of every call answering that call — instead
+  of a fresh prompt retelling the results. The turn is kept on the run's record, opaque to the
+  engine, with a fact for what each tool returned; a turn in another provider's format, or one
+  that can no longer be read, falls back to the results in words. Rounds are sent cacheable, the
+  round number is the record's, and the context is put in name order and told again only where
+  it changed. `<atlas:agentOutput>` declares the fields an answer must carry (string, number,
+  boolean, a set of values): both formats are asked for the object, the **worker checks it**,
+  and it lands as one JSON variable a gateway can route on. 🔲 Not built: a Modeler editor for
+  answer fields; trimming a run that outgrows the model's window.
 
 - ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
   published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered

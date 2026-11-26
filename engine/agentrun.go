@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -164,4 +165,37 @@ func parkAgentAtLimit(c *ProcessingContext, key uint64, ei *model.ElementInstanc
 		Reason:             model.IncidentAgentLimit,
 		Message:            msg,
 	})
+}
+
+// recordAgentToolResult appends what one tool returned to the run's record, paired with
+// the call that asked for it by the model's own call id
+// (ADR-draft-agent-transcript-and-answer). With the model calls it makes the history a
+// transcript: the next round can be shown its own turn and the answer to each call it
+// made, instead of a list of results it has to match up itself.
+//
+// Only an activity the agent called has a call id in its own scope. One reached by a
+// sequence flow from a tool does not, and adds no fact: what the call "returned" is what
+// the called activity itself finished with.
+//
+// The text is what the engine evaluated, so it holds nothing the engine does not already
+// hold: a personal value read here is its envelope, never its plaintext (ADR-0314).
+func recordAgentToolResult(c *ProcessingContext, containerKey, toolKey uint64, tool *model.ElementInstanceValue, val expr.Value) {
+	callID := c.GetVariable(toolKey, AgentCallIdVariable)
+	if callID == nil || callID.Text == "" {
+		return
+	}
+	kind, b, text := expr.Classify(val)
+	if kind == expr.KindBool {
+		text = strconv.FormatBool(b)
+	}
+	c.appendEvent(tool.ProcessInstanceKey, model.VTAgentRun, model.IntentAgentRunRecorded, inflightValue{agentRun: &model.AgentRunValue{
+		Kind:               model.AgentRunToolResult,
+		ProcessInstanceKey: tool.ProcessInstanceKey,
+		ElementInstanceKey: containerKey,
+		ProcessDefKey:      tool.ProcessDefKey,
+		ElementId:          tool.ElementId,
+		Round:              c.AgentRunTotal(tool.ProcessInstanceKey, containerKey).Rounds,
+		CallId:             callID.Text,
+		Answer:             text,
+	}})
 }

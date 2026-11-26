@@ -121,6 +121,17 @@ func checkAgentLimits(cp *CompiledProcess) []Problem {
 			ps = append(ps, problem(cp, int32(id), SeverityError, RuleAgentLimit,
 				fmt.Sprintf("%s %s", describeNode(cp, int32(id)), msg)))
 		}
+		var outputProblems []string
+		switch cp.nodes[id].Type {
+		case TypeAdHocSubProcess:
+			outputProblems = cp.AdHoc(cp.nodes[id].Detail).AgentOutputProblems
+		case TypeConnectorTask:
+			outputProblems = cp.ConnectorTask(cp.nodes[id].Detail).AgentOutputProblems
+		}
+		for _, msg := range outputProblems {
+			ps = append(ps, problem(cp, int32(id), SeverityError, RuleAgentOutput,
+				fmt.Sprintf("%s %s", describeNode(cp, int32(id)), msg)))
+		}
 	}
 	return ps
 }

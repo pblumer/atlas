@@ -52,6 +52,15 @@ type Request struct {
 	Tools   []Tool            `json:"tools"`
 	Results []string          `json:"results,omitempty"`
 	Round   int               `json:"round"`
+	// Outputs are the fields the answer must carry; empty means free text
+	// (ADR-draft-agent-transcript-and-answer).
+	Outputs []Output `json:"outputs,omitempty"`
+	// History is the run's earlier rounds as they happened, and Changed the context
+	// values the model has not been told yet. Both are set only when every earlier
+	// round is on the record whole; without them a round is put the old way, from
+	// Results (ADR-draft-agent-transcript-and-answer).
+	History []PastRound       `json:"history,omitempty"`
+	Changed map[string]string `json:"changed,omitempty"`
 	// System replaces what an adapter would otherwise tell the model about the
 	// situation it is in. Empty is the normal case and the one every runtime caller
 	// uses: a round and an ai task each have a standing prompt below, written for
@@ -109,6 +118,10 @@ type Call struct {
 	System     string // the standing instruction it was given
 	Prompt     string // what this call added to the conversation
 	Answer     string // the words it wrote, beside or instead of tool calls
+	// Wire names the format Turn is in; Turn is the model's whole turn as the provider
+	// returned it, kept so the next round can replay it unchanged.
+	Wire string
+	Turn string
 }
 
 // Model is the whole of this package's dependency on inference: one round in, one

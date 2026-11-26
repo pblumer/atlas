@@ -412,11 +412,12 @@ func elementAgentParams(data []byte) map[string][]xmlAgentParam {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if t.Name.Local == "agentParam" {
+			if t.Name.Local == "agentParam" || t.Name.Local == "agentOutput" {
 				var p xmlAgentParam
 				if err := dec.DecodeElement(&p, &t); err != nil {
 					return params
 				}
+				p.output = t.Name.Local == "agentOutput"
 				// DecodeElement consumed this element whole, including its end tag, so
 				// it never enters the owner stack.
 				for i := len(owners) - 1; i >= 0; i-- {
@@ -605,8 +606,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// ad-hoc's tool index (ADR-0253).
 	if len(agentParams) > 0 {
 		specs := make(map[string][]agentParamSpec, len(agentParams))
+		outputs := make(map[string][]agentOutputSpec)
 		for owner, ps := range agentParams {
 			for _, prm := range ps {
+				if prm.output {
+					outputs[owner] = append(outputs[owner], agentOutputSpec{
+						Name: prm.Name, Type: prm.Type, Description: prm.Description,
+						Required: strings.TrimSpace(prm.Required) == "true", Values: prm.Values,
+					})
+					continue
+				}
 				specs[owner] = append(specs[owner], agentParamSpec{
 					Name:        prm.Name,
 					Type:        prm.Type,
@@ -616,6 +625,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 		}
 		b.SetAgentParams(specs)
+		b.agentOutputs = outputs
 	}
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -1870,6 +1880,12 @@ type xmlAgentParam struct {
 	Type        string `xml:"type,attr"`
 	Description string `xml:"description,attr"`
 	Required    string `xml:"required,attr"`
+	// Values and output belong to <atlas:agentOutput>, which is read by the same walk
+	// because it is the same declaration turned round: a typed value the model must
+	// supply, in its answer rather than in a call (ADR-draft-agent-transcript-and-answer).
+	// Values is the comma-separated set a string field is limited to.
+	Values string `xml:"values,attr"`
+	output bool
 }
 
 // foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses

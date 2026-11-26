@@ -24,8 +24,17 @@ func agentRunInstancePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfAgentRun)}, piKey)
 }
 
-func keyAgentRun(piKey uint64, ts int64, pos uint64) []byte {
-	return appendBE64(appendOrderedInt64(agentRunInstancePrefix(piKey), ts), pos)
+// agentRunElementPrefix scans the facts of one agent — an ai task or a container, with
+// what its tools returned — in the order they happened. The element instance sits in the
+// key before the time so that building a round's transcript reads exactly that agent's
+// facts and nothing of the instance's others: an instance running a thousand agents in a
+// multi-instance activity must not make each of their rounds scan all of them.
+func agentRunElementPrefix(piKey, elKey uint64) []byte {
+	return appendBE64(agentRunInstancePrefix(piKey), elKey)
+}
+
+func keyAgentRun(piKey, elKey uint64, ts int64, pos uint64) []byte {
+	return appendBE64(appendOrderedInt64(agentRunElementPrefix(piKey, elKey), ts), pos)
 }
 
 // agentRunTotalInstancePrefix covers the totals of every agent of one instance, so the
@@ -45,7 +54,7 @@ func (t *Tx) RecordAgentRun(ts int64, pos uint64, v *model.AgentRunValue) error 
 	if v.ProcessInstanceKey == 0 {
 		return nil
 	}
-	if err := t.b.Set(keyAgentRun(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil); err != nil {
+	if err := t.b.Set(keyAgentRun(v.ProcessInstanceKey, v.ElementInstanceKey, ts, pos), t.encodeValue(v), nil); err != nil {
 		return err
 	}
 	if v.Kind != model.AgentRunModelCall || v.ElementInstanceKey == 0 {
@@ -80,8 +89,22 @@ func (q queries) AgentRunTotal(piKey, elKey uint64) (model.AgentRunTotal, error)
 	return model.DecodeAgentRunTotal(raw), nil
 }
 
-// AgentRunHistory folds the retained agent-run facts of one process instance in the
-// order they happened, calling fn with each fact's event timestamp and log position.
+// AgentRunsOf folds the facts of one agent — the model calls of an element instance and
+// what its tools returned — in the order they happened.
+func (q queries) AgentRunsOf(piKey, elKey uint64, fn func(ts int64, pos uint64, v *model.AgentRunValue) error) error {
+	return q.scanPrefix(agentRunElementPrefix(piKey, elKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTAgentRun, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromDecisionEvalKey(k), positionFromDecisionEvalKey(k), v.(*model.AgentRunValue))
+	})
+}
+
+// AgentRunHistory folds the retained agent-run facts of one process instance, calling fn
+// with each fact's event timestamp and log position. The facts come agent by agent, each
+// agent's in the order they happened; a caller that wants the instance's own order sorts
+// by position.
 func (q queries) AgentRunHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.AgentRunValue) error) error {
 	return q.scanPrefix(agentRunInstancePrefix(piKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTAgentRun, raw)
@@ -93,7 +116,7 @@ func (q queries) AgentRunHistory(piKey uint64, fn func(ts int64, pos uint64, v *
 }
 
 // EachAgentRun folds every retained agent-run fact across all instances, in key order:
-// by instance, then in the order the facts happened. It scans the whole family, so it
+// by instance, then by agent, then in the order the facts happened. It scans the whole family, so it
 // grows with the history and must not be called on the run loop.
 func (q queries) EachAgentRun(fn func(ts int64, pos uint64, v *model.AgentRunValue) error) error {
 	return q.scanPrefix([]byte{byte(cfAgentRun)}, func(k, raw []byte) error {

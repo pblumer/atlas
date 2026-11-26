@@ -218,3 +218,116 @@ func TestAPersonalProcessWithoutASubjectWithholdsACallsTexts(t *testing.T) {
 		t.Errorf("route = %+v, want the texts withheld and the numbers left", got)
 	}
 }
+
+// From its second round on, a round is resolved with the run as it happened: the model's
+// own earlier turn, what its call returned, the round's real number, and only the context
+// that changed (ADR-draft-agent-transcript-and-answer).
+func TestASecondRoundIsResolvedWithTheRunsTranscript(t *testing.T) {
+	srv, round := startAgentRound(t)
+	if round.Connector.Fields["history"] != nil || round.Connector.Fields["round"] != float64(1) {
+		t.Fatalf("round 1 payload = %v, want no history", round.Connector.Fields)
+	}
+	turn := `[{"type":"tool_use","id":"toolu_1","name":"zinsen_holen","input":{"url":"https://bank.example"}}]`
+	body, _ := json.Marshal(map[string]any{
+		"worker": "w1", "leaseToken": round.LeaseToken,
+		"toolCalls": []map[string]any{{"tool": "zinsen_holen", "callId": "toolu_1", "arguments": map[string]any{"url": "https://bank.example"}}},
+		"agentRun": map[string]any{"prompt": "Goal: Finde den Zins", "wire": "messages", "turn": turn,
+			"context": map[string]string{"laufzeit": "10"}},
+	})
+	if code, raw := completeJob(t, srv, round, string(body)); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("complete round 1: status=%d body=%s", code, raw)
+	}
+	tool := lease(t, srv, "rates")
+	if code, raw := completeJob(t, srv, tool, fmt.Sprintf(`{"worker":"w1","leaseToken":%d,"variables":{"toolCallResult":"1.45 %%"}}`,
+		tool.LeaseToken)); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("complete tool: status=%d body=%s", code, raw)
+	}
+
+	second := lease(t, srv, compiler.AgentJobType)
+	fields := second.Connector.Fields
+	history, _ := fields["history"].([]any)
+	if fields["round"] != float64(2) || len(history) != 1 {
+		t.Fatalf("round 2 payload = %v, want round 2 with one past round", fields)
+	}
+	past := history[0].(map[string]any)
+	results, _ := past["results"].([]any)
+	if past["wire"] != "messages" || past["turn"] != turn || past["said"] != "Goal: Finde den Zins" || len(results) != 1 {
+		t.Fatalf("past round = %v", past)
+	}
+	if r := results[0].(map[string]any); r["callId"] != "toolu_1" || r["tool"] != "zinsen_holen" || r["text"] != "1.45 %" {
+		t.Errorf("result = %v, want the call's own, by id", r)
+	}
+	if fields["changed"] != nil {
+		t.Errorf("changed = %v, want nothing: no context is authored on this container", fields["changed"])
+	}
+
+	// The record holds the turn and what the tool returned, and the route shows the
+	// instance's facts in the order they happened.
+	stored := storedAgentRuns(t, srv)
+	got := agentRunsRoute(t, srv, stored[0].ProcessInstanceKey)
+	if len(got) != 2 || got[0].Kind != "modelCall" || got[1].Kind != "toolResult" || got[1].CallID != "toolu_1" ||
+		got[1].Answer != "1.45 %" || got[1].ElementID != "zinsen_holen" || got[1].Round != 1 {
+		t.Errorf("route = %+v", got)
+	}
+}
+
+const structuredAiTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs-structured">
+  <bpmn:process id="tragbarkeit" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="pruefen">
+      <bpmn:extensionElements>
+        <atlas:agentConnector connector="anthropic_pb" prompt="Ist das tragbar?" resultVariable="urteil"/>
+        <atlas:agentOutput name="entscheid" type="string" required="true" values="ja,nein"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="pruefen"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="pruefen" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// The fields an answer must carry reach the worker with the task.
+func TestDeclaredAnswerFieldsReachTheWorker(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	deployAndStartWith(t, srv, structuredAiTaskBPMN, `{}`)
+	task := lease(t, srv, compiler.AiTaskJobType)
+	outputs, _ := task.Connector.Fields["outputs"].([]any)
+	if len(outputs) != 1 {
+		t.Fatalf("payload = %v, want the declared field", task.Connector.Fields)
+	}
+	if o := outputs[0].(map[string]any); o["name"] != "entscheid" || o["type"] != "string" || o["required"] != true ||
+		len(o["values"].([]any)) != 2 {
+		t.Errorf("output = %v", o)
+	}
+}
+
+// A sealed turn is opened for the round it is replayed in, and a run whose key is gone
+// is counted but no longer replayed.
+func TestASealedTurnIsOpenedForReplayAndLostWithItsKey(t *testing.T) {
+	srv := newVaultServer(t)
+	clear := &model.AgentRunValue{Prompt: "p", Turn: "t", Context: `{"a":"b"}`}
+	if p, tu, c, ok := srv.openAgentRunForReplay(clear); !ok || p != "p" || tu != "t" || c != `{"a":"b"}` {
+		t.Errorf("a clear record = %q %q %q %v", p, tu, c, ok)
+	}
+	sealed := &model.AgentRunValue{Prompt: "Frau Muster", Turn: `[{"type":"text"}]`, Context: `{"name":"Muster"}`}
+	srv.sealAgentRunTexts(sealed, "k-9")
+	if sealed.TextState != model.AgentRunTextEnciphered || strings.Contains(sealed.Turn+sealed.Context, "Muster") {
+		t.Fatalf("sealed = %+v, want the turn and the context enciphered too", sealed)
+	}
+	if p, tu, c, ok := srv.openAgentRunForReplay(sealed); !ok || p != "Frau Muster" || tu != `[{"type":"text"}]` || c != `{"name":"Muster"}` {
+		t.Errorf("opened = %q %q %q %v", p, tu, c, ok)
+	}
+	if err := srv.vault.Erase("k-9"); err != nil {
+		t.Fatalf("Erase: %v", err)
+	}
+	if _, _, _, ok := srv.openAgentRunForReplay(sealed); ok {
+		t.Error("a run whose key was destroyed is still replayable")
+	}
+	withheld := &model.AgentRunValue{Prompt: "p", Turn: "t"}
+	srv.sealAgentRunTexts(withheld, "")
+	if _, _, _, ok := srv.openAgentRunForReplay(withheld); ok || withheld.Turn != "" {
+		t.Errorf("a withheld run = %+v, replayable=%v", withheld, ok)
+	}
+}

@@ -23,6 +23,14 @@ _Changed_ / _Removed_ for each version.
   that declares personal data the prompt and the answer are stored under the data subject's
   key, so erasing the subject reaches them
   ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md)).
+- **An agent's answer can be held to a shape.** `<atlas:agentOutput name="…" type="…">` on an ai
+  task or an agent-driven ad-hoc subprocess declares the fields the answer must carry — a
+  string, a number or a boolean, optionally `required`, a string optionally limited to
+  `values`. The model is asked for exactly that object, the worker refuses an answer that is
+  not it, and it is written as one JSON variable, so a gateway can route on
+  `= urteil.entscheid = "ja"`. Without any declared, an answer is text as before. The Modeler
+  has no editor for the fields yet: they are written in the XML
+  ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)).
 - **An agent can be given bounds.** `<atlas:agentConnector>` reads `maxIterations` (rounds),
   `tokenBudget` (input plus output tokens of the run) and `timeout` (an ISO-8601 duration for
   one call to the model, also on an ai task). At a bound the container stops asking, stays
@@ -63,6 +71,16 @@ _Changed_ / _Removed_ for each version.
   process outside the model also receives (ADR-0559, amendment of 2026-11-25).
 
 ### Changed
+- **An agent sees its own run from the second round on.** A round used to be put to the model
+  as a fresh prompt listing what earlier tool calls returned. It is now put as the run
+  happened: the first prompt, the model's own earlier turns unchanged, and each result
+  answering the call that asked for it, with only what is new appended — so the model keeps
+  its reasoning and the provider can reuse what it has already read. Runs that were under way
+  before, a run whose provider is switched, and a run whose texts were erased are still put
+  the old way. The round number a model is told is now the number of calls made, not the
+  number of results plus one, and the process variables an agent is given arrive in name order
+  and are repeated only where they changed. What each tool returned is listed by
+  `GET /api/v1/instances/{key}/agent-runs` as `kind: "toolResult"`.
 - **An agent that states no bound now stops after 25 rounds.** An agent-driven ad-hoc
   subprocess without `maxIterations` used to run for as long as its model kept choosing tools,
   bounded only by a completion condition if its model had one. It now parks on an incident

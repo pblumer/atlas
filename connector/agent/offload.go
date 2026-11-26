@@ -64,6 +64,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.Element
 			Results: results,
 			Round:   len(results) + 1,
 			Timeout: roundTimeout(d),
+			Outputs: outputsOf(cp, d.AgentOutputs),
 		},
 		Connector: cp.Intern(d.AgentWorker),
 		Model:     cp.Intern(d.AgentModel),
@@ -176,6 +177,9 @@ func ResolveJobPayload(r Round) map[string]any {
 		"results":   r.Results,
 		"round":     r.Round,
 		"timeoutMs": timeoutMs(r.Timeout),
+		"outputs":   r.Outputs,
+		"history":   r.History,
+		"changed":   r.Changed,
 	}
 }
 
@@ -200,6 +204,9 @@ func RoundFromPayload(fields map[string]any) (Round, error) {
 		return Round{}, fmt.Errorf("agent: payload names no round")
 	}
 	r.Timeout = timeoutFromPayload(fields["timeoutMs"])
+	r.Outputs = outputsFromPayload(fields["outputs"])
+	r.History = historyFromPayload(fields["history"])
+	r.Changed = stringMap(fields["changed"])
 	r.Context = stringMap(fields["context"])
 	r.Results = stringSlice(fields["results"])
 	tools, err := toolsFromPayload(fields["tools"])

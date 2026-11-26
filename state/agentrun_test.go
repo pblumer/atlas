@@ -50,6 +50,14 @@ func TestAgentRunsAreKeptInOrderSummedPerElementAndPurgedWithTheirInstance(t *te
 	if len(got) != 4 || got[0].Round != 1 || got[1].CallId != "c1" || got[2].Round != 2 || got[3].ElementInstanceKey != task {
 		t.Fatalf("history = %+v, want the instance's four facts in order", got)
 	}
+	// One agent's facts are read without the instance's others.
+	var own []uint32
+	if err := s.AgentRunsOf(pi, agent, func(_ int64, _ uint64, v *model.AgentRunValue) error {
+		own = append(own, v.Round)
+		return nil
+	}); err != nil || len(own) != 3 {
+		t.Fatalf("the agent's own facts = %v, %v, want its three", own, err)
+	}
 	total, err := s.AgentRunTotal(pi, agent)
 	if err != nil {
 		t.Fatal(err)

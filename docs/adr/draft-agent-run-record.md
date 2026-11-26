@@ -58,9 +58,11 @@ Chosen: **option 1**.
 ### The fact
 
 `VTAgentRun` / `IntentAgentRunRecorded` is appended in the batch that completes a job of type
-`io.atlas.ai.agent` or `io.atlas.ai.task`, beside `JobCompleted`. It is keyed under its instance
-in the `(instance, ts, pos)` shape of a decision evaluation (ADR-0066) and goes with the
-instance's history.
+`io.atlas.ai.agent` or `io.atlas.ai.task`, beside `JobCompleted`. It is append-only history
+under its instance like a decision evaluation (ADR-0066), keyed
+`(instance, element instance, ts, pos)`, and goes with the instance's history.
+[ADR-draft-agent-transcript-and-answer](draft-agent-transcript-and-answer.md) adds a second
+kind of fact, what a tool returned, and three texts to this one.
 
 | Stated by the worker (an account) | Stated by the engine |
 |---|---|

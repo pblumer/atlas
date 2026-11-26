@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,9 +96,9 @@ func systemFor(req Request) string {
 		return s
 	}
 	if len(req.Tools) == 0 {
-		return taskSystemPrompt
+		return taskSystemPrompt + outputInstruction(req.Outputs)
 	}
-	return roundSystemPrompt
+	return roundSystemPrompt + outputInstruction(req.Outputs)
 }
 
 // Decide asks the model for one round. Every round is a fresh request: the worker holds
@@ -122,7 +124,10 @@ func (m *HTTPModel) Decide(ctx context.Context, req Request) (Decision, error) {
 	if err != nil {
 		return Decision{}, err
 	}
-	d.Call.System, d.Call.Prompt = body.System, promptFor(req)
+	d.Call.System, d.Call.Prompt = body.System, m.said(req)
+	if err := applyOutputs(req, &d); err != nil {
+		return Decision{}, err
+	}
 	return d, nil
 }
 
@@ -135,6 +140,32 @@ type messagesRequest struct {
 	Tools     []messagesTool   `json:"tools,omitempty"`
 	Messages  []messagesTurn   `json:"messages"`
 	Thinking  *thinkingSetting `json:"thinking,omitempty"`
+	// OutputConfig asks for the answer as an object of the declared fields. Sent only
+	// when the element declares any, so a request without them is byte for byte what it
+	// was before.
+	OutputConfig *messagesOutputConfig `json:"output_config,omitempty"`
+	// CacheControl lets the provider reuse what it has already read. A run's rounds
+	// share their tools, their system prompt and — once replayed — every earlier turn,
+	// so each round after the first re-reads a prefix it has seen. Sent for a round and
+	// not for an ai task, which is asked once.
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
+}
+
+type messagesOutputConfig struct {
+	Format messagesOutputFormat `json:"format"`
+}
+
+type messagesOutputFormat struct {
+	Type   string         `json:"type"`
+	Schema map[string]any `json:"schema"`
+}
+
+func messagesOutput(outputs []Output) *messagesOutputConfig {
+	if len(outputs) == 0 {
+		return nil
+	}
+	schema, _ := answerSchema(outputs)
+	return &messagesOutputConfig{Format: messagesOutputFormat{Type: "json_schema", Schema: schema}}
 }
 
 type thinkingSetting struct {
@@ -147,9 +178,15 @@ type messagesTool struct {
 	InputSchema map[string]any `json:"input_schema"`
 }
 
+// messagesTurn is one turn. Content is a string for a turn of plain text, and a list of
+// content blocks for a replayed turn of the model's or the tool results that answer it.
 type messagesTurn struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type cacheControl struct {
+	Type string `json:"type"`
 }
 
 func (m *HTTPModel) request(req Request) messagesRequest {
@@ -166,12 +203,90 @@ func (m *HTTPModel) request(req Request) messagesRequest {
 		MaxTokens: maxTokens,
 		System:    systemFor(req),
 		Tools:     toolSchemas(req.Tools),
-		Messages:  []messagesTurn{{Role: "user", Content: promptFor(req)}},
+		Messages:  m.turns(req),
 		// Adaptive thinking lets the model spend more where a round is hard and less
 		// where it is not, which is the shape of agent work. Off is for an endpoint
 		// that does not implement it.
-		Thinking: m.thinking(),
+		Thinking:     m.thinking(),
+		OutputConfig: messagesOutput(req.Outputs),
+		CacheControl: roundCache(req),
 	}
+}
+
+func roundCache(req Request) *cacheControl {
+	if len(req.Tools) == 0 {
+		return nil
+	}
+	return &cacheControl{Type: "ephemeral"}
+}
+
+// turns is the conversation this round is put as.
+//
+// With the run's earlier rounds on the record in this format, it is the run as it
+// happened: the first prompt, then for each round the model's own turn — unchanged,
+// thinking blocks included, which is what lets the model pick its reasoning up — and the
+// result of every call that turn made. Only what is new is appended, so everything
+// before it is a prefix the provider has already read.
+//
+// Without them it is one message stating the results in words, as before.
+func (m *HTTPModel) turns(req Request) []messagesTurn {
+	if !replayable(req.History, WireMessages) {
+		return []messagesTurn{{Role: "user", Content: promptFor(req)}}
+	}
+	turns := []messagesTurn{{Role: "user", Content: req.History[0].Said}}
+	for i, past := range req.History {
+		results, ok := messagesToolResults(past, saidAfter(req, i))
+		if !ok {
+			// A stored turn this adapter cannot read back is not replayed in part.
+			return []messagesTurn{{Role: "user", Content: promptFor(req)}}
+		}
+		turns = append(turns,
+			messagesTurn{Role: "assistant", Content: json.RawMessage(past.Turn)},
+			messagesTurn{Role: "user", Content: results})
+	}
+	return turns
+}
+
+// messagesToolResults answers every tool call of a stored turn, in the turn's own order
+// and in one message — a provider reads results split across messages as a model that
+// should stop calling tools together. said, when there is any, follows them as text.
+func messagesToolResults(past PastRound, said string) ([]map[string]any, bool) {
+	var blocks []struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(past.Turn), &blocks); err != nil {
+		return nil, false
+	}
+	var out []map[string]any
+	for _, b := range blocks {
+		if b.Type != "tool_use" {
+			continue
+		}
+		text, finished := resultOf(past, b.ID)
+		block := map[string]any{"type": "tool_result", "tool_use_id": b.ID, "content": text}
+		if !finished {
+			block["is_error"] = true
+		}
+		out = append(out, block)
+	}
+	if len(out) == 0 {
+		return nil, false // a past round that called nothing would have ended the run
+	}
+	if said != "" {
+		out = append(out, map[string]any{"type": "text", "text": said})
+	}
+	return out, true
+}
+
+// said is what this call adds to the conversation, which is what its record keeps.
+func (m *HTTPModel) said(req Request) string {
+	if replayable(req.History, WireMessages) {
+		if _, ok := messagesToolResults(req.History[len(req.History)-1], ""); ok {
+			return changedText(req.Changed)
+		}
+	}
+	return promptFor(req)
 }
 
 func (m *HTTPModel) thinking() *thinkingSetting {
@@ -248,8 +363,11 @@ func roundPrompt(req Request) string {
 	}
 	if len(req.Context) > 0 {
 		b.WriteString("\n\nWhat the process knows:")
-		for k, v := range req.Context {
-			fmt.Fprintf(&b, "\n- %s: %s", k, v)
+		// In name order, every time. A Go map has no order of its own, so ranging over
+		// it sent the same facts in a different sequence on every round — which a model
+		// reads as a different prompt and a provider's cache cannot reuse.
+		for _, k := range slices.Sorted(maps.Keys(req.Context)) {
+			fmt.Fprintf(&b, "\n- %s: %s", k, req.Context[k])
 		}
 	}
 	if len(req.Results) == 0 {
@@ -306,9 +424,16 @@ func (m *HTTPModel) decode(payload []byte) (Decision, error) {
 			calls = append(calls, model.ToolCall{Tool: block.Name, CallId: block.ID, Arguments: args})
 		}
 	}
+	// The turn itself, untouched: the next round hands it back exactly as it came.
+	var raw struct {
+		Content json.RawMessage `json:"content"`
+	}
+	_ = json.Unmarshal(payload, &raw)
 	call := Call{
 		Model:      resp.Model,
 		StopReason: resp.StopReason,
+		Wire:       WireMessages,
+		Turn:       string(raw.Content),
 		Usage: Usage{
 			InputTokens:      resp.Usage.InputTokens + resp.Usage.CacheCreationInputTokens + resp.Usage.CacheReadInputTokens,
 			OutputTokens:     resp.Usage.OutputTokens,

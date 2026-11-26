@@ -93,7 +93,7 @@ const (
 	cfTaskAnswerByJob       columnFamily = 0x4B // taskAnsJob:<jobKey> → piKey(8)
 	// An agent's run (ADR-draft-agent-run-record): the facts under their instance, and
 	// what each agent's calls add up to. See agentrun.go.
-	cfAgentRun      columnFamily = 0x4C // agentRun:<piKey>:<ts>:<pos> → AgentRunValue
+	cfAgentRun      columnFamily = 0x4C // agentRun:<piKey>:<elKey>:<ts>:<pos> → AgentRunValue
 	cfAgentRunTotal columnFamily = 0x4D // agentRunTotal:<piKey>:<elKey> → rounds(4) in(8) out(8) limit(1)
 )
 

@@ -314,7 +314,7 @@ func collectAgentToolResult(c *ProcessingContext, key uint64, ei *model.ElementI
 	}
 	cp := c.process(scope.ProcessDefKey)
 	d := cp.AdHoc(cp.Node(scope.ElementId).Detail)
-	if !d.AgentDriven || d.ResultCollection < 0 {
+	if !d.AgentDriven {
 		return
 	}
 	val := expr.Null
@@ -325,6 +325,13 @@ func collectAgentToolResult(c *ProcessingContext, key uint64, ei *model.ElementI
 		if v, err := d.ResultElement.Eval(bindInputsChain(c, d.ResultElement.Inputs(), key)); err == nil {
 			val = v
 		}
+	}
+	// The result goes on the run's record whether or not the model names a collection:
+	// the collection is the process's own view of it, the record is what the next round
+	// is told its call returned (ADR-draft-agent-transcript-and-answer).
+	recordAgentToolResult(c, ei.FlowScopeKey, key, ei, val)
+	if d.ResultCollection < 0 {
+		return
 	}
 	name := cp.Intern(d.ResultCollection)
 	writeList(c, ei.FlowScopeKey, name, append(readList(c, ei.FlowScopeKey, name), val))

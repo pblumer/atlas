@@ -721,34 +721,35 @@ type Builder struct {
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
 	dataStores         []CompiledDataStore
-	dataOutAssocs      []pendingDataOut            // data-output associations, grouped by node in Build
-	dataInAssocs       []pendingDataIn             // data-input associations, grouped by node in Build
-	ioInputs           []pendingIO                 // zeebe:ioMapping inputs, grouped by node in Build
-	ioOutputs          []pendingIO                 // zeebe:ioMapping outputs, grouped by node in Build
-	elementIds         []int32                     // interned source BPMN id per node, -1 if unset
-	flowIds            []int32                     // interned source BPMN id per flow, -1 if unset (a link goto, or a flow built in code)
-	agentParams        map[string][]agentParamSpec // element id → declared tool parameters
-	elementDocs        []int32                     // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
-	repairForms        []int32                     // interned repair form id per node, -1 if none (ADR-0169)
-	lanes              []LaneDetail                // organizational lanes (ADR-0121)
-	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
-	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
-	startVars          []StartVariable             // declared start variables (atlas:startForm), nil = none
-	constants          []Constant                  // process constants (atlas:constants), nil = none
-	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
-	defaultDecls       []defaultDeclaration        // which gateway declared which flow its default (RuleGatewayDefaultNotOutgoing)
-	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
-	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
-	invalidAnsweredBy  []int32                     // user task nodes whose atlas:answeredBy named no way (RuleAnswerValue)
-	answerTasks        map[int32]int32             // mail task node → interned BPMN id of the task it carries the link of
-	passwordFor        map[int32]RestExpr          // mail task node → the account whose password link it carries
-	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
-	searchableVars     []string                    // variable names the value index is maintained for, nil = none
-	personalVars       []string                    // variable names holding personal data, nil = none (ADR-0314)
-	dataSubjectVar     string                      // variable holding the data subject's id, "" = none (ADR-0314)
-	isExecutable       bool                        // bpmn:isExecutable; defaults true (set in NewBuilder)
+	dataOutAssocs      []pendingDataOut             // data-output associations, grouped by node in Build
+	dataInAssocs       []pendingDataIn              // data-input associations, grouped by node in Build
+	ioInputs           []pendingIO                  // zeebe:ioMapping inputs, grouped by node in Build
+	ioOutputs          []pendingIO                  // zeebe:ioMapping outputs, grouped by node in Build
+	elementIds         []int32                      // interned source BPMN id per node, -1 if unset
+	flowIds            []int32                      // interned source BPMN id per flow, -1 if unset (a link goto, or a flow built in code)
+	agentParams        map[string][]agentParamSpec  // element id → declared tool parameters
+	agentOutputs       map[string][]agentOutputSpec // element id → declared answer fields
+	elementDocs        []int32                      // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
+	repairForms        []int32                      // interned repair form id per node, -1 if none (ADR-0169)
+	lanes              []LaneDetail                 // organizational lanes (ADR-0121)
+	documentation      int32                        // interned <bpmn:documentation> of the process itself, -1 if none
+	startFormId        int32                        // interned start-form id (ADR-0028), -1 if the process has none
+	startVars          []StartVariable              // declared start variables (atlas:startForm), nil = none
+	constants          []Constant                   // process constants (atlas:constants), nil = none
+	conditionalStarts  []int32                      // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
+	defaultDecls       []defaultDeclaration         // which gateway declared which flow its default (RuleGatewayDefaultNotOutgoing)
+	eventGatewayKinds  []eventGatewayKind           // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
+	invalidWizards     []int32                      // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
+	invalidAnsweredBy  []int32                      // user task nodes whose atlas:answeredBy named no way (RuleAnswerValue)
+	answerTasks        map[int32]int32              // mail task node → interned BPMN id of the task it carries the link of
+	passwordFor        map[int32]RestExpr           // mail task node → the account whose password link it carries
+	versionTag         int32                        // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64                        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64                        // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	searchableVars     []string                     // variable names the value index is maintained for, nil = none
+	personalVars       []string                     // variable names holding personal data, nil = none (ADR-0314)
+	dataSubjectVar     string                       // variable holding the data subject's id, "" = none (ADR-0314)
+	isExecutable       bool                         // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
 	// process root, or a subprocess node's ElementId while its children are being
@@ -2903,6 +2904,10 @@ type AgentTaskConfig struct {
 	Prompt    RestExpr
 	ResultVar string
 	Retries   int32
+	// Outputs are the fields the answer must carry, with what was wrong with any of
+	// them (ADR-draft-agent-transcript-and-answer).
+	Outputs        []AgentOutput
+	OutputProblems []string
 	// Limits carries the call's authored timeout, and what was wrong with any bound
 	// the task states (ADR-draft-agent-run-record).
 	Limits AgentLimits
@@ -2926,19 +2931,20 @@ type AgentTaskConfig struct {
 func (b *Builder) AddAgentConnectorTask(cfg AgentTaskConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:     b.intern(AiTaskJobType),
-		Connector:   b.intern(cfg.Worker),
-		Subject:     -1, // not a clio task
-		EventType:   -1,
-		ClioQuery:   -1,
-		ReduceSpec:  -1,
-		Method:      -1, // not a REST task
-		Auth:        -1, // the provider's credential lives on the Worker
-		ResultVar:   b.intern(cfg.ResultVar),
-		AgentModel:  b.intern(cfg.Model),
-		AgentPrompt: cfg.Prompt,
-		AgentLimits: cfg.Limits,
-		Retries:     cfg.Retries,
+		JobType:      b.intern(AiTaskJobType),
+		Connector:    b.intern(cfg.Worker),
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // not a REST task
+		Auth:         -1, // the provider's credential lives on the Worker
+		ResultVar:    b.intern(cfg.ResultVar),
+		AgentModel:   b.intern(cfg.Model),
+		AgentPrompt:  cfg.Prompt,
+		AgentLimits:  cfg.Limits,
+		AgentOutputs: cfg.Outputs, AgentOutputProblems: cfg.OutputProblems,
+		Retries: cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

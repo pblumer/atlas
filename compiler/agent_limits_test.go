@@ -85,3 +85,67 @@ func TestAnUnusableAgentLimitRefusesTheDeployButNotTheReload(t *testing.T) {
 		})
 	}
 }
+
+const answerFields = `<atlas:agentOutput name="entscheid" type="string" required="true" values="ja, nein" description="Ob es tragbar ist"/>
+	    <atlas:agentOutput name="quote" type="number"/>`
+
+// The fields an answer must carry are read off the element that hosts the agent — an ai
+// task or a container — in the order they were written, and do not become tool
+// parameters of anything (ADR-draft-agent-transcript-and-answer).
+func TestAnswerFieldsCompileOntoTheirHost(t *testing.T) {
+	task := strings.Replace(aiTask(``), `</extensionElements>`, answerFields+`</extensionElements>`, 1)
+	container := agentAdHoc(strings.Replace(twoToolAdHoc, `<extensionElements>`, `<extensionElements>`+answerFields, 1))
+	for name, xml := range map[string]string{"ai task": task, "container": container} {
+		cp, err := Parse(1, 1, strings.NewReader(xml))
+		if err != nil {
+			t.Fatalf("%s: Parse: %v", name, err)
+		}
+		node := nodeByBpmnId(t, cp, "adhoc")
+		var outs []AgentOutput
+		if node.Type == TypeAdHocSubProcess {
+			d := cp.AdHoc(node.Detail)
+			outs = d.AgentOutputs
+			for _, tool := range d.Tools {
+				for _, p := range tool.Params {
+					if cp.Intern(p.Name) == "entscheid" {
+						t.Errorf("%s: an answer field became a parameter of a tool", name)
+					}
+				}
+			}
+		} else {
+			outs = cp.ConnectorTask(node.Detail).AgentOutputs
+		}
+		if len(outs) != 2 || cp.Intern(outs[0].Name) != "entscheid" || cp.Intern(outs[0].Type) != "string" || !outs[0].Required ||
+			len(outs[0].Values) != 2 || cp.Intern(outs[0].Values[1]) != "nein" || cp.Intern(outs[0].Description) != "Ob es tragbar ist" ||
+			cp.Intern(outs[1].Name) != "quote" || outs[1].Required || outs[1].Description != -1 {
+			t.Errorf("%s: outputs = %+v", name, outs)
+		}
+	}
+}
+
+func TestAnUnusableAnswerFieldRefusesTheDeployButNotTheReload(t *testing.T) {
+	for name, tc := range map[string]struct{ field, want string }{
+		"no name":         {`<atlas:agentOutput type="string"/>`, `agentOutput without a name`},
+		"twice":           {`<atlas:agentOutput name="a" type="string"/><atlas:agentOutput name="a" type="number"/>`, `"a" twice`},
+		"not a scalar":    {`<atlas:agentOutput name="a" type="object"/>`, `has type "object"`},
+		"values on a num": {`<atlas:agentOutput name="a" type="number" values="1,2"/>`, `only a string field can`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			xml := strings.Replace(aiTask(``), `</extensionElements>`, tc.field+`</extensionElements>`, 1)
+			if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Parse error = %v, want one naming %q", err, tc.want)
+			}
+			cp, problems, err := ReloadNamed(1, 1, strings.NewReader(xml), "p")
+			if err != nil || cp == nil {
+				t.Fatalf("ReloadNamed = %v, %v: a stored model must still load", cp, err)
+			}
+			found := false
+			for _, p := range problems {
+				found = found || (p.Rule == RuleAgentOutput && p.Element == "adhoc")
+			}
+			if !found {
+				t.Errorf("reload reported %+v, want an %s error", problems, RuleAgentOutput)
+			}
+		})
+	}
+}

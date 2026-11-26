@@ -79,3 +79,19 @@ func TestACallPastItsAuthoredTimeoutFails(t *testing.T) {
 		t.Errorf("ai task past its timeout: %v, want a deadline error", err)
 	}
 }
+
+// A round says back the model's turn and what it was told of the process, which is what
+// the next round is built from (ADR-draft-agent-transcript-and-answer).
+func TestARoundReportsItsTurnAndItsContext(t *testing.T) {
+	call := accountedCall
+	call.Wire, call.Turn = agent.WireMessages, `[{"type":"tool_use","id":"t1"}]`
+	m := accountingModel{agent.Decision{Call: call, ToolCalls: []model.ToolCall{{Tool: "t", CallId: "t1"}}}}
+	out, err := RunAgentRound(context.Background(), agentRoundJob(map[string]any{"context": map[string]any{"kunde": "K"}}),
+		map[string]agent.Model{"w": m})
+	if err != nil {
+		t.Fatalf("RunAgentRound: %v", err)
+	}
+	if r := out.AgentRun; r.Wire != agent.WireMessages || r.Turn != call.Turn || r.Context["kunde"] != "K" {
+		t.Errorf("report = %+v", r)
+	}
+}

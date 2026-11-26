@@ -143,6 +143,13 @@ type AgentRunReport struct {
 	System           string `json:"system,omitempty"`
 	Prompt           string `json:"prompt,omitempty"`
 	Answer           string `json:"answer,omitempty"`
+	// Wire and Turn are the model's whole turn in its provider's own format, kept so
+	// the next round can be shown it again unchanged; Context is the process variables
+	// this call was given, so the next round is told only what changed
+	// (ADR-draft-agent-transcript-and-answer).
+	Wire    string            `json:"wire,omitempty"`
+	Turn    string            `json:"turn,omitempty"`
+	Context map[string]string `json:"context,omitempty"`
 }
 
 // DecisionReport is a worker's account of a decision it evaluated: which decision, the

@@ -1170,6 +1170,11 @@ type ConnectorTaskDetail struct {
 	// AgentLimits is the ai task's authored timeout for its one call
 	// (ADR-draft-agent-run-record); its run bounds are a container's and stay zero.
 	AgentLimits AgentLimits
+	// AgentOutputs are the fields the task's answer must carry, in the order they were
+	// authored; empty means the answer is free text. AgentOutputProblems is what was
+	// wrong with the declarations (ADR-draft-agent-transcript-and-answer).
+	AgentOutputs        []AgentOutput
+	AgentOutputProblems []string
 	// Object-store fields (JobType == S3JobType, ADR-0442).
 	// Connector (above) names the configured S3 Worker — the field keeps that name
 	// because the BPMN attribute it is read from does; its access key lives in the
@@ -1596,10 +1601,14 @@ type AdHocDetail struct {
 	AgentContext []int32
 	// AgentLimits bound the run: how many rounds, how many tokens, and how long one
 	// call to the model may take (ADR-draft-agent-run-record).
-	AgentLimits      AgentLimits
-	ResultCollection int32 // interned variable name a tool result is appended to, -1 if none
-	ResultElement    *expr.Compiled
-	Tools            []AgentTool
+	AgentLimits AgentLimits
+	// AgentOutputs are the fields the agent's final answer must carry; empty means the
+	// answer is free text (ADR-draft-agent-transcript-and-answer).
+	AgentOutputs        []AgentOutput
+	AgentOutputProblems []string
+	ResultCollection    int32 // interned variable name a tool result is appended to, -1 if none
+	ResultElement       *expr.Compiled
+	Tools               []AgentTool
 }
 
 // AgentTool is one contained entry activity offered to the model as a tool

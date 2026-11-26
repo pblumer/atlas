@@ -2,9 +2,11 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -34,6 +36,10 @@ type agentRunReport struct {
 	System           string `json:"system"`
 	Prompt           string `json:"prompt"`
 	Answer           string `json:"answer"`
+	Wire             string `json:"wire"`
+	Turn             string `json:"turn"`
+	// Context is what the call was given of the process, by variable name.
+	Context map[string]string `json:"context"`
 }
 
 // maxReportedTokens bounds one reported token count. No call reads or writes a trillion
@@ -46,6 +52,8 @@ const maxReportedTokens = 1 << 40
 const (
 	agentRunSealPrompt = "agentRun.prompt"
 	agentRunSealAnswer = "agentRun.answer"
+	agentRunSealTurn   = "agentRun.turn"
+	agentRunSealCtx    = "agentRun.context"
 )
 
 // parseAgentRunReport reads the account off a completion body. A body without one is
@@ -117,6 +125,14 @@ func (s *Server) agentRunFromReport(jobKey uint64, rep *agentRunReport) *model.A
 		System:           rep.System,
 		Prompt:           rep.Prompt,
 		Answer:           rep.Answer,
+		Wire:             rep.Wire,
+		Turn:             rep.Turn,
+	}
+	if len(rep.Context) > 0 {
+		// A map marshals with its keys sorted, which is the canonical form (ADR-0037).
+		if ctx, err := json.Marshal(rep.Context); err == nil {
+			run.Context = string(ctx)
+		}
 	}
 	if personal {
 		s.sealAgentRunTexts(run, subject)
@@ -139,7 +155,10 @@ func (s *Server) sealAgentRunTexts(run *model.AgentRunValue, subject string) {
 	for _, f := range []struct {
 		name string
 		text *string
-	}{{agentRunSealPrompt, &run.Prompt}, {agentRunSealAnswer, &run.Answer}} {
+	}{
+		{agentRunSealPrompt, &run.Prompt}, {agentRunSealAnswer, &run.Answer},
+		{agentRunSealTurn, &run.Turn}, {agentRunSealCtx, &run.Context},
+	} {
 		if *f.text == "" {
 			continue
 		}
@@ -205,8 +224,8 @@ type agentRunView struct {
 
 // handleInstanceAgentRuns returns what a process instance's agents did, in the order it
 // happened: every call to a language model with the model that answered, what it read
-// and wrote in tokens and the element's running totals, and — once a run records them —
-// what each tool returned. Live and after the instance finished, like its decisions.
+// and wrote in tokens and the element's running totals, and what each tool an agent
+// called returned. Live and after the instance finished, like its decisions.
 func (s *Server) handleInstanceAgentRuns(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -214,14 +233,15 @@ func (s *Server) handleInstanceAgentRuns(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	type fact struct {
-		ts int64
-		v  model.AgentRunValue
+		ts  int64
+		pos uint64
+		v   model.AgentRunValue
 	}
 	var facts []fact
 	elementIDs := map[uint64]map[int32]string{}
 	err = s.readOffLoop(func(view *state.ReadView, defs defIndex) error {
-		return view.AgentRunHistory(key, func(ts int64, _ uint64, v *model.AgentRunValue) error {
-			facts = append(facts, fact{ts, *v})
+		return view.AgentRunHistory(key, func(ts int64, pos uint64, v *model.AgentRunValue) error {
+			facts = append(facts, fact{ts, pos, *v})
 			ids := elementIDs[v.ProcessDefKey]
 			if ids == nil {
 				ids = map[int32]string{}
@@ -239,6 +259,9 @@ func (s *Server) handleInstanceAgentRuns(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// The store keeps the facts agent by agent; a reader wants the instance's own order,
+	// which is the log's.
+	slices.SortFunc(facts, func(a, b fact) int { return cmp.Compare(a.pos, b.pos) })
 	// Opening a sealed text reads the vault, which is why it happens here, after the
 	// scan, with the loop long since free.
 	out := make([]agentRunView, 0, len(facts))
@@ -295,4 +318,25 @@ func (s *Server) handleInstanceAgentRuns(w http.ResponseWriter, r *http.Request)
 		out = append(out, view)
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// openAgentRunForReplay gives the texts a later round is built from back readable: what
+// the call added, the model's turn and the context it was given. It reports false when
+// any of them cannot be read — withheld, or enciphered under a key that is gone — in
+// which case the run is not replayed (see agent.WithTranscript).
+//
+// It reads the vault on the path that resolves a job for a worker, which is the edge
+// ADR-0314 deciphers at, and where the variables of the same payload are opened.
+func (s *Server) openAgentRunForReplay(v *model.AgentRunValue) (prompt, turn, context string, ok bool) {
+	switch v.TextState {
+	case model.AgentRunTextWithheld:
+		return "", "", "", false
+	case model.AgentRunTextEnciphered:
+		var okP, okT, okC bool
+		prompt, okP = s.openAgentRunText(agentRunSealPrompt, v.Prompt)
+		turn, okT = s.openAgentRunText(agentRunSealTurn, v.Turn)
+		context, okC = s.openAgentRunText(agentRunSealCtx, v.Context)
+		return prompt, turn, context, okP && okT && okC
+	}
+	return v.Prompt, v.Turn, v.Context, true
 }

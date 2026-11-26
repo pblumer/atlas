@@ -825,7 +825,8 @@ func runtimeTools() []Tool {
 				"element, the round, the model that answered, why it stopped, the tokens it read and wrote " +
 				"(inputTokens counts everything read, cached or not), the element's running totals, the tools the " +
 				"round called, and limit (\"rounds\" or \"tokens\") when the call reached its maxIterations or " +
-				"tokenBudget and the container parked on an incident. The token counts and the texts are the " +
+				"tokenBudget and the container parked on an incident. Facts of kind \"toolResult\" are what each " +
+				"tool an agent called returned, with the callId it answers. The token counts and the texts are the " +
 				"worker's account; the element, the round, the totals and the bound are the engine's. text is " +
 				"\"clear\", \"erased\" (the data subject's key was destroyed) or \"withheld\". An instance that asked " +
 				"no model (or an unknown key) returns [].",
