@@ -362,3 +362,72 @@ test("a reference nothing deploys has nothing to show, and a pool that stands fo
   expect(await pool(page, "Pool_ship")).toMatchObject({ shown: 0, ownLabelHidden: false });
   expect(page.__errors).toEqual([]);
 });
+
+// ---------- the wrench menu of a reference pool ----------
+
+// bpmn-js's own replace menu offers a pool without a process "Expanded pool", which
+// gives it an empty process. For a reference that is the wrong thing twice: the pool
+// would be a reference and a process of its own, and what the modeller means by
+// expanding it is to see the process it stands for. The menu therefore does what the
+// panel's button does.
+const openMenu = (page, id) => page.evaluate((el) => {
+  const m = window.__atlasModeler, e = m.get("elementRegistry").get(el);
+  m.get("selection").select(e);
+  m.get("popupMenu").open(e, "bpmn-replace", { x: 400, y: 300 });
+}, id);
+// The entries of the menu itself; its header holds bpmn-js's own toggles.
+const menuEntries = (page) => page.locator(".djs-popup-results .entry");
+
+test("the wrench menu of a reference pool shows and hides its process", async ({ page }) => {
+  await checked(page);
+  const processes = (await xml(page)).match(/<bpmn:process /g).length;
+  const before = await pool(page, "Pool_ship");
+
+  await openMenu(page, "Pool_ship");
+  await expect(menuEntries(page)).toHaveCount(1);
+  await expect(menuEntries(page)).toHaveText("Aufgeklappter Pool (zeigt den Prozess)");
+  await menuEntries(page).click();
+  await expect(page.locator(".djs-popup")).toHaveCount(0);
+  await expect(picture(page)).toHaveCount(1);
+  // The same as the panel's button: no process of its own, the attribute on the shape.
+  let out = await xml(page);
+  expect(out.match(/<bpmn:process /g)).toHaveLength(processes);
+  expect(out).toMatch(/<bpmn:participant id="Pool_ship" name="Versand" atlas:processId="versand"\s*\/>/);
+  expect(out).toContain('bpmnElement="Pool_ship" isHorizontal="true" atlas:showProcess="true"');
+  await expect(page.locator("#f-poolshow")).toHaveText("Prozess ausblenden");
+
+  // Shown, the menu offers the way back.
+  await openMenu(page, "Pool_ship");
+  await expect(menuEntries(page)).toHaveCount(1);
+  await expect(menuEntries(page)).toHaveText("Zugeklappter Pool (blendet den Prozess aus)");
+  await menuEntries(page).click();
+  await expect(picture(page)).toHaveCount(0);
+  expect(await pool(page, "Pool_ship")).toEqual(before);
+  out = await xml(page);
+  expect(out).not.toContain("atlas:showProcess");
+  expect(out.match(/<bpmn:process /g)).toHaveLength(processes);
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the wrench menu does not give a reference a process of its own, and leaves other pools alone", async ({ page }) => {
+  await checked(page);
+  const before = await xml(page);
+  // A reference nothing deploys has nothing to show: the entry says so and does nothing.
+  await openMenu(page, "Pool_ref");
+  await expect(menuEntries(page)).toHaveCount(1);
+  await expect(menuEntries(page)).toHaveText("Aufgeklappter Pool (Prozess nicht deployt)");
+  await expect(menuEntries(page)).toHaveClass(/disabled/);
+  await menuEntries(page).click({ force: true });
+  expect(await xml(page)).toBe(before);
+  await page.evaluate(() => window.__atlasModeler.get("popupMenu").close());
+
+  // An external party keeps bpmn-js's own entry, which gives it a process to draw in.
+  await openMenu(page, "Pool_bank");
+  await expect(menuEntries(page)).toHaveText(["Aufgeklappter Pool"]);
+  // So does a pool modelled here, which may be emptied.
+  await page.evaluate(() => window.__atlasModeler.get("popupMenu").close());
+  await openMenu(page, "Pool_order");
+  await expect(menuEntries(page)).toHaveText(["Leerer Pool (entfernt den Inhalt)"]);
+  expect(page.__errors).toEqual([]);
+});

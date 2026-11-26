@@ -10229,6 +10229,38 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     } catch { toast(tr("pnl.pool.showFailed"), "err"); }
   }
 
+  // The wrench menu of a reference pool. bpmn-js offers every pool without a process
+  // "Expanded pool", which gives it an empty process of its own. On a reference that
+  // would make the pool two things at once, and it is not what expanding it means to the
+  // modeller, who wants to see the process the pool stands for. So the menu's entry does
+  // what the panel's button does, and offers the way back while the process is shown. A
+  // reference nothing deploys keeps the entry, disabled and saying why, rather than
+  // losing it without a word. Other pools keep bpmn-js's own entries. The provider is
+  // registered below bpmn-js's own, so it is handed that one's entries to change.
+  modeler.get("popupMenu").registerProvider("bpmn-replace", 500, {
+    getPopupMenuEntries(element) {
+      return (entries) => {
+        if (!isPool(element) || poolKind(element.businessObject) !== "reference") return entries;
+        const out = { ...entries };
+        delete out["replace-with-expanded-pool"];
+        delete out["replace-with-collapsed-pool"];
+        const view = refView(element.businessObject);
+        if (showsProcess(element)) {
+          out["replace-with-collapsed-pool"] = { label: tr("pnl.pool.menu.hide"), className: "bpmn-icon-lane",
+            action: () => hideRefProcess(element) };
+        } else if (collab && !(view && view.resolved)) {
+          out["replace-with-expanded-pool"] = { label: tr("pnl.pool.menu.none"), className: "bpmn-icon-participant",
+            disabled: true, action: () => {} };
+        } else {
+          // Opened before the first check answered: ask, then show.
+          out["replace-with-expanded-pool"] = { label: tr("pnl.pool.menu.show"), className: "bpmn-icon-participant",
+            action: () => { (view ? Promise.resolve() : runCollabCheck()).then(() => showRefProcess(element)).catch(() => {}); } };
+        }
+        return out;
+      };
+    },
+  });
+
   // refreshPoolShow sets the panel's button to what the pool shows and to whether there
   // is a deployed process to show: the check answers after the panel is drawn.
   function refreshPoolShow() {

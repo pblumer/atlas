@@ -738,7 +738,10 @@ amendment of 2026-11-25.
 - **Showing and hiding** are in the pool's panel, offered for a reference the check resolved.
   Showing grows the pool to the picture's size and moves what stands below it down by as much;
   hiding gives the room back. Each is one step to undo. A pool smaller than the picture shows
-  it smaller.
+  it smaller. The pool's replace menu (the wrench) does the same: bpmn-js offers every pool
+  without a process *Expanded pool*, which would give a reference an empty process of its own
+  and make it two things at once, so on a reference that entry shows the process, a second one
+  hides it, and a reference nothing deploys keeps the entry disabled, saying why.
 - **Where a message leaves or arrives.** The check answers, for a resolved reference, its
   `points`: each element of the deployed version that sends or waits for a message, from the
   compiler's own list (ADR-0446), not from a second reading of the XML in the browser. The
