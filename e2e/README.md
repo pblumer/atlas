@@ -558,7 +558,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   reads `betrag`; none for what the compiler cannot see is written — the called process's
   variables, a round's item, an input mapping's local, an agent tool's parameter and
   `toolCallId`. The warning goes when the expression stops reading the name, and the deploy
-  panel lists it while both deploy buttons stay enabled.
+  panel lists it while both deploy buttons stay enabled. A file with pools imported over the
+  diagram gets its own findings, and in it a pool's start variables and constants are not
+  unwritten: one warning for the name nothing declares, none for the three that are.
 
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under

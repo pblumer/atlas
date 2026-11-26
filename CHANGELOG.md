@@ -56,6 +56,17 @@ _Changed_ / _Removed_ for each version.
   process talks to is no longer shown beside every process name; it is the second entry of the
   row's ⋯ menu, after *Open* (ADR-0559).
 
+### Fixed
+- **A pool's start variables are no longer reported as written nowhere.** In a file with pools,
+  the Modeler's warning about a variable that is read and written nowhere did not count what a
+  pool's process declares for its start: every read of a declared start variable or constant —
+  a message's correlation key, a script — was a warning. Each pool's process is now asked, as
+  the process of a plain file always was, and the Variables panel lists them too.
+- **A diagram replaced by an import gets its own findings.** After an applied XML source, an
+  auto-layout or a collaborator's draft pulled in, the Problems bar and the Variables panel
+  could go on showing what they said about the diagram before: the Playground's listener for
+  the import answered a promise, which stopped the event before it reached them.
+
 ## [0.29.0] — 2026-11-25
 
 **A connected system can show a person their shop, and keep a catalogue as its own.** Beside
