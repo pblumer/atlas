@@ -6228,7 +6228,7 @@ export default {
   "pnl.pool.refFailed": "Der Prozess konnte dem Pool nicht zugewiesen werden",
   "pnl.pool.show": "Prozess im Pool anzeigen",
   "pnl.pool.hide": "Prozess ausblenden",
-  "pnl.pool.showHint": "Zeigt {process} in Version {version}, so wie der Prozess deployt ist, als Bild im Pool. Er lässt sich hier nicht bearbeiten und wird nicht Teil dieser Datei. Elemente, die eine Nachricht senden oder erwarten, sind hervorgehoben.",
+  "pnl.pool.showHint": "Zeigt {process} in Version {version}, so wie der Prozess deployt ist, als Bild im Pool. Er lässt sich hier nicht bearbeiten und wird nicht Teil dieser Datei. Elemente, die eine Nachricht senden oder erwarten, sind hervorgehoben. Ein Doppelklick auf den Pool zeigt den Prozess ebenfalls und blendet ihn wieder aus.",
   "pnl.pool.showNone": "Der Prozess ist auf diesem Server nicht deployt. Es gibt nichts anzuzeigen.",
   "pnl.pool.showFailed": "Der Prozess konnte nicht angezeigt werden",
   "pnl.pool.menu.show": "Aufgeklappter Pool (zeigt den Prozess)",

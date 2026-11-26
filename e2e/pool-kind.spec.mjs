@@ -431,3 +431,62 @@ test("the wrench menu does not give a reference a process of its own, and leaves
   await expect(menuEntries(page)).toHaveText(["Leerer Pool (entfernt den Inhalt)"]);
   expect(page.__errors).toEqual([]);
 });
+
+// ---------- a double click on a reference pool ----------
+
+// Where on the page a point of a pool lies: dx from its left edge, in the middle of its
+// height. The whole diagram is brought into view first.
+const poolPoint = (page, id, dx) => page.evaluate(([el, x]) => {
+  const m = window.__atlasModeler;
+  const r = m.get("elementRegistry").getGraphics(el).querySelector(".djs-visual rect").getBoundingClientRect();
+  return { x: r.left + (x == null ? r.width / 2 : x * (r.width / m.get("elementRegistry").get(el).width)), y: r.top + r.height / 2 };
+}, [id, dx]);
+const dblclick = async (page, id, dx) => {
+  await page.evaluate(() => window.__atlasModeler.get("canvas").zoom("fit-viewport"));
+  const at = await poolPoint(page, id, dx);
+  await page.mouse.dblclick(at.x, at.y);
+};
+const editingLabel = (page) => page.locator(".djs-direct-editing-parent");
+
+test("a double click on a reference pool shows its process, and hides it again", async ({ page }) => {
+  await checked(page);
+  const before = await pool(page, "Pool_ship");
+  // A double click means "open this": the pool shows the process it stands for, and
+  // the name is not opened for editing.
+  await dblclick(page, "Pool_ship");
+  await expect(picture(page)).toHaveCount(1);
+  await expect(editingLabel(page)).toHaveCount(0);
+  expect(await xml(page)).toContain('bpmnElement="Pool_ship" isHorizontal="true" atlas:showProcess="true"');
+
+  // On the band that holds the name, a double click edits the name, as on any pool
+  // with content; the process stays shown.
+  await dblclick(page, "Pool_ship", 12);
+  await expect(editingLabel(page)).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(editingLabel(page)).toHaveCount(0);
+  await expect(picture(page)).toHaveCount(1);
+
+  // On the picture, it closes the pool again.
+  await dblclick(page, "Pool_ship");
+  await expect(picture(page)).toHaveCount(0);
+  await expect(editingLabel(page)).toHaveCount(0);
+  expect(await pool(page, "Pool_ship")).toEqual(before);
+  expect(await xml(page)).not.toContain("atlas:showProcess");
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a double click on any other pool edits its name, as before", async ({ page }) => {
+  await checked(page);
+  const before = await xml(page);
+  // A reference nothing deploys has nothing to show, and an external party is no
+  // reference: both keep bpmn-js's own double click.
+  for (const id of ["Pool_ref", "Pool_bank"]) {
+    await dblclick(page, id);
+    await expect(editingLabel(page)).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(editingLabel(page)).toHaveCount(0);
+  }
+  expect(await xml(page)).toBe(before);
+  expect(page.__errors).toEqual([]);
+});

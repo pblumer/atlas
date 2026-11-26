@@ -10261,6 +10261,34 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     },
   });
 
+  // A double click on a reference pool. On a thing that can be opened, a double click
+  // means "open it", and that is what a modeller tries first; bpmn-js's own answer, the
+  // label editor, opens the pool's name instead. So on a reference the check resolved,
+  // a double click shows the process, and one on the shown picture closes the pool
+  // again. The band that holds the name keeps the label editor, as on any pool with
+  // content, and so does every pool that has no process to show: an external party, a
+  // pool modelled here, a reference nothing deploys. The name is also edited in the
+  // panel. Registered above bpmn-js's listener, which a false answer keeps from running.
+  modeler.on("element.dblclick", 1500, (e) => {
+    const el = e.element;
+    if (!isPool(el) || poolKind(el.businessObject) !== "reference") return;
+    if (showsProcess(el)) {
+      const ev = e.originalEvent;
+      let x = Infinity;
+      try {
+        const canvas = modeler.get("canvas"), vb = canvas.viewbox();
+        if (ev && typeof ev.clientX === "number") x = vb.x + (ev.clientX - canvas.getContainer().getBoundingClientRect().left) / vb.scale;
+      } catch { return; } // canvas torn down mid-gesture
+      if (x - el.x <= REF_BAND) return; // on the name: bpmn-js edits it
+      hideRefProcess(el);
+      return false;
+    }
+    const view = refView(el.businessObject);
+    if (!view || !view.resolved) return;
+    showRefProcess(el);
+    return false;
+  });
+
   // refreshPoolShow sets the panel's button to what the pool shows and to whether there
   // is a deployed process to show: the check answers after the panel is drawn.
   function refreshPoolShow() {

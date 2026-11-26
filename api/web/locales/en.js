@@ -6167,7 +6167,7 @@ export default {
   "pnl.pool.refFailed": "The process could not be assigned to the pool",
   "pnl.pool.show": "Show the process in the pool",
   "pnl.pool.hide": "Hide the process",
-  "pnl.pool.showHint": "Shows {process}, version {version}, as it is deployed, as a picture in the pool. It cannot be edited here and does not become part of this file. Elements that send or wait for a message are highlighted.",
+  "pnl.pool.showHint": "Shows {process}, version {version}, as it is deployed, as a picture in the pool. It cannot be edited here and does not become part of this file. Elements that send or wait for a message are highlighted. A double click on the pool shows the process too, and hides it again.",
   "pnl.pool.showNone": "The process is not deployed on this server. There is nothing to show.",
   "pnl.pool.showFailed": "The process could not be shown",
   "pnl.pool.menu.show": "Expanded pool (shows the process)",

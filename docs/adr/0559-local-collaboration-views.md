@@ -741,7 +741,12 @@ amendment of 2026-11-25.
   it smaller. The pool's replace menu (the wrench) does the same: bpmn-js offers every pool
   without a process *Expanded pool*, which would give a reference an empty process of its own
   and make it two things at once, so on a reference that entry shows the process, a second one
-  hides it, and a reference nothing deploys keeps the entry disabled, saying why.
+  hides it, and a reference nothing deploys keeps the entry disabled, saying why. A double
+  click does the same, because on a thing that can be opened it means "open it": on a
+  resolved reference it shows the process instead of opening the name for editing, and on the
+  shown picture it closes the pool again. The band that holds the name keeps the label
+  editor, as does every pool with nothing to show. The price is that the name of a reference
+  that does not show its process is no longer edited by a double click, only in the panel.
 - **Where a message leaves or arrives.** The check answers, for a resolved reference, its
   `points`: each element of the deployed version that sends or waits for a message, from the
   compiler's own list (ADR-0446), not from a second reading of the XML in the browser. The

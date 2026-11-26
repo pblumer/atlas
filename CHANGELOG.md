@@ -21,7 +21,9 @@ _Changed_ / _Removed_ for each version.
   send or wait for a message are highlighted and say the name, and a message flow that ends at
   the pool's edge is led on, dashed, to the element that carries its message. The pool's wrench
   menu does the same as the button: on a reference, *Expanded pool* shows the process instead of
-  giving the pool an empty process of its own, and *Collapsed pool* hides it again. For this,
+  giving the pool an empty process of its own, and *Collapsed pool* hides it again. A double
+  click on the pool shows the process too, and one on the shown picture hides it; on the band
+  that holds the name it still edits the name. For this,
   `POST /api/v1/collaboration-check` and `atlas_collaboration_check` answer a resolved
   reference's `points`: each element of the deployed version that sends or waits for a message
   (ADR-0559).
