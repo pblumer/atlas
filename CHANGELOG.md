@@ -13,6 +13,16 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A reference pool shows the process it stands for.** In the Modeler, a pool that references a
+  deployed process can now show that process: *Show the process in the pool* in the pool's panel
+  draws the deployed version inside the pool, grows the pool to hold it and moves what stands
+  below. It is a picture — nothing of it can be edited, and nothing of it is saved with the file
+  or deployed with it; the file only keeps that the pool is drawn this way. The elements that
+  send or wait for a message are highlighted and say the name, and a message flow that ends at
+  the pool's edge is led on, dashed, to the element that carries its message. For this,
+  `POST /api/v1/collaboration-check` and `atlas_collaboration_check` answer a resolved
+  reference's `points`: each element of the deployed version that sends or waits for a message
+  (ADR-0559).
 - **A message flow says which message it carries, and the Modeler says what does not fit.** A
   message flow between two pools now has a *Message* field in its panel: it offers the names the
   sending pool sends and the receiving one waits for, and takes any other; a flow docked on a

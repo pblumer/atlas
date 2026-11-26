@@ -1698,7 +1698,8 @@ func runtimeTools() []Tool {
 				"process is in the model and holds flow elements), 'reference' (it holds none and names a deployed " +
 				"process by the attribute atlas:processId on the participant; 'resolved' is that process's newest " +
 				"deployed version, absent when none is deployed) or 'external' (neither). A white box also lists the " +
-				"message names it 'sends' and 'receives'. 'flows' are the message flows between pools with the " +
+				"message names it 'sends' and 'receives', and a resolved reference its 'points': each 'element' of the " +
+				"deployed version that sends ('direction' out) or waits for (in) a 'message'. 'flows' are the message flows between pools with the " +
 				"'message' each carries: its messageRef's, else the one the element it docks on sends or waits for. 'findings' are hints: " +
 				"collaboration.participant-unresolved, collaboration.flow-not-sent, collaboration.flow-not-received, " +
 				"collaboration.flow-unnamed, collaboration.undrawn-exchange and collaboration.reaches-outside. Use it " +

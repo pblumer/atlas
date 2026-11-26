@@ -9,7 +9,11 @@
          box, one with the empty process bpmn-js gives a pool dragged into a diagram, and
          one that already references a process this server does not hold. Two message
          flows: one docked on a message throw event, one between two pools without
-         content, whose message is picked in the panel. -->
+         content, whose message is picked in the panel. A fifth pool references a
+         process this server does hold, deployed from a file of its own with a pool
+         around it: the pool can show that process as a picture, and two flows at its
+         edge are led on to the elements that carry their messages. A sixth pool below
+         it is there to be moved when the fifth grows. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -29,6 +33,10 @@
     <bpmn:participant id="Pool_bank" name="Bank"/>
     <bpmn:participant id="Pool_new" processRef="leer"/>
     <bpmn:participant id="Pool_ref" name="Archiv" atlas:processId="nowhere"/>
+    <bpmn:participant id="Pool_ship" name="Versand" atlas:processId="versand"/>
+    <bpmn:participant id="Pool_tail" name="Kunde"/>
+    <bpmn:messageFlow id="Flow_ship" sourceRef="Pool_bank" targetRef="Pool_ship"/>
+    <bpmn:messageFlow id="Flow_back" sourceRef="Pool_ship" targetRef="Pool_tail"/>
     <bpmn:messageFlow id="Flow_docked" sourceRef="Throw_b" targetRef="Pool_bank"/>
     <bpmn:messageFlow id="Flow_open" sourceRef="Pool_bank" targetRef="Pool_ref"/>
   </bpmn:collaboration>
@@ -53,6 +61,38 @@
     <bpmndi:BPMNShape id="Pool_bank_s" bpmnElement="Pool_bank" isHorizontal="true"><dc:Bounds x="130" y="210" width="600" height="60"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Pool_new_s" bpmnElement="Pool_new" isHorizontal="true"><dc:Bounds x="130" y="300" width="600" height="140"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Pool_ref_s" bpmnElement="Pool_ref" isHorizontal="true"><dc:Bounds x="130" y="470" width="600" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Pool_ship_s" bpmnElement="Pool_ship" isHorizontal="true"><dc:Bounds x="130" y="560" width="600" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Pool_tail_s" bpmnElement="Pool_tail" isHorizontal="true"><dc:Bounds x="130" y="660" width="600" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="Flow_ship_e" bpmnElement="Flow_ship"><di:waypoint x="680" y="270"/><di:waypoint x="680" y="560"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Flow_back_e" bpmnElement="Flow_back"><di:waypoint x="640" y="620"/><di:waypoint x="640" y="660"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Shipping as it is deployed, from a file of its own that draws it in a pool: an
+      // order starts it, it packs, says that it shipped, and ends.
+      const VERSAND = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Defs_v" targetNamespace="http://atlas/test">
+  <bpmn:collaboration id="Collab_v"><bpmn:participant id="Pool_v" name="Versand" processRef="versand"/></bpmn:collaboration>
+  <bpmn:message id="Message_order" name="Auftrag"/>
+  <bpmn:message id="Message_shipped" name="Versandt"/>
+  <bpmn:process id="versand" name="Versand" isExecutable="true">
+    <bpmn:startEvent id="Start_v" name="Auftrag da"><bpmn:outgoing>v1</bpmn:outgoing><bpmn:messageEventDefinition id="Med_v1" messageRef="Message_order"/></bpmn:startEvent>
+    <bpmn:task id="Task_v" name="Packen"><bpmn:incoming>v1</bpmn:incoming><bpmn:outgoing>v2</bpmn:outgoing></bpmn:task>
+    <bpmn:intermediateThrowEvent id="Throw_v" name="Melden"><bpmn:incoming>v2</bpmn:incoming><bpmn:outgoing>v3</bpmn:outgoing><bpmn:messageEventDefinition id="Med_v2" messageRef="Message_shipped"/></bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_v"><bpmn:incoming>v3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="v1" sourceRef="Start_v" targetRef="Task_v"/>
+    <bpmn:sequenceFlow id="v2" sourceRef="Task_v" targetRef="Throw_v"/>
+    <bpmn:sequenceFlow id="v3" sourceRef="Throw_v" targetRef="End_v"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D_v"><bpmndi:BPMNPlane id="P_v" bpmnElement="Collab_v">
+    <bpmndi:BPMNShape id="Pool_v_s" bpmnElement="Pool_v" isHorizontal="true"><dc:Bounds x="100" y="60" width="560" height="180"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Start_v_s" bpmnElement="Start_v"><dc:Bounds x="182" y="132" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Task_v_s" bpmnElement="Task_v"><dc:Bounds x="270" y="110" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Throw_v_s" bpmnElement="Throw_v"><dc:Bounds x="432" y="132" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_v_s" bpmnElement="End_v"><dc:Bounds x="532" y="132" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="v1_e" bpmnElement="v1"><di:waypoint x="218" y="150"/><di:waypoint x="270" y="150"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="v2_e" bpmnElement="v2"><di:waypoint x="370" y="150"/><di:waypoint x="432" y="150"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="v3_e" bpmnElement="v3"><di:waypoint x="468" y="150"/><di:waypoint x="532" y="150"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -74,8 +114,19 @@
           { id: "Pool_bank", kind: "external", sends: ["Mahnung", "Zahlung"] },
           { id: "Pool_new", kind: "external" },
           { id: "Pool_ref", kind: "reference", processId: "nowhere", receives: ["Ablage", "Zahlung"] },
+          { id: "Pool_ship", kind: "reference", processId: "versand", resolved: { definitionKey: 11, version: 2, name: "Versand" },
+            sends: ["Versandt"], receives: ["Auftrag"], points: [
+              { element: "Start_v", message: "Auftrag", direction: "in", role: "start" },
+              { element: "Throw_v", message: "Versandt", direction: "out", role: "throw" },
+            ] },
+          { id: "Pool_tail", kind: "external" },
         ],
-        flows: [],
+        // The check names the message each flow carries; these two are the ones at the
+        // edge of the pool that shows its process.
+        flows: [
+          { id: "Flow_ship", from: "Pool_bank", to: "Pool_ship", message: "Auftrag" },
+          { id: "Flow_back", from: "Pool_ship", to: "Pool_tail", message: "Versandt" },
+        ],
         findings: [
           { rule: "collaboration.participant-unresolved", pool: "Pool_ref", subject: "Archiv", other: "nowhere", message: "Archiv names the process nowhere, which is not deployed on this server." },
           { rule: "collaboration.flow-unnamed", flow: "Flow_open", subject: "Bank", other: "Archiv", message: "The flow from Bank to Archiv names no message, so it is not checked." },
@@ -85,6 +136,7 @@
       };
       const api = async (method, url, body) => {
         if (method === "POST" && /\/collaboration-check$/.test(url)) { window.__checks.push(body); return REPORT; }
+        if (method === "GET" && /\/processes\/11\/xml$/.test(url)) { window.__pictures = (window.__pictures || 0) + 1; return VERSAND; }
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "GET" && /\/processes$/.test(url)) return PROCESSES;
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };

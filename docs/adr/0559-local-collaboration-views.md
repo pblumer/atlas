@@ -717,6 +717,41 @@ amendment of 2026-11-25.
 - **Not built yet:** `flow-not-observed`; composing step by step from a pool's ports (§6; LCV4);
   and the three questions the amendment leaves open.
 
+**Slice LCV3, third part (2026-11): a reference pool shows the process it stands for.**
+
+- **Why it is a picture.** A reference has no process in the file, so bpmn-js cannot expand it:
+  its own expand creates an empty process, and a copy of the deployed process would be deployed
+  a second time with the file, which is the duplicate the amendment exists to avoid. The pool
+  therefore shows the deployed version the check resolved it to as a picture: a second bpmn-js
+  draws that one process of the deployed model away from the page, and the drawing is hung into
+  the pool's own graphics. It moves, zooms and is exported as an image with the pool; none of it
+  can be selected or edited, none of it is an element of the diagram, and none of it is written
+  to the file.
+- **What the file keeps** is that the pool is drawn this way: `atlas:showProcess="true"` on the
+  pool's `BPMNShape`, beside its bounds, because it is a fact about the drawing and not about
+  the participant. The size the pool needs is its ordinary bounds. A drawing therefore opens
+  the way it was left, and shows whatever version is deployed on the server it is opened on:
+  the file holds no version (§5). The attribute is deliberately not declared in
+  `atlas-moddle.json`: a type of that package extending `bpmndi:BPMNShape` makes moddle write
+  the shape under the package's lower-case tag alias (`<bpmndi:bPMNShape>`), which was measured
+  and which nothing reads. An undeclared attribute of the declared namespace round-trips.
+- **Showing and hiding** are in the pool's panel, offered for a reference the check resolved.
+  Showing grows the pool to the picture's size and moves what stands below it down by as much;
+  hiding gives the room back. Each is one step to undo. A pool smaller than the picture shows
+  it smaller.
+- **Where a message leaves or arrives.** The check answers, for a resolved reference, its
+  `points`: each element of the deployed version that sends or waits for a message, from the
+  compiler's own list (ADR-0446), not from a second reading of the XML in the browser. The
+  picture marks those elements and writes the name over them. A message flow that names a
+  message and ends at the pool's edge is continued, dashed, to the element that carries that
+  message in the matching direction. The continuation is drawn from the check's answer each
+  time and is not saved: the flow in the file still connects participants (§5), so a
+  refactoring inside the referenced process changes the picture and not the collaboration.
+- **Limits.** The picture is the newest deployed version, as everywhere in the check. A
+  reference nothing deploys here has nothing to show and says so. A collapsed sub-process of
+  the referenced process is drawn collapsed; there is no drill-down into a picture. A reader
+  sees the picture only of a process they may read, because the check resolves only those.
+
 ### Consequences
 
 - **Positive:**

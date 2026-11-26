@@ -303,6 +303,35 @@ func TestAWhiteBoxSaysWhatItSendsAndWaitsFor(t *testing.T) {
 	}
 }
 
+// TestAReferenceSaysWhichElementCarriesWhichName: a reference's inside is not in the
+// file, so the answer names the elements of its newest deployed version that send or
+// wait for a message, in a stable order. That is what lets a reader of the collaboration
+// see where in the referenced process a message leaves or arrives. A pool modelled here
+// answers none: its elements are in the drawing the caller sent.
+func TestAReferenceSaysWhichElementCarriesWhichName(t *testing.T) {
+	d, err := ParseDocument([]byte(mixedBPMN))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][]PointView{}
+	for _, p := range Check(d, deployedForMixed()).Pools {
+		got[p.ID] = p.Points
+	}
+	want := map[string][]PointView{
+		"P_order": nil,
+		"P_ship": {
+			{Element: "report", Message: "Shipped", Direction: "out", Role: "throw"},
+			{Element: "s", Message: "OrderReleased", Direction: "in", Role: "start"},
+			{Element: "status", Message: "Status", Direction: "out", Role: "throw"},
+		},
+		"P_customer": nil,
+		"P_new":      nil,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("points = %+v, want %+v", got, want)
+	}
+}
+
 // TestAFindingNamesItsPartsForTranslation: beside its English sentence, a finding
 // says whom it is about, the counterpart and the message name, so a client words it
 // in the reader's language instead of showing the server's.

@@ -99,6 +99,29 @@ export function extract(xml, processId) {
   return { proc, roots, drawn, ids, box: { minX, minY, width: maxX - minX, height: maxY - minY } };
 }
 
+// processOnly answers a document that holds one process of a deployed model and
+// nothing else — no collaboration, no other pool, no drill-down plane — with the
+// drawing of that process on a plane of its own. It is what a reference pool shows
+// of the process it stands for (ADR-0559): a picture of the deployed version, which a
+// second bpmn-js draws and nobody edits. Null when extract finds no drawing.
+export function processOnly(xml, processId) {
+  const got = extract(xml, processId);
+  if (!got) return null;
+  const doc = got.proc.ownerDocument, defs = doc.documentElement;
+  for (const el of [...defs.children]) {
+    if (el !== got.proc && !got.roots.includes(el)) defs.removeChild(el);
+  }
+  const diagram = doc.createElementNS(BPMNDI, "bpmndi:BPMNDiagram");
+  diagram.setAttribute("id", "AtlasReferenceDiagram");
+  const plane = doc.createElementNS(BPMNDI, "bpmndi:BPMNPlane");
+  plane.setAttribute("id", "AtlasReferencePlane");
+  plane.setAttribute("bpmnElement", processId);
+  for (const d of got.drawn) plane.appendChild(d);
+  diagram.appendChild(plane);
+  defs.appendChild(diagram);
+  return new XMLSerializer().serializeToString(doc);
+}
+
 // prefixed rewrites every id of the copied nodes, and every reference to one —
 // attributes and the text of reference elements (incoming, outgoing, flowNodeRef,
 // sourceRef, targetRef) — so two processes using the same ids live side by side.
