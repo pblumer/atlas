@@ -91,7 +91,7 @@ from the catalogue and kept out of the Problems bar.
 **Built (third part):** a reference the check resolved shows its deployed process in the pool,
 as a picture that is neither editable nor saved; the elements that send or wait for a message
 are named from the check's `points`, and a flow at the pool's edge is led on to the element that
-carries its message. Not merged yet: it is on the branch `claude/festive-ptolemy-n9lfqq`.
+carries its message (#1743).
 
 **Remaining:** `flow-not-observed`; the amendment's open questions (two files
 modelling one process id, moving a pool into a file of its own, the identity of a draft).
