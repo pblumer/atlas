@@ -36,6 +36,7 @@ import (
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/mcptool"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/s3"
@@ -7756,6 +7757,30 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "atlasreport", Fields: fields}
+	case compiler.MCPJobTypeIndex:
+		// An MCP task resolves like every other: the evaluated arguments travel, and
+		// nothing that says where the server is or how it is spoken to. What this arm
+		// adds is the Worker's say: a tool its list does not permit travels as a
+		// refusal, which the worker honours by making no call
+		// (ADR-draft-mcp-worker).
+		j, err := mcptool.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		j.Refused = s.mcpToolRefusal(j.Connector, j.Tool)
+		raw, err := json.Marshal(j)
+		if err != nil {
+			return nil
+		}
+		// Decoded with its numbers kept as written: an argument is a process value,
+		// and a float64 on the way would round a long identifier.
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		var fields map[string]any
+		if err := dec.Decode(&fields); err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "mcp", Fields: fields}
 	case compiler.WikiwikibangbangJobTypeIndex:
 		// The evaluated values travel, and nothing that says which wiki or as whom
 		// (ADR-0498). So does whether the job has been leased

@@ -606,6 +606,19 @@
       ]
     },
     {
+      "name": "McpConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "tool", "type": "String", "isAttr": true },
+        { "name": "input", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "timeout", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WikiwikibangbangConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

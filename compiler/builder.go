@@ -585,6 +585,15 @@ const AtlasReportJobType = "io.atlas.atlasreport"
 // 41.
 const AtlasReportJobTypeIndex int32 = 41
 
+// MCPJobType is the reserved job type a service task carries when it calls one tool of
+// a Model Context Protocol server (ADR-draft-mcp-worker). The server is the configured
+// Worker the task names; which of its tools a process may call is listed on that Worker.
+const MCPJobType = "io.atlas.mcp"
+
+// MCPJobTypeIndex is the interned index MCPJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it forty-third, so it is always 42.
+const MCPJobTypeIndex int32 = 42
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -640,6 +649,8 @@ var reservedJobTypes = []string{
 	CalendarJobType, // 40
 
 	AtlasReportJobType, // 41
+
+	MCPJobType, // 42
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2749,6 +2760,35 @@ func (b *Builder) AddAtlasReportConnectorTask(cfg AtlasReportConfig) int32 {
 		Retries:              cfg.Retries,
 		AtlasReportOp:        b.intern(cfg.Op),
 		AtlasReportInput:     cfg.Input,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// McpConfig is the deploy-time configuration of an MCP task (ADR-draft-mcp-worker): the
+// Worker that is the server, the one tool to call, the arguments as a FEEL context, the
+// variable the result lands in, and how long the call may take (0 leaves the worker's own
+// bound).
+type McpConfig struct {
+	Worker       string
+	WorkerExpr   RestExpr
+	Tool         string
+	Input        RestExpr
+	ResultVar    string
+	TimeoutNanos int64
+	Retries      int32
+}
+
+// AddMcpConnectorTask adds an MCP task and returns its element id. Like every other
+// connector task it creates a job on activation and waits; nothing in the engine serves
+// the job type — the call goes to another system and is made on a worker (ADR-0164).
+func (b *Builder) AddMcpConnectorTask(cfg McpConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType: b.intern(MCPJobType), Connector: b.intern(cfg.Worker),
+		McpConnector: cfg.WorkerExpr,
+		Subject:      -1, EventType: -1, ClioQuery: -1, ReduceSpec: -1, Method: -1, Auth: -1,
+		ResultVar: b.intern(cfg.ResultVar), Retries: cfg.Retries,
+		McpTool: b.intern(cfg.Tool), McpInput: cfg.Input, McpTimeoutNanos: cfg.TimeoutNanos,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

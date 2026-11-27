@@ -1,7 +1,7 @@
 # ADR-DRAFT: An MCP server is a Worker, and one of its tools is a task
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-11-27
 - **Deciders:** Atlas maintainers
 - **Open question:** how servers in the field actually answer. The protocol was read from the
@@ -13,11 +13,14 @@
 - **Question checked:** 2026-11
 
 > **Implementation status (2026-11-27).** Built: the protocol client
-> (`connector/mcptool/client.go`) — the current revision first, the fallback to the older
-> handshake, answers as JSON or as an event stream, arguments mirrored into headers. Not
-> built: everything that makes it a Worker Type — the job type, the task's extension element
-> and its compilation, the Worker record with its list of permitted tools, the worker that
-> serves the job, the Modeler's panel, the manifest and the setup documentation.
+> (`connector/mcptool/client.go`); the job type `io.atlas.mcp` and the task's
+> `<atlas:mcpConnector>` (`compiler/mcp_compile.go`); the Worker record's list of permitted
+> tools, its validation and the check where a job is resolved (`api/mcpworker.go`); the worker
+> that makes the call (`connector/mcptool/job.go`, `worker/mcpconnector.go`), supervised by
+> default; the Modeler's task and the Console's Worker form; the manifest, the Repository
+> package and the setup instructions. Not built: reading a server's tool list at design time,
+> the client-credentials grant, documents as results, and an example model. Nothing here has
+> been run against a server other than the ones written for its tests.
 
 ## Context and problem statement
 
@@ -94,7 +97,15 @@ ADR-0538 asks of every operation, in that record's own words: `idempotency` (`na
 - **The server's hints are not taken.** `readOnlyHint` and `idempotentHint` may be shown to the
   operator who fills the list in. They decide nothing.
 - The check is made where a job is resolved for a worker, on the server, from the Worker's
-  record — not by the worker that holds the credential.
+  record — not by the worker that holds the credential. A tool that is not permitted travels
+  as a refusal, and the worker makes no call; so do a Worker that does not exist and one that
+  is switched off. Editing the list takes effect with the next job and restarts nothing.
+- A list holds at most 200 tools, and a tool listed without its two properties is taken as
+  `none` / `irreversible`.
+
+What the list does not do: it does not stop a worker somebody runs with a configuration of
+their own. Such a worker holds the credential and can call whatever the server offers. The
+list governs what a *model* can make Atlas's worker do.
 
 ### What is deliberately not done
 
@@ -136,9 +147,17 @@ on `tools/list`, which changes nothing and has to be asked anyway, and remembere
   become a string.
 - Images, audio and resources are named in the outcome and not carried: Atlas has no way yet
   to put a document in front of a model.
-- **A tool that ran and reported failure** (`isError`) is a BPMN error a model can catch.
-  **The protocol or the transport failing** is a job failure, retried and then an incident.
-  The specification draws the same line.
+- **A tool that ran and reported failure** (`isError`) throws the BPMN error `MCP_TOOL_ERROR`
+  where the process catches that code, and fails the job where it does not — the rule every
+  Worker Type follows for a coded failure. **The protocol or the transport failing** is a job
+  failure, retried and then an incident. The specification draws the same line.
+
+### The task
+
+`<atlas:mcpConnector connector="…" tool="…" input='{…}' resultVariable="…" timeout="PT30S">`.
+`connector` names the Worker, literally or as a FEEL expression. `input` is a JSON object of the
+tool's arguments whose string values starting with `=` are FEEL, as on an Atlas report task.
+`timeout` is an ISO-8601 duration between one second and one hour for the one call.
 
 ### Credentials
 

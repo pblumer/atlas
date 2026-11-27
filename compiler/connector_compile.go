@@ -176,6 +176,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.AtlasReport.Retries },
 		compile: compileAtlasReportConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Mcp != nil },
+		retries: func(st xmlServiceTask) string { return st.Mcp.Retries },
+		compile: compileMcpConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here

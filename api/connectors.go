@@ -859,6 +859,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		MailboxEndpoint: p.MailboxEndpoint,
 		Scanner:         p.Scanner,
 		FormLookups:     p.FormLookups,
+		Tools:           p.Tools,
 		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
 		// only defensible default for a thing that may hold a personal mailbox; what
@@ -944,6 +945,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// FormLookups opens the Worker to task forms' directory searches, or closes it
 		// (ADR-0473). An editor's act, like the credential.
 		FormLookups *bool `json:"formLookups"`
+		// Tools replaces an MCP Worker's list of permitted tools
+		// (ADR-draft-mcp-worker); an empty list permits none. An editor's act.
+		Tools *[]mcpToolGrant `json:"tools"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -1004,6 +1008,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
+		}
+		if p.Tools != nil {
+			rec.Tools = *p.Tools
 		}
 		if p.FormLookups != nil {
 			if *p.FormLookups && !formLookupKind(rec.Kind) {

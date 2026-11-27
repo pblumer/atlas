@@ -104,6 +104,8 @@ type createConnectorParams struct {
 	// FormLookups lets task forms search through the Worker
 	// (ADR-0473); only a kind a form can search may set it.
 	FormLookups bool `json:"formLookups"`
+	// Tools is an MCP Worker's list of permitted tools (ADR-draft-mcp-worker).
+	Tools []mcpToolGrant `json:"tools"`
 }
 
 // managedConnectorKinds is the ordered registry of managed worker kinds. Order is
@@ -512,6 +514,16 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.AtlasReportJobTypeIndex},
 	},
 	{
+		// An MCP task calls one tool of a Model Context Protocol server
+		// (ADR-draft-mcp-worker). Worker-only for the reason every call to another
+		// system is: it can take as long as the other system likes, and the credential
+		// behind it has no business on the engine's run loop (ADR-0164).
+		name:           connectorKindMCP,
+		workerOnly:     true,
+		validateCreate: validateMCPConnector,
+		jobTypes:       []int32{compiler.MCPJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -773,7 +785,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindCalendar, connectorKindWiki, connectorKindAtlasReport, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindCalendar, connectorKindWiki, connectorKindAtlasReport, connectorKindMCP, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -1204,6 +1216,8 @@ func normalizeConnectorUpdate(rec *connector) string {
 		validate = validateMailConnector
 	case connectorKindAgent:
 		validate = validateAgentConnector
+	case connectorKindMCP:
+		validate = validateMCPConnector
 	case connectorKindCloudEvents:
 		validate = validateCloudEventsConnector
 	case connectorKindSharePoint:
@@ -1223,10 +1237,12 @@ func normalizeConnectorUpdate(rec *connector) string {
 		Model:           strings.TrimSpace(rec.Model),
 		MailboxEndpoint: strings.TrimSpace(rec.MailboxEndpoint),
 		Scanner:         strings.TrimSpace(rec.Scanner),
+		Tools:           rec.Tools,
 	}
 	if msg := validate(&p); msg != "" {
 		return msg
 	}
+	rec.Tools = p.Tools
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
 	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
 	rec.MailboxEndpoint = p.MailboxEndpoint

@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A process can call a tool of any MCP server.** The new Worker Type *MCP tool* makes a
+  Model Context Protocol server a Worker and one of its tools a service task: the task names
+  the Worker, the tool and the tool's arguments as a JSON object, and the result lands in a
+  process variable. A system that has such a server needs no Worker Type of its own. In an
+  agent-driven ad-hoc subprocess the task is one of the agent's tools, described by the
+  modeller's documentation and never by the server's. **A Worker lists the tools a process may
+  call on it**, each with what a second delivery does and whether its effect can be undone; a
+  tool that is not listed is not called, and the list is empty until somebody fills it.
+  Servers of the current protocol revision (2026-07-28) and of the older ones are both spoken
+  to, over HTTP; a server started as a local program is not supported. Not built yet: reading a
+  server's tool list in the Console, and anything but a fixed token as the credential
+  ([ADR-draft-mcp-worker](docs/adr/draft-mcp-worker.md)).
 - **An agent's run is on the record.** Every call a process makes to a language model — an ai
   task's one call, or a round of an agent-driven ad-hoc subprocess — now leaves a fact with the
   instance: which element and which round, the model that answered, why it stopped, how many

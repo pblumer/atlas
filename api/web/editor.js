@@ -6348,6 +6348,42 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "mcp", name: "MCP tool", group: "Applications",
+    desc: "Call one tool of a Model Context Protocol server: the Worker is the server, the task names the tool and its arguments. In an agent-driven ad-hoc subprocess the task is one of the agent's tools",
+    icon: "M",
+    // A plug on slate: a socket any server of the kind fits, told apart from the
+    // report's teal bars and the wiki's indigo page.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#475569"/><path d="M6 3.2v2.6M10 3.2v2.6" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M4.6 5.8h6.8v1.6a3.4 3.4 0 0 1-6.8 0z" fill="#fff"/><path d="M8 10.8v2" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    ext: "atlas:McpConnector",
+    fields: [
+      { group: "MCP server" },
+      {
+        key: "connector", label: "Worker", datalist: "mcp", placeholder: "monitoring",
+        hint: "The configured MCP Worker this task calls, by its name under Workers in the Console: the server. Where it is and the credential it asks for are the Worker's and reach only the worker, never a model.",
+      },
+      { group: "Tool" },
+      {
+        key: "tool", label: "Tool", placeholder: "search_issues",
+        hint: "The one tool this task calls, by the name the server lists it under. The Worker has to permit it: a tool that is not on the Worker's list of permitted tools is not called, and the job fails saying so.",
+      },
+      {
+        key: "input", label: "Arguments", type: "json", rows: 6,
+        placeholder: "{\n  \"query\": \"=meldung\",\n  \"limit\": 5\n}",
+        hint: "A JSON object of the tool's arguments. A string value starting with = is a FEEL expression over the variables this task sees. Empty for a tool that takes none.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "treffer",
+        hint: "The tool's result is written into this process variable: its structured result when it gives one, its text otherwise. A tool that ran and reported a failure throws the BPMN error MCP_TOOL_ERROR where the process catches it, and fails the job where it does not.",
+      },
+      { group: "Limits" },
+      {
+        key: "timeout", label: "Timeout", placeholder: "PT2M",
+        hint: "How long the call may take, as an ISO-8601 duration between PT1S and PT1H — e.g. PT30S. Empty leaves the worker's own two minutes.",
+      },
+    ],
+  },
+  {
     id: "wikiwikibangbang", name: "wikiwikibangbang", group: "Applications",
     desc: "Open, read, change and move tasks in a wikiwikibangbang wiki, comment on them and find them by a query; create a page, read it as Markdown and append to it",
     icon: "W",

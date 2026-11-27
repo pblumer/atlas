@@ -1044,6 +1044,17 @@ Making processes wait, react, and time out.
   both hosts. A conversation that outgrows `maxContextTokens` (150,000 unless stated) is
   **begun again**: the next round restates the run in words and later rounds are replayed from
   there — appended to or started over, never edited.
+- ✅ **A tool of any MCP server as a task** ([ADR-draft-mcp-worker](docs/adr/draft-mcp-worker.md)):
+  the Worker Type `mcp` makes a Model Context Protocol server a Worker and one of its tools a
+  service task (`<atlas:mcpConnector connector tool input resultVariable timeout>`). At the root
+  of an agent-driven container the task is one of the agent's tools — so an agent reaches an
+  MCP server through the diagram, one modelled activity per tool, and reads the modeller's
+  description of it rather than the server's. **A Worker lists the tools a process may call**,
+  each with ADR-0538's idempotency and effect, stated by whoever configures it; the server
+  checks the list where a job is resolved, and a tool that is not on it is not called. The
+  client is written by hand, speaks the 2026-07-28 revision first and falls back to the older
+  handshake. 🔲 Not built: reading a server's tool list at design time, the client-credentials
+  grant, documents as results, a server started as a local process.
 
 - ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
   published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered

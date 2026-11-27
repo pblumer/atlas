@@ -148,6 +148,8 @@ var releasedKinds = []releasedKind{
 		Manifest: "connector/calendar/manifest.json"},
 	{JobType: compiler.AtlasReportJobType, ADR: 555, Class: classConnector, Package: "atlas.atlasreport",
 		Manifest: "connector/atlasreport/manifest.json"},
+	{JobType: compiler.MCPJobType, Slug: "mcp-worker", Class: classConnector, Package: "atlas.mcp",
+		Manifest: "connector/mcptool/manifest.json"},
 }
 
 // kindsWithoutManifest are the connector kinds released before every new built-in

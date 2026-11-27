@@ -37,6 +37,26 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // a part worth exercising. "Which fields does this create carry" is a decision, not a
 // transcription — the form keeps every field in the DOM and only *hides* the ones a
 // kind does not use, so a hidden field still has a value and FormData still reports it.
+// parseToolGrants reads an MCP Worker's list of permitted tools as an operator writes it
+// (ADR-draft-mcp-worker): one tool per line — its name, then what a second delivery
+// does and whether a repeated effect can be undone. The two words are optional here and
+// the server fills in the worst case for a line that leaves them out; a word it does
+// not know is sent as written, so the refusal names it.
+export function parseToolGrants(text) {
+  return String(text || "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [name, idempotency, effect] = line.split(/[\s,;]+/);
+    const grant = { name };
+    if (idempotency) grant.idempotency = idempotency;
+    if (effect) grant.effect = effect;
+    return grant;
+  });
+}
+
+// formatToolGrants writes a stored list back the way parseToolGrants reads it.
+export function formatToolGrants(tools) {
+  return (tools || []).map((t) => [t.name, t.idempotency, t.effect].filter(Boolean).join(" ")).join("\n");
+}
+
 export function workerCreateBody(form) {
   const f = form instanceof FormData ? form : new FormData(form);
   const get = (k) => String(f.get(k) || "").trim();
@@ -73,6 +93,10 @@ export function workerCreateBody(form) {
     body.provider = get("provider") || "messages";
     body.model = get("model");
   }
+  // An MCP Worker's list of the tools a process may call on its server. It is sent
+  // even when empty: a Worker that permits nothing is a valid one, and the safe one to
+  // start from.
+  if (body.kind === "mcp") body.tools = parseToolGrants(f.get("tools"));
   // A connection string is a SQL worker's whole configuration and belongs to no
   // other kind, so the gate is the kind — not whether the field happens to hold
   // something. Asking only "is it non-empty" is what let a DSN typed for a kind picked
@@ -149,6 +173,7 @@ export function workerShape(kind, provider) {
   // The Atlas report is the wiki's shape: a base URL to reach and an account's token to
   // reach it with — the server a report reads may be another installation than this one.
   const atlasReport = kind === "atlasreport";
+  const mcp = kind === "mcp";
   // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
   // two meanings at once: empty is AWS at the region the bundle names, and anything else
   // is the store the installation runs — which is also what decides that its buckets are
@@ -224,6 +249,8 @@ export function workerShape(kind, provider) {
     // without opening a secret store. That is also why it is a record field and not a
     // vault bundle entry.
     model: agent,
+    // An MCP Worker lists the tools a process may call on its server.
+    tools: mcp,
     endpoint: !bundle && !preview,
     // A mail worker always has a sender: it is the default From address, and the
     // preview transport frames the message exactly as it would be sent, so it needs
@@ -463,6 +490,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
             <label class="field conn-f-mailbox" style="flex:1 1 220px"><span>IMAP endpoint (optional)</span><input id="conn-mailbox" value="${esc(c.mailboxEndpoint || "")}" placeholder="imaps://imap.example.com:993"/></label>
             <label class="field conn-f-scanner" style="flex:1 1 220px" title="Every attachment this Worker forwards, reads into a variable or exports into a store is scanned by this ClamAV daemon first. A scanner that does not answer stops the task rather than letting the attachment through."><span>Malware scanner (optional)</span><input id="conn-scanner" value="${esc(c.scanner || "")}" placeholder="clamd://clamav.internal:3310"/></label>
             <label class="field conn-f-model" style="flex:1 1 200px"><span>Default model</span><input id="conn-model" value="${esc(c.model || "")}" title="What a task that names no model of its own asks. A task or an agent container may name one, and then that one runs."/></label>
+            <label class="field conn-f-tools" style="flex:1 1 100%"><span>Permitted tools</span><textarea id="conn-tools" rows="5" spellcheck="false" title="One tool per line: its name as the server lists it, then what a second delivery of one call does (natural, key, check or none) and whether a repeated effect can be undone (reversible or irreversible). A tool that is not listed is not called.">${esc(formatToolGrants(c.tools))}</textarea></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
             <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
           </div>
@@ -487,6 +515,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
     const mailboxIn = ov.querySelector("#conn-mailbox");
     const scannerIn = ov.querySelector("#conn-scanner");
     const modelIn = ov.querySelector("#conn-model");
+    const toolsIn = ov.querySelector("#conn-tools");
     const credRefIn = ov.querySelector("#conn-credref");
     const connStrIn = ov.querySelector("#conn-connstr");
     const enabledIn = ov.querySelector("#conn-enabled");
@@ -509,6 +538,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       const show = (sel, on) => { const el = ov.querySelector(sel); if (el) el.style.display = on ? "" : "none"; };
       show(".conn-f-provider", sh.provider);
       show(".conn-f-model", sh.model);
+      show(".conn-f-tools", sh.tools);
       ov.querySelector(".conn-provider-label").textContent = sh0.model ? "Wire format" : "Provider";
       if (modelIn) modelIn.placeholder = sh.modelPlaceholder || "";
       show(".conn-f-endpoint", sh.endpoint);
@@ -581,6 +611,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       if (sh.mailbox) f.set("mailboxEndpoint", mailboxIn.value.trim());
       if (sh.scanner) f.set("scanner", scannerIn.value.trim());
       if (sh.model) f.set("model", modelIn.value.trim());
+      if (sh.tools) f.set("tools", toolsIn.value);
       if (sh.credRef !== "none") f.set("credentialsRef", credRefIn.value.trim());
       if (sh.sql) f.set("connectionString", connStrIn.value.trim());
       return workerCreateBody(f);
@@ -616,6 +647,8 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
         patch.provider = providerSel.value;
         patch.model = modelIn.value.trim();
       }
+      // The whole list, so that removing a line removes the permission.
+      if (sh.tools) patch.tools = parseToolGrants(toolsIn.value);
       // Switching a SharePoint Worker to the mockup or back; the server clears the
       // credential reference the mockup does not use.
       if (c.kind === "sharepoint") patch.provider = providerSel.value;

@@ -1339,6 +1339,15 @@ type ConnectorTaskDetail struct {
 	AtlasReportConnector RestExpr
 	AtlasReportOp        int32
 	AtlasReportInput     RestExpr
+	// MCP task fields (JobType == MCPJobType, ADR-draft-mcp-worker). Connector (above)
+	// names the configured MCP Worker — the server; McpConnector is that name as an
+	// expression when the task computes it. McpTool is the interned name of the one tool
+	// the task calls, McpInput its arguments as a FEEL context, and McpTimeoutNanos how
+	// long the call may take, 0 for the worker's own bound.
+	McpConnector    RestExpr
+	McpTool         int32
+	McpInput        RestExpr
+	McpTimeoutNanos int64
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

@@ -2507,6 +2507,9 @@ type xmlServiceTask struct {
 	// (ADR-0555 §3): one of Atlas's own read routes folded into a report a form's chart
 	// draws, read with a token a *worker* holds.
 	AtlasReport *xmlAtlasReportConnector `xml:"extensionElements>atlasReportConnector"`
+	// Mcp, when present, marks this service task an MCP task: one call to one tool of
+	// the Model Context Protocol server its Worker is (ADR-draft-mcp-worker).
+	Mcp *xmlMcpConnector `xml:"extensionElements>mcpConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2895,6 +2898,21 @@ type xmlAtlasReportConnector struct {
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
+}
+
+// An MCP task's configuration, carried as an <atlas:mcpConnector> extension
+// (ADR-draft-mcp-worker). connector names the configured MCP Worker — the server, whose
+// endpoint, credential and list of permitted tools live on the Worker, never in the
+// model. tool is the one tool this task calls, by the name the server gives it. input is
+// a JSON object of that tool's arguments, whose string values starting with '=' are FEEL.
+// timeout is an ISO-8601 duration for the one call.
+type xmlMcpConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Tool           string `xml:"tool,attr"`
+	Input          string `xml:"input,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Timeout        string `xml:"timeout,attr"`
+	Retries        string `xml:"retries,attr"`
 }
 
 // xmlWikiConnector is the <atlas:wikiwikibangbangConnector> extension on a service task

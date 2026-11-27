@@ -39,6 +39,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   bpmn-js breaks for an extension element its moddle has no type for; a container shows its
   bounds, editing one keeps the others and clearing one removes the attribute; answer fields
   are shown and edited on a container and on an ai task, and offered on no other task.
+  And an MCP task ([ADR-draft-mcp-worker](../docs/adr/draft-mcp-worker.md)): it survives being
+  opened and saved, shows the fields the compiler reads, suggests only MCP Workers, and inside
+  an agent-driven container is one of the agent's tools with its declared parameter.
 - **`decision-peek.spec.mjs`** ([ADR-0556](../docs/adr/0556-decision-peek.md)):
   the Implement view marks a business rule task that calls a decision, and only there; the mark
   opens the decision over the diagram without saving or leaving it, on the model the task's

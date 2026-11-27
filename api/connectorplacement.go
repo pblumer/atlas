@@ -109,6 +109,7 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindCalendar:       {compiler.CalendarJobTypeIndex},
 	connectorKindWiki:           {compiler.WikiwikibangbangJobTypeIndex},
 	connectorKindAtlasReport:    {compiler.AtlasReportJobTypeIndex},
+	connectorKindMCP:            {compiler.MCPJobTypeIndex},
 
 	// A script task's language (ADR-0047). One entry per language, not one for
 	// "script": see above.

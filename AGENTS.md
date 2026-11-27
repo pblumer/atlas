@@ -205,6 +205,7 @@ connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)
 connector/script/      Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
 connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
+connector/mcptool/     One tool of a remote MCP server as a task; the protocol client, written by hand (ADR-draft-mcp-worker)
 ```
 
 Adding a Worker Type is one package here plus one `managedConnectorKind` entry in

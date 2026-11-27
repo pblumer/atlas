@@ -431,3 +431,46 @@ test("an ai task gets a timeout and answer fields of its own", async ({ page }) 
   expect(page.__errors).toEqual([]);
 });
 
+// --- An MCP task as an agent's tool (ADR-draft-mcp-worker) -------------------------
+//
+// An MCP server's tool reaches an agent the way everything else does: as an activity in
+// the container, named by its element id and described by the modeller. These tests are
+// the Modeler's half of that — the task survives being opened and saved, its fields are
+// the ones the compiler reads, and inside the container it is a tool with parameters.
+test("an MCP task survives being opened and saved, and is a tool of its container", async ({ page }) => {
+  let xml = await elementXML(page, "serviceTask", "fehler_suchen");
+  for (const attr of [`connector="monitoring"`, `tool="search_issues"`, `resultVariable="toolCallResult"`, `timeout="PT30S"`]) {
+    expect(xml).toContain(attr);
+  }
+  expect(xml).toMatch(/mcpConnector[^>]*input="\{&#34;query&#34;:&#34;=dienst&#34;\}"|mcpConnector[^>]*input="\{&quot;query&quot;:&quot;=dienst&quot;\}"/);
+
+  await open(page, "fehler_suchen");
+  // Recognised as an MCP task rather than as a job worker with an unknown extension.
+  await expect(page.locator("#p-body")).toContainText("MCP tool");
+  await expect(page.locator("#f-st-connector")).toHaveValue("monitoring");
+  await expect(page.locator("#f-st-tool")).toHaveValue("search_issues");
+  await expect(page.locator("#f-st-resultVariable")).toHaveValue("toolCallResult");
+  // The Worker field suggests the MCP Workers this server has, and no other kind's.
+  const options = await page.locator("#f-st-connector").evaluate((el) =>
+    [...(el.list ? el.list.options : [])].map((o) => o.value));
+  expect(options).toEqual(["monitoring"]);
+  // In the container it is one of the agent's tools, with the parameter it declares.
+  await expect(page.locator('.pgroup[data-group="Agent tool"]')).toHaveCount(1);
+  await expandGroup(page, "Parameters");
+  await expect(page.locator("#agent-params .ap-name")).toHaveValue("dienst");
+  expect(page.__errors).toEqual([]);
+});
+
+test("editing an MCP task writes what the compiler reads", async ({ page }) => {
+  await open(page, "fehler_suchen");
+  await expand(page, "Tool");
+  await page.locator("#f-st-tool").fill("list_alerts");
+  await page.locator("#f-st-tool").blur();
+  const xml = await elementXML(page, "serviceTask", "fehler_suchen");
+  expect(xml).toContain(`tool="list_alerts"`);
+  // The other fields and the tool's own parameter are what they were.
+  expect(xml).toContain(`connector="monitoring"`);
+  expect(xml).toMatch(/agentParam[^>]*name="dienst"/);
+  expect(page.__errors).toEqual([]);
+});
+
