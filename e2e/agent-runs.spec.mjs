@@ -29,7 +29,8 @@ test("an agent's calls are listed with what they add up to", async ({ page }) =>
   // The agent is named as the rest of the replay names an element, with its run's sums
   // as the last call states them.
   await expect(tab.locator(".dec-group-h")).toContainText("Erfassen");
-  await expect(tab.locator(".agent-sum")).toHaveText("2 Runden · 1,900 Tokens gelesen · 55 geschrieben");
+  // The thousands mark follows the reader's region, so it is not spelled out here.
+  await expect(tab.locator(".agent-sum")).toHaveText(/^2 Runden · 1.900 Tokens gelesen · 55 geschrieben$/);
   await expect(tab.locator(".dec-card2")).toHaveCount(2);
   expect(page.__errors).toEqual([]);
 });

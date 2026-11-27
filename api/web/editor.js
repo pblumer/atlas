@@ -586,7 +586,8 @@ const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 // the facts, and so what an operator is shown can be read off one place.
 function agentRunsHTML(runs, labelOf) {
   if (!runs || !runs.length) return `<p class="ops-empty">${esc(tr("ops.agent.empty"))}</p>`;
-  const n = (v) => Number(v || 0).toLocaleString();
+  // Grouped like every other count the Console prints, in the reader's own region.
+  const n = (v) => fmtCount(Number(v || 0));
   const agents = new Map();
   for (const r of runs) {
     if (!agents.has(r.elementInstanceKey)) agents.set(r.elementInstanceKey, []);
@@ -605,7 +606,7 @@ function agentRunsHTML(runs, labelOf) {
     // model that said nothing.
     const gone = r.text === "erased" ? tr("ops.agent.erased") : r.text === "withheld" ? tr("ops.agent.withheld") : "";
     const text = (label, body) => body
-      ? `<details class="agent-text"><summary>${esc(label)}</summary><pre>${esc(body)}</pre></details>` : "";
+      ? `<details class="fold-sub agent-text"><summary>${esc(label)}</summary><pre>${esc(body)}</pre></details>` : "";
     const texts = gone
       ? `<span class="muted">${esc(gone)}</span>`
       : (text(tr("ops.agent.prompt"), r.prompt) + text(tr("ops.agent.answer"), r.answer) + text(tr("ops.agent.system"), r.system))
