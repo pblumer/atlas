@@ -331,3 +331,70 @@ func TestASealedTurnIsOpenedForReplayAndLostWithItsKey(t *testing.T) {
 		t.Errorf("a withheld run = %+v, replayable=%v", withheld, ok)
 	}
 }
+
+// A bound a call reached is on its fact, and the route names it — the round bound and
+// the token budget each in its own word.
+func TestTheRouteNamesTheBoundACallReached(t *testing.T) {
+	for want, attrs := range map[string]string{
+		"rounds": `maxIterations="1"`,
+		"tokens": `maxIterations="9" tokenBudget="10"`,
+	} {
+		t.Run(want, func(t *testing.T) {
+			srv, _ := newValidateServer(t)
+			deployAndStartWith(t, srv, strings.Replace(boundedAgentBPMN, `maxIterations="4"`, attrs, 1), `{}`)
+			round := lease(t, srv, compiler.AgentJobType)
+			if code, raw := completeJob(t, srv, round, fmt.Sprintf(`{"worker":"w1","leaseToken":%d,
+			  "toolCalls":[{"tool":"zinsen_holen","callId":"c1"}],"agentRun":{"inputTokens":20,"outputTokens":5}}`, round.LeaseToken)); code != http.StatusOK && code != http.StatusNoContent {
+				t.Fatalf("complete: status=%d body=%s", code, raw)
+			}
+			stored := storedAgentRuns(t, srv)
+			got := agentRunsRoute(t, srv, stored[0].ProcessInstanceKey)
+			if len(got) != 1 || got[0].Limit != want {
+				t.Fatalf("route = %+v, want the bound %q", got, want)
+			}
+			// The tool finishes, the scope drains, and the container parks instead of
+			// asking again.
+			tool := lease(t, srv, "rates")
+			if code, raw := completeJob(t, srv, tool, fmt.Sprintf(`{"worker":"w1","leaseToken":%d}`, tool.LeaseToken)); code != http.StatusOK && code != http.StatusNoContent {
+				t.Fatalf("complete tool: status=%d body=%s", code, raw)
+			}
+			parked := false
+			for _, inc := range incidents(t, srv) {
+				parked = parked || inc.Reason == model.IncidentAgentLimit
+			}
+			if !parked {
+				t.Error("the container did not park at its bound")
+			}
+		})
+	}
+}
+
+// An account of a model call on a job that asked no model is not kept: a worker of
+// another kind cannot write agent history by sending one.
+func TestAnAccountOnAJobThatAskedNoModelIsNotKept(t *testing.T) {
+	srv, round := startAgentRound(t)
+	if code, raw := completeJob(t, srv, round, fmt.Sprintf(`{"worker":"w1","leaseToken":%d,
+	  "toolCalls":[{"tool":"zinsen_holen","callId":"c1"}]}`, round.LeaseToken)); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("complete round: status=%d body=%s", code, raw)
+	}
+	tool := lease(t, srv, "rates")
+	if code, raw := completeJob(t, srv, tool, fmt.Sprintf(`{"worker":"w1","leaseToken":%d,
+	  "agentRun":{"model":"forged","inputTokens":999,"prompt":"forged"}}`, tool.LeaseToken)); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("complete tool: status=%d body=%s", code, raw)
+	}
+	for _, f := range storedAgentRuns(t, srv) {
+		if f.Model == "forged" || f.InputTokens == 999 {
+			t.Errorf("a tool's worker wrote a model call: %+v", f)
+		}
+	}
+	if run := srv.agentRunFromReport(1<<40, &agentRunReport{Model: "m"}); run != nil {
+		t.Errorf("an account for a job that does not exist = %+v", run)
+	}
+	// A stored text that is not an envelope, or a server with no vault, opens nothing.
+	if text, ok := srv.openAgentRunText(agentRunSealPrompt, "plain text"); ok || text != "" {
+		t.Errorf("a text that is no envelope opened as %q", text)
+	}
+	if text, ok := srv.openAgentRunText(agentRunSealPrompt, ""); !ok || text != "" {
+		t.Errorf("an empty text = %q, %v, want it to be simply empty", text, ok)
+	}
+}

@@ -95,6 +95,16 @@ func TestAnMcpTaskIsResolvedAgainstItsWorkersList(t *testing.T) {
 		t.Errorf("activate: status=%d, body does not carry the identifier exactly: %s", code, raw)
 	}
 
+	// A task whose Worker expression names nobody cannot be resolved; it is leased
+	// without a task, and the worker fails it saying so.
+	if code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"meldung":"x"}}`, "application/json"); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create instance: status=%d body=%s", code, raw)
+	}
+	if unresolved := lease(t, srv, compiler.MCPJobType); unresolved.Connector != nil {
+		t.Errorf("a task that names no Worker was resolved: %+v", unresolved.Connector)
+	}
+
 	// The list is edited: the tool is no longer permitted.
 	if code, raw := serveInternal(t, srv, http.MethodPatch, "/api/v1/connectors/"+id, `{"tools":[{"name":"create_incident"}]}`, "application/json"); code != http.StatusOK {
 		t.Fatalf("patch tools: status=%d body=%s", code, raw)
@@ -170,6 +180,7 @@ func TestSupervisedMcpEnvBuildsTheWorker(t *testing.T) {
 	save("2", "intern", "http://intern.example.ch/mcp", "", true) // asks for no credential
 	save("3", "aus", "https://aus.example.ch/mcp", "", false)
 	save("4", "kaputt", "ftp://x", "", true)
+	save("5", "monitorinG", "https://zwei.example.ch/mcp", "", true) // folds to "monitoring"'s environment name, and sorts first
 	t.Setenv("ATLAS_CONNECTOR_MONITORING_MCP_TOKEN", `{"token":"mcp_0123"}`)
 
 	env := envOf(t, srv.mcpWorkerEnv())
@@ -177,11 +188,22 @@ func TestSupervisedMcpEnvBuildsTheWorker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a worker could not be configured from what the engine handed it: %v", err)
 	}
-	if !slices.Contains(built.Names, "monitoring") || !slices.Contains(built.Names, "intern") || len(built.Names) != 2 {
-		t.Errorf("the worker holds %v, want the two usable servers", built.Names)
+	// Two Workers whose names fold to one environment name: only the first is handed over.
+	if !slices.Contains(built.Names, "monitorinG") || !slices.Contains(built.Names, "intern") || len(built.Names) != 2 {
+		t.Errorf("the worker holds %v, want intern and the first of the two that share a name", built.Names)
 	}
-	if env["ATLAS_MCP_MONITORING_URL"] != "https://mcp.example.ch/mcp" || env["ATLAS_MCP_MONITORING_CREDENTIALS"] != `{"token":"mcp_0123"}` {
+	if env["ATLAS_MCP_MONITORING_URL"] != "https://zwei.example.ch/mcp" || env["ATLAS_MCP_INTERN_URL"] != "http://intern.example.ch/mcp" {
 		t.Errorf("handed = %v", env)
+	}
+
+	// With a credential reference, what the vault holds is handed over as it is.
+	creds, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	if err := creds.connectors.Save(connector{ID: "1", Name: "monitoring", Kind: connectorKindMCP, Endpoint: "https://mcp.example.ch/mcp",
+		CredentialsRef: "monitoring-mcp", Enabled: true, CreatedAt: 1}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if got := envOf(t, creds.mcpWorkerEnv())["ATLAS_MCP_MONITORING_CREDENTIALS"]; got != `{"token":"mcp_0123"}` {
+		t.Errorf("handed credential = %q", got)
 	}
 	if _, has := env["ATLAS_MCP_INTERN_CREDENTIALS"]; has {
 		t.Error("a server that asks for no credential was handed one")
