@@ -66,7 +66,13 @@ _Changed_ / _Removed_ for each version.
   below. It is a picture — nothing of it can be edited, and nothing of it is saved with the file
   or deployed with it; the file only keeps that the pool is drawn this way. The elements that
   send or wait for a message are highlighted and say the name, and a message flow that ends at
-  the pool's edge is led on, dashed, to the element that carries its message. For this,
+  the pool's edge is led on, dashed, to the element that carries its message. The pool's wrench
+  menu does the same as the button: on a reference, *Expanded pool* shows the process instead of
+  giving the pool an empty process of its own, and *Collapsed pool* hides it again. A double
+  click on the pool shows the process too, and a double click on the shown process opens that
+  process's own model in the Modeler, as the "+" of a call activity does; *Open the process in
+  the Modeler* in the panel is the same door. On the band that holds the name a double click
+  still edits the name. For this,
   `POST /api/v1/collaboration-check` and `atlas_collaboration_check` answer a resolved
   reference's `points`: each element of the deployed version that sends or waits for a message
   (ADR-0559).
@@ -113,6 +119,17 @@ _Changed_ / _Removed_ for each version.
 - **The Interactions link moved into the row's menu.** In the Operations list, the link to who a
   process talks to is no longer shown beside every process name; it is the second entry of the
   row's ⋯ menu, after *Open* (ADR-0559).
+
+### Fixed
+- **A pool's start variables are no longer reported as written nowhere.** In a file with pools,
+  the Modeler's warning about a variable that is read and written nowhere did not count what a
+  pool's process declares for its start: every read of a declared start variable or constant —
+  a message's correlation key, a script — was a warning. Each pool's process is now asked, as
+  the process of a plain file always was, and the Variables panel lists them too.
+- **A diagram replaced by an import gets its own findings.** After an applied XML source, an
+  auto-layout or a collaborator's draft pulled in, the Problems bar and the Variables panel
+  could go on showing what they said about the diagram before: the Playground's listener for
+  the import answered a promise, which stopped the event before it reached them.
 
 ## [0.29.0] — 2026-11-25
 

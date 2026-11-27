@@ -738,7 +738,21 @@ amendment of 2026-11-25.
 - **Showing and hiding** are in the pool's panel, offered for a reference the check resolved.
   Showing grows the pool to the picture's size and moves what stands below it down by as much;
   hiding gives the room back. Each is one step to undo. A pool smaller than the picture shows
-  it smaller.
+  it smaller. The pool's replace menu (the wrench) does the same: bpmn-js offers every pool
+  without a process *Expanded pool*, which would give a reference an empty process of its own
+  and make it two things at once, so on a reference that entry shows the process, a second one
+  hides it, and a reference nothing deploys keeps the entry disabled, saying why.
+- **A double click goes in.** On a thing that can be opened a double click means "open it",
+  so on a resolved reference it shows the process instead of opening the name for editing,
+  and on the shown process it goes one step further: the Modeler opens that process's own
+  model — its draft where there is one, else the newest deployed version — through the same
+  path as the "+" of a call activity, which saves this draft first or asks before leaving a
+  diagram that has nowhere to be saved. The panel's *Open the process in the Modeler* is the
+  same door for a keyboard and for a pool that does not show its process. A double click
+  never hides the process; that is the button and the menu. The band that holds the name
+  keeps the label editor, as does every pool with nothing to show. The price is that the name
+  of a reference that does not show its process is no longer edited by a double click, only
+  in the panel.
 - **Where a message leaves or arrives.** The check answers, for a resolved reference, its
   `points`: each element of the deployed version that sends or waits for a message, from the
   compiler's own list (ADR-0446), not from a second reading of the XML in the browser. The
