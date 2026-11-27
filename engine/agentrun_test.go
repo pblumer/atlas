@@ -347,3 +347,23 @@ func TestAnAiTaskRecordsItsOneCall(t *testing.T) {
 		t.Fatalf("history = %+v, want the task's one call", got)
 	}
 }
+
+// A bound of one round is said as one round, in the singular.
+func TestABoundOfOneRoundIsSaidInTheSingular(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p, cp, tool := limitedAgent(t, h, 707, "agent-one-round", compiler.AgentLimits{MaxRounds: 1})
+	agentRound(t, h, p, cp, tool, 10, 1)
+	_, inc, parked := agentIncident(t, h.store)
+	if !parked || !strings.Contains(inc.Message, "ran 1 round without finishing") {
+		t.Fatalf("incident = %q (parked=%v), want the singular", inc.Message, parked)
+	}
+
+	h2 := openHarness(t, t.TempDir())
+	defer h2.close(t)
+	p2, cp2, tool2 := limitedAgent(t, h2, 708, "agent-one-round-budget", compiler.AgentLimits{MaxRounds: 9, TokenBudget: 10})
+	agentRound(t, h2, p2, cp2, tool2, 10, 5)
+	if _, inc, parked := agentIncident(t, h2.store); !parked || !strings.Contains(inc.Message, "tokens in 1 round,") {
+		t.Errorf("budget incident = %q (parked=%v), want the singular", inc.Message, parked)
+	}
+}

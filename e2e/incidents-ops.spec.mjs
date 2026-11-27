@@ -653,6 +653,35 @@ test.describe("incidents by cause", () => {
     expect(page.__errors).toEqual([]);
   });
 
+  // An agent parked at the bound its model states (ADR-0566): resolving grants the same
+  // allowance again, so the cause reads as an agent's, not as a timer's, and the dialog
+  // says what resolving does instead of asking for retries it ignores.
+  test("an agent at its bound reads as one, and resolving it grants no retries", async ({ page }) => {
+    await bootOverview(page, {
+      seed: [{
+        elementInstanceKey: "3001", processInstanceKey: "900002", processDefKey: 6, elementId: "Zins_ermitteln",
+        elementIndex: 2, type: "agent", raisedAt: 1,
+        message: "the agent ran 1 round without finishing, which is its maxIterations; resolve to run 1 more",
+      }],
+    });
+    await openIncidents(page);
+
+    const cause = page.locator("#causes tr").first();
+    await expect(cause.locator("span.pill.warn", { hasText: "agent" })).toHaveCount(1);
+    await expect(cause).not.toContainText("timer");
+
+    await cause.locator("button[data-resolve-cause]").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toContainText("Each agent is granted the same allowance once more");
+    await expect(modal).toContainText("ignored by an agent incident");
+    await expect(modal.locator("#inc-bulk-retries")).toBeDisabled();
+    await modal.locator("[data-inc-go]").click();
+
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0]).toMatchObject({ processDefKey: 6, elementId: "Zins_ermitteln", type: "agent", retries: 1 });
+    expect(page.__errors).toEqual([]);
+  });
+
   test("ticked rows resolve as exactly that set", async ({ page }) => {
     await bootOverview(page);
     await openIncidents(page);

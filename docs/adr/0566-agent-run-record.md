@@ -104,7 +104,8 @@ precedent of `SafeLoopCeiling` for a standard loop that states no maximum (ADR-0
 
 The round boundary — `startNextAgentRound`, the one place a round after the first is asked for —
 reads the totals row. If the last call reached a bound, the container **parks**: it stays
-active, takes no outgoing flow, and carries an incident with reason `IncidentAgentLimit`.
+active, takes no outgoing flow, and carries an incident with reason `IncidentAgentLimit`,
+listed and filtered as the incident kind `agent`.
 Resolving the incident asks for the next round.
 
 Both tests are stateless, in `parkRunawayLoop`'s shape: the round bound is reached whenever the

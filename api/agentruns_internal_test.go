@@ -365,6 +365,11 @@ func TestTheRouteNamesTheBoundACallReached(t *testing.T) {
 			if !parked {
 				t.Error("the container did not park at its bound")
 			}
+			// It is listed as an agent's incident, and a filter on that kind finds it.
+			code, raw := serveInternal(t, srv, http.MethodGet, "/api/v1/incidents?type=agent", "", "")
+			if code != http.StatusOK || !strings.Contains(string(raw), `"type":"agent"`) || !strings.Contains(string(raw), "1 round") {
+				t.Errorf("incidents?type=agent: status=%d body=%s", code, raw)
+			}
 		})
 	}
 }
