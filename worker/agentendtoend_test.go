@@ -45,8 +45,9 @@ type stubAsk struct {
 		InputSchema map[string]any `json:"input_schema"`
 	} `json:"tools"`
 	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
+		Role string `json:"role"`
+		// A string for a turn of plain text, a list of blocks for a replayed turn.
+		Content json.RawMessage `json:"content"`
 	} `json:"messages"`
 }
 
@@ -166,19 +167,32 @@ func TestAnAgentRunsEndToEndOverTheWorkerProtocol(t *testing.T) {
 	if _, ok := props["url"]; !ok {
 		t.Errorf("input_schema = %v, want the declared url parameter", first.Tools[zinsen].InputSchema)
 	}
-	if len(first.Messages) == 0 || !strings.Contains(first.Messages[0].Content, "Finde den guenstigsten Hypothekarzins.") {
-		t.Errorf("first prompt = %+v, want the container's documentation as the goal", first.Messages)
+	if len(first.Messages) == 0 || !strings.Contains(string(first.Messages[0].Content), "Finde den guenstigsten Hypothekarzins.") {
+		t.Fatalf("first prompt = %s, want the container's documentation as the goal", first.Messages)
 	}
-	if strings.Contains(first.Messages[0].Content, "round 2") {
-		t.Errorf("first prompt = %q, want it to say nothing has been called yet", first.Messages[0].Content)
+	if strings.Contains(string(first.Messages[0].Content), "round 2") {
+		t.Errorf("first prompt = %s, want it to say nothing has been called yet", first.Messages[0].Content)
 	}
 
 	// The round boundary: the second round is a *new* request carrying what the first
 	// round's call returned. The worker held nothing in between — the process did, which
 	// is the trade ADR-0253 makes and the reason the loop is durable.
+	//
+	// And it carries it as the run happened (ADR-draft-agent-transcript-and-answer): the
+	// first prompt byte for byte, the model's own turn handed back, and the call's result
+	// answering that call — not a fresh prompt retelling the results in words.
 	second := rounds[1]
-	if len(second.Messages) == 0 || !strings.Contains(second.Messages[0].Content, "1.13 %") {
-		t.Errorf("second prompt = %+v, want the first call's result in it: the agent's memory is the instance", second.Messages)
+	if len(second.Messages) != 3 {
+		t.Fatalf("second round = %d messages, want the first prompt, the model's turn and its results: %s", len(second.Messages), second.Messages)
+	}
+	if string(second.Messages[0].Content) != string(first.Messages[0].Content) {
+		t.Errorf("second round opens with %s, want the first prompt unchanged", second.Messages[0].Content)
+	}
+	if second.Messages[1].Role != "assistant" || !strings.Contains(string(second.Messages[1].Content), `"tool_use"`) {
+		t.Errorf("second message = %s, want the model's own turn", second.Messages[1].Content)
+	}
+	if results := string(second.Messages[2].Content); !strings.Contains(results, `"tool_result"`) || !strings.Contains(results, "1.13 %") {
+		t.Errorf("third message = %s, want the first call's result answering its call: the agent's memory is the instance", results)
 	}
 
 	// --- what the process actually did -----------------------------------------

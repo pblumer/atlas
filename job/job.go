@@ -59,6 +59,10 @@ type Completion struct {
 	// the loop and completes the container, which is why the zero value is an ending
 	// rather than an error.
 	ToolCalls []model.ToolCall
+	// AgentRun is the account of the model call behind this completion — the model
+	// that answered, its token counts, the texts (ADR-draft-agent-run-record). nil
+	// for every worker that asks no model.
+	AgentRun *model.AgentRunValue
 	// Outcome is how a product action ended, stated by a shop send task (ADR-0429
 	// §4). It rides the completion so the engine appends it in the batch that
 	// completes the job: the handler runs off the loop and must not write it itself.
@@ -81,6 +85,7 @@ type Engine interface {
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
 	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
+	CompleteJobWithAgentRun(jobKey uint64, run *model.AgentRunValue, toolCalls []model.ToolCall, outputs ...model.VariableValue)
 	CompleteJobWithOutcome(jobKey uint64, outcome model.ActionOutcomeValue, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string, backoff int64)
 	// ThrowJobErrorWithMessage ends a job in a BPMN error a handler returned as a
@@ -601,6 +606,12 @@ func (r *Runner) Submit(outcomes []Outcome) {
 		}
 		if r.gate != nil {
 			r.gate.Succeeded(o.Job.Type, o.Job.Key)
+		}
+		if o.Completion.AgentRun != nil {
+			// A call to a language model: its account rides the completion, with the
+			// round's tool calls when it chose any (ADR-draft-agent-run-record).
+			r.engine.CompleteJobWithAgentRun(o.Job.Key, o.Completion.AgentRun, o.Completion.ToolCalls, o.Completion.Outputs...)
+			continue
 		}
 		if len(o.Completion.ToolCalls) > 0 {
 			// An agent's round: the completion carries what to run next, not what the

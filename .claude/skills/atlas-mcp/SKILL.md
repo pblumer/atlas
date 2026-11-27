@@ -48,6 +48,7 @@ Bearer` header.
 | `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
 | `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
 | `atlas_instance_decisions` | `key` | one instance's DMN decision evaluations (inputs, outputs, trace) |
+| `atlas_instance_agent_runs` | `key` | one instance's calls to a language model: element, round, model, tokens read and written, running totals, the tools called, and the bound it reached if any |
 | `atlas_cancel_instance` | `key` | terminates one active instance |
 | `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination (by definition key) |
 | `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |

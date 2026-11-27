@@ -57,6 +57,13 @@ type Command struct {
 	// an agent container's completion is the agent saying it is done, which is why the
 	// zero value is the ending, not an error.
 	ToolCalls []model.ToolCall
+	// AgentRun is a worker's account of the model call this completion ends: the model
+	// that answered, its token counts, the texts (ADR-draft-agent-run-record). The API
+	// allocates it off the run loop; the handler states everything that decides
+	// anything — element, round, sums, bound — and freezes it into an AgentRun event
+	// beside JobCompleted. nil when the worker reported nothing, which still records
+	// the call.
+	AgentRun *model.AgentRunValue
 	// Actor identifies who submitted an external variable-modify command (ADR-0098):
 	// the acting principal's username, frozen into the audit event the modify emits so
 	// the "who changed it" trail is durable and replayable. Empty for every other

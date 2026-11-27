@@ -176,6 +176,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.AtlasReport.Retries },
 		compile: compileAtlasReportConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Mcp != nil },
+		retries: func(st xmlServiceTask) string { return st.Mcp.Retries },
+		compile: compileMcpConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -3080,12 +3085,15 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	outputs, outputProblems := b.compileAgentOutputs(st.Id)
 	return b.AddAgentConnectorTask(AgentTaskConfig{
+		Outputs: outputs, OutputProblems: outputProblems,
 		Worker:    worker,
 		Model:     strings.TrimSpace(cn.Model),
 		Prompt:    prompt,
 		ResultVar: result,
 		Retries:   retries,
+		Limits:    parseAgentLimits(cn, false),
 	}), nil
 }
 

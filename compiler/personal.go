@@ -236,6 +236,8 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.CalendarInput.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AtlasReportConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AtlasReportInput.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.McpConnector.Expr":         "evaluated where the MCP task is resolved for a worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.McpInput.Expr":             "evaluated where the MCP task is resolved for a worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
 	// The wikiwikibangbang Worker's (ADR-0498).
 	"connectorTasks.WikiConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

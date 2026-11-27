@@ -1231,6 +1231,11 @@ const WORKER_TYPES = [
     refs: "ADR-0555", status: "active", statusLabel: "configured below",
   },
   {
+    id: "mcp", name: "MCP tool", kind: "Protocol",
+    desc: "Calls one tool of a Model Context Protocol server. A Worker is one server: its endpoint, the credential it asks for, and the list of tools a process may call on it — a tool that is not on the list is not called. A task names the Worker, the tool and its arguments; in an agent-driven ad-hoc subprocess it is one of the agent\u0027s tools, described by the modeller\u0027s own documentation and never by the server\u0027s.",
+    refs: "ADR-draft-mcp-worker", status: "active", statusLabel: "configured below",
+  },
+  {
     id: "wikiwikibangbang", name: "wikiwikibangbang", kind: "Wiki",
     desc: "Uses a wikiwikibangbang wiki from a process: opens a task for a person, reads it, changes its properties and labels, moves it through its workflow, comments on it and finds tasks by a query; creates a page, reads it as Markdown and appends to it. A repeated create finds the item an earlier round made when a matching field identifies it, a transition already made counts as made, and an append carries every block of the page back unchanged. Configure each wiki below: its base URL, and the API token of a technical account that is an editor in the spaces processes write to, in the vault, which never enters a model. An account with a system role is refused. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0498", status: "active", statusLabel: "configured below",
@@ -5765,7 +5770,7 @@ function wireWorkerManagement(workers) {
       }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="sharepointserver">sharepointserver</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="calendar">Calendar booking</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="atlasreport">Atlas report</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="sharepointserver">sharepointserver</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="calendar">Calendar booking</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="atlasreport">Atlas report</option><option value="mcp">MCP tool</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -5773,6 +5778,7 @@ function wireWorkerManagement(workers) {
         <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
         <label class="field scanner-field" style="margin:0;flex:1 1 200px" title="Every attachment this Worker forwards, reads into a variable or exports into a store is scanned by this ClamAV daemon first. A scanner that does not answer stops the task rather than letting the attachment through."><span>Malware scanner (optional)</span><input name="scanner" placeholder="clamd://clamav.internal:3310"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
+        <label class="field tools-field" style="margin:0;flex:1 1 100%;display:none"><span>Permitted tools</span><textarea name="tools" rows="4" spellcheck="false" placeholder="search_issues natural reversible&#10;create_incident none irreversible" title="One tool per line: its name as the server lists it, then what a second delivery of one call does (natural, key, check or none) and whether a repeated effect can be undone (reversible or irreversible). A tool that is not listed is not called. A line with only a name is taken as none / irreversible."></textarea></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this configured worker">Add worker</button>
@@ -5825,6 +5831,13 @@ function wireWorkerManagement(workers) {
         // typed for a kind picked earlier would ride along into the next create.
         if (!sh.model) modelIn.value = "";
         modelIn.disabled = !sh.model;
+        // The list of tools an MCP Worker permits (ADR-draft-mcp-worker): shown for that
+        // kind alone, and emptied for any other so it cannot ride into another create.
+        const toolsField = form.querySelector(".tools-field");
+        toolsField.style.display = sh.tools ? "" : "none";
+        const toolsIn = toolsField.querySelector("textarea");
+        if (!sh.tools) toolsIn.value = "";
+        toolsIn.disabled = !sh.tools;
         // The connection string is a SQL worker's whole configuration, so it is the
         // one field that appears for those kinds and for no other. It is not marked
         // required: an operator who already keeps the DSN in the vault names its key in

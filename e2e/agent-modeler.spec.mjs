@@ -323,3 +323,154 @@ test("an ai task offers no context list", async ({ page }) => {
   await expect(page.locator("#f-st-context")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
+
+// --- Bounds and answer fields (ADR-draft-agent-run-record, -transcript-and-answer) ---
+//
+// The first test is the one that matters most and drives no field at all. bpmn-js drops
+// an attribute or an extension element its moddle has no type for, so a model that
+// carries a bound or an answer field would lose it the first time somebody opened it in
+// the Modeler and pressed Save — silently, and the deploy that followed would run an
+// agent with no bound. What is checked is that the model comes back out as it went in.
+test("a model's bounds and answer fields survive being opened and saved", async ({ page }) => {
+  const xml = await elementXML(page, "adHocSubProcess", "agent");
+  for (const attr of [`maxIterations="6"`, `tokenBudget="40000"`, `timeout="PT90S"`, `maxContextTokens="30000"`]) {
+    expect(xml).toContain(attr);
+  }
+  expect(xml).toMatch(/agentOutput[^>]*name="entscheid"/);
+  expect(xml).toMatch(/agentOutput[^>]*values="ja,nein"/);
+  expect(xml).toMatch(/agentOutput[^>]*required="true"/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a container shows its bounds, and editing one keeps the others", async ({ page }) => {
+  await open(page, "agent");
+  await expand(page, "Agent limits");
+  await expect(page.locator("#f-agent-maxiter")).toHaveValue("6");
+  await expect(page.locator("#f-agent-budget")).toHaveValue("40000");
+  await expect(page.locator("#f-agent-timeout")).toHaveValue("PT90S");
+  await expect(page.locator("#f-agent-maxctx")).toHaveValue("30000");
+  await expect(page.locator("#p-body")).toContainText("gewährt dieselbe Menge noch einmal");
+
+  await page.locator("#f-agent-maxiter").fill("12");
+  await page.locator("#f-agent-maxiter").blur();
+  let xml = await elementXML(page, "adHocSubProcess", "agent");
+  expect(xml).toContain(`maxIterations="12"`);
+  expect(xml).toContain(`tokenBudget="40000"`);
+  expect(xml).toContain(`timeout="PT90S"`);
+  expect(xml).toContain(`connector="anthropic_pb"`);
+
+  // A bound cleared is written as absent, which the compiler reads as "not stated" —
+  // an empty attribute would be a second way to say it.
+  await expand(page, "Agent limits");
+  await page.locator("#f-agent-budget").fill("");
+  await page.locator("#f-agent-budget").blur();
+  xml = await elementXML(page, "adHocSubProcess", "agent");
+  expect(xml).not.toContain("tokenBudget");
+  expect(xml).toContain(`maxIterations="12"`);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a container's answer fields are shown, and an added one lands in the XML", async ({ page }) => {
+  await open(page, "agent");
+  await expandGroup(page, "Answer fields");
+  const cards = page.locator("#agent-outputs [data-agent-output]");
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first().locator(".ao-name")).toHaveValue("entscheid");
+  await expect(cards.first().locator(".ao-type")).toHaveValue("string");
+  await expect(cards.first().locator(".ao-values")).toHaveValue("ja,nein");
+  await expect(cards.first().locator(".ao-required")).toBeChecked();
+  // Scalars only: an object declared by name alone says nothing about what is inside.
+  const types = await cards.first().locator(".ao-type option").evaluateAll((els) => els.map((e) => e.value));
+  expect(types).toEqual(["string", "number", "boolean"]);
+
+  await page.locator("[data-agent-output-group] .io-group-add").click();
+  const added = page.locator("#agent-outputs [data-agent-output]").nth(1);
+  await added.locator(".ao-name").fill("quote");
+  await added.locator(".ao-name").blur();
+  await page.locator("#agent-outputs [data-agent-output]").nth(1).locator(".ao-type").selectOption("number");
+
+  const xml = await elementXML(page, "adHocSubProcess", "agent");
+  expect(xml).toMatch(/agentOutput[^>]*name="entscheid"/);
+  expect(xml).toMatch(/agentOutput[^>]*name="quote"[^>]*type="number"/);
+  // The tools' own declarations are untouched: an answer field is not a parameter.
+  expect(xml).toMatch(/agentParam[^>]*name="url"/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("an ai task gets a timeout and answer fields of its own", async ({ page }) => {
+  await open(page, "einordnen");
+  await expand(page, "Limits");
+  await page.locator("#f-st-timeout").fill("PT20S");
+  await page.locator("#f-st-timeout").blur();
+
+  await expandGroup(page, "Answer fields");
+  await expect(page.locator("#agent-outputs [data-agent-output]")).toHaveCount(0);
+  await page.locator("[data-agent-output-group] .io-group-add").click();
+  const card = page.locator("#agent-outputs [data-agent-output]").first();
+  await card.locator(".ao-name").fill("kategorie");
+  await card.locator(".ao-name").blur();
+  await page.locator("#agent-outputs [data-agent-output]").first().locator(".ao-values").fill("Neubau, Sanierung");
+  await page.locator("#agent-outputs [data-agent-output]").first().locator(".ao-values").blur();
+  await page.locator("#agent-outputs [data-agent-output]").first().locator(".ao-required").check();
+
+  let xml = await elementXML(page, "serviceTask", "einordnen");
+  expect(xml).toContain(`timeout="PT20S"`);
+  expect(xml).toMatch(/agentOutput[^>]*name="kategorie"/);
+  expect(xml).toMatch(/agentOutput[^>]*values="Neubau,Sanierung"/);
+  expect(xml).toMatch(/agentOutput[^>]*required="true"/);
+  // The task itself is what it was.
+  expect(xml).toContain(`resultVariable="kategorie"`);
+
+  await page.locator("#agent-outputs .io-map-del").click();
+  xml = await elementXML(page, "serviceTask", "einordnen");
+  expect(xml).not.toMatch(/agentOutput/);
+
+  // A task that asks no model is offered none of this.
+  await open(page, "zinsen_holen");
+  await expect(page.locator("[data-agent-output-group]")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+// --- An MCP task as an agent's tool (ADR-draft-mcp-worker) -------------------------
+//
+// An MCP server's tool reaches an agent the way everything else does: as an activity in
+// the container, named by its element id and described by the modeller. These tests are
+// the Modeler's half of that — the task survives being opened and saved, its fields are
+// the ones the compiler reads, and inside the container it is a tool with parameters.
+test("an MCP task survives being opened and saved, and is a tool of its container", async ({ page }) => {
+  let xml = await elementXML(page, "serviceTask", "fehler_suchen");
+  for (const attr of [`connector="monitoring"`, `tool="search_issues"`, `resultVariable="toolCallResult"`, `timeout="PT30S"`]) {
+    expect(xml).toContain(attr);
+  }
+  expect(xml).toMatch(/mcpConnector[^>]*input="\{&#34;query&#34;:&#34;=dienst&#34;\}"|mcpConnector[^>]*input="\{&quot;query&quot;:&quot;=dienst&quot;\}"/);
+
+  await open(page, "fehler_suchen");
+  // Recognised as an MCP task rather than as a job worker with an unknown extension.
+  await expect(page.locator("#p-body")).toContainText("MCP tool");
+  await expect(page.locator("#f-st-connector")).toHaveValue("monitoring");
+  await expect(page.locator("#f-st-tool")).toHaveValue("search_issues");
+  await expect(page.locator("#f-st-resultVariable")).toHaveValue("toolCallResult");
+  // The Worker field suggests the MCP Workers this server has, and no other kind's.
+  const options = await page.locator("#f-st-connector").evaluate((el) =>
+    [...(el.list ? el.list.options : [])].map((o) => o.value));
+  expect(options).toEqual(["monitoring"]);
+  // In the container it is one of the agent's tools, with the parameter it declares.
+  await expect(page.locator('.pgroup[data-group="Agent tool"]')).toHaveCount(1);
+  await expandGroup(page, "Parameters");
+  await expect(page.locator("#agent-params .ap-name")).toHaveValue("dienst");
+  expect(page.__errors).toEqual([]);
+});
+
+test("editing an MCP task writes what the compiler reads", async ({ page }) => {
+  await open(page, "fehler_suchen");
+  await expand(page, "Tool");
+  await page.locator("#f-st-tool").fill("list_alerts");
+  await page.locator("#f-st-tool").blur();
+  const xml = await elementXML(page, "serviceTask", "fehler_suchen");
+  expect(xml).toContain(`tool="list_alerts"`);
+  // The other fields and the tool's own parameter are what they were.
+  expect(xml).toContain(`connector="monitoring"`);
+  expect(xml).toMatch(/agentParam[^>]*name="dienst"/);
+  expect(page.__errors).toEqual([]);
+});
+

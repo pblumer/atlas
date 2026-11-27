@@ -276,6 +276,25 @@ func startNextAgentRound(c *ProcessingContext, scope uint64, ei *model.ElementIn
 	if d.CompletionCondition != nil && adHocConditionHolds(c, d.CompletionCondition, scope) {
 		return false // the model said how far this goes, and it has gone that far
 	}
+	// The scope can drain while the container is not between rounds at all: an event
+	// subprocess inside it ends while the round is still with the model, or while the
+	// container is parked on an incident. Neither is the end of a round, and asking for
+	// another would put two questions to the model at once, or raise the same incident
+	// twice.
+	if _, open := c.JobOfElement(scope); open {
+		return true
+	}
+	if c.GetIncident(scope) != nil {
+		return true
+	}
+	// A bound the model states — or the ceiling it gets for stating none — is weighed
+	// here and nowhere else, because this is the only place a round after the first is
+	// asked for (ADR-draft-agent-run-record). The fact of the last call says whether it
+	// reached one; a run that ended instead never comes this way.
+	if total := c.AgentRunTotal(ei.ProcessInstanceKey, scope); total.Limit != model.AgentRunLimitNone {
+		parkAgentAtLimit(c, scope, ei, d.AgentLimits, total)
+		return true
+	}
 	createAgentRoundJob(c, scope, ei)
 	return true
 }
@@ -295,7 +314,7 @@ func collectAgentToolResult(c *ProcessingContext, key uint64, ei *model.ElementI
 	}
 	cp := c.process(scope.ProcessDefKey)
 	d := cp.AdHoc(cp.Node(scope.ElementId).Detail)
-	if !d.AgentDriven || d.ResultCollection < 0 {
+	if !d.AgentDriven {
 		return
 	}
 	val := expr.Null
@@ -306,6 +325,13 @@ func collectAgentToolResult(c *ProcessingContext, key uint64, ei *model.ElementI
 		if v, err := d.ResultElement.Eval(bindInputsChain(c, d.ResultElement.Inputs(), key)); err == nil {
 			val = v
 		}
+	}
+	// The result goes on the run's record whether or not the model names a collection:
+	// the collection is the process's own view of it, the record is what the next round
+	// is told its call returned (ADR-draft-agent-transcript-and-answer).
+	recordAgentToolResult(c, ei.FlowScopeKey, key, ei, val)
+	if d.ResultCollection < 0 {
+		return
 	}
 	name := cp.Intern(d.ResultCollection)
 	writeList(c, ei.FlowScopeKey, name, append(readList(c, ei.FlowScopeKey, name), val))

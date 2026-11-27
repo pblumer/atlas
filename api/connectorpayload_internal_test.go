@@ -864,6 +864,7 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"CalendarJobTypeIndex": compiler.CalendarJobTypeIndex,
 
 		"AtlasReportJobTypeIndex": compiler.AtlasReportJobTypeIndex,
+		"MCPJobTypeIndex":         compiler.MCPJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+

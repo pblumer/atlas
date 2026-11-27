@@ -412,11 +412,12 @@ func elementAgentParams(data []byte) map[string][]xmlAgentParam {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if t.Name.Local == "agentParam" {
+			if t.Name.Local == "agentParam" || t.Name.Local == "agentOutput" {
 				var p xmlAgentParam
 				if err := dec.DecodeElement(&p, &t); err != nil {
 					return params
 				}
+				p.output = t.Name.Local == "agentOutput"
 				// DecodeElement consumed this element whole, including its end tag, so
 				// it never enters the owner stack.
 				for i := len(owners) - 1; i >= 0; i-- {
@@ -605,8 +606,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// ad-hoc's tool index (ADR-0253).
 	if len(agentParams) > 0 {
 		specs := make(map[string][]agentParamSpec, len(agentParams))
+		outputs := make(map[string][]agentOutputSpec)
 		for owner, ps := range agentParams {
 			for _, prm := range ps {
+				if prm.output {
+					outputs[owner] = append(outputs[owner], agentOutputSpec{
+						Name: prm.Name, Type: prm.Type, Description: prm.Description,
+						Required: strings.TrimSpace(prm.Required) == "true", Values: prm.Values,
+					})
+					continue
+				}
 				specs[owner] = append(specs[owner], agentParamSpec{
 					Name:        prm.Name,
 					Type:        prm.Type,
@@ -616,6 +625,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 		}
 		b.SetAgentParams(specs)
+		b.agentOutputs = outputs
 	}
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -1855,6 +1865,14 @@ type xmlAgentConnector struct {
 	// separated (ADR-0257). It is the container's alone: an ai
 	// task's prompt is FEEL over the variables it sees, so it carries its own data.
 	Context string `xml:"context,attr"`
+	// The bounds of ADR-0117, read by parseAgentLimits: maxIterations and tokenBudget
+	// bound a container's run, timeout (an ISO-8601 duration) one call to the model.
+	MaxIterations string `xml:"maxIterations,attr"`
+	TokenBudget   string `xml:"tokenBudget,attr"`
+	Timeout       string `xml:"timeout,attr"`
+	// MaxContextTokens bounds how large a container's conversation may grow before
+	// the next round restates the run in words and starts over.
+	MaxContextTokens string `xml:"maxContextTokens,attr"`
 }
 
 // One <atlas:agentParam> on a contained activity: a value the model must supply when it calls
@@ -1865,6 +1883,12 @@ type xmlAgentParam struct {
 	Type        string `xml:"type,attr"`
 	Description string `xml:"description,attr"`
 	Required    string `xml:"required,attr"`
+	// Values and output belong to <atlas:agentOutput>, which is read by the same walk
+	// because it is the same declaration turned round: a typed value the model must
+	// supply, in its answer rather than in a call (ADR-draft-agent-transcript-and-answer).
+	// Values is the comma-separated set a string field is limited to.
+	Values string `xml:"values,attr"`
+	output bool
 }
 
 // foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses
@@ -2483,6 +2507,9 @@ type xmlServiceTask struct {
 	// (ADR-0555 §3): one of Atlas's own read routes folded into a report a form's chart
 	// draws, read with a token a *worker* holds.
 	AtlasReport *xmlAtlasReportConnector `xml:"extensionElements>atlasReportConnector"`
+	// Mcp, when present, marks this service task an MCP task: one call to one tool of
+	// the Model Context Protocol server its Worker is (ADR-draft-mcp-worker).
+	Mcp *xmlMcpConnector `xml:"extensionElements>mcpConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2871,6 +2898,21 @@ type xmlAtlasReportConnector struct {
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
+}
+
+// An MCP task's configuration, carried as an <atlas:mcpConnector> extension
+// (ADR-draft-mcp-worker). connector names the configured MCP Worker — the server, whose
+// endpoint, credential and list of permitted tools live on the Worker, never in the
+// model. tool is the one tool this task calls, by the name the server gives it. input is
+// a JSON object of that tool's arguments, whose string values starting with '=' are FEEL.
+// timeout is an ISO-8601 duration for the one call.
+type xmlMcpConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Tool           string `xml:"tool,attr"`
+	Input          string `xml:"input,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Timeout        string `xml:"timeout,attr"`
+	Retries        string `xml:"retries,attr"`
 }
 
 // xmlWikiConnector is the <atlas:wikiwikibangbangConnector> extension on a service task

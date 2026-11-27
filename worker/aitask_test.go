@@ -64,12 +64,13 @@ func TestAnAiTaskAnswersIntoTheVariableTheModelNamed(t *testing.T) {
 		answer: answering("Dachsanierung"),
 	}}
 
-	vars, err := RunAiTask(context.Background(), aiTaskJob(map[string]any{
+	out, err := RunAiTask(context.Background(), aiTaskJob(map[string]any{
 		"connector": "anthropic_pb", "prompt": "Klassifiziere", "resultVariable": "kategorie",
 	}), models)
 	if err != nil {
 		t.Fatalf("RunAiTask: %v", err)
 	}
+	vars := out.Variables
 	if got := vars["kategorie"]; got != "Dachsanierung" {
 		t.Errorf("variables = %v, want the answer under the authored name", vars)
 	}

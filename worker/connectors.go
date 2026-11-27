@@ -191,10 +191,10 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			})
 			// The same providers serve the ai task, under a job type of its own: one
 			// call, one answer, no tools (ADR-0256). It
-			// completes with variables like every ordinary connector, so the plain
-			// handler shape serves it — the wider one above is the round's, because a
-			// round answers with a choice of activities.
-			built.Handlers[compiler.AiTaskJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+			// completes with variables like every ordinary connector, and with the
+			// account of its one call beside them (ADR-draft-agent-run-record), which
+			// is why it takes the wider handler shape too.
+			built.Handlers[compiler.AiTaskJobType] = CompletingExecFunc(func(ctx context.Context, j Job) (Outcome, error) {
 				return RunAiTask(ctx, j, models)
 			})
 		case "temis":
@@ -604,6 +604,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.AtlasReportJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunAtlasReportJob(ctx, j, reg)
 			})
+		case "mcp":
+			reg, names, err := mcpRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve MCP tasks, holding no server to call: not an error, for
+				// the report kind's reason — the kind is supervised by default.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.MCPJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunMCPJob(ctx, j, reg)
+			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -706,6 +721,7 @@ var endpointKeys = map[string]struct{ prefix, field string }{
 	// The Atlas server a report reads, which may be another installation than the
 	// one that leases the job.
 	"atlasreport": {atlasReportEnvPrefix, "URL"},
+	"mcp":         {mcpEnvPrefix, "URL"},
 }
 
 // noteEndpoints records, for each worker name this worker holds, the endpoint its
@@ -767,7 +783,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "atlasreport", "calendar", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "sharepointserver", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
+	return []string{"ad", "agent", "atlasreport", "calendar", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mcp", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "sharepointserver", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

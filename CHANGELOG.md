@@ -13,6 +13,53 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A process can call a tool of any MCP server.** The new Worker Type *MCP tool* makes a
+  Model Context Protocol server a Worker and one of its tools a service task: the task names
+  the Worker, the tool and the tool's arguments as a JSON object, and the result lands in a
+  process variable. A system that has such a server needs no Worker Type of its own. In an
+  agent-driven ad-hoc subprocess the task is one of the agent's tools, described by the
+  modeller's documentation and never by the server's. **A Worker lists the tools a process may
+  call on it**, each with what a second delivery does and whether its effect can be undone; a
+  tool that is not listed is not called, and the list is empty until somebody fills it.
+  Servers of the current protocol revision (2026-07-28) and of the older ones are both spoken
+  to, over HTTP; a server started as a local program is not supported. Not built yet: reading a
+  server's tool list in the Console, and anything but a fixed token as the credential
+  ([ADR-draft-mcp-worker](docs/adr/draft-mcp-worker.md)).
+- **An agent's run is on the record.** Every call a process makes to a language model — an ai
+  task's one call, or a round of an agent-driven ad-hoc subprocess — now leaves a fact with the
+  instance: which element and which round, the model that answered, why it stopped, how many
+  tokens it read and wrote, and what the element's calls add up to so far. The worker reports
+  what only it can know; the engine numbers the rounds and keeps the sums itself, also for a
+  worker that reports nothing. Read it with `GET /api/v1/instances/{key}/agent-runs` or the MCP
+  tool `atlas_instance_agent_runs`, while the instance runs and after it finished. In a process
+  that declares personal data the prompt and the answer are stored under the data subject's
+  key, so erasing the subject reaches them
+  ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md)).
+- **An agent's answer can be held to a shape.** `<atlas:agentOutput name="…" type="…">` on an ai
+  task or an agent-driven ad-hoc subprocess declares the fields the answer must carry — a
+  string, a number or a boolean, optionally `required`, a string optionally limited to
+  `values`. The model is asked for exactly that object, the worker refuses an answer that is
+  not it, and it is written as one JSON variable, so a gateway can route on
+  `= urteil.entscheid = "ja"`. Without any declared, an answer is text as before. The Modeler
+  edits them under *Answer fields*, on both elements
+  ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)).
+- **Operations shows what an agent did.** The instance replay has an **Agent** tab: per agent
+  what its calls add up to, every call to the model with the model that answered, its tokens
+  and how many came from the cache, the tools it called, and its texts folded until wanted —
+  and under each call what the tools it called returned. A bound that was reached is marked,
+  and texts that were erased or never stored are said to be so rather than left blank.
+- **A long agent run starts its conversation over.** Once a round's request has grown past
+  `maxContextTokens` — 150,000 tokens unless the container states another — the next round is
+  put as a new conversation that restates what the tools returned, the most recent twenty in
+  full, and the rounds after it continue from there. A run whose provider is switched half-way
+  now continues the same way in the new format instead of staying in words to its end.
+- **An agent can be given bounds.** `<atlas:agentConnector>` reads `maxIterations` (rounds),
+  `tokenBudget` (input plus output tokens of the run) and `timeout` (an ISO-8601 duration for
+  one call to the model, also on an ai task). At a bound the container stops asking, stays
+  active and raises an incident that says which bound it reached; resolving the incident grants
+  the same allowance once more. A value that cannot be honoured refuses the deploy on the
+  element that states it. The Modeler has fields for them: *Agent limits* on the container,
+  *Timeout* on an ai task.
 - **A reference pool shows the process it stands for.** In the Modeler, a pool that references a
   deployed process can now show that process: *Show the process in the pool* in the pool's panel
   draws the deployed version inside the pool, grows the pool to hold it and moves what stands
@@ -52,6 +99,23 @@ _Changed_ / _Removed_ for each version.
   process outside the model also receives (ADR-0559, amendment of 2026-11-25).
 
 ### Changed
+- **An agent sees its own run from the second round on.** A round used to be put to the model
+  as a fresh prompt listing what earlier tool calls returned. It is now put as the run
+  happened: the first prompt, the model's own earlier turns unchanged, and each result
+  answering the call that asked for it, with only what is new appended — so the model keeps
+  its reasoning and the provider can reuse what it has already read. Runs that were under way
+  before, a run whose provider is switched, and a run whose texts were erased are still put
+  the old way. The round number a model is told is now the number of calls made, not the
+  number of results plus one, and the process variables an agent is given arrive in name order
+  and are repeated only where they changed. What each tool returned is listed by
+  `GET /api/v1/instances/{key}/agent-runs` as `kind: "toolResult"`.
+- **An agent that states no bound now stops after 25 rounds.** An agent-driven ad-hoc
+  subprocess without `maxIterations` used to run for as long as its model kept choosing tools,
+  bounded only by a completion condition if its model had one. It now parks on an incident
+  after 25 rounds, and after every further 25 once resolved. A model that needs more states
+  `maxIterations`. An ai task's worker now completes with the account of its call as well as
+  its variable, so a custom worker built on `worker.RunAiTask` gets an `Outcome` back instead of
+  a map.
 - **The Interactions link moved into the row's menu.** In the Operations list, the link to who a
   process talks to is no longer shown beside every process name; it is the second entry of the
   row's ⋯ menu, after *Open* (ADR-0559).

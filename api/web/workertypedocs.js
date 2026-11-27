@@ -422,6 +422,18 @@ export const WORKER_TYPE_DOCS = {
     ],
     trap: "workerDoc.atlasreport.trap",
   },
+  mcp: {
+    anchor: "runbook-mcp", title: "workerDoc.mcp.title",
+    checked: "2026-11",
+    needs: "workerDoc.mcp.needs",
+    steps: [
+      "workerDoc.mcp.step1",
+      "workerDoc.mcp.step2",
+      "workerDoc.mcp.step3",
+      "workerDoc.mcp.step4",
+    ],
+    trap: "workerDoc.mcp.trap",
+  },
   wikiwikibangbang: {
     anchor: "runbook-wikiwikibangbang", title: "wikiwikibangbang",
     checked: "2026-10",

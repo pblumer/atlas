@@ -198,6 +198,11 @@ const (
 	// index a person's completed tasks are listed from. Appended last so every prior
 	// value type keeps its numeric value on the log.
 	VTTaskAnswer
+	// VTAgentRun is one fact about an agent's run: a call to a language model, or what
+	// a tool it called returned (ADR-0117, as built by ADR-draft-agent-run-record).
+	// Append-only history keyed under its process instance, like VTDecisionEvaluation.
+	// Appended last so every prior value type keeps its numeric value on the log.
+	VTAgentRun
 )
 
 func (t ValueType) String() string {
@@ -236,6 +241,8 @@ func (t ValueType) String() string {
 		return "ActionApproval"
 	case VTTaskAnswer:
 		return "TaskAnswer"
+	case VTAgentRun:
+		return "AgentRun"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -596,6 +603,11 @@ const (
 	// ADR-0554). It is appended by the job completion's handler, never submitted as a
 	// command. Appended at the end so every prior intent keeps its value.
 	IntentTaskAnswered
+	// IntentAgentRunRecorded is one fact of an agent's run (VTAgentRun): a model call
+	// or a tool's result. It is appended by the handler that completes the job or the
+	// tool, never submitted as a command. Appended at the end so every prior intent
+	// keeps its value.
+	IntentAgentRunRecorded
 )
 
 func (i Intent) String() string {
@@ -740,6 +752,8 @@ func (i Intent) String() string {
 		return "ApprovalRecorded"
 	case IntentTaskAnswered:
 		return "TaskAnswered"
+	case IntentAgentRunRecorded:
+		return "AgentRunRecorded"
 	default:
 		return "Intent(?)"
 	}

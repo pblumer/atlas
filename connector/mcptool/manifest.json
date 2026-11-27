@@ -1,0 +1,17 @@
+{
+  "apiVersion": "atlas.io/v1alpha1",
+  "kind": "WorkerType",
+  "metadata": {"id": "atlas.mcp", "version": "1.0.0", "name": "MCP tool"},
+  "spec": {
+    "atlasCompatibility": ">0.29.0",
+    "workerProtocol": "v1",
+    "runtime": {"mode": "bundled"},
+    "jobTypes": ["io.atlas.mcp"],
+    "operations": [
+      {"id": "call-tool", "jobType": "io.atlas.mcp", "idempotency": "none", "effect": "irreversible"}
+    ],
+    "configurationSchema": "#/spec/configuration",
+    "configuration": {"type": "object", "additionalProperties": false, "properties": {}},
+    "modelerTemplate": "api/repository_catalog/mcp.json"
+  }
+}

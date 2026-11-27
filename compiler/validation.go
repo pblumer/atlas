@@ -327,6 +327,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkDottedTargets(cp)...)
 	ps = append(ps, checkVariableShadowsDataObject(cp)...)
 	ps = append(ps, checkAgentTools(cp)...)
+	ps = append(ps, checkAgentLimits(cp)...)
 	ps = append(ps, checkDecisionBindings(cp)...)
 	ps = append(ps, checkWizards(cp)...)
 	ps = append(ps, checkAnswerLinks(cp)...)

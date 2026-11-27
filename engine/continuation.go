@@ -43,6 +43,7 @@ var continuationCarries = map[string]string{
 	"StartElements": "carried", // which start event fired, for a triggered instantiation
 	"Decision":      "external",
 	"ToolCalls":     "external",
+	"AgentRun":      "external",
 	"Actor":         "external",
 	"Reason":        "external",
 	"Manual":        "external",

@@ -59,6 +59,7 @@ var connectorJobTypes = map[string][]string{
 
 	"wikiwikibangbang": {compiler.WikiwikibangbangJobType},
 	"atlasreport":      {compiler.AtlasReportJobType},
+	"mcp":              {compiler.MCPJobType},
 	"sharepointserver": {compiler.SharePointServerJobType},
 	// Two job types, one kind: create-item keeps the one it always had, and every other
 	// operation rides its own so an older worker is never handed one (ADR-0141, amended).
@@ -140,6 +141,12 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_WIKIWIKIBANGBANG_CONNECTORS":       "wiki",
 			"ATLAS_WIKIWIKIBANGBANG_WIKI_URL":         "https://wiki.example.ch",
 			"ATLAS_WIKIWIKIBANGBANG_WIKI_CREDENTIALS": `{"token":"wwbb_0123456789"}`,
+		}
+	case "mcp":
+		return map[string]string{
+			"ATLAS_MCP_CONNECTORS":             "monitoring",
+			"ATLAS_MCP_MONITORING_URL":         "https://mcp.example.ch/mcp",
+			"ATLAS_MCP_MONITORING_CREDENTIALS": `{"token":"mcp_0123456789"}`,
 		}
 	case "atlasreport":
 		return map[string]string{

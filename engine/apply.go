@@ -638,6 +638,15 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordTaskAnswer(h.Timestamp, h.Position, v.taskAnswer)
 		}
 
+	case model.VTAgentRun:
+		if h.Intent == model.IntentAgentRunRecorded && v.agentRun != nil {
+			// One fact of an agent's run (ADR-draft-agent-run-record). The handler froze
+			// the round, the sums and the bound into the event, so this is two plain
+			// writes and replay rebuilds history and totals without asking a model
+			// (I4/I6).
+			return tx.RecordAgentRun(h.Timestamp, h.Position, v.agentRun)
+		}
+
 	case model.VTActionApproval:
 		if h.Intent == model.IntentApprovalRecorded && v.approval != nil {
 			// One fact about an approval — requested, answered or withdrawn — frozen on

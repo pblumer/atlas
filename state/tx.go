@@ -581,6 +581,8 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		taskAnswerInstancePrefix(piKey),
 		variableAuditScopePrefix(piKey),
 		decisionEvaluationScopePrefix(piKey),
+		agentRunInstancePrefix(piKey),
+		agentRunTotalInstancePrefix(piKey),
 		variablePrefix(piKey),
 		dataObjectPrefix(piKey),
 		dataObjectSnapshotScopePrefix(piKey),

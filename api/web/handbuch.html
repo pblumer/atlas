@@ -8248,6 +8248,58 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         </div>
         <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
+      <div class="card" id="runbook-mcp">
+        <h4 data-l="de">MCP-Server</h4><h4 data-l="en">MCP server</h4>
+        <p data-l="de">Ein MCP-Worker ist ein Server, der das Model Context Protocol spricht. Eine Task ruft
+          <b>ein</b> Werkzeug dieses Servers auf: Sie nennt den Worker, das Werkzeug und dessen Argumente. Damit
+          erreicht ein Prozess jedes System, das einen solchen Server hat, ohne dass Atlas einen eigenen Worker-Typ
+          dafür braucht. In einem agentengesteuerten Ad-hoc-Subprozess ist die Task ein Werkzeug des Agenten
+          (ADR-draft-mcp-worker).</p>
+        <p data-l="en">An MCP worker is a server that speaks the Model Context Protocol. A task calls <b>one</b>
+          tool of that server: it names the Worker, the tool and its arguments. A process thereby reaches any system
+          that has such a server, without Atlas needing a Worker Type of its own for it. In an agent-driven ad-hoc
+          subprocess the task is one of the agent's tools (ADR-draft-mcp-worker).</p>
+        <ol>
+          <li data-l="de">Die MCP-Adresse des Servers ermitteln, eine einzige URL, und ob er ein Token verlangt. Atlas
+            spricht nur Server an, die über HTTP erreichbar sind.</li>
+          <li data-l="en">Find the server's MCP address, a single URL, and whether it asks for a token. Atlas calls
+            only servers reachable over HTTP.</li>
+          <li data-l="de">Verlangt er ein Token: unter <i>Administration → Vault</i> ablegen, als Token selbst oder
+            als Bündel mit dem Feld <code>token</code>. Es wird als Bearer-Token mitgeschickt.</li>
+          <li data-l="en">If it asks for a token: put it under <i>Administration → Vault</i>, as the token itself or
+            as a bundle with the field <code>token</code>. It is sent as a bearer token.</li>
+          <li data-l="de">Unter <i>Workers → New worker</i> den Typ <b>MCP tool</b> wählen, Name, Adresse und
+            Credential-Referenz eintragen und unter <b>Permitted tools</b> die Werkzeuge auflisten, die ein Prozess
+            aufrufen darf: pro Zeile der Name des Werkzeugs, was eine zweite Zustellung desselben Aufrufs bewirkt
+            (<code>natural</code>, <code>key</code>, <code>check</code>, <code>none</code>) und ob eine wiederholte
+            Wirkung rückgängig zu machen ist (<code>reversible</code>, <code>irreversible</code>).</li>
+          <li data-l="en">Under <i>Workers → New worker</i> choose the type <b>MCP tool</b>, enter a name, the address
+            and the credential reference, and under <b>Permitted tools</b> list the tools a process may call: per
+            line the tool's name, what a second delivery of the same call does (<code>natural</code>,
+            <code>key</code>, <code>check</code>, <code>none</code>) and whether a repeated effect can be undone
+            (<code>reversible</code>, <code>irreversible</code>).</li>
+          <li data-l="de">Im Modeler eine Service-Task als <b>MCP tool</b> anlegen: Worker, Werkzeug, Argumente als
+            JSON-Objekt und die Ergebnisvariable.</li>
+          <li data-l="en">In the Modeler make a service task an <b>MCP tool</b>: Worker, tool, arguments as a JSON
+            object and the result variable.</li>
+        </ol>
+        <div class="note">
+          <p data-l="de" style="margin:0">Ein Werkzeug, das nicht auf der Liste des Workers steht, wird nicht
+            aufgerufen; der Job schlägt fehl und nennt Worker und Werkzeug. Die Liste ist leer, bis sie jemand füllt.
+            Die beiden Angaben pro Werkzeug macht, wer den Worker einrichtet, weil nur diese Person das Zielsystem
+            kennt; was der Server über seine eigenen Werkzeuge sagt, übernimmt Atlas nicht.</p>
+          <p data-l="en" style="margin:0">A tool that is not on the Worker's list is not called; the job fails and
+            names the Worker and the tool. The list is empty until somebody fills it. The two statements per tool are
+            made by whoever sets the Worker up, because only that person knows the target system; what the server
+            says about its own tools Atlas does not take over.</p>
+          <p data-l="de" style="margin:.3em 0 0">In einem Agenten liest das Modell die Dokumentation der Task, nicht
+            die Beschreibung des Servers. Was ein Werkzeug zurückgibt, liest es dagegen sehr wohl: Das ist Inhalt aus
+            einem fremden System.</p>
+          <p data-l="en" style="margin:.3em 0 0">In an agent the model reads the task's documentation, not the
+            server's description. What a tool returns it does read: that is content from another system.</p>
+        </div>
+        <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
       <div class="card" id="runbook-wikiwikibangbang">
         <h4>wikiwikibangbang</h4>
         <p data-l="de">Ein wikiwikibangbang-Worker steht für <b>ein Wiki und ein Konto</b> darin. Ein Prozess legt damit

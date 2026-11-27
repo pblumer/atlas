@@ -695,6 +695,22 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 	})
 }
 
+// CompleteJobWithAgentRun completes a job that was a call to a language model — an
+// agent-driven container's round or an ai task — and carries the worker's account of
+// that call (ADR-draft-agent-run-record). toolCalls are a round's choice, as in
+// CompleteJobWithToolCalls; run may be nil. The call is recorded either way: the
+// account only adds what the engine cannot know.
+func (p *Processor) CompleteJobWithAgentRun(jobKey uint64, run *model.AgentRunValue, toolCalls []model.ToolCall, outputs ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+		ToolCalls: toolCalls,
+		AgentRun:  run,
+	})
+}
+
 // CompleteJobWithToolCalls completes an agent-driven ad-hoc subprocess's round job
 // (ADR-0253), carrying the tools the model chose to run next. An empty or nil toolCalls
 // is the agent reporting it is done: the container then completes through the ordinary

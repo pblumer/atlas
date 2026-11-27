@@ -44,7 +44,8 @@
     <bpmn:adHocSubProcess id="agent" name="Beraten">
       <bpmn:documentation>Finde den guenstigsten Hypothekarzins.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:agentConnector connector="anthropic_pb" model="claude-opus-5" context="antrag,kunde" resultCollection="toolCallResults" resultElement="=toolCallResult"/>
+        <atlas:agentConnector connector="anthropic_pb" model="claude-opus-5" context="antrag,kunde" resultCollection="toolCallResults" resultElement="=toolCallResult" maxIterations="6" tokenBudget="40000" timeout="PT90S" maxContextTokens="30000"/>
+        <atlas:agentOutput name="entscheid" type="string" required="true" values="ja,nein" description="Ob es tragbar ist"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
       <bpmn:serviceTask id="zinsen_holen" name="Zinsen holen">
@@ -58,6 +59,13 @@
       <bpmn:serviceTask id="pruefen" name="Pruefen">
         <bpmn:extensionElements><zeebe:taskDefinition type="check"/></bpmn:extensionElements>
         <bpmn:incoming>g0</bpmn:incoming>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="fehler_suchen" name="Fehler suchen">
+        <bpmn:documentation>Sucht im Monitoring nach Fehlern eines Dienstes.</bpmn:documentation>
+        <bpmn:extensionElements>
+          <atlas:mcpConnector connector="monitoring" tool="search_issues" input="{&quot;query&quot;:&quot;=dienst&quot;}" resultVariable="toolCallResult" timeout="PT30S"/>
+          <atlas:agentParam name="dienst" type="string" required="true"/>
+        </bpmn:extensionElements>
       </bpmn:serviceTask>
       <bpmn:serviceTask id="historie_lesen" name="Historie lesen">
         <bpmn:extensionElements><zeebe:taskDefinition type="history"/></bpmn:extensionElements>
@@ -86,6 +94,7 @@
     <bpmndi:BPMNShape id="zinsen_holen_s" bpmnElement="zinsen_holen"><dc:Bounds x="260" y="140" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="pruefen_s" bpmnElement="pruefen"><dc:Bounds x="420" y="140" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="historie_lesen_s" bpmnElement="historie_lesen"><dc:Bounds x="260" y="240" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="fehler_suchen_s" bpmnElement="fehler_suchen"><dc:Bounds x="400" y="240" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="plain_s" bpmnElement="plain" isExpanded="true"><dc:Bounds x="220" y="380" width="280" height="160"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="frei_s" bpmnElement="frei"><dc:Bounds x="260" y="420" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="einordnen_s" bpmnElement="einordnen"><dc:Bounds x="720" y="178" width="100" height="80"/></bpmndi:BPMNShape>
@@ -105,6 +114,7 @@
           { name: "anthropic_pb", kind: "agent", enabled: true },
           { name: "openai_pb", kind: "agent", enabled: true },
           { name: "rules", kind: "temis", enabled: true },
+          { name: "monitoring", kind: "mcp", enabled: true },
         ];
         if (method === "GET" && /\/processes$/.test(url)) return [];
         if (method === "GET" && /\/drafts$/.test(url)) return [];

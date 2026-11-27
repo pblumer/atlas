@@ -36,6 +36,7 @@ import (
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/mcptool"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/s3"
@@ -5828,6 +5829,15 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The account of the model call behind this completion rides beside them
+	// (ADR-draft-agent-run-record). Built here, off the run loop, because sealing its
+	// texts for a process that declares personal data reads the vault (ADR-0314).
+	callReport, err := parseAgentRunReport(body)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	agentRun := s.agentRunFromReport(key, callReport)
 	// Forcing a step the engine would not have taken on its own is an intervention, so
 	// it must say why (ADR-0159). The reason is required — not merely recorded when
 	// offered — because the audit trail is the whole point of this route: without it a
@@ -5949,8 +5959,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case decision != nil:
 				s.proc.CompleteJobWithDecision(key, decision, vars...)
-			case len(calls) > 0:
-				s.proc.CompleteJobWithToolCalls(key, calls, vars...)
+			case jv.JobType == compiler.AgentJobTypeIndex || jv.JobType == compiler.AiTaskJobTypeIndex:
+				// A call to a language model: the round's choice, when it made one, and
+				// the worker's account of the call. Both may be absent — no calls is the
+				// agent's ending, and a worker that reports nothing has still asked a
+				// model, which the engine records from what it knows itself.
+				s.proc.CompleteJobWithAgentRun(key, agentRun, calls, vars...)
 			default:
 				// No calls is the agent's ending, and the ordinary completion is
 				// exactly what it means: the container drains and finishes.
@@ -7302,6 +7316,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		if err != nil {
 			return nil
 		}
+		// What the run's record adds: which round this is, the earlier rounds to put
+		// in front of the model again, and what has changed since it was last told
+		// (ADR-draft-agent-transcript-and-answer).
+		r.Request = agent.WithTranscript(r.Request, s.store, cp, ei.ProcessInstanceKey, jv.ElementInstanceKey,
+			agent.ContextLimit(cp, ei.ElementId), s.openAgentRunForReplay)
 		return &connectorPayload{Kind: "agent", Fields: agent.ResolveJobPayload(r)}
 	}
 	// A *central* business rule task resolves too, so the gate admits both node types
@@ -7738,6 +7757,30 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "atlasreport", Fields: fields}
+	case compiler.MCPJobTypeIndex:
+		// An MCP task resolves like every other: the evaluated arguments travel, and
+		// nothing that says where the server is or how it is spoken to. What this arm
+		// adds is the Worker's say: a tool its list does not permit travels as a
+		// refusal, which the worker honours by making no call
+		// (ADR-draft-mcp-worker).
+		j, err := mcptool.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		j.Refused = s.mcpToolRefusal(j.Connector, j.Tool)
+		raw, err := json.Marshal(j)
+		if err != nil {
+			return nil
+		}
+		// Decoded with its numbers kept as written: an argument is a process value,
+		// and a float64 on the way would round a long identifier.
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		var fields map[string]any
+		if err := dec.Decode(&fields); err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "mcp", Fields: fields}
 	case compiler.WikiwikibangbangJobTypeIndex:
 		// The evaluated values travel, and nothing that says which wiki or as whom
 		// (ADR-0498). So does whether the job has been leased

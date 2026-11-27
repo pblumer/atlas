@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -49,6 +50,11 @@ type Task struct {
 	// as the same one rather than looking like a second question — mail's MessageID
 	// exactly, and for its reason.
 	RequestID string `json:"requestId,omitempty"`
+	// TimeoutMs bounds the one call, in milliseconds, when the task states a timeout
+	// (ADR-draft-agent-run-record); zero leaves the worker's default.
+	TimeoutMs int64 `json:"timeoutMs,omitempty"`
+	// Outputs are the fields the answer must carry; empty means free text.
+	Outputs []Output `json:"outputs,omitempty"`
 }
 
 // ResolveTask turns a compiled ai task into a [Task]: the authored prompt evaluated
@@ -73,6 +79,8 @@ func ResolveTask(store state.Reader, cp *compiler.CompiledProcess, detail *compi
 		Prompt:         resolveValue(detail.AgentPrompt, ei.ProcessInstanceKey, scopeVars),
 		ResultVariable: cp.Intern(detail.ResultVar),
 		RequestID:      strconv.FormatUint(jobKey, 10),
+		TimeoutMs:      timeoutMs(time.Duration(detail.AgentLimits.TimeoutNanos)),
+		Outputs:        outputsOf(cp, detail.AgentOutputs),
 	}, nil
 }
 
@@ -86,6 +94,8 @@ func TaskJobPayload(t Task) map[string]any {
 		"prompt":         t.Prompt,
 		"resultVariable": t.ResultVariable,
 		"requestId":      t.RequestID,
+		"timeoutMs":      t.TimeoutMs,
+		"outputs":        t.Outputs,
 	}
 }
 
@@ -102,6 +112,8 @@ func TaskFromPayload(fields map[string]any) (Task, error) {
 	t.Prompt, _ = fields["prompt"].(string)
 	t.ResultVariable, _ = fields["resultVariable"].(string)
 	t.RequestID, _ = fields["requestId"].(string)
+	t.TimeoutMs = timeoutFromPayload(fields["timeoutMs"]).Milliseconds()
+	t.Outputs = outputsFromPayload(fields["outputs"])
 	if t.Prompt == "" {
 		return Task{}, fmt.Errorf("agent: payload carries no prompt")
 	}
@@ -115,7 +127,7 @@ func TaskFromPayload(fields map[string]any) (Task, error) {
 // there are no tools, and it is round one and only — an adapter offered nothing to call
 // answers in words, which is precisely what an ai task wants.
 func TaskRequest(t Task) Request {
-	return Request{Goal: t.Prompt, Round: 1}
+	return Request{Goal: t.Prompt, Round: 1, Timeout: time.Duration(t.TimeoutMs) * time.Millisecond, Outputs: t.Outputs}
 }
 
 // builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's key,

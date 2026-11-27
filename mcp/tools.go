@@ -819,6 +819,27 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_agent_runs",
+			Description: "Read what one process instance's agents did, in the order it happened: every call to a " +
+				"language model — an ai task's one call, or a round of an agent-driven ad-hoc subprocess — with the " +
+				"element, the round, the model that answered, why it stopped, the tokens it read and wrote " +
+				"(inputTokens counts everything read, cached or not), the element's running totals, the tools the " +
+				"round called, and limit (\"rounds\" or \"tokens\") when the call reached its maxIterations or " +
+				"tokenBudget and the container parked on an incident. Facts of kind \"toolResult\" are what each " +
+				"tool an agent called returned, with the callId it answers. The token counts and the texts are the " +
+				"worker's account; the element, the round, the totals and the bound are the engine's. text is " +
+				"\"clear\", \"erased\" (the data subject's key was destroyed) or \"withheld\". An instance that asked " +
+				"no model (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose model calls to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/agent-runs"))
+			},
+		},
+		{
 			Name: "atlas_cancel_instance",
 			Description: "Cancel (terminate) one running process instance by its instance key. All " +
 				"its tokens are discarded and the instance moves to the 'terminated' state. " +

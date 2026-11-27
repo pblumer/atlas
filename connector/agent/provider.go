@@ -51,6 +51,16 @@ func applyAuth(h http.Header, scheme, key string) error {
 	return nil
 }
 
+// callTimeout is how long one call may take: what the model states on the element when
+// it states anything (ADR-draft-agent-run-record), otherwise the adapter's own setting,
+// which postJSON turns into two minutes when that is unset too.
+func callTimeout(configured time.Duration, req Request) time.Duration {
+	if req.Timeout > 0 {
+		return req.Timeout
+	}
+	return configured
+}
+
 // postJSON is one round trip to a model endpoint. It is shared because the failure
 // half is the part an operator reads: the status is carried into the message because it
 // decides what they do about the incident — 401 is a credential, 429 is capacity, 400

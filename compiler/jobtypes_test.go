@@ -58,6 +58,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 
 		CalendarJobType:    CalendarJobTypeIndex,
 		AtlasReportJobType: AtlasReportJobTypeIndex,
+		MCPJobType:         MCPJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

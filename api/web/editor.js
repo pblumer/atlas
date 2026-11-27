@@ -575,6 +575,71 @@ const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 // rows. Each result carries a "Rule N" badge; a row backed by a decision table is
 // hoverable — data-dec indexes the caller's evaluation list so a shared popover can
 // look the trace back up. Shared by the replay Decisions tab and the live view.
+// --- An instance's agents in the replay (ADR-draft-agent-run-record) ---
+//
+// agentRunsHTML draws what GET /api/v1/instances/{key}/agent-runs answers: per agent —
+// an ai task or an agent-driven container — what its calls add up to, then every call
+// to the model in the order it happened, each followed by what the tools it called
+// returned. labelOf names an element the way the rest of the replay does.
+//
+// It is a pure function of its arguments so the same markup serves any view that has
+// the facts, and so what an operator is shown can be read off one place.
+function agentRunsHTML(runs, labelOf) {
+  if (!runs || !runs.length) return `<p class="ops-empty">${esc(tr("ops.agent.empty"))}</p>`;
+  // Grouped like every other count the Console prints, in the reader's own region.
+  const n = (v) => fmtCount(Number(v || 0));
+  const agents = new Map();
+  for (const r of runs) {
+    if (!agents.has(r.elementInstanceKey)) agents.set(r.elementInstanceKey, []);
+    agents.get(r.elementInstanceKey).push(r);
+  }
+  const callCard = (r) => {
+    const when = r.at ? fmtDateTime(r.at / 1e6) : "";
+    const tokens = tr("ops.agent.tokens", { input: n(r.inputTokens), output: n(r.outputTokens) })
+      + (r.cacheReadTokens ? " · " + tr("ops.agent.cached", { cached: n(r.cacheReadTokens) }) : "");
+    const took = r.durationMs ? ` · ${(r.durationMs / 1000).toFixed(1)} s` : "";
+    const limit = r.limit
+      ? `<span class="agent-limit">${esc(tr(r.limit === "tokens" ? "ops.agent.limitTokens" : "ops.agent.limitRounds"))}</span>` : "";
+    const calls = (r.toolCalls || []).map((c) =>
+      `<span class="pill-kv"><b>${esc(labelOf(c.tool))}</b>${c.callId ? ` <span class="muted">${esc(c.callId)}</span>` : ""}</span>`).join("");
+    // A text that is no longer there is said to be so: an empty box would read as a
+    // model that said nothing.
+    const gone = r.text === "erased" ? tr("ops.agent.erased") : r.text === "withheld" ? tr("ops.agent.withheld") : "";
+    const text = (label, body) => body
+      ? `<details class="fold-sub agent-text"><summary>${esc(label)}</summary><pre>${esc(body)}</pre></details>` : "";
+    const texts = gone
+      ? `<span class="muted">${esc(gone)}</span>`
+      : (text(tr("ops.agent.prompt"), r.prompt) + text(tr("ops.agent.answer"), r.answer) + text(tr("ops.agent.system"), r.system))
+        || `<span class="muted">${esc(tr("ops.agent.noText"))}</span>`;
+    return `<div class="dec-card2">
+      <div class="dec-card2-h"><b>${esc(tr("ops.agent.round", { round: r.round }))}</b>${r.model ? " · " + esc(r.model) : ""}${limit}${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+      <div class="dec-sect2"><span class="dec-sect2-l">${esc(tr("ops.agent.usage"))}</span><span>${esc(tokens)}${esc(took)}${r.stopReason ? ` · <span class="muted">${esc(r.stopReason)}</span>` : ""}</span></div>
+      ${calls ? `<div class="dec-sect2"><span class="dec-sect2-l">${esc(tr("ops.agent.calls"))}</span><div class="in-pills">${calls}</div></div>` : ""}
+      <div class="dec-sect2"><span class="dec-sect2-l">${esc(tr("ops.agent.texts"))}</span><div>${texts}</div></div>
+    </div>`;
+  };
+  const resultRow = (r) => `<div class="agent-result">
+      <span class="agent-result-l">↳ <b>${esc(labelOf(r.elementId))}</b>${r.callId ? ` <span class="muted">${esc(r.callId)}</span>` : ""}</span>
+      <pre>${esc(r.answer || tr("ops.agent.noResult"))}</pre>
+    </div>`;
+  const body = [...agents.values()].map((facts) => {
+    const calls = facts.filter((f) => f.kind !== "toolResult");
+    const last = calls[calls.length - 1] || facts[0];
+    const sum = tr("ops.agent.sum", {
+      rounds: calls.length, input: n(last.totalInputTokens), output: n(last.totalOutputTokens),
+    });
+    return `<div class="dec-group">
+      <div class="dec-group-h">${esc(labelOf(last.elementId))} <span class="agent-sum">${esc(sum)}</span></div>
+      ${facts.map((f) => (f.kind === "toolResult" ? resultRow(f) : callCard(f))).join("")}
+    </div>`;
+  }).join("");
+  const total = runs.filter((r) => r.kind !== "toolResult").length;
+  return `<div class="vp-head">
+      <span class="vp-title">${esc(tr("ops.agent.title"))}</span>
+      <span class="vp-count">${esc(tr("ops.agent.count", { n: total }))}</span>
+    </div>${body}`;
+}
+
 function decCard(d, i) {
   const when = d.at ? fmtDateTime(d.at / 1e6) : "";
   const inEntries = Object.entries(decVal(d.inputs, {}) || {});
@@ -6308,6 +6373,42 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "mcp", name: "MCP tool", group: "Applications",
+    desc: "Call one tool of a Model Context Protocol server: the Worker is the server, the task names the tool and its arguments. In an agent-driven ad-hoc subprocess the task is one of the agent's tools",
+    icon: "M",
+    // A plug on slate: a socket any server of the kind fits, told apart from the
+    // report's teal bars and the wiki's indigo page.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#475569"/><path d="M6 3.2v2.6M10 3.2v2.6" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M4.6 5.8h6.8v1.6a3.4 3.4 0 0 1-6.8 0z" fill="#fff"/><path d="M8 10.8v2" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    ext: "atlas:McpConnector",
+    fields: [
+      { group: "MCP server" },
+      {
+        key: "connector", label: "Worker", datalist: "mcp", placeholder: "monitoring",
+        hint: "The configured MCP Worker this task calls, by its name under Workers in the Console: the server. Where it is and the credential it asks for are the Worker's and reach only the worker, never a model.",
+      },
+      { group: "Tool" },
+      {
+        key: "tool", label: "Tool", placeholder: "search_issues",
+        hint: "The one tool this task calls, by the name the server lists it under. The Worker has to permit it: a tool that is not on the Worker's list of permitted tools is not called, and the job fails saying so.",
+      },
+      {
+        key: "input", label: "Arguments", type: "json", rows: 6,
+        placeholder: "{\n  \"query\": \"=meldung\",\n  \"limit\": 5\n}",
+        hint: "A JSON object of the tool's arguments. A string value starting with = is a FEEL expression over the variables this task sees. Empty for a tool that takes none.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "treffer",
+        hint: "The tool's result is written into this process variable: its structured result when it gives one, its text otherwise. A tool that ran and reported a failure throws the BPMN error MCP_TOOL_ERROR where the process catches it, and fails the job where it does not.",
+      },
+      { group: "Limits" },
+      {
+        key: "timeout", label: "Timeout", placeholder: "PT2M",
+        hint: "How long the call may take, as an ISO-8601 duration between PT1S and PT1H — e.g. PT30S. Empty leaves the worker's own two minutes.",
+      },
+    ],
+  },
+  {
     id: "wikiwikibangbang", name: "wikiwikibangbang", group: "Applications",
     desc: "Open, read, change and move tasks in a wikiwikibangbang wiki, comment on them and find them by a query; create a page, read it as Markdown and append to it",
     icon: "W",
@@ -6658,7 +6759,12 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: "string", placeholder: "kategorie",
-        hint: "The model's answer is written into this process variable. It is required — an answer nothing reads is a call nobody needed.",
+        hint: "The model's answer is written into this process variable. It is required — an answer nothing reads is a call nobody needed. With answer fields declared below, it holds one object carrying exactly those fields.",
+      },
+      { group: "Limits" },
+      {
+        key: "timeout", label: "Timeout", placeholder: "PT2M",
+        hint: "How long the one call to the model may take, as an ISO-8601 duration between PT1S and PT1H — e.g. PT90S. Empty leaves the Worker's own two minutes. A call that runs out fails the job, which is retried and then raises an incident. It must be shorter than the lease of the Worker Instance that makes the call (five minutes unless it was started with another).",
       },
     ],
   },
@@ -7920,6 +8026,103 @@ function saveAgentParams(modeler, element, rows) {
   });
   const others = (ext.values || []).filter((v) => v.$type !== "atlas:AgentParam");
   kept.forEach((p) => (p.$parent = ext));
+  ext.values = [...others, ...kept];
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
+// --- An agent's answer fields (ADR-draft-agent-transcript-and-answer) ---
+//
+// <atlas:agentOutput> is <atlas:agentParam> turned round: a typed value the model must
+// supply, in its answer rather than in a call. It sits on the element that hosts the
+// agent — an ai task or an agent-driven ad-hoc subprocess — and the editor is the
+// parameter editor's shape on purpose, so an author who has declared one knows the other.
+
+// agentAnswerHostOf returns the <atlas:agentConnector> of an element that hosts an agent,
+// or null: an ai task, or an agent-driven ad-hoc subprocess.
+function agentAnswerHostOf(bo) {
+  if (!bo || (bo.$type !== "bpmn:ServiceTask" && bo.$type !== "bpmn:AdHocSubProcess")) return null;
+  return findExt(bo, "atlas:AgentConnector") || null;
+}
+
+function agentOutputsOf(bo) {
+  const ext = bo && bo.extensionElements;
+  return ((ext && ext.values) || []).filter((v) => v.$type === "atlas:AgentOutput");
+}
+
+// Scalars only: a provider's structured output needs every object closed, and an object
+// or a list declared by name alone says nothing about what is inside.
+const AGENT_OUTPUT_TYPES = ["string", "number", "boolean"];
+
+function agentOutputCardHTML(i, o) {
+  const type = AGENT_OUTPUT_TYPES.includes((o && o.type) || "") ? o.type : "string";
+  const required = String((o && o.required) || "") === "true";
+  return `<div class="io-map" data-agent-output data-i="${i}">
+    <div class="io-map-head">
+      <span class="io-map-chevron" aria-hidden="true">▾</span>
+      <span class="io-map-title">${esc((o && o.name) || tr("pnl.task.agent.output"))}</span>
+      <button type="button" class="io-map-del" title="${esc(tr("pnl.task.agent.deleteOutput"))}" aria-label="${esc(tr("pnl.task.agent.deleteOutput"))}">${ioTrashIcon}</button>
+    </div>
+    <div class="io-map-body">
+      <label class="field"><span>Name</span>
+        <input type="text" class="ao-name" value="${esc((o && o.name) || "")}" placeholder="entscheid"
+          title="${esc(tr("pnl.task.agent.outputNameTitle"))}"/></label>
+      <label class="field"><span>${esc(tr("pnl.task.agent.type"))}</span>
+        <select class="ao-type">
+          ${AGENT_OUTPUT_TYPES.map((t) => `<option value="${t}" ${type === t ? "selected" : ""}>${t}</option>`).join("")}
+        </select></label>
+      <label class="field"><span>${esc(tr("pnl.task.agent.outputValues"))}</span>
+        <input type="text" class="ao-values" value="${esc((o && o.values) || "")}" placeholder="ja, nein"
+          title="${esc(tr("pnl.task.agent.outputValuesTitle"))}"/></label>
+      <label class="field"><span>${esc(tr("pnl.task.agent.description"))}</span>
+        <textarea class="ao-desc" rows="2" placeholder="Ob die Finanzierung tragbar ist">${esc((o && o.description) || "")}</textarea></label>
+      <label class="field checkbox"><input type="checkbox" class="ao-required" ${required ? "checked" : ""}/> <span>${esc(tr("pnl.task.agent.required"))}</span></label>
+    </div>
+  </div>`;
+}
+
+// agentOutputsHTML renders the answer fields of an element that hosts an agent as one
+// collapsible group, and nothing for any other element.
+function agentOutputsHTML(bo) {
+  if (!agentAnswerHostOf(bo)) return "";
+  const outputs = agentOutputsOf(bo);
+  const cards = outputs.map((o, i) => agentOutputCardHTML(i, o)).join("");
+  return `<div class="io-group" data-agent-output-group="1" data-group="Answer fields" data-standalone-group="1">
+    <div class="io-group-head">
+      <span class="io-group-title">${esc(tr("pnl.task.agent.outputs"))}</span>
+      <button type="button" class="io-group-add" title="${esc(tr("pnl.task.agent.addOutput"))}" aria-label="${esc(tr("pnl.task.agent.addOutput"))}">＋</button>
+      <span class="io-group-count" title="${esc(tr("pnl.task.agent.outputs"))}">${outputs.length}</span>
+      <span class="io-group-chevron" aria-hidden="true">▾</span>
+    </div>
+    <div class="io-group-body">
+      <div class="io-map-list" id="agent-outputs">${cards}</div>
+      <p class="muted io-group-hint">${tr("pnl.task.agent.outputsHint")}</p>
+    </div>
+  </div>`;
+}
+
+// saveAgentOutputs rebuilds an element's <atlas:agentOutput> declarations from the panel
+// rows. A row with no name is dropped; `required`, `values` and `description` are written
+// only when they say something. `values` belongs to a string field alone, so it is not
+// written for any other type — the compiler refuses it there.
+function saveAgentOutputs(modeler, element, rows) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) {
+    ext = moddle.create("bpmn:ExtensionElements", { values: [] });
+    ext.$parent = bo;
+  }
+  const kept = rows.filter((r) => (r.name || "").trim() !== "").map((r) => {
+    const props = { name: r.name.trim(), type: r.type };
+    if ((r.description || "").trim() !== "") props.description = r.description.trim();
+    if (r.required) props.required = "true";
+    const values = (r.values || "").split(",").map((v) => v.trim()).filter(Boolean).join(",");
+    if (values !== "" && r.type === "string") props.values = values;
+    return moddle.create("atlas:AgentOutput", props);
+  });
+  const others = (ext.values || []).filter((v) => v.$type !== "atlas:AgentOutput");
+  kept.forEach((o) => (o.$parent = ext));
   ext.values = [...others, ...kept];
   modeling.updateProperties(element, { extensionElements: ext });
 }
@@ -11127,6 +11330,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // What this activity is to the agent, when it sits in an agent-driven ad-hoc
         // (ADR-0253). Empty everywhere else.
         html += agentToolHTML(bo);
+        // The fields an ai task's answer must carry
+        // (ADR-draft-agent-transcript-and-answer). Empty for every other task.
+        if (bo.$type === "bpmn:ServiceTask") html += agentOutputsHTML(bo);
         // Generic zeebe:ioMapping input/output editor for job-backed activities
         // (ADR-0068). A business rule task's ioMapping inputs are decision inputs
         // with their own editor above, so it is excluded here.
@@ -11192,6 +11398,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <label class="field"><span>${esc(tr("pnl.main.adhoc.mayRead"))}</span>
               <input type="text" id="f-agent-context" value="${esc(ac.context || "")}" placeholder="dossier, kunde"/></label>
             <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.readHint")}</p>
+            <h3 data-group="Agent limits">${esc(tr("bpmn.group.agentLimits"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.maxIterations"))}</span>
+              <input type="number" id="f-agent-maxiter" min="1" step="1" value="${esc(ac.maxIterations || "")}" placeholder="25"/></label>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.tokenBudget"))}</span>
+              <input type="number" id="f-agent-budget" min="1" step="1" value="${esc(ac.tokenBudget || "")}" placeholder="${esc(tr("pnl.main.adhoc.noBound"))}"/></label>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.timeout"))}</span>
+              <input type="text" id="f-agent-timeout" value="${esc(ac.timeout || "")}" placeholder="PT2M" spellcheck="false"/></label>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.maxContext"))}</span>
+              <input type="number" id="f-agent-maxctx" min="1" step="1" value="${esc(ac.maxContextTokens || "")}" placeholder="150000"/></label>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.limitsHint")}</p>
+            ${agentOutputsHTML(bo)}
             <h3 data-group="Tool results">${esc(tr("bpmn.group.toolResults"))}</h3>
             <label class="field"><span>${esc(tr("pnl.main.adhoc.collectInto"))}</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
@@ -13139,8 +13356,23 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           context: (fagentctx.value || "").trim() || undefined,
           resultCollection: (fagentcoll.value || "").trim() || undefined,
           resultElement: elem === "" ? undefined : (elem.startsWith("=") ? elem : "= " + elem),
+          // A bound left empty is written as absent: the compiler reads a missing
+          // attribute as "not stated", and an empty one would be a second way to say
+          // it (ADR-draft-agent-run-record).
+          maxIterations: limitValue("#f-agent-maxiter"),
+          tokenBudget: limitValue("#f-agent-budget"),
+          timeout: limitValue("#f-agent-timeout"),
+          maxContextTokens: limitValue("#f-agent-maxctx"),
         });
       });
+      const limitValue = (sel) => {
+        const el = body.querySelector(sel);
+        return (el && (el.value || "").trim()) || undefined;
+      };
+      for (const sel of ["#f-agent-maxiter", "#f-agent-budget", "#f-agent-timeout", "#f-agent-maxctx"]) {
+        const el = body.querySelector(sel);
+        if (el) el.addEventListener("change", saveAgent);
+      }
       fagentconn.addEventListener("change", saveAgent);
       fagentmodel.addEventListener("change", saveAgent);
       fagentctx.addEventListener("change", saveAgent);
@@ -13150,6 +13382,60 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         body.querySelector("#nt-agent-connector"), "agent");
     }
 
+    // An agent's answer fields (ADR-draft-agent-transcript-and-answer): the parameter
+    // group's behaviour below, for the declarations of what comes back.
+    const aoGroup = body.querySelector("[data-agent-output-group]");
+    if (aoGroup) {
+      const aoList = aoGroup.querySelector("#agent-outputs");
+      const readOutputs = () => [...aoList.querySelectorAll("[data-agent-output]")].map((card) => ({
+        name: card.querySelector(".ao-name").value,
+        type: card.querySelector(".ao-type").value,
+        values: card.querySelector(".ao-values").value,
+        description: card.querySelector(".ao-desc").value,
+        required: card.querySelector(".ao-required").checked,
+      }));
+      const saveOutputs = () => savePreservingPanel(() => saveAgentOutputs(modeler, element, readOutputs()));
+      const countOutputs = () => {
+        const c = aoGroup.querySelector(".io-group-count");
+        if (c) c.textContent = String(aoList.querySelectorAll("[data-agent-output]").length);
+      };
+      const wireOutput = (card) => {
+        const name = card.querySelector(".ao-name");
+        const title = card.querySelector(".io-map-title");
+        card.querySelector(".io-map-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-map-del")) return;
+          card.classList.toggle("collapsed");
+        });
+        name.addEventListener("input", () => { title.textContent = name.value.trim() || tr("pnl.task.agent.output"); });
+        for (const sel of [".ao-name", ".ao-type", ".ao-values", ".ao-desc", ".ao-required"]) {
+          card.querySelector(sel).addEventListener("change", saveOutputs);
+        }
+        card.querySelector(".io-map-del").addEventListener("click", (e) => {
+          e.stopPropagation();
+          card.remove();
+          countOutputs();
+          saveOutputs();
+        });
+      };
+      [...aoList.querySelectorAll("[data-agent-output]")].forEach(wireOutput);
+      aoGroup.classList.toggle("collapsed", groupCtl.isCollapsed(aoGroup.dataset.group || ""));
+      aoGroup.querySelector(".io-group-head").addEventListener("click", (e) => {
+        if (e.target.closest(".io-group-add")) return;
+        groupCtl.onToggle((aoGroup.dataset.group || "").trim(), aoGroup.classList.toggle("collapsed"));
+      });
+      aoGroup.querySelector(".io-group-add").addEventListener("click", (e) => {
+        e.stopPropagation();
+        aoGroup.classList.remove("collapsed");
+        groupCtl.onToggle((aoGroup.dataset.group || "").trim(), false);
+        const tmp = document.createElement("div");
+        tmp.innerHTML = agentOutputCardHTML(aoList.querySelectorAll("[data-agent-output]").length, { type: "string" });
+        const card = tmp.firstElementChild;
+        aoList.appendChild(card);
+        wireOutput(card);
+        countOutputs();
+        card.querySelector(".ao-name").focus();
+      });
+    }
     // A tool's declared parameters (ADR-0253). The group behaves like an I/O mapping
     // group — add, delete, collapse — because it is the same shape and an author has
     // already learned it.
@@ -16912,11 +17198,13 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
             <button data-tab="variables" title="Show the process variables at this step">Variables</button>
             <button data-tab="decisions" title="Show the decisions evaluated at this step">Decisions</button>
             <button data-tab="data" title="Show the data objects this instance carries, their state, and where each value came from">Data</button>
+            <button data-tab="agent" title="${esc(tr("ops.agent.tabTitle"))}">${esc(tr("ops.agent.tab"))}</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
           <div class="ops-tab-body" id="tab-decisions" hidden></div>
           <div class="ops-tab-body" id="tab-data" hidden></div>
+          <div class="ops-tab-body" id="tab-agent" hidden></div>
         </div>
       </div>
       ${valueWindowHTML()}
@@ -17038,6 +17326,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   const detailEl = root.querySelector("#tab-details");
   const varsEl = root.querySelector("#tab-variables");
   const decEl = root.querySelector("#tab-decisions");
+  const agentEl = root.querySelector("#tab-agent");
   const dataEl = root.querySelector("#tab-data");
   const decPop = root.querySelector("#dec-pop");
   const refPop = root.querySelector("#ref-pop");
@@ -17116,6 +17405,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   let incidentTotal = 0;
   let incidentsByElement = new Map();
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
+  let agentRuns = [];    // this instance's model calls and tool results (ADR-draft-agent-run-record)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
   let openTrails = {};   // data-object name → whether its state trail is expanded
@@ -18499,7 +18789,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     renderDataObjects();
   });
 
-  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); renderDataObjects(); }
+  // renderAgentRuns draws the Agent tab: what the instance's agents asked a model, what
+  // that cost and what came back. It names an element as the Data tab does.
+  function renderAgentRuns() { agentEl.innerHTML = agentRunsHTML(agentRuns, doLabel); }
+
+  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); renderDataObjects(); renderAgentRuns(); }
 
   function updateClock() {
     if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
@@ -19294,6 +19588,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     await loadRuntime();
     await refreshDecisions();
     await refreshDataObjects();
+    await refreshAgentRuns();
   }
 
   // refreshDataObjects pulls the instance's data objects and re-renders the tab when
@@ -19331,6 +19626,20 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     if (next.length === decisions.length) return; // nothing new
     decisions = next;
     renderDecisions();
+  }
+
+  // refreshAgentRuns pulls the instance's model calls and re-renders the tab when there
+  // are more of them, so a running agent's rounds appear as they complete. The facts are
+  // append-only, so a count that has not moved means nothing has.
+  async function refreshAgentRuns() {
+    let next;
+    try { next = await api("GET", `/api/v1/instances/${key}/agent-runs`); }
+    catch { return; } // transient; keep what we have
+    if (current !== viewer) return;
+    next = next || [];
+    if (next.length === agentRuns.length) return;
+    agentRuns = next;
+    renderAgentRuns();
   }
 
   // Selecting an element in the diagram inspects it, the same as a history click.
@@ -19428,6 +19737,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     varsEl.hidden = activeTab !== "variables";
     decEl.hidden = activeTab !== "decisions";
     dataEl.hidden = activeTab !== "data";
+    agentEl.hidden = activeTab !== "agent";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   // The in/out card can cover whatever the modeler drew below a task, so it is the

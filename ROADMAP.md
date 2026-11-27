@@ -1016,6 +1016,45 @@ Making processes wait, react, and time out.
   ([ADR-0098](docs/adr/0098-external-variable-modification-audit.md)), read via
   `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
   timeline so a corrected value carries its actor.
+- ✅ **An agent's run on the record, and bounded** ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md),
+  completing [ADR-0117](docs/adr/0117-ai-agent-task.md)): every call to a language model — an ai
+  task's one call, a round of an agent-driven container — leaves an `AgentRun` fact beside its
+  job's completion: element, round, the model that answered, the tokens it read and wrote, the
+  element's running sums. The worker accounts for the call, the **engine** numbers the round and
+  keeps the sums, so a worker cannot hide a round. `<atlas:agentConnector>` reads
+  `maxIterations`, `tokenBudget` and `timeout`; a container that states no bound gets 25 rounds.
+  At a bound the container **parks on an incident** and resolving it grants the same allowance
+  again — the standard loop's runaway rule (ADR-0133) applied to a loop whose every turn is paid
+  for. A process that declares personal data keeps a call's texts under the data subject's key
+  (ADR-0314). Read over `GET /api/v1/instances/{key}/agent-runs` and MCP
+  `atlas_instance_agent_runs`, and in Operations on the **Agent** tab of the instance replay:
+  per agent what its calls add up to, each call with its model, tokens and texts, and each
+  tool's result under the call that asked for it. The bounds are fields in the Modeler.
+- ✅ **An agent is shown its own run again, and its answer has a shape**
+  ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)): from
+  its second round on, a round is put to the model as the run happened — the first prompt, each
+  of the model's own turns unchanged, and the result of every call answering that call — instead
+  of a fresh prompt retelling the results. The turn is kept on the run's record, opaque to the
+  engine, with a fact for what each tool returned; a turn in another provider's format, or one
+  that can no longer be read, falls back to the results in words. Rounds are sent cacheable, the
+  round number is the record's, and the context is put in name order and told again only where
+  it changed. `<atlas:agentOutput>` declares the fields an answer must carry (string, number,
+  boolean, a set of values): both formats are asked for the object, the **worker checks it**,
+  and it lands as one JSON variable a gateway can route on; the Modeler edits the fields on
+  both hosts. A conversation that outgrows `maxContextTokens` (150,000 unless stated) is
+  **begun again**: the next round restates the run in words and later rounds are replayed from
+  there — appended to or started over, never edited.
+- ✅ **A tool of any MCP server as a task** ([ADR-draft-mcp-worker](docs/adr/draft-mcp-worker.md)):
+  the Worker Type `mcp` makes a Model Context Protocol server a Worker and one of its tools a
+  service task (`<atlas:mcpConnector connector tool input resultVariable timeout>`). At the root
+  of an agent-driven container the task is one of the agent's tools — so an agent reaches an
+  MCP server through the diagram, one modelled activity per tool, and reads the modeller's
+  description of it rather than the server's. **A Worker lists the tools a process may call**,
+  each with ADR-0538's idempotency and effect, stated by whoever configures it; the server
+  checks the list where a job is resolved, and a tool that is not on it is not called. The
+  client is written by hand, speaks the 2026-07-28 revision first and falls back to the older
+  handshake. 🔲 Not built: reading a server's tool list at design time, the client-credentials
+  grant, documents as results, a server started as a local process.
 
 - ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
   published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered

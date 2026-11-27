@@ -1167,6 +1167,14 @@ type ConnectorTaskDetail struct {
 	// (ADR-0253), not this.
 	AgentModel  int32
 	AgentPrompt RestExpr
+	// AgentLimits is the ai task's authored timeout for its one call
+	// (ADR-draft-agent-run-record); its run bounds are a container's and stay zero.
+	AgentLimits AgentLimits
+	// AgentOutputs are the fields the task's answer must carry, in the order they were
+	// authored; empty means the answer is free text. AgentOutputProblems is what was
+	// wrong with the declarations (ADR-draft-agent-transcript-and-answer).
+	AgentOutputs        []AgentOutput
+	AgentOutputProblems []string
 	// Object-store fields (JobType == S3JobType, ADR-0442).
 	// Connector (above) names the configured S3 Worker — the field keeps that name
 	// because the BPMN attribute it is read from does; its access key lives in the
@@ -1331,6 +1339,15 @@ type ConnectorTaskDetail struct {
 	AtlasReportConnector RestExpr
 	AtlasReportOp        int32
 	AtlasReportInput     RestExpr
+	// MCP task fields (JobType == MCPJobType, ADR-draft-mcp-worker). Connector (above)
+	// names the configured MCP Worker — the server; McpConnector is that name as an
+	// expression when the task computes it. McpTool is the interned name of the one tool
+	// the task calls, McpInput its arguments as a FEEL context, and McpTimeoutNanos how
+	// long the call may take, 0 for the worker's own bound.
+	McpConnector    RestExpr
+	McpTool         int32
+	McpInput        RestExpr
+	McpTimeoutNanos int64
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
@@ -1590,10 +1607,17 @@ type AdHocDetail struct {
 	// Names rather than values: what an agent may reach is the diagram (ADR-0253), and
 	// what it may read is in the diagram for the same reason. A reviewer reads the
 	// element and sees what leaves the process.
-	AgentContext     []int32
-	ResultCollection int32 // interned variable name a tool result is appended to, -1 if none
-	ResultElement    *expr.Compiled
-	Tools            []AgentTool
+	AgentContext []int32
+	// AgentLimits bound the run: how many rounds, how many tokens, and how long one
+	// call to the model may take (ADR-draft-agent-run-record).
+	AgentLimits AgentLimits
+	// AgentOutputs are the fields the agent's final answer must carry; empty means the
+	// answer is free text (ADR-draft-agent-transcript-and-answer).
+	AgentOutputs        []AgentOutput
+	AgentOutputProblems []string
+	ResultCollection    int32 // interned variable name a tool result is appended to, -1 if none
+	ResultElement       *expr.Compiled
+	Tools               []AgentTool
 }
 
 // AgentTool is one contained entry activity offered to the model as a tool

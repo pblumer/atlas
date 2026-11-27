@@ -3297,6 +3297,23 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .var-panel.side .dec-card2 { margin-left: 14px; margin-right: 14px; }
 .var-panel.side .dec-card2:first-of-type { margin-top: 12px; }
 
+/* Agent tab (ADR-draft-agent-run-record): the shared .dec-* cards, one per call to a
+   model, each followed by what the tools it called returned. */
+.ops-tab-body .agent-sum { font-weight: 400; margin-left: 6px; }
+.agent-limit {
+  margin-left: 8px; padding: 1px 6px; border-radius: 9px;
+  font: 600 10.5px/1.6 system-ui, sans-serif; color: #8a4b00; background: #fff1d6;
+}
+.agent-text { margin-bottom: 4px; }
+.agent-text summary { cursor: pointer; font: 600 12px/1.6 system-ui, sans-serif; color: var(--accent-text); }
+.agent-text pre, .agent-result pre {
+  margin: 4px 0 0; padding: 6px 8px; border-radius: var(--radius); background: var(--bg-soft, rgba(127, 127, 127, 0.08));
+  font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word;
+  max-height: 260px; overflow: auto;
+}
+.agent-result { margin: 0 0 8px 14px; }
+.agent-result-l { font: 12px/1.5 system-ui, sans-serif; }
+
 /* Execution-count badge Operate draws at a node's corner. */
 .ops-badge {
   display: inline-grid; grid-auto-flow: column; place-items: center; gap: 3px;
