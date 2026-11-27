@@ -32,7 +32,7 @@ const (
 
 func twoRounds() recordedRuns {
 	return recordedRuns{
-		{Round: 1, Wire: WireMessages, Turn: turnOne, Prompt: "Goal: prüfe", Context: `{"dossier":"D1","kunde":"K"}`},
+		{Round: 1, Fresh: true, Wire: WireMessages, Turn: turnOne, Prompt: "Goal: prüfe", Context: `{"dossier":"D1","kunde":"K"}`},
 		{Kind: model.AgentRunToolResult, Round: 1, CallId: "t1", Answer: "sieben"},
 		{Round: 2, Wire: WireMessages, Turn: turnTwo, Prompt: "", Context: `{"dossier":"D1","kunde":"K"}`},
 		{Kind: model.AgentRunToolResult, Round: 2, CallId: "t3", Answer: ""},
@@ -56,7 +56,7 @@ func emptyProcess(t *testing.T) *compiler.CompiledProcess {
 func TestARoundIsGivenItsRunsTranscript(t *testing.T) {
 	cp := emptyProcess(t)
 	req := Request{Goal: "prüfe", Tools: oneTool, Round: 1, Context: map[string]string{"dossier": "D2", "kunde": "K", "neu": "x"}}
-	got := WithTranscript(req, twoRounds(), cp, 1, 2, openClear)
+	got := WithTranscript(req, twoRounds(), cp, 1, 2, 150000, openClear)
 	if got.Round != 3 || len(got.History) != 2 {
 		t.Fatalf("round %d with %d past rounds, want round 3 with 2", got.Round, len(got.History))
 	}
@@ -69,18 +69,18 @@ func TestARoundIsGivenItsRunsTranscript(t *testing.T) {
 	}
 
 	// No record yet: the round is what it was.
-	if first := WithTranscript(req, recordedRuns{}, cp, 1, 2, openClear); first.Round != 1 || first.History != nil {
+	if first := WithTranscript(req, recordedRuns{}, cp, 1, 2, 150000, openClear); first.Round != 1 || first.History != nil {
 		t.Errorf("a first round = %+v", first)
 	}
 	// A round whose texts cannot be read back is counted and not replayed.
 	sealed := func(*model.AgentRunValue) (string, string, string, bool) { return "", "", "", false }
-	if blind := WithTranscript(req, twoRounds(), cp, 1, 2, sealed); blind.Round != 3 || blind.History != nil || blind.Changed != nil {
+	if blind := WithTranscript(req, twoRounds(), cp, 1, 2, 150000, sealed); blind.Round != 3 || blind.History != nil || blind.Changed != nil {
 		t.Errorf("an unreadable run = round %d, history %v", blind.Round, blind.History)
 	}
 	// So is one recorded before turns were kept.
 	old := twoRounds()
 	old[0].Turn, old[0].Wire = "", ""
-	if legacy := WithTranscript(req, old, cp, 1, 2, openClear); legacy.Round != 3 || legacy.History != nil {
+	if legacy := WithTranscript(req, old, cp, 1, 2, 150000, openClear); legacy.Round != 3 || legacy.History != nil {
 		t.Errorf("a run without stored turns = round %d, history %v", legacy.Round, legacy.History)
 	}
 }
@@ -88,7 +88,7 @@ func TestARoundIsGivenItsRunsTranscript(t *testing.T) {
 func replayRequest(t *testing.T) Request {
 	t.Helper()
 	req := Request{Goal: "prüfe", Tools: oneTool, Round: 1, Context: map[string]string{"dossier": "D2", "kunde": "K"}}
-	return WithTranscript(req, twoRounds(), emptyProcess(t), 1, 2, openClear)
+	return WithTranscript(req, twoRounds(), emptyProcess(t), 1, 2, 150000, openClear)
 }
 
 // The Messages format is handed the run as it happened: the first prompt, each of the
@@ -180,7 +180,7 @@ func TestChatCompletionsReplaysTheRunAsItHappened(t *testing.T) {
 		{Kind: model.AgentRunToolResult, Round: 1, CallId: "c1", Answer: "sieben"},
 	}
 	req := WithTranscript(Request{Goal: "prüfe", Tools: oneTool, Round: 1, Context: map[string]string{"dossier": "D2"}},
-		runs, emptyProcess(t), 1, 2, openClear)
+		runs, emptyProcess(t), 1, 2, 150000, openClear)
 	var sent map[string]any
 	c := &ChatCompletionsModel{APIKey: "k", Model: "gpt", Endpoint: recordingEndpoint(t,
 		`{"choices":[{"finish_reason":"tool_calls","message":{"content":null,"refusal":null,
@@ -232,5 +232,103 @@ func TestTheTranscriptTravelsInThePayload(t *testing.T) {
 	}
 	if got := historyFromPayload(7); got != nil {
 		t.Errorf("a payload of the wrong shape = %v", got)
+	}
+}
+
+// A run whose last request outgrew its bound is not continued: the next round is put as
+// a new conversation that restates what the calls returned, from the record — and the
+// rounds after that one are replayed from it, not from round one.
+func TestARunPastItsContextBoundStartsItsConversationOver(t *testing.T) {
+	cp := emptyProcess(t)
+	runs := twoRounds()
+	runs[2].InputTokens = 200_000
+	req := Request{Goal: "prüfe", Tools: oneTool, Round: 1, Context: map[string]string{"kunde": "K"}}
+
+	over := WithTranscript(req, runs, cp, 1, 2, 150_000, openClear)
+	if over.History != nil || over.Changed != nil || over.Round != 3 {
+		t.Fatalf("past the bound: history %v, round %d, want none and round 3", over.History, over.Round)
+	}
+	if len(over.Results) != 2 || over.Results[0] != "sieben" {
+		t.Errorf("results = %v, want what the calls returned, from the record", over.Results)
+	}
+	m := &HTTPModel{}
+	if !strings.Contains(m.said(over), "Your earlier tool calls returned") || m.continues(over) {
+		t.Errorf("the round is not put as a new conversation: %q", m.said(over))
+	}
+	// Under a wider bound the same run is simply continued.
+	if within := WithTranscript(req, runs, cp, 1, 2, 250_000, openClear); len(within.History) != 2 {
+		t.Errorf("within the bound: %d past rounds, want 2", len(within.History))
+	}
+
+	// Round three was put fresh and recorded so. Round four is replayed from it.
+	runs = append(runs, model.AgentRunValue{Round: 3, Fresh: true, Wire: WireMessages, Turn: turnTwo,
+		Prompt: "Goal: prüfe\n\nThis is round 3.", InputTokens: 9_000, Context: `{"kunde":"K"}`})
+	next := WithTranscript(req, runs, cp, 1, 2, 150_000, openClear)
+	if next.Round != 4 || len(next.History) != 1 || next.History[0].Said != "Goal: prüfe\n\nThis is round 3." {
+		t.Fatalf("after the restart: round %d, history %+v, want round 4 replayed from round 3", next.Round, next.History)
+	}
+	if got := m.turns(next); len(got) != 3 || got[0].Content != "Goal: prüfe\n\nThis is round 3." {
+		t.Errorf("turns = %v, want the restated prompt, round 3's turn and its results", got)
+	}
+}
+
+// Restating repeats the most recent results and counts the rest.
+func TestRestatingALongRunRepeatsOnlyItsRecentResults(t *testing.T) {
+	var results []string
+	for i := 0; i < restatedResults+5; i++ {
+		results = append(results, "r")
+	}
+	got := restate(results)
+	if len(got) != restatedResults+1 || got[0] != "(5 earlier results are not repeated here)" {
+		t.Errorf("restated %d entries starting %q, want the note and the last %d", len(got), got[0], restatedResults)
+	}
+	if short := restate(results[:3]); len(short) != 3 {
+		t.Errorf("a short run = %v, want it whole", short)
+	}
+}
+
+// An adapter says whether it put the call as a new conversation, which is what the next
+// round is replayed from.
+func TestACallSaysWhetherItBeganANewConversation(t *testing.T) {
+	var sent map[string]any
+	m := &HTTPModel{APIKey: "k", Endpoint: recordingEndpoint(t, `{"content":[{"type":"text","text":"ok"}]}`, &sent)}
+	first, err := m.Decide(context.Background(), Request{Goal: "g", Tools: oneTool, Round: 1})
+	if err != nil || !first.Call.Fresh {
+		t.Errorf("a first round: fresh=%v, %v, want fresh", first.Call.Fresh, err)
+	}
+	later, err := m.Decide(context.Background(), replayRequest(t))
+	if err != nil || later.Call.Fresh {
+		t.Errorf("a replayed round: fresh=%v, %v, want a continuation", later.Call.Fresh, err)
+	}
+	c := &ChatCompletionsModel{APIKey: "k", Model: "gpt", Endpoint: recordingEndpoint(t,
+		`{"choices":[{"finish_reason":"stop","message":{"content":"ok"}}]}`, &sent)}
+	// A run recorded in the other format is begun again in this one.
+	switched, err := c.Decide(context.Background(), replayRequest(t))
+	if err != nil || !switched.Call.Fresh {
+		t.Errorf("a round after a change of provider: fresh=%v, %v, want fresh", switched.Call.Fresh, err)
+	}
+}
+
+func TestTheContextBoundIsTheContainers(t *testing.T) {
+	cp := emptyProcess(t)
+	if got := ContextLimit(cp, 0); got != compiler.SafeAgentContextTokens {
+		t.Errorf("an element that is no container = %d, want the default", got)
+	}
+	bl := compiler.NewBuilder(1, "p", 1)
+	s := bl.AddStartEvent()
+	adhoc := bl.AddAdHocSubProcess(compiler.AdHocDetail{AgentDriven: true, AgentWorker: -1, ResultCollection: -1,
+		CancelRemaining: true, AgentLimits: compiler.AgentLimits{MaxContextTokens: 5000}})
+	e := bl.AddEndEvent()
+	bl.Connect(s, adhoc)
+	bl.Connect(adhoc, e)
+	bl.PushScope(adhoc)
+	bl.AddServiceTask("t", 3)
+	bl.PopScope()
+	built, err := bl.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got := ContextLimit(built, adhoc); got != 5000 {
+		t.Errorf("limit = %d, want the container's 5000", got)
 	}
 }

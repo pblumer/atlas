@@ -22,7 +22,9 @@
 > container rather than by a worker, since [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md)
 > moved the loop into the process. The output schema is built by
 > [ADR-draft-agent-transcript-and-answer](draft-agent-transcript-and-answer.md) as declared
-> answer fields (`<atlas:agentOutput>`), checked by the worker. Not built: the Operations view.
+> answer fields (`<atlas:agentOutput>`), checked by the worker, and the Operations view as
+> the **Agent** tab of the instance replay. With that, everything this record named is built;
+> the state line above stays as the reconciliation of 2026-10-11 left it until that is reviewed.
 
 ## Context and problem statement
 

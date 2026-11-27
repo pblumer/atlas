@@ -7318,7 +7318,8 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// What the run's record adds: which round this is, the earlier rounds to put
 		// in front of the model again, and what has changed since it was last told
 		// (ADR-draft-agent-transcript-and-answer).
-		r.Request = agent.WithTranscript(r.Request, s.store, cp, ei.ProcessInstanceKey, jv.ElementInstanceKey, s.openAgentRunForReplay)
+		r.Request = agent.WithTranscript(r.Request, s.store, cp, ei.ProcessInstanceKey, jv.ElementInstanceKey,
+			agent.ContextLimit(cp, ei.ElementId), s.openAgentRunForReplay)
 		return &connectorPayload{Kind: "agent", Fields: agent.ResolveJobPayload(r)}
 	}
 	// A *central* business rule task resolves too, so the gate admits both node types

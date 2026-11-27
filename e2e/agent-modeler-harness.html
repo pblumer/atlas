@@ -44,7 +44,8 @@
     <bpmn:adHocSubProcess id="agent" name="Beraten">
       <bpmn:documentation>Finde den guenstigsten Hypothekarzins.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:agentConnector connector="anthropic_pb" model="claude-opus-5" context="antrag,kunde" resultCollection="toolCallResults" resultElement="=toolCallResult"/>
+        <atlas:agentConnector connector="anthropic_pb" model="claude-opus-5" context="antrag,kunde" resultCollection="toolCallResults" resultElement="=toolCallResult" maxIterations="6" tokenBudget="40000" timeout="PT90S" maxContextTokens="30000"/>
+        <atlas:agentOutput name="entscheid" type="string" required="true" values="ja,nein" description="Ob es tragbar ist"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
       <bpmn:serviceTask id="zinsen_holen" name="Zinsen holen">

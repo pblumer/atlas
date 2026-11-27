@@ -315,6 +315,7 @@ func agentRunReport(call agent.Call, took time.Duration) *AgentRunReport {
 		Answer:           call.Answer,
 		Wire:             call.Wire,
 		Turn:             call.Turn,
+		Fresh:            call.Fresh,
 	}
 }
 

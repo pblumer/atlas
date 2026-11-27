@@ -44,55 +44,109 @@ type RunReader interface {
 	AgentRunsOf(piKey, elKey uint64, fn func(ts int64, pos uint64, v *model.AgentRunValue) error) error
 }
 
+// restatedResults is how many of a run's most recent results are repeated in full when
+// the run is restated in words. The older ones are counted and not repeated: restating
+// exists to make a long conversation short again, and repeating everything would not.
+const restatedResults = 20
+
+// ContextLimit is the size past which a container's conversation is started anew.
+func ContextLimit(cp *compiler.CompiledProcess, containerElementId int32) uint64 {
+	node := cp.Node(containerElementId)
+	if node.Type != compiler.TypeAdHocSubProcess {
+		return compiler.SafeAgentContextTokens
+	}
+	return cp.AdHoc(node.Detail).AgentLimits.ContextTokens()
+}
+
 // WithTranscript adds what the run's record knows to a resolved round: which round this
 // really is, the earlier rounds to replay, and which of the context's values have
 // changed since the model was last told them.
 //
+// A run is replayed from its last *fresh* round on — the last call that was put as a new
+// conversation. That is round one, until something starts the conversation over: the
+// provider changed, an earlier turn can no longer be read, or the last request had grown
+// past limit tokens. In each of those cases this round carries no history; the adapter
+// then puts it as one message restating the run in words, marks its own call fresh, and
+// the rounds after it are replayed from there. So a conversation is only ever appended
+// to or begun again, never edited — which is what a provider's cache and a model's own
+// reasoning blocks both require.
+//
 // open gives a stored text back readable, and reports false when it cannot — a text
-// enciphered under a key that has since been destroyed, or one that was withheld. A run
-// with any such round is not replayed: half a conversation is worse than the summary in
-// words every adapter can still give.
-func WithTranscript(req Request, runs RunReader, cp *compiler.CompiledProcess, piKey, containerKey uint64,
+// enciphered under a key that has since been destroyed, or one that was withheld.
+func WithTranscript(req Request, runs RunReader, cp *compiler.CompiledProcess, piKey, containerKey uint64, limit uint64,
 	open func(v *model.AgentRunValue) (prompt, turn, context string, ok bool)) Request {
+	type round struct {
+		PastRound
+		readable bool
+	}
 	var (
-		history  []PastRound
-		complete = true
-		last     map[string]string
-		rounds   int
+		rounds    []round
+		start     int
+		last      map[string]string
+		lastInput uint64
+		results   []string
 	)
 	err := runs.AgentRunsOf(piKey, containerKey, func(_ int64, _ uint64, v *model.AgentRunValue) error {
 		if v.Kind == model.AgentRunToolResult {
-			if i := int(v.Round) - 1; i >= 0 && i < len(history) {
-				history[i].Results = append(history[i].Results, ToolResult{
+			if i := int(v.Round) - 1; i >= 0 && i < len(rounds) {
+				rounds[i].Results = append(rounds[i].Results, ToolResult{
 					CallId: v.CallId, Tool: cp.ElementBpmnId(v.ElementId), Text: v.Answer,
 				})
 			}
+			results = append(results, v.Answer)
 			return nil
 		}
-		rounds++
 		prompt, turn, context, ok := open(v)
-		if !ok || turn == "" || v.Wire == "" {
-			complete = false
+		if v.Fresh {
+			start = len(rounds)
 		}
-		history = append(history, PastRound{Wire: v.Wire, Turn: turn, Said: prompt})
+		rounds = append(rounds, round{
+			PastRound: PastRound{Wire: v.Wire, Turn: turn, Said: prompt},
+			readable:  ok && turn != "" && v.Wire != "",
+		})
+		lastInput = v.InputTokens
 		last = nil
 		if context != "" {
 			_ = json.Unmarshal([]byte(context), &last)
 		}
 		return nil
 	})
-	if err != nil || rounds == 0 {
+	if err != nil || len(rounds) == 0 {
 		return req
 	}
 	// The record counts rounds; the number of results does not, as soon as a round
 	// calls two tools or the model names no result collection.
-	req.Round = rounds + 1
-	if !complete || history[0].Said == "" {
+	req.Round = len(rounds) + 1
+
+	replay := lastInput <= limit && rounds[start].Said != ""
+	for _, r := range rounds[start:] {
+		replay = replay && r.readable
+	}
+	if !replay {
+		// Restated in words, from the record rather than from the result collection,
+		// so a container that names no collection is still told what its calls
+		// returned.
+		req.Results = restate(results)
 		return req
 	}
-	req.History = history
+	req.History = make([]PastRound, 0, len(rounds)-start)
+	for _, r := range rounds[start:] {
+		req.History = append(req.History, r.PastRound)
+	}
 	req.Changed = changedContext(last, req.Context)
 	return req
+}
+
+// restate is a run's results as they are repeated in words: the most recent ones in
+// full, and a count of the rest.
+func restate(results []string) []string {
+	if len(results) <= restatedResults {
+		return results
+	}
+	omitted := len(results) - restatedResults
+	out := make([]string, 0, restatedResults+1)
+	out = append(out, fmt.Sprintf("(%d earlier results are not repeated here)", omitted))
+	return append(out, results[omitted:]...)
 }
 
 // changedContext is what the model has not been told yet: every value that differs from

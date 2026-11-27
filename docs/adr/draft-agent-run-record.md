@@ -1,7 +1,7 @@
 # ADR-DRAFT: An agent's run is on the record, and its bounds are the engine's
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-11-26
 - **Deciders:** Atlas engine team
 
@@ -9,8 +9,10 @@
 > the token account from both provider formats, `maxIterations`, `tokenBudget` and `timeout`
 > on `<atlas:agentConnector>`, the ceiling for a container that states no bound,
 > `GET /api/v1/instances/{key}/agent-runs` and the MCP tool `atlas_instance_agent_runs`.
-> Not built: the Operations view on the agent's element, and fields for the three bounds in
-> the Modeler's properties panel — they are authored in the XML until then.
+> Built on 2026-11-27: the **Agent** tab of the instance replay in Operations, and fields
+> for the bounds in the Modeler's properties panel — on the container under *Agent limits*, on
+> an ai task as *Timeout*. Both are covered in a browser by `e2e/agent-runs.spec.mjs` and
+> `e2e/agent-modeler.spec.mjs`.
 
 ## Context and problem statement
 
@@ -154,8 +156,7 @@ agent-driven container, which no test in the tree builds yet.
     cannot wrap the sums; beyond that they are believed.
   - **Texts are stored without a size bound of their own** — only the completion route's body
     budget applies. A long prompt is a long record in the log.
-- **Follow-ups / risks to watch:** the Operations view and the Modeler fields named above;
-  whether a bound should be catchable in the model (a boundary error event) instead of only
+- **Follow-ups / risks to watch:** whether a bound should be catchable in the model (a boundary error event) instead of only
   resolvable by an operator; a cost figure in money, which needs a price list this engine does
   not hold.
 

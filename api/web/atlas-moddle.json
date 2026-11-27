@@ -788,7 +788,8 @@
         { "name": "context", "type": "String", "isAttr": true },
         { "name": "maxIterations", "type": "String", "isAttr": true },
         { "name": "tokenBudget", "type": "String", "isAttr": true },
-        { "name": "timeout", "type": "String", "isAttr": true }
+        { "name": "timeout", "type": "String", "isAttr": true },
+        { "name": "maxContextTokens", "type": "String", "isAttr": true }
       ]
     },
     {

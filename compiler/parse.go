@@ -1870,6 +1870,9 @@ type xmlAgentConnector struct {
 	MaxIterations string `xml:"maxIterations,attr"`
 	TokenBudget   string `xml:"tokenBudget,attr"`
 	Timeout       string `xml:"timeout,attr"`
+	// MaxContextTokens bounds how large a container's conversation may grow before
+	// the next round restates the run in words and starts over.
+	MaxContextTokens string `xml:"maxContextTokens,attr"`
 }
 
 // One <atlas:agentParam> on a contained activity: a value the model must supply when it calls

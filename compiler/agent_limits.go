@@ -16,6 +16,13 @@ import (
 // deciding for the operator how long a legitimate run may be.
 const SafeAgentRounds = 25
 
+// SafeAgentContextTokens is how much a round's request may have grown to before the next
+// round is put as a new conversation, for a container that states no maxContextTokens
+// (ADR-draft-agent-transcript-and-answer). It is far below what current models can read,
+// on purpose: a run's every round re-reads the whole conversation, so the cost of a long
+// one grows with the square of its length long before any window is full.
+const SafeAgentContextTokens = 150_000
+
 // The bounds an authored model-call timeout must lie between. The floor is what a call
 // cannot be made in; the ceiling is not a recommendation but the point past which the
 // value is certainly a mistake — a Worker Instance's lease (five minutes unless it was
@@ -48,7 +55,19 @@ type AgentLimits struct {
 	MaxRounds    int32
 	TokenBudget  int64
 	TimeoutNanos int64
-	Problems     []string
+	// MaxContextTokens is how large a round's request may grow before the next round
+	// starts a new conversation that restates the run in words.
+	MaxContextTokens int64
+	Problems         []string
+}
+
+// ContextTokens is the size past which this container's conversation is started anew:
+// what its model states, or SafeAgentContextTokens when it states nothing.
+func (l AgentLimits) ContextTokens() uint64 {
+	if l.MaxContextTokens > 0 {
+		return uint64(l.MaxContextTokens)
+	}
+	return SafeAgentContextTokens
 }
 
 // Rounds is how many rounds this container may run before it parks: what its model
@@ -91,6 +110,7 @@ func parseAgentLimits(ag *xmlAgentConnector, container bool) AgentLimits {
 		}
 	}
 	l.TokenBudget = positive("tokenBudget", ag.TokenBudget)
+	l.MaxContextTokens = positive("maxContextTokens", ag.MaxContextTokens)
 	if raw := strings.TrimSpace(ag.Timeout); raw != "" {
 		nanos, err := parseISO8601Duration(raw)
 		switch {

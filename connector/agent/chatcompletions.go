@@ -75,7 +75,7 @@ func (m *ChatCompletionsModel) Decide(ctx context.Context, req Request) (Decisio
 		return Decision{}, err
 	}
 	d.Call.System, d.Call.Prompt = systemFor(req), chatSaid(req)
-	d.Call.Wire, d.Call.Turn = WireChatCompletions, chatStoredTurn(payload)
+	d.Call.Wire, d.Call.Turn, d.Call.Fresh = WireChatCompletions, chatStoredTurn(payload), !chatContinues(req)
 	if err := applyOutputs(req, &d); err != nil {
 		return Decision{}, err
 	}
@@ -176,12 +176,16 @@ func chatCallIds(turn string) ([]string, bool) {
 	return ids, true
 }
 
+// chatContinues reports whether this round is put as a continuation of the run's
+// earlier rounds: a new conversation is the system prompt and one message.
+func chatContinues(req Request) bool {
+	return len(chatTurns(req)) > 2
+}
+
 // chatSaid is what this call adds to the conversation, which is what its record keeps.
 func chatSaid(req Request) string {
-	if replayable(req.History, WireChatCompletions) {
-		if _, ok := chatCallIds(req.History[len(req.History)-1].Turn); ok {
-			return changedText(req.Changed)
-		}
+	if chatContinues(req) {
+		return changedText(req.Changed)
 	}
 	return promptFor(req)
 }

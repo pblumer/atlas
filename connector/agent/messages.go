@@ -124,7 +124,7 @@ func (m *HTTPModel) Decide(ctx context.Context, req Request) (Decision, error) {
 	if err != nil {
 		return Decision{}, err
 	}
-	d.Call.System, d.Call.Prompt = body.System, m.said(req)
+	d.Call.System, d.Call.Prompt, d.Call.Fresh = body.System, m.said(req), !m.continues(req)
 	if err := applyOutputs(req, &d); err != nil {
 		return Decision{}, err
 	}
@@ -279,12 +279,16 @@ func messagesToolResults(past PastRound, said string) ([]map[string]any, bool) {
 	return out, true
 }
 
+// continues reports whether this round is put as a continuation of the run's earlier
+// rounds, rather than as a new conversation.
+func (m *HTTPModel) continues(req Request) bool {
+	return len(m.turns(req)) > 1
+}
+
 // said is what this call adds to the conversation, which is what its record keeps.
 func (m *HTTPModel) said(req Request) string {
-	if replayable(req.History, WireMessages) {
-		if _, ok := messagesToolResults(req.History[len(req.History)-1], ""); ok {
-			return changedText(req.Changed)
-		}
+	if m.continues(req) {
+		return changedText(req.Changed)
 	}
 	return promptFor(req)
 }

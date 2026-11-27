@@ -29,15 +29,25 @@ _Changed_ / _Removed_ for each version.
   `values`. The model is asked for exactly that object, the worker refuses an answer that is
   not it, and it is written as one JSON variable, so a gateway can route on
   `= urteil.entscheid = "ja"`. Without any declared, an answer is text as before. The Modeler
-  has no editor for the fields yet: they are written in the XML
+  edits them under *Answer fields*, on both elements
   ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)).
+- **Operations shows what an agent did.** The instance replay has an **Agent** tab: per agent
+  what its calls add up to, every call to the model with the model that answered, its tokens
+  and how many came from the cache, the tools it called, and its texts folded until wanted —
+  and under each call what the tools it called returned. A bound that was reached is marked,
+  and texts that were erased or never stored are said to be so rather than left blank.
+- **A long agent run starts its conversation over.** Once a round's request has grown past
+  `maxContextTokens` — 150,000 tokens unless the container states another — the next round is
+  put as a new conversation that restates what the tools returned, the most recent twenty in
+  full, and the rounds after it continue from there. A run whose provider is switched half-way
+  now continues the same way in the new format instead of staying in words to its end.
 - **An agent can be given bounds.** `<atlas:agentConnector>` reads `maxIterations` (rounds),
   `tokenBudget` (input plus output tokens of the run) and `timeout` (an ISO-8601 duration for
   one call to the model, also on an ai task). At a bound the container stops asking, stays
   active and raises an incident that says which bound it reached; resolving the incident grants
   the same allowance once more. A value that cannot be honoured refuses the deploy on the
-  element that states it. The Modeler has no fields for the three yet: they are written in the
-  XML.
+  element that states it. The Modeler has fields for them: *Agent limits* on the container,
+  *Timeout* on an ai task.
 - **A reference pool shows the process it stands for.** In the Modeler, a pool that references a
   deployed process can now show that process: *Show the process in the pool* in the pool's panel
   draws the deployed version inside the pool, grows the pool to hold it and moves what stands

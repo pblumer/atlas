@@ -1016,7 +1016,7 @@ Making processes wait, react, and time out.
   ([ADR-0098](docs/adr/0098-external-variable-modification-audit.md)), read via
   `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
   timeline so a corrected value carries its actor.
-- 🚧 **An agent's run on the record, and bounded** ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md),
+- ✅ **An agent's run on the record, and bounded** ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md),
   completing [ADR-0117](docs/adr/0117-ai-agent-task.md)): every call to a language model — an ai
   task's one call, a round of an agent-driven container — leaves an `AgentRun` fact beside its
   job's completion: element, round, the model that answered, the tokens it read and wrote, the
@@ -1027,9 +1027,10 @@ Making processes wait, react, and time out.
   again — the standard loop's runaway rule (ADR-0133) applied to a loop whose every turn is paid
   for. A process that declares personal data keeps a call's texts under the data subject's key
   (ADR-0314). Read over `GET /api/v1/instances/{key}/agent-runs` and MCP
-  `atlas_instance_agent_runs`. 🔲 Not built: the Operations view on the agent's element, and
-  Modeler fields for the three bounds.
-- 🚧 **An agent is shown its own run again, and its answer has a shape**
+  `atlas_instance_agent_runs`, and in Operations on the **Agent** tab of the instance replay:
+  per agent what its calls add up to, each call with its model, tokens and texts, and each
+  tool's result under the call that asked for it. The bounds are fields in the Modeler.
+- ✅ **An agent is shown its own run again, and its answer has a shape**
   ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)): from
   its second round on, a round is put to the model as the run happened — the first prompt, each
   of the model's own turns unchanged, and the result of every call answering that call — instead
@@ -1039,8 +1040,10 @@ Making processes wait, react, and time out.
   round number is the record's, and the context is put in name order and told again only where
   it changed. `<atlas:agentOutput>` declares the fields an answer must carry (string, number,
   boolean, a set of values): both formats are asked for the object, the **worker checks it**,
-  and it lands as one JSON variable a gateway can route on. 🔲 Not built: a Modeler editor for
-  answer fields; trimming a run that outgrows the model's window.
+  and it lands as one JSON variable a gateway can route on; the Modeler edits the fields on
+  both hosts. A conversation that outgrows `maxContextTokens` (150,000 unless stated) is
+  **begun again**: the next round restates the run in words and later rounds are replayed from
+  there — appended to or started over, never edited.
 
 - ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
   published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered

@@ -40,6 +40,7 @@ type agentRunReport struct {
 	Turn             string `json:"turn"`
 	// Context is what the call was given of the process, by variable name.
 	Context map[string]string `json:"context"`
+	Fresh   bool              `json:"fresh"`
 }
 
 // maxReportedTokens bounds one reported token count. No call reads or writes a trillion
@@ -127,6 +128,7 @@ func (s *Server) agentRunFromReport(jobKey uint64, rep *agentRunReport) *model.A
 		Answer:           rep.Answer,
 		Wire:             rep.Wire,
 		Turn:             rep.Turn,
+		Fresh:            rep.Fresh,
 	}
 	if len(rep.Context) > 0 {
 		// A map marshals with its keys sorted, which is the canonical form (ADR-0037).

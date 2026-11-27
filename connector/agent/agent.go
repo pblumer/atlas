@@ -122,6 +122,9 @@ type Call struct {
 	// returned it, kept so the next round can replay it unchanged.
 	Wire string
 	Turn string
+	// Fresh says the call was put as a new conversation rather than as a continuation
+	// of the rounds before it. The next round is replayed from the last fresh one on.
+	Fresh bool
 }
 
 // Model is the whole of this package's dependency on inference: one round in, one

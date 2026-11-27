@@ -112,6 +112,13 @@ type AgentRunValue struct {
 	Context string
 	// CallId pairs a tool result with the call that asked for it.
 	CallId string
+	// Fresh marks a model call that was put as a new conversation rather than as a
+	// continuation of the rounds before it: the first round, and any later one that
+	// restated the run in words — because the run had outgrown its context bound, the
+	// provider changed, or an earlier turn could not be read back. A later round is
+	// replayed from the last fresh one on. An appended field: a record written before
+	// it ends after CallId and reads false.
+	Fresh bool
 }
 
 func (*AgentRunValue) ValueType() ValueType { return VTAgentRun }
@@ -141,7 +148,11 @@ func (v *AgentRunValue) encode(dst []byte) []byte {
 	} {
 		dst = appendString(dst, s)
 	}
-	return dst
+	fresh := byte(0)
+	if v.Fresh {
+		fresh = 1
+	}
+	return append(dst, fresh)
 }
 
 func (v *AgentRunValue) decode(src []byte) error {
@@ -174,6 +185,7 @@ func (v *AgentRunValue) decode(src []byte) error {
 		}
 		*dst, rest = s, r
 	}
+	v.Fresh = len(rest) >= 1 && rest[0] == 1
 	return nil
 }
 

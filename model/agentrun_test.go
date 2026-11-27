@@ -16,7 +16,7 @@ func TestAgentRunValueRoundTrips(t *testing.T) {
 		DurationMs: 4200, SumInputTokens: 3000, SumOutputTokens: 800,
 		Limit: AgentRunLimitTokens, ToolCalls: `[{"callId":"c1","tool":"lookup"}]`,
 		TextState: AgentRunTextEnciphered, System: "s", Prompt: "p", Answer: "a",
-		Wire: "messages", Turn: `[{"type":"text"}]`, Context: `{"k":"v"}`, CallId: "c1",
+		Wire: "messages", Turn: `[{"type":"text"}]`, Context: `{"k":"v"}`, CallId: "c1", Fresh: true,
 	}
 	v, err := DecodeValue(VTAgentRun, want.encode(nil))
 	if err != nil || !reflect.DeepEqual(v, want) {
@@ -24,9 +24,18 @@ func TestAgentRunValueRoundTrips(t *testing.T) {
 	}
 }
 
+// A record written before Fresh existed ends one byte earlier and reads as not fresh.
+func TestAgentRunValueReadsARecordWithoutItsAppendedField(t *testing.T) {
+	full := (&AgentRunValue{Model: "m", Fresh: true}).encode(nil)
+	var v AgentRunValue
+	if err := v.decode(full[:len(full)-1]); err != nil || v.Fresh || v.Model != "m" {
+		t.Errorf("decode = %+v, %v, want the record without Fresh", v, err)
+	}
+}
+
 func TestAgentRunValueRefusesATruncatedRecord(t *testing.T) {
 	full := (&AgentRunValue{Model: "m", Answer: "a"}).encode(nil)
-	for _, n := range []int{0, agentRunFixed - 1, agentRunFixed + 2, len(full) - 1} {
+	for _, n := range []int{0, agentRunFixed - 1, agentRunFixed + 2, len(full) - 2} {
 		if err := (&AgentRunValue{}).decode(full[:n]); err == nil {
 			t.Errorf("decode of %d of %d bytes succeeded, want an error", n, len(full))
 		}

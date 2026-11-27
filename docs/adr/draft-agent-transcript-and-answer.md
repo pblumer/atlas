@@ -1,7 +1,7 @@
 # ADR-DRAFT: An agent is shown its own run again, and its answer can be held to a shape
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-11-26
 - **Deciders:** Atlas engine team
 - **Open question:** whether a gateway that speaks the Messages or Chat Completions format
@@ -14,8 +14,9 @@
 > **Implementation status (2026-11-26).** Built: the tool-result fact, the stored turn and
 > context on the model-call fact, the transcript in the resolved round, replay and prompt
 > caching in both provider formats, `<atlas:agentOutput>` with the request-side schema and the
-> worker-side check, and the context in name order. Not built: an editor for answer fields in
-> the Modeler — they are authored in the XML.
+> worker-side check, and the context in name order. Built on 2026-11-27: starting a
+> conversation over once it outgrows `maxContextTokens`, and the Modeler's editor for answer
+> fields, on both hosts (`e2e/agent-modeler.spec.mjs`).
 
 ## Context and problem statement
 
@@ -92,11 +93,30 @@ thousand agents in a multi-instance activity must not make each round scan all o
   that cannot be read back is not replayed in part.
 - **Changed** is the context values that differ from what the last call was given.
 
+### A conversation is appended to or begun again, never edited
+
+A model call says whether it was put as a **new conversation** (`Fresh`) or as a continuation.
+Round one always is. A later round is put fresh when it carries no history, and it carries
+none when the provider's format changed, when an earlier turn cannot be read back, or when the
+last request had grown past the container's `maxContextTokens` — 150,000 when the model states
+none. A fresh round restates the run in words, from the tool-result facts rather than from the
+result collection: the most recent twenty results in full and a count of the rest.
+
+**A round is replayed from the last fresh one on.** So a run that outgrows its bound is
+shortened once, at one point, and then grows again from there; a run whose provider is switched
+picks native replay up again in the new format. What never happens is a conversation with its
+beginning cut off or its middle rewritten: a provider's cache misses from the first changed
+byte, and a model's reasoning blocks are valid only in the conversation that produced them.
+
+The bound is weighed against the input tokens the *worker reported* for the last call. A worker
+that reports none never triggers it.
+
 ### How an adapter replays
 
 An adapter replays only turns in its own format. Otherwise it puts the round as before: one
 message, the results in words. So a run recorded before this existed, a run whose provider was
-switched half-way, and a run whose texts were erased all still work.
+switched half-way, and a run whose texts were erased all still work — and each of them is a
+fresh round the rounds after it are replayed from.
 
 In the Messages format a replayed round is: the first prompt as it was sent; then per earlier
 round the model's turn, unchanged — reasoning blocks and their signatures included — and one
@@ -160,9 +180,10 @@ it carries what the engine evaluated, so a personal value appears in it as its e
     one completes; the ones after it add no result.
   - **Answer fields are scalars.** An object or a list declared by name alone says nothing
     about what is inside, and a provider's structured output needs every object closed.
-  - **A provider switched mid-run starts over in words** for the rest of that run.
-- **Follow-ups / risks to watch:** the open question above; context that outgrows a model's
-  window on a long run, which nothing trims yet; a Modeler editor for answer fields; whether
+  - **Restating loses what words do not carry.** A run begun again keeps what its tools
+    returned and drops the model's own reasoning up to that point, and of a long run only the
+    last twenty results are repeated.
+- **Follow-ups / risks to watch:** the open question above; whether a restated run should be summarised by a model rather than listed; whether
   the model's reasoning summary should be shown in Operations.
 
 ## Pros and cons of the options

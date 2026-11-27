@@ -150,6 +150,9 @@ type AgentRunReport struct {
 	Wire    string            `json:"wire,omitempty"`
 	Turn    string            `json:"turn,omitempty"`
 	Context map[string]string `json:"context,omitempty"`
+	// Fresh says the call was put as a new conversation, not as a continuation of the
+	// rounds before it; the next round is replayed from the last fresh one on.
+	Fresh bool `json:"fresh,omitempty"`
 }
 
 // DecisionReport is a worker's account of a decision it evaluated: which decision, the

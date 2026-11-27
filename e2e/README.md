@@ -27,6 +27,18 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`agent-runs.spec.mjs`** ([ADR-draft-agent-run-record](../docs/adr/draft-agent-run-record.md)):
+  the instance replay's Agent tab lists an agent's calls to a model with what they add up to;
+  a call shows its model, its tokens and how many came from the cache, the tools it called and
+  its texts, folded until opened; what a tool returned follows the call that asked for it; a
+  reached bound is marked and texts that are gone are said to be gone; and an instance that
+  asked no model says so.
+- **`agent-modeler.spec.mjs`** also covers the agent's bounds and answer fields
+  ([ADR-draft-agent-transcript-and-answer](../docs/adr/draft-agent-transcript-and-answer.md)):
+  a model carrying them comes back out of the Modeler as it went in, which is the round trip
+  bpmn-js breaks for an extension element its moddle has no type for; a container shows its
+  bounds, editing one keeps the others and clearing one removes the attribute; answer fields
+  are shown and edited on a container and on an ai task, and offered on no other task.
 - **`decision-peek.spec.mjs`** ([ADR-0556](../docs/adr/0556-decision-peek.md)):
   the Implement view marks a business rule task that calls a decision, and only there; the mark
   opens the decision over the diagram without saving or leaving it, on the model the task's
