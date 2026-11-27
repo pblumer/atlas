@@ -6069,8 +6069,10 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 // label: a job incident holds a service-task job whose retries ran out; one the
 // execution budget raised holds a token that never got to run
 // (ADR-0272); an error incident holds a BPMN error nothing caught, which resolving
-// throws again (ADR-0089); a job-less incident is otherwise a timer whose FEEL
-// schedule stopped resolving (ADR-0064/0111).
+// throws again (ADR-0089); an agent incident holds an agent-driven container that
+// reached a bound its model states, which resolving grants once more (ADR-0566); a
+// job-less incident is otherwise a timer whose FEEL schedule stopped resolving
+// (ADR-0064/0111).
 //
 // A job outranks the reason: a worker's uncaught error keeps its job, and resolving
 // it retries that job with the retries the operator grants, as for any parked job.
@@ -6090,6 +6092,8 @@ func incidentType(v *model.IncidentValue) string {
 		return "budget"
 	case v.Reason == model.IncidentUnhandledError:
 		return "error"
+	case v.Reason == model.IncidentAgentLimit:
+		return "agent"
 	default:
 		return "timer"
 	}

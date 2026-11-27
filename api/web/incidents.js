@@ -18,8 +18,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 // incidentKind is what parked: a service-task job whose retries ran out, a BPMN
 // error nothing caught (ADR-0089), a token that used up its execution budget
-// (ADR-0272), or a job-less timer whose FEEL schedule stopped resolving
-// (ADR-0064/0111). The server says so directly; the jobKey fallback keeps an older
+// (ADR-0272), an agent that reached a bound its model states (ADR-0566), or a
+// job-less timer whose FEEL schedule stopped resolving (ADR-0064/0111). The server says so directly; the jobKey fallback keeps an older
 // response readable.
 const incidentKind = (inc) => inc.type || (inc.jobKey ? "job" : "timer");
 
@@ -44,7 +44,14 @@ const resolveNotes = {
     one: "The error is thrown again. A handler that has come into reach catches it; while none does, the incident is raised again.",
     many: "Each error is thrown again. One a handler now catches takes its error path; the others raise their incident again.",
   },
+  agent: {
+    one: "The agent is granted the same allowance once more — as many rounds, or as many tokens, as its model states — and asked for its next round. If it reaches the bound again without finishing, the incident is raised again.",
+    many: "Each agent is granted the same allowance once more and asked for its next round. One that reaches its bound again without finishing raises its incident again.",
+  },
 };
+
+// kindNoun names a kind that ignores the retries field, for that field's label.
+const kindNoun = (kind) => ({ error: "an error", agent: "an agent", timer: "a timer" })[kind] || "a timer";
 
 // fmtRaised renders an incident's raisedAt (unix nanoseconds, frozen into the
 // event) as a local timestamp.
@@ -195,7 +202,7 @@ function askResolveRetries(inc) {
             ? note.one
             : "The parked job goes back on the activatable index and a worker retries it. If the cause is unfixed it fails again and a new incident is raised."}</p>
           ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
-          <label class="field"><span>Retries to grant${noRetries ? ` (ignored by ${kind === "error" ? "an error" : "a timer"} incident)` : ""}</span>
+          <label class="field"><span>Retries to grant${noRetries ? ` (ignored by ${kindNoun(kind)} incident)` : ""}</span>
             <input id="inc-retries" type="number" min="1" step="1" value="1" ${noRetries ? "disabled" : ""}/></label>
         </div>
         <div class="modal-foot">
@@ -293,7 +300,7 @@ function askBulkResolve({ title, count, kind, message, note }) {
             : "Each parked job goes back on the activatable index and a worker retries it. <b>Fix the cause first</b> — a retry against an unfixed cause fails again and parks the same tokens with a new incident."}</p>
           ${note ? `<p class="muted" style="margin:0 0 10px">${note}</p>` : ""}
           ${message ? `<p class="inc-modal-msg">${esc(message)}</p>` : ""}
-          <label class="field"><span>Retries to grant each${noRetries ? ` (ignored by ${kind === "error" ? "an error" : "a timer"} incident)` : ""}</span>
+          <label class="field"><span>Retries to grant each${noRetries ? ` (ignored by ${kindNoun(kind)} incident)` : ""}</span>
             <input id="inc-bulk-retries" type="number" min="1" step="1" value="1" ${noRetries ? "disabled" : ""}/></label>
         </div>
         <div class="modal-foot">

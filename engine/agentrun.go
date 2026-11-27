@@ -145,7 +145,7 @@ func parkAgentAtLimit(c *ProcessingContext, key uint64, ei *model.ElementInstanc
 		used := total.InputTokens + total.OutputTokens
 		budget := uint64(l.TokenBudget)
 		msg = "the agent has used " + strconv.FormatUint(used, 10) + " tokens in " +
-			strconv.FormatUint(uint64(total.Rounds), 10) + " rounds, past its tokenBudget of " +
+			roundsText(uint64(total.Rounds)) + ", past its tokenBudget of " +
 			strconv.FormatUint(budget, 10) + "; resolve to let it continue up to " +
 			strconv.FormatUint((used/budget+1)*budget, 10)
 	default:
@@ -153,8 +153,8 @@ func parkAgentAtLimit(c *ProcessingContext, key uint64, ei *model.ElementInstanc
 		if l.MaxRounds == 0 {
 			stated = "the ceiling for an agent that states no maxIterations"
 		}
-		msg = "the agent ran " + strconv.FormatUint(uint64(total.Rounds), 10) +
-			" rounds without finishing, which is " + stated + "; resolve to run " +
+		msg = "the agent ran " + roundsText(uint64(total.Rounds)) +
+			" without finishing, which is " + stated + "; resolve to run " +
 			strconv.FormatUint(uint64(l.Rounds()), 10) + " more"
 	}
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
@@ -198,4 +198,12 @@ func recordAgentToolResult(c *ProcessingContext, containerKey, toolKey uint64, t
 		CallId:             callID.Text,
 		Answer:             text,
 	}})
+}
+
+// roundsText is a count of rounds as a sentence says it: one round, two rounds.
+func roundsText(n uint64) string {
+	if n == 1 {
+		return "1 round"
+	}
+	return strconv.FormatUint(n, 10) + " rounds"
 }

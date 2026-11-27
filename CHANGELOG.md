@@ -121,6 +121,12 @@ _Changed_ / _Removed_ for each version.
   row's ⋯ menu, after *Open* (ADR-0559).
 
 ### Fixed
+- **An agent at its bound is listed as an agent's incident.** A container parked at its
+  `maxIterations` or `tokenBudget` was listed and filtered as a `timer` incident, and the
+  resolve dialog asked for retries that resolving ignores. It is now of the kind `agent`
+  (`GET /api/v1/incidents?type=agent`, the MCP incident tools, the Console's pill), and the
+  dialog says that resolving grants the same allowance once more. The incident's message
+  says "1 round" rather than "1 rounds" (ADR-0566).
 - **A pool's start variables are no longer reported as written nowhere.** In a file with pools,
   the Modeler's warning about a variable that is read and written nowhere did not count what a
   pool's process declares for its start: every read of a declared start variable or constant —

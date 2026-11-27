@@ -27,6 +27,9 @@ func TestIncidentTypeNamesWhatParked(t *testing.T) {
 		// A worker's uncaught error keeps its job, and resolving retries that job: the
 		// operator grants retries as for any parked job, so it reads as one.
 		{"a job outranks an uncaught error", model.IncidentValue{JobKey: 42, Reason: model.IncidentUnhandledError}, "job"},
+		// An agent parked at its bound holds no job and is not a timer: resolving it
+		// grants the allowance again rather than re-arming a schedule (ADR-0566).
+		{"agent at its bound", model.IncidentValue{Reason: model.IncidentAgentLimit}, "agent"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := incidentType(&tc.v); got != tc.want {
