@@ -39,7 +39,7 @@ func agentRoundJob(extra map[string]any) Job {
 }
 
 // A round and an ai task both complete with the account of their call, which is what
-// the engine keeps as the record of it (ADR-draft-agent-run-record).
+// the engine keeps as the record of it (ADR-0566).
 func TestAModelCallIsReportedWithItsOutcome(t *testing.T) {
 	round := accountingModel{agent.Decision{Call: accountedCall, ToolCalls: []model.ToolCall{{Tool: "t", CallId: "c"}}}}
 	out, err := RunAgentRound(context.Background(), agentRoundJob(nil), map[string]agent.Model{"w": round})
@@ -81,7 +81,7 @@ func TestACallPastItsAuthoredTimeoutFails(t *testing.T) {
 }
 
 // A round says back the model's turn and what it was told of the process, which is what
-// the next round is built from (ADR-draft-agent-transcript-and-answer).
+// the next round is built from (ADR-0567).
 func TestARoundReportsItsTurnAndItsContext(t *testing.T) {
 	call := accountedCall
 	call.Wire, call.Turn = agent.WireMessages, `[{"type":"tool_use","id":"t1"}]`

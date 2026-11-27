@@ -1,5 +1,5 @@
 // Package mcptool is the Worker Type that calls one tool of a remote Model Context
-// Protocol server (ADR-draft-mcp-worker): a service task names a configured MCP Worker
+// Protocol server (ADR-0568): a service task names a configured MCP Worker
 // and a tool, and the worker behind it makes the call.
 //
 // This file is the protocol, written by hand for the reason the model adapters are

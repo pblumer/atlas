@@ -3297,7 +3297,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .var-panel.side .dec-card2 { margin-left: 14px; margin-right: 14px; }
 .var-panel.side .dec-card2:first-of-type { margin-top: 12px; }
 
-/* Agent tab (ADR-draft-agent-run-record): the shared .dec-* cards, one per call to a
+/* Agent tab (ADR-0566): the shared .dec-* cards, one per call to a
    model, each followed by what the tools it called returned. */
 .ops-tab-body .agent-sum { font-weight: 400; margin-left: 6px; }
 .agent-limit {

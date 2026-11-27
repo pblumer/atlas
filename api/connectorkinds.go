@@ -104,7 +104,7 @@ type createConnectorParams struct {
 	// FormLookups lets task forms search through the Worker
 	// (ADR-0473); only a kind a form can search may set it.
 	FormLookups bool `json:"formLookups"`
-	// Tools is an MCP Worker's list of permitted tools (ADR-draft-mcp-worker).
+	// Tools is an MCP Worker's list of permitted tools (ADR-0568).
 	Tools []mcpToolGrant `json:"tools"`
 }
 
@@ -515,7 +515,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// An MCP task calls one tool of a Model Context Protocol server
-		// (ADR-draft-mcp-worker). Worker-only for the reason every call to another
+		// (ADR-0568). Worker-only for the reason every call to another
 		// system is: it can take as long as the other system likes, and the credential
 		// behind it has no business on the engine's run loop (ADR-0164).
 		name:           connectorKindMCP,

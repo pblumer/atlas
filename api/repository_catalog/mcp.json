@@ -4,7 +4,7 @@
   "kind": "connector",
   "title": "MCP tool",
   "author": "Atlas core",
-  "description": "Call one tool of a Model Context Protocol server (ADR-draft-mcp-worker). A model names the Worker — the server —, the tool and one object of the tool's arguments; where the server is and the credential it asks for live in the Worker and the vault and reach only the worker. A Worker lists the tools a process may call on it, each with what a second delivery does; a tool that is not listed is not called. Placed in an agent-driven ad-hoc subprocess the task is one of the agent's tools, described by the modeller's own documentation and never by the server's. A tool that ran and reported a failure is the BPMN error MCP_TOOL_ERROR where the process catches it.",
+  "description": "Call one tool of a Model Context Protocol server (ADR-0568). A model names the Worker — the server —, the tool and one object of the tool's arguments; where the server is and the credential it asks for live in the Worker and the vault and reach only the worker. A Worker lists the tools a process may call on it, each with what a second delivery does; a tool that is not listed is not called. Placed in an agent-driven ad-hoc subprocess the task is one of the agent's tools, described by the modeller's own documentation and never by the server's. A tool that ran and reported a failure is the BPMN error MCP_TOOL_ERROR where the process catches it.",
   "engineCompat": ">=0.29",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",

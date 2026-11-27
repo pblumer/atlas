@@ -199,7 +199,7 @@ const (
 	// value type keeps its numeric value on the log.
 	VTTaskAnswer
 	// VTAgentRun is one fact about an agent's run: a call to a language model, or what
-	// a tool it called returned (ADR-0117, as built by ADR-draft-agent-run-record).
+	// a tool it called returned (ADR-0117, as built by ADR-0566).
 	// Append-only history keyed under its process instance, like VTDecisionEvaluation.
 	// Appended last so every prior value type keeps its numeric value on the log.
 	VTAgentRun

@@ -24,7 +24,7 @@ type agentOutputSpec struct {
 }
 
 // AgentOutput is one field the model's answer must carry
-// (ADR-draft-agent-transcript-and-answer): <atlas:agentParam>'s shape turned round. With
+// (ADR-0567): <atlas:agentParam>'s shape turned round. With
 // any declared, the answer is one JSON object holding exactly these fields, and the
 // worker refuses an answer that is not — which is what lets a gateway route on it.
 // Values, when present, is the set a string field is limited to.

@@ -27,19 +27,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
-- **`agent-runs.spec.mjs`** ([ADR-draft-agent-run-record](../docs/adr/draft-agent-run-record.md)):
+- **`agent-runs.spec.mjs`** ([ADR-0566](../docs/adr/0566-agent-run-record.md)):
   the instance replay's Agent tab lists an agent's calls to a model with what they add up to;
   a call shows its model, its tokens and how many came from the cache, the tools it called and
   its texts, folded until opened; what a tool returned follows the call that asked for it; a
   reached bound is marked and texts that are gone are said to be gone; and an instance that
   asked no model says so.
 - **`agent-modeler.spec.mjs`** also covers the agent's bounds and answer fields
-  ([ADR-draft-agent-transcript-and-answer](../docs/adr/draft-agent-transcript-and-answer.md)):
+  ([ADR-0567](../docs/adr/0567-agent-transcript-and-answer.md)):
   a model carrying them comes back out of the Modeler as it went in, which is the round trip
   bpmn-js breaks for an extension element its moddle has no type for; a container shows its
   bounds, editing one keeps the others and clearing one removes the attribute; answer fields
   are shown and edited on a container and on an ai task, and offered on no other task.
-  And an MCP task ([ADR-draft-mcp-worker](../docs/adr/draft-mcp-worker.md)): it survives being
+  And an MCP task ([ADR-0568](../docs/adr/0568-mcp-worker.md)): it survives being
   opened and saved, shows the fields the compiler reads, suggests only MCP Workers, and inside
   an agent-driven container is one of the agent's tools with its declared parameter.
 - **`decision-peek.spec.mjs`** ([ADR-0556](../docs/adr/0556-decision-peek.md)):

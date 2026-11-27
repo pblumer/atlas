@@ -24,7 +24,7 @@ _Changed_ / _Removed_ for each version.
   Servers of the current protocol revision (2026-07-28) and of the older ones are both spoken
   to, over HTTP; a server started as a local program is not supported. Not built yet: reading a
   server's tool list in the Console, and anything but a fixed token as the credential
-  ([ADR-draft-mcp-worker](docs/adr/draft-mcp-worker.md)).
+  ([ADR-0568](docs/adr/0568-mcp-worker.md)).
 - **An agent's run is on the record.** Every call a process makes to a language model — an ai
   task's one call, or a round of an agent-driven ad-hoc subprocess — now leaves a fact with the
   instance: which element and which round, the model that answered, why it stopped, how many
@@ -34,7 +34,7 @@ _Changed_ / _Removed_ for each version.
   tool `atlas_instance_agent_runs`, while the instance runs and after it finished. In a process
   that declares personal data the prompt and the answer are stored under the data subject's
   key, so erasing the subject reaches them
-  ([ADR-draft-agent-run-record](docs/adr/draft-agent-run-record.md)).
+  ([ADR-0566](docs/adr/0566-agent-run-record.md)).
 - **An agent's answer can be held to a shape.** `<atlas:agentOutput name="…" type="…">` on an ai
   task or an agent-driven ad-hoc subprocess declares the fields the answer must carry — a
   string, a number or a boolean, optionally `required`, a string optionally limited to
@@ -42,7 +42,7 @@ _Changed_ / _Removed_ for each version.
   not it, and it is written as one JSON variable, so a gateway can route on
   `= urteil.entscheid = "ja"`. Without any declared, an answer is text as before. The Modeler
   edits them under *Answer fields*, on both elements
-  ([ADR-draft-agent-transcript-and-answer](docs/adr/draft-agent-transcript-and-answer.md)).
+  ([ADR-0567](docs/adr/0567-agent-transcript-and-answer.md)).
 - **Operations shows what an agent did.** The instance replay has an **Agent** tab: per agent
   what its calls add up to, every call to the model with the model that answered, its tokens
   and how many came from the cache, the tools it called, and its texts folded until wanted —

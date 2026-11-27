@@ -19,7 +19,7 @@ var verdict = []Output{
 }
 
 // An answer is held to its declared fields here, whatever the provider promised, and
-// comes back in the canonical form a gateway reads (ADR-draft-agent-transcript-and-answer).
+// comes back in the canonical form a gateway reads (ADR-0567).
 func TestAStructuredAnswerIsCheckedAgainstItsFields(t *testing.T) {
 	for name, tc := range map[string]struct{ text, want, wantErr string }{
 		"all fields":      {`{"quote": 0.33, "entscheid": "ja", "geprueft": true}`, `{"entscheid":"ja","geprueft":true,"quote":0.33}`, ""},

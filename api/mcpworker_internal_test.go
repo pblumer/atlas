@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
-// The MCP Worker Type on the server (ADR-draft-mcp-worker): a Worker is one MCP server,
+// The MCP Worker Type on the server (ADR-0568): a Worker is one MCP server,
 // a task calls one of its tools, and which tools a process may call is the Worker's list.
 
 const mcpTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>

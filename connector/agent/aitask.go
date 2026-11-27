@@ -51,7 +51,7 @@ type Task struct {
 	// exactly, and for its reason.
 	RequestID string `json:"requestId,omitempty"`
 	// TimeoutMs bounds the one call, in milliseconds, when the task states a timeout
-	// (ADR-draft-agent-run-record); zero leaves the worker's default.
+	// (ADR-0566); zero leaves the worker's default.
 	TimeoutMs int64 `json:"timeoutMs,omitempty"`
 	// Outputs are the fields the answer must carry; empty means free text.
 	Outputs []Output `json:"outputs,omitempty"`

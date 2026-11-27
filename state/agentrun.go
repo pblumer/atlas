@@ -8,7 +8,7 @@ import (
 //
 // Every call an agent makes to a language model, and what each tool it called
 // returned, is retained here in the order it happened, keyed under the owning process
-// instance (ADR-0117, as built by ADR-draft-agent-run-record). The shape is the decision
+// instance (ADR-0117, as built by ADR-0566). The shape is the decision
 // evaluation's (ADR-0066): the worker did the work off the processor goroutine, the
 // handler froze its report into an event, and this writer runs only from applyToState,
 // from that event alone — so replay rebuilds the same rows without asking any model

@@ -52,7 +52,7 @@ func applyAuth(h http.Header, scheme, key string) error {
 }
 
 // callTimeout is how long one call may take: what the model states on the element when
-// it states anything (ADR-draft-agent-run-record), otherwise the adapter's own setting,
+// it states anything (ADR-0566), otherwise the adapter's own setting,
 // which postJSON turns into two minutes when that is unset too.
 func callTimeout(configured time.Duration, req Request) time.Duration {
 	if req.Timeout > 0 {

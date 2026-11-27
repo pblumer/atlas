@@ -35,7 +35,7 @@ func mcpServer(t *testing.T, result string, seen *[]map[string]any) *httptest.Se
 }
 
 // A leased MCP task is worked with what the worker alone holds: the server's address
-// and its credential, read from the worker's own environment (ADR-draft-mcp-worker).
+// and its credential, read from the worker's own environment (ADR-0568).
 func TestALeasedMcpTaskIsWorkedFromTheWorkersEnvironment(t *testing.T) {
 	var seen []map[string]any
 	srv := mcpServer(t, `{"content":[{"type":"text","text":"2 Treffer"}],"structuredContent":{"count":2}}`, &seen)

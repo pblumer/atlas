@@ -12,7 +12,7 @@ import (
 )
 
 // Output is one field the model's answer must carry, as the model is told it
-// (ADR-draft-agent-transcript-and-answer): the shape of <atlas:agentOutput>.
+// (ADR-0567): the shape of <atlas:agentOutput>.
 type Output struct {
 	Name        string   `json:"name"`
 	Type        string   `json:"type"`

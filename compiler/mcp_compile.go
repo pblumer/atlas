@@ -7,7 +7,7 @@ import (
 )
 
 // compileMcpConnectorTask compiles an <atlas:mcpConnector> service task: one call to one
-// tool of the MCP server its Worker is (ADR-draft-mcp-worker).
+// tool of the MCP server its Worker is (ADR-0568).
 //
 // What is checked here is what the model alone can get wrong: a Worker and a tool have
 // to be named, the arguments have to be an object, and a timeout has to be a duration.

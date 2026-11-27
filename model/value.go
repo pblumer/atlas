@@ -1519,7 +1519,7 @@ const (
 	IncidentAuthorizationDenied IncidentReason = 8
 	// IncidentAgentLimit marks an agent-driven container that reached a bound its model
 	// states — its rounds or its token budget — before the agent said it was done
-	// (ADR-draft-agent-run-record). The container is parked, not failed: resolving the
+	// (ADR-0566). The container is parked, not failed: resolving the
 	// incident grants the same allowance once more and asks for the next round.
 	IncidentAgentLimit IncidentReason = 9
 )

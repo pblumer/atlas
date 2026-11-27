@@ -1168,11 +1168,11 @@ type ConnectorTaskDetail struct {
 	AgentModel  int32
 	AgentPrompt RestExpr
 	// AgentLimits is the ai task's authored timeout for its one call
-	// (ADR-draft-agent-run-record); its run bounds are a container's and stay zero.
+	// (ADR-0566); its run bounds are a container's and stay zero.
 	AgentLimits AgentLimits
 	// AgentOutputs are the fields the task's answer must carry, in the order they were
 	// authored; empty means the answer is free text. AgentOutputProblems is what was
-	// wrong with the declarations (ADR-draft-agent-transcript-and-answer).
+	// wrong with the declarations (ADR-0567).
 	AgentOutputs        []AgentOutput
 	AgentOutputProblems []string
 	// Object-store fields (JobType == S3JobType, ADR-0442).
@@ -1339,7 +1339,7 @@ type ConnectorTaskDetail struct {
 	AtlasReportConnector RestExpr
 	AtlasReportOp        int32
 	AtlasReportInput     RestExpr
-	// MCP task fields (JobType == MCPJobType, ADR-draft-mcp-worker). Connector (above)
+	// MCP task fields (JobType == MCPJobType, ADR-0568). Connector (above)
 	// names the configured MCP Worker — the server; McpConnector is that name as an
 	// expression when the task computes it. McpTool is the interned name of the one tool
 	// the task calls, McpInput its arguments as a FEEL context, and McpTimeoutNanos how
@@ -1609,10 +1609,10 @@ type AdHocDetail struct {
 	// element and sees what leaves the process.
 	AgentContext []int32
 	// AgentLimits bound the run: how many rounds, how many tokens, and how long one
-	// call to the model may take (ADR-draft-agent-run-record).
+	// call to the model may take (ADR-0566).
 	AgentLimits AgentLimits
 	// AgentOutputs are the fields the agent's final answer must carry; empty means the
-	// answer is free text (ADR-draft-agent-transcript-and-answer).
+	// answer is free text (ADR-0567).
 	AgentOutputs        []AgentOutput
 	AgentOutputProblems []string
 	ResultCollection    int32 // interned variable name a tool result is appended to, -1 if none

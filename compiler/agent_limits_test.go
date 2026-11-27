@@ -20,7 +20,7 @@ func aiTask(attrs string) string {
 }
 
 // The three bounds ADR-0117 named are read off the container, and a container that
-// states no round bound still has one (ADR-draft-agent-run-record).
+// states no round bound still has one (ADR-0566).
 func TestAgentLimitsCompileOntoTheContainer(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(limitedAdHoc(`maxIterations="6" tokenBudget="40000" timeout="PT90S" maxContextTokens="30000"`)))
 	if err != nil {
@@ -99,7 +99,7 @@ const answerFields = `<atlas:agentOutput name="entscheid" type="string" required
 
 // The fields an answer must carry are read off the element that hosts the agent — an ai
 // task or a container — in the order they were written, and do not become tool
-// parameters of anything (ADR-draft-agent-transcript-and-answer).
+// parameters of anything (ADR-0567).
 func TestAnswerFieldsCompileOntoTheirHost(t *testing.T) {
 	task := strings.Replace(aiTask(``), `</extensionElements>`, answerFields+`</extensionElements>`, 1)
 	container := agentAdHoc(strings.Replace(twoToolAdHoc, `<extensionElements>`, `<extensionElements>`+answerFields, 1))

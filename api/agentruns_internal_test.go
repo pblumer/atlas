@@ -40,7 +40,7 @@ func agentRunsRoute(t *testing.T, srv *Server, piKey uint64) []agentRunView {
 
 // A worker's account of a round is kept with the round and read back from the instance:
 // the numbers as reported, the element and the round as the engine states them
-// (ADR-draft-agent-run-record).
+// (ADR-0566).
 func TestAnAgentRoundsAccountIsKeptAndReadBack(t *testing.T) {
 	srv, round := startAgentRound(t)
 	code, raw := completeJob(t, srv, round, fmt.Sprintf(`{"worker":"w1","leaseToken":%d,
@@ -165,7 +165,7 @@ const personalAccount = `"agentRun":{"model":"m","inputTokens":7,"outputTokens":
 
 // Where a process declares personal data, the texts of a model call are stored under the
 // data subject's key, so erasing the subject reaches them — and the numbers stay
-// (ADR-0314, ADR-draft-agent-run-record).
+// (ADR-0314, ADR-0566).
 func TestAPersonalProcessKeepsACallsTextsUnderTheSubjectsKey(t *testing.T) {
 	srv := newVaultServer(t)
 	deployAndStartWith(t, srv, personalAiTaskBPMN, `{"kunde":"k-1","name":"Muster"}`)
@@ -221,7 +221,7 @@ func TestAPersonalProcessWithoutASubjectWithholdsACallsTexts(t *testing.T) {
 
 // From its second round on, a round is resolved with the run as it happened: the model's
 // own earlier turn, what its call returned, the round's real number, and only the context
-// that changed (ADR-draft-agent-transcript-and-answer).
+// that changed (ADR-0567).
 func TestASecondRoundIsResolvedWithTheRunsTranscript(t *testing.T) {
 	srv, round := startAgentRound(t)
 	if round.Connector.Fields["history"] != nil || round.Connector.Fields["round"] != float64(1) {

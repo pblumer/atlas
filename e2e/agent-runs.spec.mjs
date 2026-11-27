@@ -1,5 +1,5 @@
 // End-to-end coverage for the replay's Agent tab (api/web/editor.js,
-// ADR-draft-agent-run-record): what an instance's agents asked a model, what that cost
+// ADR-0566): what an instance's agents asked a model, what that cost
 // and what came back.
 //
 // The record exists so that "what did the agent do in this instance" has an answer an

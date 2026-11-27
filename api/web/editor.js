@@ -575,7 +575,7 @@ const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 // rows. Each result carries a "Rule N" badge; a row backed by a decision table is
 // hoverable — data-dec indexes the caller's evaluation list so a shared popover can
 // look the trace back up. Shared by the replay Decisions tab and the live view.
-// --- An instance's agents in the replay (ADR-draft-agent-run-record) ---
+// --- An instance's agents in the replay (ADR-0566) ---
 //
 // agentRunsHTML draws what GET /api/v1/instances/{key}/agent-runs answers: per agent —
 // an ai task or an agent-driven container — what its calls add up to, then every call
@@ -8030,7 +8030,7 @@ function saveAgentParams(modeler, element, rows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
-// --- An agent's answer fields (ADR-draft-agent-transcript-and-answer) ---
+// --- An agent's answer fields (ADR-0567) ---
 //
 // <atlas:agentOutput> is <atlas:agentParam> turned round: a typed value the model must
 // supply, in its answer rather than in a call. It sits on the element that hosts the
@@ -11331,7 +11331,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // (ADR-0253). Empty everywhere else.
         html += agentToolHTML(bo);
         // The fields an ai task's answer must carry
-        // (ADR-draft-agent-transcript-and-answer). Empty for every other task.
+        // (ADR-0567). Empty for every other task.
         if (bo.$type === "bpmn:ServiceTask") html += agentOutputsHTML(bo);
         // Generic zeebe:ioMapping input/output editor for job-backed activities
         // (ADR-0068). A business rule task's ioMapping inputs are decision inputs
@@ -13358,7 +13358,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           resultElement: elem === "" ? undefined : (elem.startsWith("=") ? elem : "= " + elem),
           // A bound left empty is written as absent: the compiler reads a missing
           // attribute as "not stated", and an empty one would be a second way to say
-          // it (ADR-draft-agent-run-record).
+          // it (ADR-0566).
           maxIterations: limitValue("#f-agent-maxiter"),
           tokenBudget: limitValue("#f-agent-budget"),
           timeout: limitValue("#f-agent-timeout"),
@@ -13382,7 +13382,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         body.querySelector("#nt-agent-connector"), "agent");
     }
 
-    // An agent's answer fields (ADR-draft-agent-transcript-and-answer): the parameter
+    // An agent's answer fields (ADR-0567): the parameter
     // group's behaviour below, for the declarations of what comes back.
     const aoGroup = body.querySelector("[data-agent-output-group]");
     if (aoGroup) {
@@ -17405,7 +17405,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   let incidentTotal = 0;
   let incidentsByElement = new Map();
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
-  let agentRuns = [];    // this instance's model calls and tool results (ADR-draft-agent-run-record)
+  let agentRuns = [];    // this instance's model calls and tool results (ADR-0566)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
   let openTrails = {};   // data-object name → whether its state trail is expanded

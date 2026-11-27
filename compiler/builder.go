@@ -586,7 +586,7 @@ const AtlasReportJobType = "io.atlas.atlasreport"
 const AtlasReportJobTypeIndex int32 = 41
 
 // MCPJobType is the reserved job type a service task carries when it calls one tool of
-// a Model Context Protocol server (ADR-draft-mcp-worker). The server is the configured
+// a Model Context Protocol server (ADR-0568). The server is the configured
 // Worker the task names; which of its tools a process may call is listed on that Worker.
 const MCPJobType = "io.atlas.mcp"
 
@@ -2764,7 +2764,7 @@ func (b *Builder) AddAtlasReportConnectorTask(cfg AtlasReportConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// McpConfig is the deploy-time configuration of an MCP task (ADR-draft-mcp-worker): the
+// McpConfig is the deploy-time configuration of an MCP task (ADR-0568): the
 // Worker that is the server, the one tool to call, the arguments as a FEEL context, the
 // variable the result lands in, and how long the call may take (0 leaves the worker's own
 // bound).
@@ -2945,11 +2945,11 @@ type AgentTaskConfig struct {
 	ResultVar string
 	Retries   int32
 	// Outputs are the fields the answer must carry, with what was wrong with any of
-	// them (ADR-draft-agent-transcript-and-answer).
+	// them (ADR-0567).
 	Outputs        []AgentOutput
 	OutputProblems []string
 	// Limits carries the call's authored timeout, and what was wrong with any bound
-	// the task states (ADR-draft-agent-run-record).
+	// the task states (ADR-0566).
 	Limits AgentLimits
 }
 

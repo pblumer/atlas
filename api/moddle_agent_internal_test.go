@@ -12,7 +12,7 @@ import (
 // Neither is a *Connector element, so the connector drift test does not see them — and
 // bpmn-js drops an extension element or attribute it has no type for, which would strip
 // an authored answer shape the first time the model is saved from the Modeler
-// (ADR-draft-agent-transcript-and-answer).
+// (ADR-0567).
 func TestModdleKnowsAnAgentsDeclarations(t *testing.T) {
 	raw, err := os.ReadFile("web/atlas-moddle.json")
 	if err != nil {

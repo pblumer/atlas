@@ -72,7 +72,7 @@ func compiledTask(t *testing.T, attrs string) (*compiler.CompiledProcess, *compi
 
 // A task is resolved into what a worker needs and nothing else: the Worker's name, the
 // tool, the arguments with their expressions evaluated against the variables the task
-// sees, and the codes the process catches (ADR-draft-mcp-worker).
+// sees, and the codes the process catches (ADR-0568).
 func TestATaskIsResolvedAgainstTheVariablesItSees(t *testing.T) {
 	cp, detail := compiledTask(t, `connector="=server" tool="search_issues" resultVariable="treffer" timeout="PT30S"
 	  input='{"query":"=meldung","dringend":"=eilt","anzahl":"=limit","instanz":"=processInstanceKey","fest":7,"fehlt":"=gibtsnicht","kopf":"=daten.kopf"}'`)

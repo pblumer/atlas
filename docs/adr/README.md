@@ -653,6 +653,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0563](0563-cross-origin-protection.md) | A browser's request that changes something comes from Atlas's own origin | Accepted | Landed |
 | [0564](0564-script-execution-defaults.md) | What a script task may reach when nobody said | Proposed | Not started |
 | [0565](0565-a-shop-and-its-catalogues-from-another-system.md) | A shop and its catalogues from another system — a person's grant for `…/shop`, and a catalogue maintained where it is published from | Proposed | Partial |
+| [0566](0566-agent-run-record.md) | An agent's run is on the record, and its bounds are the engine's | Accepted | Landed |
+| [0567](0567-agent-transcript-and-answer.md) | An agent is shown its own run again, and its answer can be held to a shape | Accepted | Landed |
+| [0568](0568-mcp-worker.md) | An MCP server is a Worker, and one of its tools is a task | Accepted | Landed |
 
 ## The two states of a record
 

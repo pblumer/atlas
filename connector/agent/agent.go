@@ -53,12 +53,12 @@ type Request struct {
 	Results []string          `json:"results,omitempty"`
 	Round   int               `json:"round"`
 	// Outputs are the fields the answer must carry; empty means free text
-	// (ADR-draft-agent-transcript-and-answer).
+	// (ADR-0567).
 	Outputs []Output `json:"outputs,omitempty"`
 	// History is the run's earlier rounds as they happened, and Changed the context
 	// values the model has not been told yet. Both are set only when every earlier
 	// round is on the record whole; without them a round is put the old way, from
-	// Results (ADR-draft-agent-transcript-and-answer).
+	// Results (ADR-0567).
 	History []PastRound       `json:"history,omitempty"`
 	Changed map[string]string `json:"changed,omitempty"`
 	// System replaces what an adapter would otherwise tell the model about the
@@ -79,7 +79,7 @@ type Request struct {
 	// state, and a request that travelled from the engine never carries one.
 	System string `json:"-"`
 	// Timeout bounds this one call when the model states one on the element
-	// (ADR-draft-agent-run-record). Zero leaves the adapter's own default. It is not
+	// (ADR-0566). Zero leaves the adapter's own default. It is not
 	// serialized as part of the request: it travels beside it, in milliseconds, because
 	// it is a property of the call and not something the model is told.
 	Timeout time.Duration `json:"-"`
@@ -93,7 +93,7 @@ type Decision struct {
 	Outputs   []model.VariableValue
 	// Call is the adapter's account of the call that produced this decision: which
 	// model answered, what it read and wrote, and the texts that went each way. It is
-	// what becomes the durable record of the round (ADR-draft-agent-run-record).
+	// what becomes the durable record of the round (ADR-0566).
 	Call Call
 }
 

@@ -1,4 +1,4 @@
-# ADR-DRAFT: An MCP server is a Worker, and one of its tools is a task
+# ADR-0568: An MCP server is a Worker, and one of its tools is a task
 
 - **Status:** Accepted
 - **Implementation:** Landed

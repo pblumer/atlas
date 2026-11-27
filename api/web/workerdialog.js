@@ -38,7 +38,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // transcription — the form keeps every field in the DOM and only *hides* the ones a
 // kind does not use, so a hidden field still has a value and FormData still reports it.
 // parseToolGrants reads an MCP Worker's list of permitted tools as an operator writes it
-// (ADR-draft-mcp-worker): one tool per line — its name, then what a second delivery
+// (ADR-0568): one tool per line — its name, then what a second delivery
 // does and whether a repeated effect can be undone. The two words are optional here and
 // the server fills in the worst case for a line that leaves them out; a word it does
 // not know is sent as written, so the refusal names it.

@@ -25,7 +25,7 @@ import (
 // that does not gets a failed job, as for any other failure.
 const CodeToolError = "MCP_TOOL_ERROR"
 
-// Job is a resolved MCP task as it travels to a worker (ADR-draft-mcp-worker): which
+// Job is a resolved MCP task as it travels to a worker (ADR-0568): which
 // configured server, which tool, and the arguments with their FEEL already evaluated.
 // There is nowhere in it to put a credential or an endpoint — both are the worker's.
 type Job struct {

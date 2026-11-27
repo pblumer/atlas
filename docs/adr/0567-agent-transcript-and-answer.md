@@ -1,4 +1,4 @@
-# ADR-DRAFT: An agent is shown its own run again, and its answer can be held to a shape
+# ADR-0567: An agent is shown its own run again, and its answer can be held to a shape
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -69,7 +69,7 @@ Chosen: **option 1 and option A**.
 
 ### The run's record becomes a transcript
 
-The model-call fact of [ADR-draft-agent-run-record](draft-agent-run-record.md) gains three
+The model-call fact of [ADR-0566](0566-agent-run-record.md) gains three
 texts the worker reports: `Wire`, naming the provider format; `Turn`, the model's whole turn
 exactly as the provider returned it; and `Context`, the process variables the call was given.
 The engine stores `Turn` and never reads it.
@@ -217,6 +217,6 @@ it carries what the engine evaluated, so a personal value appears in it as its e
 - answers the transcript question of [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md)
   and [ADR-0254](0254-agent-rounds-on-a-worker.md)
 - completes [ADR-0117](0117-ai-agent-task.md)'s output schema
-- builds on [ADR-draft-agent-run-record](draft-agent-run-record.md)
+- builds on [ADR-0566](0566-agent-run-record.md)
 - follows [ADR-0257](0257-what-an-agent-may-read.md) for what the context is
 - applies [ADR-0314](0314-portal-personal-data.md) to a stored turn

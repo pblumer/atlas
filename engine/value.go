@@ -77,7 +77,7 @@ type inflightValue struct {
 	// loop, so the processor copies sixteen bytes and allocates nothing.
 	taskAnswer *model.TaskAnswerValue
 	// agentRun rides only on the AgentRun event a model call or a tool's result emits
-	// (ADR-draft-agent-run-record), behind a pointer for the same reason: it is a dozen
+	// (ADR-0566), behind a pointer for the same reason: it is a dozen
 	// strings wide and is allocated off the hot path.
 	agentRun *model.AgentRunValue
 }

@@ -21,7 +21,7 @@ func agentRuns(t *testing.T, s *state.Store, piKey uint64) []model.AgentRunValue
 
 // An agent's facts are read back in the order they happened, each element instance's
 // totals follow its latest model call, a tool result moves no total, and all of it goes
-// with the instance's history (ADR-draft-agent-run-record).
+// with the instance's history (ADR-0566).
 func TestAgentRunsAreKeptInOrderSummedPerElementAndPurgedWithTheirInstance(t *testing.T) {
 	s := openStore(t)
 	pi, other := model.NewKey(1, 10), model.NewKey(1, 11)

@@ -9,7 +9,7 @@ import (
 
 // SafeAgentRounds is how many rounds an agent-driven ad-hoc subprocess that states no
 // maxIterations gets before the engine parks it on an incident
-// (ADR-draft-agent-run-record). It is the standard loop's SafeLoopCeiling applied to a
+// (ADR-0566). It is the standard loop's SafeLoopCeiling applied to a
 // loop whose every turn is a paid call to a model: far above what a deliberate agent
 // needs, far below what a model that never stops choosing tools would cost. Resolving
 // the incident grants the same number again, so the ceiling stops a runaway without
@@ -18,7 +18,7 @@ const SafeAgentRounds = 25
 
 // SafeAgentContextTokens is how much a round's request may have grown to before the next
 // round is put as a new conversation, for a container that states no maxContextTokens
-// (ADR-draft-agent-transcript-and-answer). It is far below what current models can read,
+// (ADR-0567). It is far below what current models can read,
 // on purpose: a run's every round re-reads the whole conversation, so the cost of a long
 // one grows with the square of its length long before any window is full.
 const SafeAgentContextTokens = 150_000
@@ -38,7 +38,7 @@ const (
 const RuleAgentLimit = "agent.limit"
 
 // AgentLimits are the bounds a model states on an <atlas:agentConnector>
-// (ADR-0117, as built by ADR-draft-agent-run-record). Zero in any field means "not
+// (ADR-0117, as built by ADR-0566). Zero in any field means "not
 // stated", never "none allowed".
 //
 // MaxRounds and TokenBudget bound an agent-driven container's run and are enforced by

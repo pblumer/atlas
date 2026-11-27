@@ -18,7 +18,7 @@ const (
 )
 
 // PastRound is one earlier round of the run, as it is put in front of the model again
-// (ADR-draft-agent-transcript-and-answer): what that call added to the conversation, the
+// (ADR-0567): what that call added to the conversation, the
 // model's own turn exactly as its provider returned it, and what each tool it called
 // returned.
 //

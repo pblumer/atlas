@@ -6,7 +6,7 @@ import (
 )
 
 // An instance's model calls are read over MCP through the one route the HTTP surface
-// has for them (ADR-0016, ADR-draft-agent-run-record). An instance that asked no model
+// has for them (ADR-0016, ADR-0566). An instance that asked no model
 // answers an empty list, and a key that is not a number is the caller's error.
 func TestInstanceAgentRunsViaTool(t *testing.T) {
 	atlas := newAtlas(t)

@@ -18,7 +18,7 @@ func mcpTask(attrs string) string {
 }
 
 // An MCP task compiles to a job of its own type carrying the Worker, the one tool, the
-// arguments as an expression and the bound on the call (ADR-draft-mcp-worker).
+// arguments as an expression and the bound on the call (ADR-0568).
 func TestAnMcpTaskCompiles(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(mcpTask(
 		`connector="monitoring" tool="search_issues" input='{"query":"=meldung","limit":5}' resultVariable="treffer" timeout="PT30S"`)))

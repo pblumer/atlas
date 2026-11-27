@@ -1885,7 +1885,7 @@ type xmlAgentParam struct {
 	Required    string `xml:"required,attr"`
 	// Values and output belong to <atlas:agentOutput>, which is read by the same walk
 	// because it is the same declaration turned round: a typed value the model must
-	// supply, in its answer rather than in a call (ADR-draft-agent-transcript-and-answer).
+	// supply, in its answer rather than in a call (ADR-0567).
 	// Values is the comma-separated set a string field is limited to.
 	Values string `xml:"values,attr"`
 	output bool
@@ -2508,7 +2508,7 @@ type xmlServiceTask struct {
 	// draws, read with a token a *worker* holds.
 	AtlasReport *xmlAtlasReportConnector `xml:"extensionElements>atlasReportConnector"`
 	// Mcp, when present, marks this service task an MCP task: one call to one tool of
-	// the Model Context Protocol server its Worker is (ADR-draft-mcp-worker).
+	// the Model Context Protocol server its Worker is (ADR-0568).
 	Mcp *xmlMcpConnector `xml:"extensionElements>mcpConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
@@ -2901,7 +2901,7 @@ type xmlAtlasReportConnector struct {
 }
 
 // An MCP task's configuration, carried as an <atlas:mcpConnector> extension
-// (ADR-draft-mcp-worker). connector names the configured MCP Worker — the server, whose
+// (ADR-0568). connector names the configured MCP Worker — the server, whose
 // endpoint, credential and list of permitted tools live on the Worker, never in the
 // model. tool is the one tool this task calls, by the name the server gives it. input is
 // a JSON object of that tool's arguments, whose string values starting with '=' are FEEL.

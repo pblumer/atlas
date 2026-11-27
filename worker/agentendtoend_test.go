@@ -178,7 +178,7 @@ func TestAnAgentRunsEndToEndOverTheWorkerProtocol(t *testing.T) {
 	// round's call returned. The worker held nothing in between — the process did, which
 	// is the trade ADR-0253 makes and the reason the loop is durable.
 	//
-	// And it carries it as the run happened (ADR-draft-agent-transcript-and-answer): the
+	// And it carries it as the run happened (ADR-0567): the
 	// first prompt byte for byte, the model's own turn handed back, and the call's result
 	// answering that call — not a fresh prompt retelling the results in words.
 	second := rounds[1]

@@ -1233,7 +1233,7 @@ const WORKER_TYPES = [
   {
     id: "mcp", name: "MCP tool", kind: "Protocol",
     desc: "Calls one tool of a Model Context Protocol server. A Worker is one server: its endpoint, the credential it asks for, and the list of tools a process may call on it — a tool that is not on the list is not called. A task names the Worker, the tool and its arguments; in an agent-driven ad-hoc subprocess it is one of the agent\u0027s tools, described by the modeller\u0027s own documentation and never by the server\u0027s.",
-    refs: "ADR-draft-mcp-worker", status: "active", statusLabel: "configured below",
+    refs: "ADR-0568", status: "active", statusLabel: "configured below",
   },
   {
     id: "wikiwikibangbang", name: "wikiwikibangbang", kind: "Wiki",
@@ -5831,7 +5831,7 @@ function wireWorkerManagement(workers) {
         // typed for a kind picked earlier would ride along into the next create.
         if (!sh.model) modelIn.value = "";
         modelIn.disabled = !sh.model;
-        // The list of tools an MCP Worker permits (ADR-draft-mcp-worker): shown for that
+        // The list of tools an MCP Worker permits (ADR-0568): shown for that
         // kind alone, and emptied for any other so it cannot ride into another create.
         const toolsField = form.querySelector(".tools-field");
         toolsField.style.display = sh.tools ? "" : "none";

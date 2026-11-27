@@ -22,7 +22,7 @@ var oneTool = []Tool{{Name: "lookup", Params: []Param{{Name: "id", Type: "string
 
 // The Messages format reports the uncached, cache-written and cache-read input apart.
 // The account sums them, because a budget over a figure that silently leaves out the
-// cached part would not be a budget (ADR-draft-agent-run-record).
+// cached part would not be a budget (ADR-0566).
 func TestMessagesAccountOfACall(t *testing.T) {
 	m := &HTTPModel{APIKey: "k", Endpoint: cannedEndpoint(t, `{
 	  "model": "claude-opus-5-5", "stop_reason": "tool_use",

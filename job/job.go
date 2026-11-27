@@ -60,7 +60,7 @@ type Completion struct {
 	// rather than an error.
 	ToolCalls []model.ToolCall
 	// AgentRun is the account of the model call behind this completion — the model
-	// that answered, its token counts, the texts (ADR-draft-agent-run-record). nil
+	// that answered, its token counts, the texts (ADR-0566). nil
 	// for every worker that asks no model.
 	AgentRun *model.AgentRunValue
 	// Outcome is how a product action ended, stated by a shop send task (ADR-0429
@@ -609,7 +609,7 @@ func (r *Runner) Submit(outcomes []Outcome) {
 		}
 		if o.Completion.AgentRun != nil {
 			// A call to a language model: its account rides the completion, with the
-			// round's tool calls when it chose any (ADR-draft-agent-run-record).
+			// round's tool calls when it chose any (ADR-0566).
 			r.engine.CompleteJobWithAgentRun(o.Job.Key, o.Completion.AgentRun, o.Completion.ToolCalls, o.Completion.Outputs...)
 			continue
 		}

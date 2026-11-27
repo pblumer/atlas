@@ -324,7 +324,7 @@ test("an ai task offers no context list", async ({ page }) => {
   expect(page.__errors).toEqual([]);
 });
 
-// --- Bounds and answer fields (ADR-draft-agent-run-record, -transcript-and-answer) ---
+// --- Bounds and answer fields (ADR-0566, -transcript-and-answer) ---
 //
 // The first test is the one that matters most and drives no field at all. bpmn-js drops
 // an attribute or an extension element its moddle has no type for, so a model that
@@ -431,7 +431,7 @@ test("an ai task gets a timeout and answer fields of its own", async ({ page }) 
   expect(page.__errors).toEqual([]);
 });
 
-// --- An MCP task as an agent's tool (ADR-draft-mcp-worker) -------------------------
+// --- An MCP task as an agent's tool (ADR-0568) -------------------------
 //
 // An MCP server's tool reaches an agent the way everything else does: as an activity in
 // the container, named by its element id and described by the modeller. These tests are

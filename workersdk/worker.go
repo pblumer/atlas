@@ -118,7 +118,7 @@ type Outcome struct {
 	// so a round that ends completes with variables like any other job.
 	ToolCalls []ToolCallReport
 	// AgentRun is a worker's account of the call it made to a language model for this
-	// job (ADR-draft-agent-run-record): the model that answered, what it read and
+	// job (ADR-0566): the model that answered, what it read and
 	// wrote, and the texts. The engine keeps it as the durable record of the call; nil
 	// for every kind that asks no model.
 	AgentRun *AgentRunReport
@@ -146,7 +146,7 @@ type AgentRunReport struct {
 	// Wire and Turn are the model's whole turn in its provider's own format, kept so
 	// the next round can be shown it again unchanged; Context is the process variables
 	// this call was given, so the next round is told only what changed
-	// (ADR-draft-agent-transcript-and-answer).
+	// (ADR-0567).
 	Wire    string            `json:"wire,omitempty"`
 	Turn    string            `json:"turn,omitempty"`
 	Context map[string]string `json:"context,omitempty"`

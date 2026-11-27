@@ -289,7 +289,7 @@ func startNextAgentRound(c *ProcessingContext, scope uint64, ei *model.ElementIn
 	}
 	// A bound the model states — or the ceiling it gets for stating none — is weighed
 	// here and nowhere else, because this is the only place a round after the first is
-	// asked for (ADR-draft-agent-run-record). The fact of the last call says whether it
+	// asked for (ADR-0566). The fact of the last call says whether it
 	// reached one; a run that ended instead never comes this way.
 	if total := c.AgentRunTotal(ei.ProcessInstanceKey, scope); total.Limit != model.AgentRunLimitNone {
 		parkAgentAtLimit(c, scope, ei, d.AgentLimits, total)
@@ -328,7 +328,7 @@ func collectAgentToolResult(c *ProcessingContext, key uint64, ei *model.ElementI
 	}
 	// The result goes on the run's record whether or not the model names a collection:
 	// the collection is the process's own view of it, the record is what the next round
-	// is told its call returned (ADR-draft-agent-transcript-and-answer).
+	// is told its call returned (ADR-0567).
 	recordAgentToolResult(c, ei.FlowScopeKey, key, ei, val)
 	if d.ResultCollection < 0 {
 		return

@@ -12,7 +12,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// --- The MCP Worker Type on the server (ADR-draft-mcp-worker) ---
+// --- The MCP Worker Type on the server (ADR-0568) ---
 //
 // A Worker of this type is one Model Context Protocol server. This file holds what only
 // the server side knows about it: the list of tools a process may call on it, checked

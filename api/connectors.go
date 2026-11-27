@@ -946,7 +946,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// (ADR-0473). An editor's act, like the credential.
 		FormLookups *bool `json:"formLookups"`
 		// Tools replaces an MCP Worker's list of permitted tools
-		// (ADR-draft-mcp-worker); an empty list permits none. An editor's act.
+		// (ADR-0568); an empty list permits none. An editor's act.
 		Tools *[]mcpToolGrant `json:"tools"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {

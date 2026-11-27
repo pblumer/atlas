@@ -58,7 +58,7 @@ type Command struct {
 	// zero value is the ending, not an error.
 	ToolCalls []model.ToolCall
 	// AgentRun is a worker's account of the model call this completion ends: the model
-	// that answered, its token counts, the texts (ADR-draft-agent-run-record). The API
+	// that answered, its token counts, the texts (ADR-0566). The API
 	// allocates it off the run loop; the handler states everything that decides
 	// anything — element, round, sums, bound — and freezes it into an AgentRun event
 	// beside JobCompleted. nil when the worker reported nothing, which still records

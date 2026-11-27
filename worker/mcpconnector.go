@@ -12,7 +12,7 @@ import (
 // mcpEnvPrefix is where an MCP worker's servers live: ATLAS_MCP_CONNECTORS names them,
 // and per name ATLAS_MCP_<NAME>_URL is the server's endpoint and
 // ATLAS_MCP_<NAME>_CREDENTIALS its token, or a bundle {"token": "…"}, or nothing for a
-// server that asks for none (ADR-draft-mcp-worker).
+// server that asks for none (ADR-0568).
 const mcpEnvPrefix = "ATLAS_MCP_"
 
 // mcpRegistryFromEnv builds the worker's MCP servers from its environment. It returns

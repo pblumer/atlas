@@ -40,7 +40,7 @@ const (
 )
 
 // AgentRunValue is one fact about an agent's run (ADR-0117's VTAgentRun, as built by
-// ADR-draft-agent-run-record): a call to a language model, or what a tool it called
+// ADR-0566): a call to a language model, or what a tool it called
 // returned. It is append-only history keyed under its process instance, like a decision
 // evaluation (ADR-0066), so an operator can read after the fact which model answered,
 // what it was asked, what it chose and what that cost.

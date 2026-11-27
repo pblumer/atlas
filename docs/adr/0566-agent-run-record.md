@@ -1,4 +1,4 @@
-# ADR-DRAFT: An agent's run is on the record, and its bounds are the engine's
+# ADR-0566: An agent's run is on the record, and its bounds are the engine's
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -63,7 +63,7 @@ Chosen: **option 1**.
 `io.atlas.ai.agent` or `io.atlas.ai.task`, beside `JobCompleted`. It is append-only history
 under its instance like a decision evaluation (ADR-0066), keyed
 `(instance, element instance, ts, pos)`, and goes with the instance's history.
-[ADR-draft-agent-transcript-and-answer](draft-agent-transcript-and-answer.md) adds a second
+[ADR-0567](0567-agent-transcript-and-answer.md) adds a second
 kind of fact, what a tool returned, and three texts to this one.
 
 | Stated by the worker (an account) | Stated by the engine |

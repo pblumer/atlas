@@ -52,7 +52,7 @@ func emptyProcess(t *testing.T) *compiler.CompiledProcess {
 }
 
 // The record says which round this is and what the earlier ones were; the round is told
-// only the context that changed since (ADR-draft-agent-transcript-and-answer).
+// only the context that changed since (ADR-0567).
 func TestARoundIsGivenItsRunsTranscript(t *testing.T) {
 	cp := emptyProcess(t)
 	req := Request{Goal: "prüfe", Tools: oneTool, Round: 1, Context: map[string]string{"dossier": "D2", "kunde": "K", "neu": "x"}}

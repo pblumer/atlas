@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// --- An agent's run on the record (ADR-0117, as built by ADR-draft-agent-run-record) ---
+// --- An agent's run on the record (ADR-0117, as built by ADR-0566) ---
 //
 // Every completed call to a language model leaves one AgentRun fact beside the job's
 // completion: which element, which round, which model answered, what it read and wrote,
@@ -169,7 +169,7 @@ func parkAgentAtLimit(c *ProcessingContext, key uint64, ei *model.ElementInstanc
 
 // recordAgentToolResult appends what one tool returned to the run's record, paired with
 // the call that asked for it by the model's own call id
-// (ADR-draft-agent-transcript-and-answer). With the model calls it makes the history a
+// (ADR-0567). With the model calls it makes the history a
 // transcript: the next round can be shown its own turn and the answer to each call it
 // made, instead of a list of results it has to match up itself.
 //

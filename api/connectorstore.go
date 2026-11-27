@@ -118,7 +118,7 @@ const (
 	// with a technical principal's API token (connector/atlasreport.Bundle). The engine
 	// builds no client from it.
 	connectorKindAtlasReport = "atlasreport"
-	// connectorKindMCP is the MCP Worker Type (ADR-draft-mcp-worker): a Worker of it is
+	// connectorKindMCP is the MCP Worker Type (ADR-0568): a Worker of it is
 	// one Model Context Protocol server, and a task calls one of its tools.
 	connectorKindMCP = "mcp"
 	// connectorKindAD is the Active Directory Worker Type
@@ -204,7 +204,7 @@ type configuredWorker struct {
 	// remote data source is offered for (entra) may carry it.
 	FormLookups bool `json:"formLookups,omitempty"`
 	// Tools is an MCP Worker's list of the tools a process may call on its server
-	// (ADR-draft-mcp-worker). A tool that is not on it is not called, and the list is
+	// (ADR-0568). A tool that is not on it is not called, and the list is
 	// empty until one of the Worker's editors fills it: one credential opens every
 	// tool a server offers, and which of them a model may reach is a decision
 	// somebody has to have made.

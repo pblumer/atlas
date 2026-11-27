@@ -1011,7 +1011,7 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 
 	// A job that was a call to a language model leaves the fact of that call on the
-	// record, in this batch (ADR-draft-agent-run-record).
+	// record, in this batch (ADR-0566).
 	recordAgentRun(c, c.cmd.Key, job)
 
 	// A shop send task states how an action ended (ADR-0429 §4); the outcome rides
@@ -1395,7 +1395,7 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 		runElementBehavior(c, elKey, ei)
 		return
 	case model.IncidentAgentLimit:
-		// An agent parked at a bound (ADR-draft-agent-run-record): the operator grants
+		// An agent parked at a bound (ADR-0566): the operator grants
 		// the allowance once more, which is simply the next round. Nothing is reset —
 		// the count and the sums run on, and the next multiple parks it again.
 		createAgentRoundJob(c, elKey, ei)

@@ -16,12 +16,12 @@
 > timeout. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 >
 > **Implementation status (2026-11-26).** Still partial, by less. Built since, by
-> [ADR-draft-agent-run-record](draft-agent-run-record.md): the `VTAgentRun` record with its
+> [ADR-0566](0566-agent-run-record.md): the `VTAgentRun` record with its
 > token usage, `GET /api/v1/instances/{key}/agent-runs`, and the limits `maxIterations`,
 > `timeout` and `tokenBudget` — the two run bounds enforced by the engine on an agent-driven
 > container rather than by a worker, since [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md)
 > moved the loop into the process. The output schema is built by
-> [ADR-draft-agent-transcript-and-answer](draft-agent-transcript-and-answer.md) as declared
+> [ADR-0567](0567-agent-transcript-and-answer.md) as declared
 > answer fields (`<atlas:agentOutput>`), checked by the worker, and the Operations view as
 > the **Agent** tab of the instance replay. With that, everything this record named is built;
 > the state line above stays as the reconciliation of 2026-10-11 left it until that is reviewed.

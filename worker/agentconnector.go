@@ -282,7 +282,7 @@ func RunAiTask(ctx context.Context, j Job, models map[string]agent.Model) (Outco
 }
 
 // decideWithin puts one request to the model inside the bound its element states, and
-// says how long the call took (ADR-draft-agent-run-record).
+// says how long the call took (ADR-0566).
 //
 // The bound is applied twice on purpose. The adapter gives it to its HTTP client, which
 // is what ends a call that has stopped sending; the context carries it too, so an

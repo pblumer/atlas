@@ -66,7 +66,7 @@ func checkVerdictFields(t *testing.T, outs []Output) {
 
 // The fields a container's answer must carry, its bound on one call and what it may read
 // are resolved from the compiled process into the round a worker is handed
-// (ADR-draft-agent-transcript-and-answer, ADR-draft-agent-run-record).
+// (ADR-0567, ADR-0566).
 func TestAContainersAnswerFieldsAndBoundsAreResolved(t *testing.T) {
 	cp, id := compiledHost(t, `<adHocSubProcess id="host">
 	  <documentation>Prüfe die Tragbarkeit.</documentation>

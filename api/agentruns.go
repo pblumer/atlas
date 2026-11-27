@@ -16,7 +16,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// --- An agent's run on the record (ADR-0117, as built by ADR-draft-agent-run-record) ---
+// --- An agent's run on the record (ADR-0117, as built by ADR-0566) ---
 //
 // This file is the two edges of that record: the completion route taking a worker's
 // account of the model call it made, and the read route giving an instance's calls

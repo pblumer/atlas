@@ -192,7 +192,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			// The same providers serve the ai task, under a job type of its own: one
 			// call, one answer, no tools (ADR-0256). It
 			// completes with variables like every ordinary connector, and with the
-			// account of its one call beside them (ADR-draft-agent-run-record), which
+			// account of its one call beside them (ADR-0566), which
 			// is why it takes the wider handler shape too.
 			built.Handlers[compiler.AiTaskJobType] = CompletingExecFunc(func(ctx context.Context, j Job) (Outcome, error) {
 				return RunAiTask(ctx, j, models)

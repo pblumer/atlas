@@ -5830,7 +5830,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The account of the model call behind this completion rides beside them
-	// (ADR-draft-agent-run-record). Built here, off the run loop, because sealing its
+	// (ADR-0566). Built here, off the run loop, because sealing its
 	// texts for a process that declares personal data reads the vault (ADR-0314).
 	callReport, err := parseAgentRunReport(body)
 	if err != nil {
@@ -7318,7 +7318,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}
 		// What the run's record adds: which round this is, the earlier rounds to put
 		// in front of the model again, and what has changed since it was last told
-		// (ADR-draft-agent-transcript-and-answer).
+		// (ADR-0567).
 		r.Request = agent.WithTranscript(r.Request, s.store, cp, ei.ProcessInstanceKey, jv.ElementInstanceKey,
 			agent.ContextLimit(cp, ei.ElementId), s.openAgentRunForReplay)
 		return &connectorPayload{Kind: "agent", Fields: agent.ResolveJobPayload(r)}
@@ -7762,7 +7762,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// nothing that says where the server is or how it is spoken to. What this arm
 		// adds is the Worker's say: a tool its list does not permit travels as a
 		// refusal, which the worker honours by making no call
-		// (ADR-draft-mcp-worker).
+		// (ADR-0568).
 		j, err := mcptool.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil

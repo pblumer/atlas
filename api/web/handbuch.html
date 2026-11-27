@@ -8254,11 +8254,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <b>ein</b> Werkzeug dieses Servers auf: Sie nennt den Worker, das Werkzeug und dessen Argumente. Damit
           erreicht ein Prozess jedes System, das einen solchen Server hat, ohne dass Atlas einen eigenen Worker-Typ
           dafür braucht. In einem agentengesteuerten Ad-hoc-Subprozess ist die Task ein Werkzeug des Agenten
-          (ADR-draft-mcp-worker).</p>
+          (ADR-0568).</p>
         <p data-l="en">An MCP worker is a server that speaks the Model Context Protocol. A task calls <b>one</b>
           tool of that server: it names the Worker, the tool and its arguments. A process thereby reaches any system
           that has such a server, without Atlas needing a Worker Type of its own for it. In an agent-driven ad-hoc
-          subprocess the task is one of the agent's tools (ADR-draft-mcp-worker).</p>
+          subprocess the task is one of the agent's tools (ADR-0568).</p>
         <ol>
           <li data-l="de">Die MCP-Adresse des Servers ermitteln, eine einzige URL, und ob er ein Token verlangt. Atlas
             spricht nur Server an, die über HTTP erreichbar sind.</li>
